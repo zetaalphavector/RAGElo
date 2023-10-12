@@ -6,6 +6,7 @@ from typing_extensions import Annotated
 from auto_eval import __app_name__, __version__
 from auto_eval.documents_eval import DocumentEvaluator
 from auto_eval.games_creator import GamesCreator
+from auto_eval.games_runner import GamesRunner
 
 app = typer.Typer()
 
@@ -89,6 +90,7 @@ def create_pairwise_games(
         bool, typer.Option("--print", help="Print games to screen?")
     ] = False,
 ):
+    """Generates random pairs of agents and build the prompts for an Evaluator to evaluate them."""
     games_creator = GamesCreator(
         queries_file,
         answers_path,
@@ -105,8 +107,35 @@ def create_pairwise_games(
 
 
 @app.command()
-def run_games():
-    pass
+def run_games(
+    games_file: Annotated[
+        str,
+        typer.Argument(help="jsonl file with prompts to be used. One per line."),
+    ],
+    output_file: Annotated[str, typer.Argument(help="csv file to write results to")],
+    answers_file: Annotated[str, typer.Argument(help="jsonl file to write answers to")],
+    model_name: Annotated[
+        str, typer.Argument(help="Model to use as Evaluator")
+    ] = "gpt-4",
+    credentials_file: Annotated[
+        Optional[str],
+        typer.Option(
+            help="path to a file with OpenAI credentials."
+            "If missing, will use environment variables"
+        ),
+    ] = None,
+    print_answers: Annotated[
+        bool, typer.Option("--print", help="Print LLM answers to screen?")
+    ] = False,
+    force: Annotated[
+        bool, typer.Option("--force", help="Overwrite output file?")
+    ] = False,
+):
+    """Uses an Evaluator to evaluate a series of pairwise games with prompts created by the create-pairwise-games command."""
+    runner = GamesRunner(
+        games_file, output_file, model_name, credentials_file, print_answers, force
+    )
+    runner.run_games()
 
 
 @app.command()
