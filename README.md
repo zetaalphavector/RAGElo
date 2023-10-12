@@ -48,14 +48,54 @@ RAGeval deals with the following entities:
 
 ## Example
 
-For evaluating an answer, the first step is to annotate the documents used to generate it. This can be done using the `annotate-documents` command.
-
-In this example, we are annotating the relevance for the documents retrieved for the queries in the `queries.csv` file. The documents are in the `documents.csv` file. We are using the `reasoner` evaluator, that only outputs the reasoning if the document is relevant or not. The annotations will be saved in the `annotations.csv` file.
-
+For evaluating a set of answers, we can use the `run-all` command like this:
 ```bash
-$ python -m auto_eval annotate-documents queries.csv documents.csv reasoner outputs.csv 
+$ python -m auto_eval run-all queries.csv documents.csv answers.csv
+
+---------- Agent Scores by Elo Rating ----------
+agent1  : 1165.4
+agent2  : 1016.5
+agent3  : 818.1
+
 ```
 
+The queries.csv file has the following format:
+```csv
+query_id,query
+0, What is the capital of Brazil?
+1, What is the capital of France?
+```
+The documents.csv file has the following format:
+```csv
+query_id,doc_id,document_text
+0,0, Brasília is the capital of Brazil.
+0,1, Rio de Janeiro used to be the capital of Brazil.
+1,2, Paris is the capital of France.
+1,3, Lyon is the second largest city in France.
+```
+
+The answers.csv file has the following format:
+```csv
+qid,agent,answer
+0, agent1, Brasília is the capital of Brazil, according to [0].
+0, agent2, Accodring to [1], Rio de Janeiro used to be the capital of Brazil, until 1960."
+1, agent1, Paris is the capital of France, according to [2].
+2, agent2, Lyon is the second largest city in France, according to [3].
+```
+
+
+### Individual Commands
+It is also possible to run just either of the Evaluators individually. To do so, we use the `annotate-documents` and `annotate-answers` commands:
+
+```bash
+$ python -m auto_eval annotate-documents queries.csv documents.csv reasoner reasonings.csv 
+```
+
+```bash
+$ python -m auto_eval annotate-answers queries.csv answers.csv reasonings.csv elo answers_eval.json
+```
+
+For additional information on the commands, use the `--help` flag.
 ## TODO
 
 - [ ] Install as standalone CLI
