@@ -126,3 +126,13 @@ class OpenAiClient:
         )
         logger.info(f":globe_with_meridians: [bold]API Type[/bold]   : {api_type}")
         logger.info(f":link: [bold]API URL [/bold]   : {base_url}")
+
+
+def set_credentials_from_file(credentials_file: str):
+    """Read credentials from a file and add them to the environment."""
+    logger.info(f"Loading credentials from {credentials_file}")
+    with open(credentials_file) as f:
+        for line in f:
+            key, value = line.strip().split("=")
+            logger.debug(f"Setting {key} from file")
+            os.environ[key] = value

@@ -7,8 +7,5 @@ You should write one sentence explaining why the document is relevant or not for
 [user question]
 {user_question}
 
-[document title]
-{doc_title}
-
 [document content]
 {doc_content}
