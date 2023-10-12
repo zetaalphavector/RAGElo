@@ -40,13 +40,16 @@ class EloEvaluatorWithReasoning(AnswerEvaluator):
                 agent_b = data["agent_b"]
                 skip_tuples.add((qid, agent_a, agent_b))
             logger.info(f"Skipping {len(skip_tuples)} games...")
-        print(f"Running {len(self.prompts) - len(skip_tuples)} games...")
+        if len(self.prompts) - len(skip_tuples) > 0:
+            print(f"Running {len(self.prompts) - len(skip_tuples)} games...")
 
         for p in track(self.prompts, description="Evaluating games"):
             qid = p["qid"]
             agent_a = p["agent_a"]
             agent_b = p["agent_b"]
             prompt_str = p["prompt"]
+            if (qid, agent_a, agent_b) in skip_tuples:
+                continue
             logger.debug(f"Running query id {qid} agent {agent_a} vs {agent_b}")
             try:
                 gpt_answer = self.openai_client(prompt_str)
@@ -94,9 +97,10 @@ class EloEvaluatorWithReasoning(AnswerEvaluator):
                     },
                     f,
                 )
+                f.write("\n")
 
         self.games, self.players = self.__get_elo_scores()
-        print(f":check_mark: Done!")
+        print(f"✅ Done!")
         print(f"Unparsed answers: {unparsed_answers}")
         print(f"Total evaluations: {len(self.prompts) - unparsed_answers}")
 
@@ -106,11 +110,16 @@ class EloEvaluatorWithReasoning(AnswerEvaluator):
             self.__play_one_game()
 
     def print_ranking(self):
+        if self.print:
+            print()
+            print(
+                f"----------[bold white] Agent Scores by Elo Rating [/bold white]----------"
+            )
         for player, rating in sorted(
             self.get_player_ratings().items(), key=lambda x: x[1], reverse=True
         ):
             if self.print:
-                print(f"[bold white]{player:<15}[/bold white]: [{rating:.1f<6}")
+                print(f"[bold white]{player:<15}[/bold white]: {rating:.1f}")
 
     def __expected_score(self, rating1, rating2):
         return 1 / (1 + 10 ** ((rating2 - rating1) / 400))
