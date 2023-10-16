@@ -1,4 +1,4 @@
-Please act as an impartial judge and evaluate the quality of the responses provided by two AI assistants tasked to answer the question displayed below, based on a set of documens retrieved by a search engine.
+Please act as an impartial judge and evaluate the quality of the responses provided by two AI assistants tasked to answer the question displayed below, based on a set of documents retrieved by a search engine.
 
 You should choose the assistant that best answers the user question based on a set of reference documents that may or not be relevant. 
 

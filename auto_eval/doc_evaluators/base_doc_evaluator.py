@@ -3,7 +3,7 @@ import csv
 import os
 from abc import abstractmethod
 from collections import defaultdict
-from typing import Callable, Dict, List, Type
+from typing import Callable, Dict, Type
 
 from loguru import logger
 from rich import print

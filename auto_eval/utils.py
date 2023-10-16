@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 
 DATA_PATH = Path(__file__).parent.parent / "data"
@@ -11,7 +10,8 @@ def get_default_data_path(
     Args:
         step_name: Name of the step to generate the path for.
         extension: File extension to use.
-        overwrite: Whether to overwrite the file if it already exists. If false, creates a new file with a number appended to the name.
+        overwrite: Whether to overwrite the file if it already exists. If false, 
+            creates a new file with a number appended to the name.
     """
     path = DATA_PATH / f"{step_name}.{extension}"
     if path.exists() and not overwrite:

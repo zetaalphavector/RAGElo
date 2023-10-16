@@ -15,7 +15,7 @@ def annotate_documents(
     queries_file: Annotated[
         str,
         typer.Argument(
-            help="csv file with queries to evaluate. Each row should have query_id, query"
+            help="csv file with queries to evaluate. Rows should have query_id,query"
         ),
     ],
     documents_file: Annotated[

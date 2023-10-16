@@ -3,7 +3,6 @@ from typing import Dict, List, Optional, Union
 
 import openai
 from loguru import logger
-from rich import print
 from tenacity import retry, stop_after_attempt, wait_random_exponential
 
 
@@ -120,11 +119,11 @@ class OpenAiClient:
     ):
         """Prints credentials to scren."""
         logger.info("Starting OPENAI client with the following settings:")
-        logger.info(f":lock: [red]API KEY [/red]   : {key[:3]}...{key[-3:]}")
+        logger.info(f":lock: [red]API KEY [/red]  : {key[:3]}...{key[-3:]}")
         logger.info(
-            f":brain: [bold]Model[/bold]      : [not bold white]{model}[/not bold white]"
+            f":brain: [bold]Model[/bold]     : [not bold white]{model}[/not bold white]"
         )
-        logger.info(f":globe_with_meridians: [bold]API Type[/bold]   : {api_type}")
+        logger.info(f":globe_with_meridians: [bold]API Type[/bold]  : {api_type}")
         logger.info(f":link: [bold]API URL [/bold]   : {base_url}")
 
 
