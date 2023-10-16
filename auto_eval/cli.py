@@ -233,7 +233,7 @@ def main(
         None,
         "--credentials",
         "-c",
-        help="Path to a file with OpenAI credentials."
+        help="Path to a file with OpenAI credentials. "
         "If missing, will use environment variables",
     ),
     model_name: Optional[str] = typer.Option(

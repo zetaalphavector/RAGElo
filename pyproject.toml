@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=61.0", "wheel", "setuptools-git-versioning<2"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -24,7 +24,10 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: System :: Benchmark",
 ]
-dependencies = ["openai", "tenacity", "typer[all]", "rich"]
+dependencies = ["openai", "tenacity", "typer"]
+
+[project.optional-dependencies]
+CLI = ["typer[all]"]
 
 [project.scripts]
 auto_eval = "auto_eval.cli:app"
@@ -40,3 +43,6 @@ convention = "google"
 
 [tool.ruff.per-file-ignores]
 "__init__.py" = ["E402", "F401"]
+
+[tool.setuptools-git-versioning]
+enabled = true
