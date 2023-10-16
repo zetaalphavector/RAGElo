@@ -3,11 +3,20 @@ from typing import Optional
 import typer
 from typing_extensions import Annotated
 
-from auto_eval import __app_name__, __version__
+from auto_eval import __app_name__, __version__, logger
 from auto_eval.answer_evaluators import AnswerEvaluatorFactory
 from auto_eval.doc_evaluators import DocumentEvaluatorFactory
+from auto_eval.logger import CLILogHandler
+
+logger.addHandler(CLILogHandler())
 
 app = typer.Typer()
+state = {
+    "verbose": False,
+    "force": False,
+    "credentials_file": None,
+    "model_name": "gpt-4",
+}
 
 
 @app.command()
@@ -31,22 +40,6 @@ def annotate_documents(
     output_file: Annotated[
         Optional[str], typer.Argument(help="csv file to write LLM reasonings to")
     ] = "data/reasonings.csv",
-    model_name: Annotated[
-        str, typer.Option(help="Model to use as annotator")
-    ] = "gpt-4",
-    print_answers: Annotated[
-        bool, typer.Option("--print", help="Print LLM answers to screen?")
-    ] = False,
-    credentials_file: Annotated[
-        Optional[str],
-        typer.Option(
-            help="path to a file with OpenAI credentials."
-            "If missing, will use environment variables"
-        ),
-    ] = None,
-    force: Annotated[
-        bool, typer.Option("--force", help="Overwrite output file?")
-    ] = False,
 ):
     """
     Evaluate a list of documents for relevancy using a LLM as annotator
@@ -56,10 +49,10 @@ def annotate_documents(
         query_path=queries_file,
         documents_path=documents_file,
         output_file=output_file,
-        model_name=model_name,
-        credentials_file=credentials_file,
-        print_answers=print_answers,
-        force=force,
+        model_name=state["model_name"],
+        credentials_file=state["credentials_file"],
+        print_answers=state["verbose"],
+        force=state["force"],
     )
 
     doc_evaluator.get_answers()
@@ -216,6 +209,18 @@ def _version_callback(value: bool) -> None:
 
 @app.callback()
 def main(
+    verbose: Optional[bool] = typer.Option(
+        None,
+        "--verbose",
+        "-V",
+        help="Show debug information",
+    ),
+    force: Optional[bool] = typer.Option(
+        None,
+        "--force",
+        "-f",
+        help="Overwrite output files",
+    ),
     version: Optional[bool] = typer.Option(
         None,
         "--version",
@@ -223,7 +228,27 @@ def main(
         help="Show the CLI version",
         callback=_version_callback,
         is_eager=True,
-    )
+    ),
+    credentials_file: Optional[str] = typer.Option(
+        None,
+        "--credentials",
+        "-c",
+        help="Path to a file with OpenAI credentials."
+        "If missing, will use environment variables",
+    ),
+    model_name: Optional[str] = typer.Option(
+        None,
+        "--model",
+        "-m",
+        help="Model to use as annotator",
+    ),
 ) -> None:
     """A CLI for auto-eval"""
-    return
+    if force:
+        state["force"] = force
+    if verbose:
+        state["verbose"] = verbose
+    if credentials_file:
+        state["credentials_file"] = credentials_file
+    if model_name:
+        state["model_name"] = model_name

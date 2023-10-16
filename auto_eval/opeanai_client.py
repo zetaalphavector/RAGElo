@@ -2,8 +2,9 @@ import os
 from typing import Dict, List, Optional, Union
 
 import openai
-from loguru import logger
 from tenacity import retry, stop_after_attempt, wait_random_exponential
+
+from auto_eval import logger
 
 
 class OpenAiClient:
@@ -25,7 +26,6 @@ class OpenAiClient:
             version: The version of the API to use. Defaults to None.
 
         """
-
         self.openai_type = os.environ.get("OPENAI_TYPE") or "open_ai"
         if self.openai_type == "azure":
             service = os.environ.get("OPENAI_SERVICE_GPT4") or os.environ.get(
@@ -134,4 +134,5 @@ def set_credentials_from_file(credentials_file: str):
         for line in f:
             key, value = line.strip().split("=")
             logger.debug(f"Setting {key} from file")
+            os.environ[key] = value
             os.environ[key] = value

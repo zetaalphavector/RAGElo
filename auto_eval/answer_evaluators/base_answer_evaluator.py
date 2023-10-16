@@ -5,9 +5,7 @@ from abc import abstractmethod
 from collections import defaultdict
 from typing import Dict, Type
 
-from loguru import logger
-from rich import print
-
+from auto_eval import logger
 from auto_eval.opeanai_client import OpenAiClient, set_credentials_from_file
 
 
@@ -83,7 +81,7 @@ class AnswerEvaluator:
             queries[qid] = query
         logger.info(f"Loaded {len(queries)} queries")
         if self.print:
-            print(f"Loaded {len(queries)} queries")
+            logger.info(f"Loaded {len(queries)} queries")
         return queries
 
     def _load_answers(self, answers_path: str) -> Dict[str, Dict[str, str]]:

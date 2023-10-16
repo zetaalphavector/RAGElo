@@ -1,17 +1,18 @@
 import csv
 import os
 
-from loguru import logger
-from rich import print
-from rich.progress import track
 from tenacity import RetryError
 
+from auto_eval import logger
 from auto_eval.doc_evaluators import DocumentEvaluator, DocumentEvaluatorFactory
 
 
 @DocumentEvaluatorFactory.register("reasoner")
 class ReasonerDocEval(DocumentEvaluator):
-    """A document Evaluator that only outputs the reasoning for why a document is relevant."""
+    """
+    A document Evaluator that only outputs the reasoning for why a document
+    is relevant.
+    """
 
     def __init__(
         self,
@@ -21,7 +22,7 @@ class ReasonerDocEval(DocumentEvaluator):
         prompt_name: str,
         model_name: str = "gpt-4",
         credentials_file: str | None = None,
-        print_answers: bool = False,
+        verbose: bool = False,
         force: bool = False,
     ):
         super().__init__(
@@ -31,7 +32,7 @@ class ReasonerDocEval(DocumentEvaluator):
             "reasoner",
             model_name,
             credentials_file,
-            print_answers,
+            verbose,
             force,
         )
 
@@ -45,7 +46,15 @@ class ReasonerDocEval(DocumentEvaluator):
         if len(skip_docs) > 0:
             logger.info(f"Skipping {len(skip_docs)} documents")
 
-        for qid in track(self.queries, description="Annotating Documents"):
+        if self.verbose:
+            try:
+                from rich.progress import track
+
+                q_iterator = track(self.queries, description="Annotating Documents")
+            except ImportError:
+                q_iterator = self.queries
+        q_iterator = self.queries
+        for qid in q_iterator:
             if max == 0:
                 break
             max -= 1
@@ -62,17 +71,17 @@ class ReasonerDocEval(DocumentEvaluator):
                     logger.warning(f"Failed to annotate document {qid} {did}")
                     continue
                 logger.debug(answer)
-                if self.print_answers:
-                    print(
+                if self.verbose:
+                    logger.info(
                         "[bold cyan]Query       [/bold cyan]: "
                         f"[not bold cyan]{self.queries[qid]}[/not bold cyan]"
                     )
-                    print(f"[bold cyan]Document ID [/bold cyan]: {did}")
-                    print(
+                    logger.info(f"[bold cyan]Document ID [/bold cyan]: {did}")
+                    logger.info(
                         "[bold cyan]Evaluation  [/bold cyan]: "
                         f"[not bold]{answer}[/not bold]"
                     )
-                    print()
+                    logger.info("")
                 if not os.path.isfile(self.output_file):
                     with open(self.output_file, "w") as f:
                         writer = csv.writer(f)

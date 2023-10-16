@@ -1,8 +1,5 @@
 """CLI for automatically evaluating Retrieval Augmented Generation (RAG) models."""
-from loguru import logger
-
-# disable logger if used as a library by default
-logger.disable("auto_eval")
+from .logger import logger
 
 __version__ = "0.1.0"
 __app_name__ = "auto-eval"

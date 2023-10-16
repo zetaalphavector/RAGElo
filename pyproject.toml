@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "RAGeval"
+name = "auto_eval"
 authors = [
     { name = "Zeta Alpha", email = "team@zeta-alpha.com" },
     { name = "Arthur Câmara", email = "camara@zeta-alpha.com" },
@@ -11,7 +11,7 @@ authors = [
 description = "RAGeval: A Tool for Evaluating Retrieval-Augmented Generation Models"
 readme = "README.md"
 requires-python = ">=3.10"
-license = "Apache-2.0"
+license = { text = "Apache-2.0" }
 dynamic = ["version"]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
@@ -24,7 +24,11 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: System :: Benchmark",
 ]
-dependencies = ["openai", "tenacity", "loguru", "typer", "rich"]
+dependencies = ["openai", "tenacity", "loguru", "typer[all]", "rich"]
+
+
+[tool.setuptools.packages.find]
+exclude = ["data*"]
 
 [tool.ruff]
 ignore = ["E203", "N818"]

@@ -5,9 +5,7 @@ from abc import abstractmethod
 from collections import defaultdict
 from typing import Callable, Dict, Type
 
-from loguru import logger
-from rich import print
-
+from auto_eval import logger
 from auto_eval.opeanai_client import OpenAiClient, set_credentials_from_file
 
 
@@ -20,10 +18,10 @@ class DocumentEvaluator:
         prompt_name: str,
         model_name: str = "gpt-4",
         credentials_file: str | None = None,
-        print_answers: bool = False,
+        verbose: bool = False,
         force: bool = False,
     ):
-        self.print_answers = print_answers
+        self.verbose = verbose
         self.force = force
         self.output_file = output_file
         self.queries = self._load_queries(query_path)
