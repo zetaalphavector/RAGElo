@@ -1,4 +1,3 @@
-import csv
 import json
 import os
 import random
@@ -100,7 +99,7 @@ class EloEvaluatorWithReasoning(AnswerEvaluator):
                 f.write("\n")
 
         self.games, self.players = self.__get_elo_scores()
-        print(f"✅ Done!")
+        print("✅ Done!")
         print(f"Unparsed answers: {unparsed_answers}")
         print(f"Total evaluations: {len(self.prompts) - unparsed_answers}")
 
@@ -113,7 +112,7 @@ class EloEvaluatorWithReasoning(AnswerEvaluator):
         if self.print:
             print()
             print(
-                f"----------[bold white] Agent Scores by Elo Rating [/bold white]----------"
+                "--------[bold white] Agent Scores by Elo Rating [/bold white]--------"
             )
         for player, rating in sorted(
             self.get_player_ratings().items(), key=lambda x: x[1], reverse=True

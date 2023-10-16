@@ -83,7 +83,7 @@ class DocumentEvaluator:
                 rows[qid][did] = line["document_text"]
             else:
                 logger.debug(
-                    f"Document {did} found more than once. trying to merge them by title"
+                    f"Document {did} found again. trying to merge them by title"
                 )
                 overlap_size = self.__title_overlap(
                     line["document_text"], rows[qid][did]

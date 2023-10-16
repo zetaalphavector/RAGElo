@@ -70,7 +70,8 @@ def annotate_answers(
     queries_file: Annotated[
         str,
         typer.Argument(
-            help="csv file with queries to evaluate. Each row should have query_id, query"
+            help="csv file with queries to evaluate."
+            "Each row should have query_id, query"
         ),
     ],
     answers_file: Annotated[
@@ -137,7 +138,8 @@ def run_all(
     queries_file: Annotated[
         str,
         typer.Argument(
-            help="csv file with queries to evaluate. Each row should have query_id, query"
+            help="csv file with queries to evaluate. "
+            "Each row should have query_id, query"
         ),
     ],
     documents_file: Annotated[
