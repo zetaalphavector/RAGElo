@@ -3,10 +3,10 @@ from typing import Optional
 import typer
 from typing_extensions import Annotated
 
-from auto_eval import __app_name__, __version__, logger
+from auto_eval import __app_name__, __version__
 from auto_eval.answer_evaluators import AnswerEvaluatorFactory
 from auto_eval.doc_evaluators import DocumentEvaluatorFactory
-from auto_eval.logger import CLILogHandler
+from auto_eval.logger import CLILogHandler, logger
 
 logger.addHandler(CLILogHandler())
 

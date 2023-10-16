@@ -3,8 +3,8 @@ import os
 
 from tenacity import RetryError
 
-from auto_eval import logger
 from auto_eval.doc_evaluators import DocumentEvaluator, DocumentEvaluatorFactory
+from auto_eval.logger import logger
 
 
 @DocumentEvaluatorFactory.register("reasoner")

@@ -5,7 +5,7 @@ from abc import abstractmethod
 from collections import defaultdict
 from typing import Callable, Dict, Type
 
-from auto_eval import logger
+from auto_eval.logger import logger
 from auto_eval.opeanai_client import OpenAiClient, set_credentials_from_file
 
 
@@ -34,7 +34,7 @@ class DocumentEvaluator:
         self.openai_client = OpenAiClient(model=model_name)
 
     def _load_prompt(self, prompt_name: str) -> str:
-        prompts_path = f"prompts/retrieval/{prompt_name}.txt"
+        prompts_path = f"auto_eval/prompts/retrieval/{prompt_name}.txt"
         if not os.path.isfile(prompts_path):
             logger.exception(f"Prompts file {prompts_path} not found")
             raise FileNotFoundError

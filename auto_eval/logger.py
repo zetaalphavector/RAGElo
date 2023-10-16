@@ -1,8 +1,6 @@
 import logging
 
-from auto_eval import __app_name__
-
-logger = logging.getLogger(__app_name__)
+logger = logging.getLogger(__name__)
 
 
 class CLILogHandler(logging.Handler):
