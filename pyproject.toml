@@ -26,6 +26,8 @@ classifiers = [
 ]
 dependencies = ["openai", "tenacity", "typer[all]", "rich"]
 
+[project.scripts]
+auto_eval = "auto_eval.cli:app"
 
 [tool.setuptools.packages.find]
 exclude = ["data*"]
