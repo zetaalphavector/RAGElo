@@ -10,7 +10,7 @@ from rich import print
 from rich.progress import track
 from tenacity import RetryError
 
-from auto_eval.answer_evaluators import AnswerEvaluator, AnswerEvaluatorFactory
+from rageval.answer_evaluators import AnswerEvaluator, AnswerEvaluatorFactory
 
 
 @AnswerEvaluatorFactory.register("elo")

@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Union
 import openai
 from tenacity import retry, stop_after_attempt, wait_random_exponential
 
-from auto_eval.logger import logger
+from rageval.logger import logger
 
 
 class OpenAiClient:

@@ -1,4 +1,4 @@
-from auto_eval import __app_name__
+from rageval import __app_name__
 
 from . import cli
 
