@@ -50,7 +50,7 @@ RAGeval deals with the following entities:
 
 For evaluating a set of answers, we can use the `run-all` command like this:
 ```bash
-$ python -m auto_eval run-all queries.csv documents.csv answers.csv
+$ python -m rageval run-all queries.csv documents.csv answers.csv
 
 ---------- Agent Scores by Elo Rating ----------
 agent1  : 1165.4
@@ -88,11 +88,11 @@ qid,agent,answer
 It is also possible to run just either of the Evaluators individually. To do so, we use the `annotate-documents` and `annotate-answers` commands:
 
 ```bash
-$ python -m auto_eval annotate-documents queries.csv documents.csv reasoner reasonings.csv 
+$ python -m rageval annotate-documents queries.csv documents.csv reasoner reasonings.csv 
 ```
 
 ```bash
-$ python -m auto_eval annotate-answers queries.csv answers.csv reasonings.csv elo answers_eval.json
+$ python -m rageval annotate-answers queries.csv answers.csv reasonings.csv elo answers_eval.json
 ```
 
 For additional information on the commands, use the `--help` flag.

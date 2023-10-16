@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0", "wheel", "setuptools-git-versioning<2"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "auto_eval"
+name = "RAGEval"
 authors = [
     { name = "Zeta Alpha", email = "team@zeta-alpha.com" },
     { name = "Arthur Câmara", email = "camara@zeta-alpha.com" },
@@ -30,7 +30,7 @@ dependencies = ["openai", "tenacity", "typer"]
 CLI = ["typer[all]"]
 
 [project.scripts]
-auto_eval = "auto_eval.cli:app"
+rageval = "rageval.cli:app"
 
 [tool.setuptools.packages.find]
 exclude = ["data*"]
