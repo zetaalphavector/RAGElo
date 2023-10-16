@@ -24,7 +24,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: System :: Benchmark",
 ]
-dependencies = ["openai", "tenacity", "loguru", "typer[all]", "rich"]
+dependencies = ["openai", "tenacity", "typer[all]", "rich"]
 
 
 [tool.setuptools.packages.find]
