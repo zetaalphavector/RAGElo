@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "RAGeval"
+authors = [
+    { name = "Zeta Alpha", email = "team@zeta-alpha.com" },
+    { name = "Arthur Câmara", email = "camara@zeta-alpha.com" },
+]
+description = "RAGeval: A Tool for Evaluating Retrieval-Augmented Generation Models"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+dynamic = ["version"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.10",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Benchmark",
+]
+dependencies = ["openai", "tenacity", "loguru", "typer", "rich"]
+
+[tool.ruff]
+ignore = ["E203", "N818"]
+
+[tool.ruff.pydocstyle]
+convention = "google"
+
+[tool.ruff.per-file-ignores]
+"__init__.py" = ["E402", "F401"]
