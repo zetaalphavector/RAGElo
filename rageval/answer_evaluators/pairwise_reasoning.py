@@ -114,16 +114,14 @@ class PairwiseWithReasoning(AnswerEvaluator):
                 logger.info("[bold white] Evaluator answer: [/bold white]")
                 logger.info(parser_ans)
             with open(self.output_file, "a") as f:
-                d = (
-                    {
-                        "query_id": qid,
-                        "agent_a": agent_a,
-                        "agent_b": agent_b,
-                        "prompt": prompt_str,
-                        "answer": gpt_answer,
-                        "relevant": relevant,
-                    },
-                )
+                d = {
+                    "query_id": qid,
+                    "agent_a": agent_a,
+                    "agent_b": agent_b,
+                    "prompt": prompt_str,
+                    "answer": gpt_answer,
+                    "relevant": relevant,
+                }
                 json.dump(d, f)
                 f.write("\n")
                 self.evaluations.append(d)

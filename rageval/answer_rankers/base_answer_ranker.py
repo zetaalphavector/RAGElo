@@ -68,7 +68,6 @@ class AnswerRanker:
 
     def print_ranking(self):
         if self.print:
-            logger.info("")
             logger.info(
                 f"-------[bold white] Agent Scores by {self.name} [/bold white]-------"
             )
@@ -79,6 +78,7 @@ class AnswerRanker:
                 logger.info(f"[bold white]{agent:<15}[/bold white]: {rating:.1f}")
         with open(self.output_file, "w") as f:
             writer = csv.writer(f)
+            writer.writerow(["agent", "score"])
             for agent, rating in sorted(
                 self.get_agents_ratings().items(), key=lambda x: x[1], reverse=True
             ):

@@ -1,6 +1,8 @@
 import random
 from typing import Dict, List, Tuple
 
+from rageval.logger import logger
+
 from .base_answer_ranker import AnswerRanker, AnswerRankerFactory
 
 
@@ -22,7 +24,7 @@ class EloRanker(AnswerRanker):
         while self.games:
             self.__play_one_game()
 
-    def get_player_ratings(self):
+    def get_agents_ratings(self):
         if not self.computed:
             raise ValueError("Ranking not computed yet, Run evaluate() first")
         return self.players
@@ -33,6 +35,7 @@ class EloRanker(AnswerRanker):
         for agent_a, agent_b, score in self.evaluations:
             score = self.score_map[score]
             games.append((agent_a, agent_b, score))
+            logger.info(f"Game: {agent_a} vs {agent_b} -> {score}")
             if agent_a not in players:
                 players[agent_a] = self.initial_score
             if agent_b not in players:

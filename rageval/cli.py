@@ -79,12 +79,12 @@ def annotate_answers(
             "Produced by the annotate-documents command"
         ),
     ],
-    evaluator_name: Annotated[
-        str, typer.Argument(help="Name of the evaluator to use.")
-    ] = "PairwiseWithReasoning",
     output_file: Annotated[
         Optional[str], typer.Argument(help="json file to write pairwise annotators to")
     ] = "data/answers_eval.json",
+    evaluator_name: Annotated[
+        str, typer.Argument(help="Name of the evaluator to use.")
+    ] = "PairwiseWithReasoning",
     k: Annotated[int, typer.Option("--k", help="Number of games to generate.")] = 100,
     bidirectional: Annotated[
         bool, typer.Option("--bidirectional", help="Create games in both directions?")
@@ -111,15 +111,15 @@ def annotate_answers(
 
 @app.command()
 def rank_agents(
-    output_file: Annotated[
-        Optional[str], typer.Argument(help="csv file to rank to")
-    ] = "data/ranking.csv",
     evaluations_file: Annotated[
         str,
         typer.Argument(
-            help="jsonl file with the annotated answers " "from annotated_answers"
+            help="jsonl file with the annotated answers from annotated_answers"
         ),
-    ] = "data/answers_eval.json",
+    ] = "data/answers_eval.jsonl",
+    output_file: Annotated[
+        Optional[str], typer.Argument(help="csv file to rank to")
+    ] = "data/ranking.csv",
     evaluator_name: Annotated[
         str, typer.Argument(help="Name of the evaluator to use.")
     ] = "elo",
@@ -130,8 +130,8 @@ def rank_agents(
 ):
     """Ranks answers of agents using an Elo ranker"""
     agent_ranker = AnswerRankerFactory.create(
-        evalutor_name=evaluator_name,
-        output_name=output_file,
+        name=evaluator_name,
+        output_file=output_file,
         evaluations_file=evaluations_file,
         initial_score=initial_score,
         k=k,
@@ -169,7 +169,7 @@ def run_all(
     ] = "PairwiseWithReasonong",
     output_file: Annotated[
         Optional[str], typer.Argument(help="json file to write pairwise annotators to")
-    ] = "data/answers_eval.json",
+    ] = "data/answers_eval.jsonl",
     k: Annotated[int, typer.Option("--k", help="Number of games to generate.")] = 100,
     bidirectional: Annotated[
         bool, typer.Option("--bidirectional", help="Create games in both directions?")
