@@ -55,11 +55,9 @@ For evaluating a set of answers, we can use the `run-all` command like this:
 ```bash
 $ python -m rageval run-all queries.csv documents.csv answers.csv
 
----------- Agent Scores by Elo Rating ----------
-agent1  : 1165.4
-agent2  : 1016.5
-agent3  : 818.1
-
+---------- Agent Scores by Elo ranking ----------
+ agent1        : 1026.7
+ agent2        : 973.3
 ```
 
 The queries.csv file has the following format:
@@ -83,26 +81,35 @@ query_id,agent,answer
 0, agent1, Brasília is the capital of Brazil, according to [0].
 0, agent2, Accodring to [1], Rio de Janeiro used to be the capital of Brazil, until 1960."
 1, agent1, Paris is the capital of France, according to [2].
-2, agent2, Lyon is the second largest city in France, according to [3].
+1, agent2, Lyon is the second largest city in France, according to [3].
 ```
 
 
 ### Individual Commands
-It is also possible to run just either of the Evaluators individually. To do so, we use the `annotate-documents` and `annotate-answers` commands:
+It is also possible to run just either of the Evaluators individually. To do so, we use the `annotate-documents`, `annotate-answers` and `rank-agents` commands:
 
 ```bash
 $ python -m rageval annotate-documents queries.csv documents.csv reasoner reasonings.csv 
 ```
 
 ```bash
-$ python -m rageval annotate-answers queries.csv answers.csv reasonings.csv elo answers_eval.json
+$ python -m rageval annotate-answers queries.csv answers.csv reasonings.csv answers_eval.jsonl
+```
+
+```bash
+$ python -m rageval rank-agents answers_eval.jsonl 
 ```
 
 For additional information on the commands, use the `--help` flag.
+---
+The RAGeval logo was created using Dall-E 3 with the following prompt:
+```
+Vector design of a minimalistic command line interface (CLI) window. Inside the window, there's a concise Python code snippet symbolizing retrieval and augmentation. Above the window, a single performance bar glows in green, indicating success.
 
+```
 ### TODO
-- [ ] Split Elo evaluator
 - [ ] Publish on PyPi
 - [ ] Add custom types
 - [ ] Add more document evaluators (Microsoft)
+- [x] Split Elo evaluator
 - [x] Install as standalone CLI
