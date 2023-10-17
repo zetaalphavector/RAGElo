@@ -1,0 +1,5 @@
+query_id,agent,answer
+0, agent1, "Brasília is the capital of Brazil, according to [0]."
+0, agent2, "Accodring to [1], Rio de Janeiro used to be the capital of Brazil, until the 60s."
+1, agent1, "Paris is the capital of France, according to [2]."
+1, agent2, "According to [3], Lyon is the second largest city in France. Meanwile, Paris is its capital [2]."
