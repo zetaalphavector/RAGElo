@@ -52,7 +52,6 @@ class AnswerEvaluator:
                 continue
             qid, query = line
             queries[qid] = query
-        logger.info(f"Loaded {len(queries)} queries")
         if self.print:
             logger.info(f"Loaded {len(queries)} queries")
         return queries

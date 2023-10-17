@@ -32,6 +32,9 @@ class ReasonerDocEval(DocumentEvaluator):
             for line in csv.reader(open(self.output_file)):
                 qid, did, answer = line
                 skip_docs.add((qid, did))
+        if self.force and os.path.isfile(self.output_file):
+            # remove the file
+            os.remove(self.output_file)
         if len(skip_docs) > 0:
             logger.info(f"Skipping {len(skip_docs)} documents")
         q_iterator = self.queries

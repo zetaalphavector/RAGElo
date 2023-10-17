@@ -60,6 +60,9 @@ class PairwiseWithReasoning(AnswerEvaluator):
                 agent_b = data["agent_b"]
                 skip_tuples.add((qid, agent_a, agent_b))
             logger.info(f"Skipping {len(skip_tuples)} games...")
+        if self.force and os.path.exists(self.output_file):
+            # remove the file
+            os.remove(self.output_file)
         if len(self.prompts) - len(skip_tuples) > 0:
             logger.info(f"Running {len(self.prompts) - len(skip_tuples)} games...")
 
