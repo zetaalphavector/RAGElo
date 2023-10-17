@@ -79,7 +79,7 @@ query_id,doc_id,document_text
 
 The answers.csv file has the following format:
 ```csv
-qid,agent,answer
+query_id,agent,answer
 0, agent1, Brasília is the capital of Brazil, according to [0].
 0, agent2, Accodring to [1], Rio de Janeiro used to be the capital of Brazil, until 1960."
 1, agent1, Paris is the capital of France, according to [2].
