@@ -27,6 +27,8 @@ What RAGeval is **not**:
 - A RAG system itself. It does not generate answers, it only evaluates them.
 - A substitute for human evaluation. It is meant to be used as a tool to help with the annotation process, not to replace it.
 
+RAGEVal was developed by [Zeta-Alpha](https://zeta-alpha.com) in partnership with BASF.
+
 ## Requirements
 
 Python 3.10+
@@ -35,8 +37,15 @@ RAGeval is built with [Typer](https://github.com/tiangolo/typer) for pretty CLIs
 
 ## Installation
 
+If you want to install RAGEval as a library, you can use pip directly:
 ```bash
-pip install rageval
+pip install RAGEval
+```
+
+If you want to use RAGEval as a standalone CLI, use the `[CLI]` tag:
+
+```bash
+pip install RAGEval[CLI]
 ```
 
 ## Naming
