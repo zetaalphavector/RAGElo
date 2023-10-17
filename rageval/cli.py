@@ -213,12 +213,17 @@ def run_all(
         str, typer.Argument(help="Name of the answer ranker to use.")
     ] = "elo",
     output_file: Annotated[
-        Optional[str], typer.Argument(help="json file to write pairwise annotators to")
+        Optional[str], typer.Argument(help="csv file to write ranker result to")
     ] = None,
     k: Annotated[int, typer.Option("--k", help="Number of games to generate.")] = 100,
     bidirectional: Annotated[
         bool, typer.Option("--bidirectional", help="Create games in both directions?")
     ] = False,
+    initial_score: Annotated[
+        int,
+        typer.Argument(help="Initial score for the Elo ranker"),
+    ] = 1000,
+    elo_k: Annotated[int, typer.Argument(help="K factor for the Elo ranker")] = 32,
 ):
     if not queries_file:
         queries_file = os.path.join(state["data_path"], "queries.csv")
@@ -230,10 +235,12 @@ def run_all(
         answers_file = os.path.join(state["data_path"], "answers.csv")
         logger.info(f"Using default answers file: {answers_file}")
     if not output_file:
-        output_file = os.path.join(state["data_path"], "answers_eval.jsonl")
+        output_file = os.path.join(state["data_path"], "agents_ranking.csv")
         logger.info(f"Using default output file: {output_file}")
 
+    evaluations_file = os.path.join(state["data_path"], "answers_eval.jsonl")
     reasonings_file = os.path.join(state["data_path"], "reasonings.csv")
+
     doc_evaluator = DocumentEvaluatorFactory.create(
         document_evaluator_name,
         query_path=queries_file,
@@ -251,7 +258,7 @@ def run_all(
         query_path=queries_file,
         answers_file=answers_file,
         reasonings_file=reasonings_file,
-        output_file=output_file,
+        output_file=evaluations_file,
         k=k,
         bidirectional=bidirectional,
         model_name=state["model_name"],
@@ -259,8 +266,19 @@ def run_all(
         print_answers=state["verbose"],
         force=state["force"],
     )
-
     answer_evaluator.run()
+
+    agent_ranker = AnswerRankerFactory.create(
+        name=answer_ranker_name,
+        output_file=output_file,
+        evaluations_file=evaluations_file,
+        initial_score=initial_score,
+        k=elo_k,
+        print=state["verbose"],
+        force=state["force"],
+    )
+    agent_ranker.evaluate()
+    agent_ranker.print_ranking()
 
 
 def _version_callback(value: bool) -> None:
