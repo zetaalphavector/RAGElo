@@ -1,9 +1,8 @@
 # RAGeval
 
-<p>
-<img src="RAGEval_logo_DallE.png", align="left", width="200px"/> 
-<p  align="center" ><em> For when you are too lazy to annotate everything manually</em>
-</p>
+
+<img  align="left" src="RAGEval_logo_DallE.png" width="200">
+<p  align="center" ><em> For when you are too lazy to annotate everything manually</em></p>
 
 
 ---
