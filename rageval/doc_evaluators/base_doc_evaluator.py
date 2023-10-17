@@ -15,33 +15,23 @@ class DocumentEvaluator:
         query_path: str,
         documents_path: str,
         output_file: str,
-        prompt_name: str,
         model_name: str = "gpt-4",
         credentials_file: str | None = None,
         verbose: bool = False,
         force: bool = False,
+        *args,
+        **kwargs,
     ):
         self.verbose = verbose
         self.force = force
         self.output_file = output_file
         self.queries = self._load_queries(query_path)
         self.documents = self._load_documents(documents_path)
-        self.prompt = self._load_prompt(prompt_name)
 
         if credentials_file and os.path.isfile(credentials_file):
             set_credentials_from_file(credentials_file)
 
         self.openai_client = OpenAiClient(model=model_name)
-
-    def _load_prompt(self, prompt_name: str) -> str:
-        prompts_path = f"rageval/prompts/retrieval/{prompt_name}.txt"
-        if not os.path.isfile(prompts_path):
-            logger.exception(f"Prompts file {prompts_path} not found")
-            raise FileNotFoundError
-
-        with open(prompts_path) as f:
-            prompt = f.read().strip()
-        return prompt
 
     def _load_queries(self, queries_path: str) -> Dict[str, str]:
         queries = {}

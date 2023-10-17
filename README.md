@@ -100,8 +100,10 @@ $ python -m rageval annotate-answers queries.csv answers.csv reasonings.csv elo 
 ```
 
 For additional information on the commands, use the `--help` flag.
-## TODO
-- [ ] Publish on PyPI
+
+### TODO
 - [ ] Split Elo evaluator
+- [ ] Publish on PyPi
+- [ ] Add custom types
 - [ ] Add more document evaluators (Microsoft)
-- [X] Install as standalone CLI
+- [x] Install as standalone CLI

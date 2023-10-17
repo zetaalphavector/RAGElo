@@ -1,2 +1,2 @@
 from .base_answer_evaluator import AnswerEvaluator, AnswerEvaluatorFactory
-from .elo_evaluator import EloEvaluatorWithReasoning
+from .pairwise_reasoning import PairwiseWithReasoning

@@ -1,34 +1,58 @@
+import csv
 import json
 import os
 import random
 import re
-from collections import deque
+from collections import defaultdict, deque
 from typing import Dict, List, Tuple
 
-from loguru import logger
-from rich import print
-from rich.progress import track
 from tenacity import RetryError
 
-from rageval.answer_evaluators import AnswerEvaluator, AnswerEvaluatorFactory
+from rageval.logger import logger
+
+from .base_answer_evaluator import AnswerEvaluator, AnswerEvaluatorFactory
 
 
-@AnswerEvaluatorFactory.register("elo")
-class EloEvaluatorWithReasoning(AnswerEvaluator):
-    def __init__(self, k: int = 100, bidirectional: bool = False, *args, **kwargs):
+@AnswerEvaluatorFactory.register("PairwiseWithReasonong")
+class PairwiseWithReasoning(AnswerEvaluator):
+    """A evaluator that evaluates RAG-based answers pairwise, with document reasoning"""
+
+    prompt = """Please act as an impartial judge and evaluate the quality of the responses provided by two AI assistants tasked to answer the question displayed below, based on a set of documents retrieved by a search engine.
+    You should choose the assistant that best answers the user question based on a set of reference documents that may or not be relevant.
+    Answers cite documents using square brackets.  For each reference document, you will be provided with a reasoning explaining why the document is or is not relevant. 
+    Your evaluation should consider factors such as the correctness, helpfulness, completeness, accuracy, depth, and level of detail of their responses. Details are only useful if they answer the user question. If an answers contains non-relevant details, it should not be preferred over one that only use relevant information.
+    Begin your evaluation by explaining why each answer correctly answers the user question. Then, you should compare the two responses and provide a short explanation on their differences. Avoid any position biases and ensure that the order in which the responses were presented does not influence your decision. Do not allow the length of the responses to influence your evaluation. Be as objective as possible. After providing your explanation, output your final verdict by strictly following this format: "[[A]]" if assistant A is better, "[[B]]" if assistant B is better, and "[[C]]" for a tie. 
+    [User Question]
+    {query}
+    [Reference Documents]
+    {documents}
+    [The Start of Assistant A's Answer]
+    {answer_a}
+    [The End of Assistant A's Answer]
+    [The Start of Assistant B's Answer]
+    {answer_b}
+    [The End of Assistant B's Answer]"""  # noqa: E501
+
+    def __init__(
+        self,
+        reasonings_file: str,
+        k: int = 100,
+        bidirectional: bool = False,
+        *args,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self.k = k
         self.bidirectional = bidirectional
         self.pattern = re.compile(r"\[\[([^]]+)]].*$(?:(?!\[\[).)*", re.DOTALL)
-        self.score_map = {"A": 1, "B": 0, "C": 0.5}
-        self.initial_score = 1000
-        self.elo_k = 32
+        self.reasonings = self._load_reasonings(reasonings_file)
+        self.evaluations = []
 
     def prepare(self):
         """Prepare the evaluator for running by creating all prompts to be used."""
         self.prompts = self.__create_all_prompts()
 
-    def run(self):
+    def run(self) -> List[Dict[str, str]]:
         unparsed_answers = 0
         skip_tuples = set()
         if os.path.exists(self.output_file) and not self.force:
@@ -40,9 +64,17 @@ class EloEvaluatorWithReasoning(AnswerEvaluator):
                 skip_tuples.add((qid, agent_a, agent_b))
             logger.info(f"Skipping {len(skip_tuples)} games...")
         if len(self.prompts) - len(skip_tuples) > 0:
-            print(f"Running {len(self.prompts) - len(skip_tuples)} games...")
+            logger.info(f"Running {len(self.prompts) - len(skip_tuples)} games...")
 
-        for p in track(self.prompts, description="Evaluating games"):
+        p_iterator = self.prompts
+        if self.print:
+            try:
+                from rich.progress import track
+
+                p_iterator = track(self.prompts, description="Evaluating games")
+            except ImportError:
+                pass
+        for p in p_iterator:
             qid = p["qid"]
             agent_a = p["agent_a"]
             agent_b = p["agent_b"]
@@ -69,7 +101,7 @@ class EloEvaluatorWithReasoning(AnswerEvaluator):
                 )
                 continue
             if self.print:
-                print(
+                logger.info(
                     f"[not bold white][{qid}][/not bold white] "
                     f"[bold blue] {agent_a:<18} [/bold blue] 🆚  "
                     f"[bold red] {agent_b}[/bold red]"
@@ -82,10 +114,10 @@ class EloEvaluatorWithReasoning(AnswerEvaluator):
                     parser_ans = gpt_answer.replace(
                         "[[C]]", "[bold purple]C[/bold purple]"
                     )
-                print("[bold white] Evaluator answer: [/bold white]")
-                print(parser_ans)
+                logger.info("[bold white] Evaluator answer: [/bold white]")
+                logger.info(parser_ans)
             with open(self.output_file, "a") as f:
-                json.dump(
+                d = (
                     {
                         "qid": qid,
                         "agent_a": agent_a,
@@ -94,72 +126,17 @@ class EloEvaluatorWithReasoning(AnswerEvaluator):
                         "answer": gpt_answer,
                         "relevant": relevant,
                     },
-                    f,
                 )
+                json.dump(d, f)
                 f.write("\n")
+                self.evaluations.append(d)
 
-        self.games, self.players = self.__get_elo_scores()
-        print("✅ Done!")
-        print(f"Unparsed answers: {unparsed_answers}")
-        print(f"Total evaluations: {len(self.prompts) - unparsed_answers}")
+        logger.info("✅ Done!")
+        logger.info(f"Unparsed answers: {unparsed_answers}")
+        logger.info(f"Total evaluations: {len(self.prompts) - unparsed_answers}")
+        return self.evaluations
 
-    def evaluate(self):
-        """Compute score for each agent"""
-        while self.games:
-            self.__play_one_game()
-
-    def print_ranking(self):
-        if self.print:
-            print()
-            print(
-                "--------[bold white] Agent Scores by Elo Rating [/bold white]--------"
-            )
-        for player, rating in sorted(
-            self.get_player_ratings().items(), key=lambda x: x[1], reverse=True
-        ):
-            if self.print:
-                print(f"[bold white]{player:<15}[/bold white]: {rating:.1f}")
-
-    def __expected_score(self, rating1, rating2):
-        return 1 / (1 + 10 ** ((rating2 - rating1) / 400))
-
-    def __update_rating(self, rating, expected_score, actual_score):
-        return rating + self.k * (actual_score - expected_score)
-
-    def get_player_ratings(self):
-        return self.players
-
-    def __play_one_game(self):
-        player1, player2, result = self.games.pop()
-        player1_rating = self.players[player1]
-        player2_rating = self.players[player2]
-        expected_score = self.__expected_score(player1_rating, player2_rating)
-
-        self.players[player1] = self.__update_rating(
-            player1_rating, expected_score, result
-        )
-        self.players[player2] = self.__update_rating(
-            player2_rating, 1 - expected_score, 1 - result
-        )
-
-    def __get_elo_scores(self) -> Tuple[List[Tuple[str, str, float]], Dict[str, float]]:
-        games = []
-        players = {}
-        for line in open(self.output_file):
-            data = json.loads(line)
-            agent_a = data["agent_a"]
-            agent_b = data["agent_b"]
-            relevant = data["relevant"]
-            score = self.score_map[relevant]
-            games.append((agent_a, agent_b, score))
-            if agent_a not in players:
-                players[agent_a] = self.initial_score
-            if agent_b not in players:
-                players[agent_b] = self.initial_score
-        random.shuffle(games)
-        return games, players
-
-    def __genereate_random_games(self) -> List[Tuple[str, str]]:
+    def __generate_random_games(self) -> List[Tuple[str, str]]:
         """Creates all prompts necessary for running the evaluator"""
         total_agents = len(self.agents)
         _agents = list(self.agents)
@@ -211,8 +188,16 @@ class EloEvaluatorWithReasoning(AnswerEvaluator):
 
     def __create_all_prompts(self) -> List[Dict[str, str]]:
         prompts = []
-        random_pairs = self.__genereate_random_games()
-        for qid in track(self.answers):
+        random_pairs = self.__generate_random_games()
+        a_iterator = self.answers
+        if self.print:
+            try:
+                from rich.progress import track
+
+                a_iterator = track(self.answers, description="Creating prompts")
+            except ImportError:
+                pass
+        for qid in a_iterator:
             query = self.queries[qid]
             for a, b in random_pairs:
                 if a not in self.answers[qid] or b not in self.answers[qid]:
@@ -257,3 +242,14 @@ class EloEvaluatorWithReasoning(AnswerEvaluator):
         if answer not in ["A", "B", "C"]:
             raise ValueError(f"Unknown answer: {answer}")
         return answer
+
+    def _load_reasonings(self, reasonings_path: str) -> Dict[str, Dict[str, str]]:
+        reasonings = defaultdict(dict)
+        reasonings_read = 0
+        for line in csv.DictReader(open(reasonings_path)):
+            if line["qid"] not in self.queries:
+                continue
+            reasonings_read += 1
+            reasonings[line["qid"]][line["did"]] = line["answer"]
+        logger.info(f"Loaded {reasonings_read} reasonings")
+        return reasonings

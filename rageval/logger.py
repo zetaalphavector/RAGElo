@@ -1,4 +1,5 @@
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,10 @@ class CLILogHandler(logging.Handler):
                 else:
                     self.print(msg)
             else:
-                self.print(msg)
+                self.print(self.__clean_formatting(msg))
         except Exception:
             self.handleError(record)
+
+    def __clean_formatting(self, msg: str) -> str:
+        clean_text = re.sub(r"\[.*?\]", "", msg).strip()
+        return clean_text

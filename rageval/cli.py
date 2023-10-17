@@ -5,6 +5,7 @@ from typing_extensions import Annotated
 
 from rageval import __app_name__, __version__
 from rageval.answer_evaluators import AnswerEvaluatorFactory
+from rageval.answer_rankers import AnswerRankerFactory
 from rageval.doc_evaluators import DocumentEvaluatorFactory
 from rageval.logger import CLILogHandler, logger
 
@@ -79,27 +80,11 @@ def annotate_answers(
     ],
     evaluator_name: Annotated[
         str, typer.Argument(help="Name of the evaluator to use.")
-    ] = "elo",
+    ] = "PairwiseWithReasonong",
     output_file: Annotated[
         Optional[str], typer.Argument(help="json file to write pairwise annotators to")
     ] = "data/answers_eval.json",
-    model_name: Annotated[
-        str, typer.Option(help="Model to use as annotator")
-    ] = "gpt-4",
-    print_answers: Annotated[
-        bool, typer.Option("--print", help="Print LLM answers to screen?")
-    ] = False,
-    credentials_file: Annotated[
-        Optional[str],
-        typer.Option(
-            help="path to a file with OpenAI credentials."
-            "If missing, will use environment variables"
-        ),
-    ] = None,
-    force: Annotated[
-        bool, typer.Option("--force", help="Overwrite output file?")
-    ] = False,
-    k: Annotated[int, typer.Argument(help="Number of games to generate.")] = 100,
+    k: Annotated[int, typer.Option("--k", help="Number of games to generate.")] = 100,
     bidirectional: Annotated[
         bool, typer.Option("--bidirectional", help="Create games in both directions?")
     ] = False,
@@ -113,17 +98,47 @@ def annotate_answers(
         answers_file=answers_file,
         reasonings_file=reasonings_file,
         output_file=output_file,
-        model_name=model_name,
-        credentials_file=credentials_file,
-        print_answers=print_answers,
-        force=force,
         k=k,
         bidirectional=bidirectional,
+        model_name=state["model_name"],
+        credentials_file=state["credentials_file"],
+        print_answers=state["verbose"],
+        force=state["force"],
     )
     answer_evaluator.prepare()
     answer_evaluator.run()
-    answer_evaluator.evaluate()
-    answer_evaluator.print_ranking()
+
+
+@app.command()
+def rank_agents(
+    output_file: Annotated[
+        Optional[str], typer.Argument(help="csv file to rank to")
+    ] = "data/ranking.csv",
+    evaluations_file: Annotated[
+        str,
+        typer.Argument(
+            help="jsonl file with the annotated answers " "from annotated_answers"
+        ),
+    ] = "data/answers_eval.json",
+    evaluator_name: Annotated[
+        str, typer.Argument(help="Name of the evaluator to use.")
+    ] = "elo",
+    initial_score: Annotated[
+        int, typer.Argument(help="Initial score for the Elo ranker")
+    ] = 1000,
+    k: Annotated[int, typer.Argument(help="K factor for the Elo ranker")] = 32,
+):
+    agent_ranker = AnswerRankerFactory.create(
+        evalutor_name=evaluator_name,
+        output_name=output_file,
+        evaluations_file=evaluations_file,
+        initial_score=initial_score,
+        k=k,
+        print=state["verbose"],
+        force=state["force"],
+    )
+    agent_ranker.evaluate()
+    agent_ranker.print_ranking()
 
 
 @app.command()
@@ -150,37 +165,25 @@ def run_all(
     ] = "reasoner",
     answer_evaluator_name: Annotated[
         str, typer.Argument(help="Name of the answer evaluator to use.")
-    ] = "elo",
+    ] = "PairwiseWithReasonong",
     output_file: Annotated[
         Optional[str], typer.Argument(help="json file to write pairwise annotators to")
     ] = "data/answers_eval.json",
-    model_name: Annotated[
-        str, typer.Option(help="Model to use as annotator")
-    ] = "gpt-4",
-    print_answers: Annotated[
-        bool, typer.Option("--print", help="Print LLM answers to screen?")
-    ] = False,
-    credentials_file: Annotated[
-        Optional[str],
-        typer.Option(
-            help="path to a file with OpenAI credentials."
-            "If missing, will use environment variables"
-        ),
-    ] = None,
-    force: Annotated[
-        bool, typer.Option("--force", help="Overwrite output file?")
+    k: Annotated[int, typer.Option("--k", help="Number of games to generate.")] = 100,
+    bidirectional: Annotated[
+        bool, typer.Option("--bidirectional", help="Create games in both directions?")
     ] = False,
 ):
-    reasoning_file = "data/reasonings.csv"
+    reasonings_file = "data/reasonings.csv"
     doc_evaluator = DocumentEvaluatorFactory.create(
         document_evaluator_name,
         query_path=queries_file,
         documents_path=documents_file,
-        output_file=reasoning_file,
-        model_name=model_name,
-        credentials_file=credentials_file,
-        print_answers=print_answers,
-        force=force,
+        output_file=reasonings_file,
+        model_name=state["model_name"],
+        credentials_file=state["credentials_file"],
+        print_answers=state["print_answers"],
+        force=state["force"],
     )
 
     doc_evaluator.get_answers()
@@ -188,17 +191,18 @@ def run_all(
         answer_evaluator_name,
         query_path=queries_file,
         answers_file=answers_file,
-        reasonings_file=reasoning_file,
+        reasonings_file=reasonings_file,
         output_file=output_file,
-        model_name=model_name,
-        credentials_file=credentials_file,
-        print_answers=print_answers,
-        force=force,
+        k=k,
+        bidirectional=bidirectional,
+        model_name=state["model_name"],
+        credentials_file=state["credentials_file"],
+        print_answers=state["verbose"],
+        force=state["force"],
     )
+
     answer_evaluator.prepare()
     answer_evaluator.run()
-    answer_evaluator.evaluate()
-    answer_evaluator.print_ranking()
 
 
 def _version_callback(value: bool) -> None:

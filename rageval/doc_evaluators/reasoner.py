@@ -14,27 +14,16 @@ class ReasonerDocEval(DocumentEvaluator):
     is relevant.
     """
 
-    def __init__(
-        self,
-        query_path: str,
-        documents_path: str,
-        output_file: str,
-        prompt_name: str,
-        model_name: str = "gpt-4",
-        credentials_file: str | None = None,
-        verbose: bool = False,
-        force: bool = False,
-    ):
-        super().__init__(
-            query_path,
-            documents_path,
-            output_file,
-            "reasoner",
-            model_name,
-            credentials_file,
-            verbose,
-            force,
-        )
+    prompt = """You are an expert document annotator, evaluating if a document contains relevant information to anser a question submitted by a user. Please act as an impartial relevance annotator for a search engine. Your goal is to evaluate the relevancy of the documents given a user question.
+    You should write one sentence explaining why the document is relevant or not for the user question. A document can be:
+    - Not relevant: The document is not on topic.
+    - Somewhat relevant: The document is on topic but does not fully answer the user question.
+    - Very relevant: The document is on topic and answers the user question.
+    [user question]
+    {user_question}
+
+    [document content]
+    {doc_content}"""  # noqa: E501
 
     def get_answers(self):
         max = 10
@@ -46,14 +35,15 @@ class ReasonerDocEval(DocumentEvaluator):
         if len(skip_docs) > 0:
             logger.info(f"Skipping {len(skip_docs)} documents")
 
+        q_iterator = self.queries
         if self.verbose:
             try:
                 from rich.progress import track
 
                 q_iterator = track(self.queries, description="Annotating Documents")
             except ImportError:
-                q_iterator = self.queries
-        q_iterator = self.queries
+                pass
+
         for qid in q_iterator:
             if max == 0:
                 break
