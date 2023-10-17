@@ -26,7 +26,7 @@ class ReasonerDocEval(DocumentEvaluator):
     {doc_content}"""  # noqa: E501
 
     def get_answers(self):
-        max = 10
+        print(self.verbose)
         skip_docs = set()
         if os.path.isfile(self.output_file) and not self.force:
             for line in csv.reader(open(self.output_file)):
@@ -34,7 +34,6 @@ class ReasonerDocEval(DocumentEvaluator):
                 skip_docs.add((qid, did))
         if len(skip_docs) > 0:
             logger.info(f"Skipping {len(skip_docs)} documents")
-
         q_iterator = self.queries
         if self.verbose:
             try:
@@ -45,9 +44,6 @@ class ReasonerDocEval(DocumentEvaluator):
                 pass
 
         for qid in q_iterator:
-            if max == 0:
-                break
-            max -= 1
             for did in self.documents[qid]:
                 if (qid, did) in skip_docs:
                     logger.debug(f"Skipping {qid} {did}")
@@ -60,7 +56,6 @@ class ReasonerDocEval(DocumentEvaluator):
                 except RetryError:
                     logger.warning(f"Failed to annotate document {qid} {did}")
                     continue
-                logger.debug(answer)
                 if self.verbose:
                     logger.info(
                         "[bold cyan]Query       [/bold cyan]: "
@@ -75,7 +70,7 @@ class ReasonerDocEval(DocumentEvaluator):
                 if not os.path.isfile(self.output_file):
                     with open(self.output_file, "w") as f:
                         writer = csv.writer(f)
-                        writer.writerow(["qid", "did", "answer"])
+                        writer.writerow(["query_id", "did", "answer"])
 
                 with open(self.output_file, "a") as f:
                     writer = csv.writer(f)

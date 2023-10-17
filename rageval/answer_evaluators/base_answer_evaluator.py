@@ -37,11 +37,6 @@ class AnswerEvaluator:
         self.openai_client = OpenAiClient(model=model_name)
 
     @abstractmethod
-    def prepare(self):
-        """Prepare the evaluator for running"""
-        pass
-
-    @abstractmethod
     def run(self):
         """Run and extract answers for all queries"""
         pass
@@ -65,7 +60,7 @@ class AnswerEvaluator:
     def _load_answers(self, answers_path: str) -> Dict[str, Dict[str, str]]:
         answers = defaultdict(dict)
         for line in csv.DictReader(open(answers_path)):
-            qid = line["qid"]
+            qid = line["query_id"]
             if qid not in self.queries:
                 continue
             agent = line["agent"]
@@ -95,6 +90,6 @@ class AnswerEvaluatorFactory:
 
     @classmethod
     def create(cls, name: str, **kwargs) -> AnswerEvaluator:
-        if name not in cls.registry:
+        if name.lower() not in cls.registry:
             raise ValueError(f"Name {name} not in registry")
         return cls.registry[name.lower()](evaluator_name=name, **kwargs)

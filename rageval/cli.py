@@ -10,6 +10,7 @@ from rageval.doc_evaluators import DocumentEvaluatorFactory
 from rageval.logger import CLILogHandler, logger
 
 logger.addHandler(CLILogHandler())
+logger.setLevel("INFO")
 
 app = typer.Typer()
 state = {
@@ -39,7 +40,7 @@ def annotate_documents(
         str, typer.Argument(help="Name of the evaluator to use.")
     ] = "reasoner",
     output_file: Annotated[
-        Optional[str], typer.Argument(help="csv file to write LLM reasonings to")
+        Optional[str], typer.Option(help="csv file to write LLM reasonings to")
     ] = "data/reasonings.csv",
 ):
     """
@@ -52,7 +53,7 @@ def annotate_documents(
         output_file=output_file,
         model_name=state["model_name"],
         credentials_file=state["credentials_file"],
-        print_answers=state["verbose"],
+        verbose=state["verbose"],
         force=state["force"],
     )
 
@@ -80,7 +81,7 @@ def annotate_answers(
     ],
     evaluator_name: Annotated[
         str, typer.Argument(help="Name of the evaluator to use.")
-    ] = "PairwiseWithReasonong",
+    ] = "PairwiseWithReasoning",
     output_file: Annotated[
         Optional[str], typer.Argument(help="json file to write pairwise annotators to")
     ] = "data/answers_eval.json",
@@ -105,7 +106,6 @@ def annotate_answers(
         print_answers=state["verbose"],
         force=state["force"],
     )
-    answer_evaluator.prepare()
     answer_evaluator.run()
 
 
@@ -128,6 +128,7 @@ def rank_agents(
     ] = 1000,
     k: Annotated[int, typer.Argument(help="K factor for the Elo ranker")] = 32,
 ):
+    """Ranks answers of agents using an Elo ranker"""
     agent_ranker = AnswerRankerFactory.create(
         evalutor_name=evaluator_name,
         output_name=output_file,
@@ -182,7 +183,7 @@ def run_all(
         output_file=reasonings_file,
         model_name=state["model_name"],
         credentials_file=state["credentials_file"],
-        print_answers=state["print_answers"],
+        verbose=state["print_answers"],
         force=state["force"],
     )
 

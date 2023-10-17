@@ -45,7 +45,6 @@ class DocumentEvaluator:
             qid, query = line
             queries[qid] = query
         logger.info(f"Loaded {len(queries)} queries")
-        print(f"Loaded {len(queries)} queries")
 
         return queries
 

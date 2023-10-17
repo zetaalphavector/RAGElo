@@ -13,7 +13,7 @@ from rageval.logger import logger
 from .base_answer_evaluator import AnswerEvaluator, AnswerEvaluatorFactory
 
 
-@AnswerEvaluatorFactory.register("PairwiseWithReasonong")
+@AnswerEvaluatorFactory.register("PairwiseWithReasoning")
 class PairwiseWithReasoning(AnswerEvaluator):
     """A evaluator that evaluates RAG-based answers pairwise, with document reasoning"""
 
@@ -48,17 +48,14 @@ class PairwiseWithReasoning(AnswerEvaluator):
         self.reasonings = self._load_reasonings(reasonings_file)
         self.evaluations = []
 
-    def prepare(self):
-        """Prepare the evaluator for running by creating all prompts to be used."""
-        self.prompts = self.__create_all_prompts()
-
     def run(self) -> List[Dict[str, str]]:
         unparsed_answers = 0
         skip_tuples = set()
+        self.prompts = self.__create_all_prompts()
         if os.path.exists(self.output_file) and not self.force:
             for line in open(self.output_file):
                 data = json.loads(line)
-                qid = data["qid"]
+                qid = data["query_id"]
                 agent_a = data["agent_a"]
                 agent_b = data["agent_b"]
                 skip_tuples.add((qid, agent_a, agent_b))
@@ -75,7 +72,7 @@ class PairwiseWithReasoning(AnswerEvaluator):
             except ImportError:
                 pass
         for p in p_iterator:
-            qid = p["qid"]
+            qid = p["query_id"]
             agent_a = p["agent_a"]
             agent_b = p["agent_b"]
             prompt_str = p["prompt"]
@@ -119,7 +116,7 @@ class PairwiseWithReasoning(AnswerEvaluator):
             with open(self.output_file, "a") as f:
                 d = (
                     {
-                        "qid": qid,
+                        "query_id": qid,
                         "agent_a": agent_a,
                         "agent_b": agent_b,
                         "prompt": prompt_str,
@@ -216,7 +213,7 @@ class PairwiseWithReasoning(AnswerEvaluator):
                     query=query, documents=reasonings, answer_a=ans_a, answer_b=ans_b
                 )
                 prompts.append(
-                    {"qid": qid, "agent_a": a, "agent_b": b, "prompt": prompt}
+                    {"query_id": qid, "agent_a": a, "agent_b": b, "prompt": prompt}
                 )
         return prompts
 
@@ -247,9 +244,9 @@ class PairwiseWithReasoning(AnswerEvaluator):
         reasonings = defaultdict(dict)
         reasonings_read = 0
         for line in csv.DictReader(open(reasonings_path)):
-            if line["qid"] not in self.queries:
+            if line["query_id"] not in self.queries:
                 continue
             reasonings_read += 1
-            reasonings[line["qid"]][line["did"]] = line["answer"]
+            reasonings[line["query_id"]][line["did"]] = line["answer"]
         logger.info(f"Loaded {reasonings_read} reasonings")
         return reasonings
