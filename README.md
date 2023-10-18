@@ -48,6 +48,32 @@ If you want to use RAGEval as a standalone CLI, use the `[CLI]` tag:
 pip install RAGEval[CLI]
 ```
 
+## OpenAI credentials
+Most of the commands require an OpenAI API key. It should be set as an environment variable (`OPENAI_API_KEY`). Alternatively, you can set a credentials file and pass it as an option to `rageval`:
+
+```bash
+rageval --credentials credentials.txt run-all queries.csv documents.csv answers.csv
+```
+The variables set in this file will be set to the environment before calling the OpenAI API.
+
+The following variables can be set in the credentials file:
+- `OPENAI_API_KEY`: The OpenAI API key
+- `OPENAI_TYPE`: Either azure or open_ai (default)
+- `OPENAI_SERVICE`: The service name when using the azure api
+- `OPENAI_GPT_DEPLOYMENT`: The deployment name when using the azure api
+- `OPENAI_VERSION`: The version name when using the azure api
+
+This file has the following structure:
+
+```
+OPENAI_API_KEY=<your_key_here>
+OPENAI_TYPE=open_ai
+OPENAI_SERVICE=<your_service_name>
+OPENAI_GPT_DEPLOYMENT=<your_deployment_name>
+OPENAI_VERSION=<your_version_name>
+```
+
+
 ## Naming
 
 RAGeval deals with the following entities:

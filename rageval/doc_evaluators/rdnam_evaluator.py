@@ -127,5 +127,4 @@ Each rater used their own independent judgement."""  # noqa: E501
         except json.decoder.JSONDecodeError:
             logger.warning(f"Failed to parse answer {answer}")
             raise ValueError
-
         return ans
