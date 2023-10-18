@@ -1,2 +1,3 @@
 from .base_doc_evaluator import DocumentEvaluator, DocumentEvaluatorFactory
-from .reasoner import ReasonerEvaluator
+from .rdnam_evaluator import RDNAMvaluator
+from .reasoner_evaluator import ReasonerEvaluator

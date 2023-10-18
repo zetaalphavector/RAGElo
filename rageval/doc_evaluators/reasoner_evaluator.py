@@ -1,11 +1,4 @@
-import csv
-import os
-from typing import Any
-
-from tenacity import RetryError
-
 from rageval.doc_evaluators import DocumentEvaluator, DocumentEvaluatorFactory
-from rageval.logger import logger
 
 
 @DocumentEvaluatorFactory.register("reasoner")
@@ -26,7 +19,9 @@ class ReasonerEvaluator(DocumentEvaluator):
     [document content]
     {doc_content}"""  # noqa: E501
 
-    def __build_message(self, document: str, query: str) -> str:
+    def __build_message(self, qid: str, did: str) -> str:
+        query = self.queries[qid]
+        document = self.documents[qid][did]
         return self.prompt.format(user_question=query, doc_content=document)
 
     def __process_answer(self, answer: str) -> str:

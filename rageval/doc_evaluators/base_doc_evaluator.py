@@ -35,6 +35,67 @@ class DocumentEvaluator:
 
         self.openai_client = OpenAiClient(model=model_name)
 
+    def get_answers(self):
+        """Runs the evaluator and saves the results to a file"""
+        skip_docs = set()
+        if os.path.isfile(self.output_file) and not self.force:
+            for line in csv.reader(open(self.output_file)):
+                qid, did, answer = line
+                skip_docs.add((qid, did))
+        if self.force and os.path.isfile(self.output_file):
+            os.remove(self.output_file)
+        if len(skip_docs) > 0:
+            logger.info(f"Skipping {len(skip_docs)} documents")
+        q_iterator = self.queries
+        if self.verbose:
+            try:
+                from rich.progress import track
+
+                q_iterator = track(self.queries, description="Annotating Documents")
+            except ImportError:
+                pass
+        for qid in q_iterator:
+            for did in self.documents[qid]:
+                if (qid, did) in skip_docs:
+                    logger.debug(f"Skipping {qid} {did}")
+                    continue
+                message = self.__build_message(qid, did)
+
+                try:
+                    answer = self.openai_client(message)
+                    answer = self.__process_answer(answer)
+                except RetryError:
+                    logger.warning(f"Failed to annotate document {qid} {did}")
+                    continue
+                if self.verbose:
+                    logger.info(
+                        "[bold cyan]Query       [/bold cyan]: "
+                        f"[not bold cyan]{self.queries[qid]}[/not bold cyan]"
+                    )
+                    logger.info(f"[bold cyan]Document ID [/bold cyan]: {did}")
+                    logger.info(
+                        "[bold cyan]Evaluation  [/bold cyan]: "
+                        f"[not bold]{answer}[/not bold]"
+                    )
+                    logger.info("")
+                if not os.path.isfile(self.output_file):
+                    with open(self.output_file, "w") as f:
+                        writer = csv.writer(f)
+                        writer.writerow(["query_id", "did", "answer"])
+
+                with open(self.output_file, "a") as f:
+                    writer = csv.writer(f)
+                    writer.writerow([qid, did, answer])
+
+    @abstractmethod
+    def __build_message(self, qid: str, did: str) -> str:
+        """Builds the prompt to send to the LLM."""
+        pass
+
+    @abstractmethod
+    def __process_answer(self, answer: str) -> Any:
+        """Processes the LLM evaluator output into some serializable format"""
+
     def _load_queries(self, queries_path: str) -> Dict[str, str]:
         queries = {}
         if not os.path.isfile(queries_path):
@@ -49,13 +110,6 @@ class DocumentEvaluator:
         logger.info(f"Loaded {len(queries)} queries")
 
         return queries
-
-    def __title_overlap(self, new_doc: str, current_doc: str) -> int:
-        size = 0
-        min_len = min(len(new_doc), len(current_doc))
-        while size < min_len and new_doc[size] == current_doc[size]:
-            size += 1
-        return size
 
     def _load_documents(self, documents_path: str) -> Dict[str, Dict[str, str]]:
         rows = defaultdict(dict)
@@ -92,66 +146,19 @@ class DocumentEvaluator:
         logger.info(f"Loaded {len(rows)} documents")
         return rows
 
-    @abstractmethod
-    def __build_message(self, document: str, query: str) -> str:
-        pass
+    def __load_from_csv(self, file_path: str) -> Dict[str, str]:
+        """extra content from a CSV file"""
+        contents = {}
+        for line in csv.reader(open(file_path, "r")):
+            contents[line[0]] = line[1]
+        return contents
 
-    def get_answers(self):
-        """Runs the evaluator and saves the results to a file"""
-        skip_docs = set()
-        if os.path.isfile(self.output_file) and not self.force:
-            for line in csv.reader(open(self.output_file)):
-                qid, did, answer = line
-                skip_docs.add((qid, did))
-        if self.force and os.path.isfile(self.output_file):
-            os.remove(self.output_file)
-        if len(skip_docs) > 0:
-            logger.info(f"Skipping {len(skip_docs)} documents")
-        q_iterator = self.queries
-        if self.verbose:
-            try:
-                from rich.progress import track
-
-                q_iterator = track(self.queries, description="Annotating Documents")
-            except ImportError:
-                pass
-        for qid in q_iterator:
-            for did in self.documents[qid]:
-                if (qid, did) in skip_docs:
-                    logger.debug(f"Skipping {qid} {did}")
-                    continue
-                message = self.__build_message(
-                    self.documents[qid][did], self.queries[qid]
-                )
-                try:
-                    answer = self.openai_client(message)
-                    answer = self.__process_answer(answer)
-                except RetryError:
-                    logger.warning(f"Failed to annotate document {qid} {did}")
-                    continue
-                if self.verbose:
-                    logger.info(
-                        "[bold cyan]Query       [/bold cyan]: "
-                        f"[not bold cyan]{self.queries[qid]}[/not bold cyan]"
-                    )
-                    logger.info(f"[bold cyan]Document ID [/bold cyan]: {did}")
-                    logger.info(
-                        "[bold cyan]Evaluation  [/bold cyan]: "
-                        f"[not bold]{answer}[/not bold]"
-                    )
-                    logger.info("")
-                if not os.path.isfile(self.output_file):
-                    with open(self.output_file, "w") as f:
-                        writer = csv.writer(f)
-                        writer.writerow(["query_id", "did", "answer"])
-
-                with open(self.output_file, "a") as f:
-                    writer = csv.writer(f)
-                    writer.writerow([qid, did, answer])
-
-    @abstractmethod
-    def __process_answer(self, answer: str) -> Any:
-        """Processes the LLM evaluator output into some serializable format"""
+    def __title_overlap(self, new_doc: str, current_doc: str) -> int:
+        size = 0
+        min_len = min(len(new_doc), len(current_doc))
+        while size < min_len and new_doc[size] == current_doc[size]:
+            size += 1
+        return size
 
 
 class DocumentEvaluatorFactory:
