@@ -137,7 +137,17 @@ $ python -m rageval rank-agents answers_eval.jsonl
 
 For additional information on the commands, use the `--help` flag.
 
----
+## Contributing
+
+To install the development dependencies, download the repository and run:
+```bash
+pip install -e '.[dev]'
+```
+This will intstall the requirement dependencies and in an editable mode (i.e., any changes to the code don't need to be re-build.)
+For building a new version, use the `build` command:
+```bash
+python -m build
+```
 
 ### TODO
 - [ ] Publish on PyPi
