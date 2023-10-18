@@ -65,7 +65,10 @@ class DocumentEvaluator:
                     answer = self.openai_client(message)
                     answer = self.__process_answer(answer)
                 except RetryError:
-                    logger.warning(f"Failed to annotate document {qid} {did}")
+                    logger.warning(f"Failed to fetch answers for document {qid} {did}")
+                    continue
+                except ValueError:
+                    logger.warning(f"Failed to parse answer for document {qid} {did}")
                     continue
                 if self.verbose:
                     logger.info(
