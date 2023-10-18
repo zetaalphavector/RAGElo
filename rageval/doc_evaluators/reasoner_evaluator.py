@@ -19,10 +19,10 @@ class ReasonerEvaluator(DocumentEvaluator):
     [document content]
     {doc_content}"""  # noqa: E501
 
-    def __build_message(self, qid: str, did: str) -> str:
+    def _build_message(self, qid: str, did: str) -> str:
         query = self.queries[qid]
         document = self.documents[qid][did]
         return self.prompt.format(user_question=query, doc_content=document)
 
-    def __process_answer(self, answer: str) -> str:
+    def _process_answer(self, answer: str) -> str:
         return answer

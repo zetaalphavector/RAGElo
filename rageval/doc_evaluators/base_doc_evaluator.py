@@ -59,11 +59,10 @@ class DocumentEvaluator:
                 if (qid, did) in skip_docs:
                     logger.debug(f"Skipping {qid} {did}")
                     continue
-                message = self.__build_message(qid, did)
-
+                message = self._build_message(qid, did)
                 try:
                     answer = self.openai_client(message)
-                    answer = self.__process_answer(answer)
+                    answer = self._process_answer(answer)
                 except RetryError:
                     logger.warning(f"Failed to fetch answers for document {qid} {did}")
                     continue
@@ -91,13 +90,14 @@ class DocumentEvaluator:
                     writer.writerow([qid, did, answer])
 
     @abstractmethod
-    def __build_message(self, qid: str, did: str) -> str:
+    def _build_message(self, qid: str, did: str) -> str:
         """Builds the prompt to send to the LLM."""
-        pass
+        raise NotImplementedError
 
     @abstractmethod
-    def __process_answer(self, answer: str) -> Any:
+    def _process_answer(self, answer: str) -> Any:
         """Processes the LLM evaluator output into some serializable format"""
+        raise NotImplementedError
 
     def _load_queries(self, queries_path: str) -> Dict[str, str]:
         queries = {}

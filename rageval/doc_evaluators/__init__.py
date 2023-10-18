@@ -1,3 +1,2 @@
-from .base_doc_evaluator import DocumentEvaluator, DocumentEvaluatorFactory
-from .rdnam_evaluator import RDNAMvaluator
-from .reasoner_evaluator import ReasonerEvaluator
+from rageval.doc_evaluators.rdnam_evaluator import *
+from rageval.doc_evaluators.reasoner_evaluator import *

@@ -1,13 +1,15 @@
-"""Evaluator based on the paper: Paul Thomas, Seth Spielman, Nick Craswell and 
+"""Evaluator based on the paper: Paul Thomas, Seth Spielman, Nick Craswell and
 Bhaskar Mitra. Large language models can accurately predict searcher preferences.
 https://arxiv.org/abs/2309.10621
 """
 import json
 from typing import Any, Dict
 
+from rageval.doc_evaluators.base_doc_evaluator import (
+    DocumentEvaluator,
+    DocumentEvaluatorFactory,
+)
 from rageval.logger import logger
-
-from .base_doc_evaluator import DocumentEvaluator, DocumentEvaluatorFactory
 
 
 @DocumentEvaluatorFactory.register("RDNAM")
@@ -17,16 +19,16 @@ class RDNAMvaluator(DocumentEvaluator):
     1 = relevant, may be partly helpful but might contain other irrelevant content
     0 = not relevant, should never be shown for this query
     Assume that you are writing a report on the subject of the topic. If you would use any of the information contained in the document in such a report, mark it 1. If the document is primarily about the topic, or contains vital information about the topic, mark it 2. Otherwise, mark it 0.
-    
+
     # Query
     A person has typed {query} into a search engine.{narrative}{description}
-    
+
     # Result
     Consider the following document.
     ---BEGIN DOCUMENT CONTENT---
     {doc_content}
     ---END DOCUMENT CONTENT---
-    
+
     # Instructions
     Split this problem into steps:
     Consider the underlying intent of the search.
@@ -34,7 +36,7 @@ class RDNAMvaluator(DocumentEvaluator):
     Consider the aspects above and relative importance of each, and decide on a final score (O).
     {multiple}
     Produce a JSON array of scores without providing any reasoning. Example: {example}
-    
+
     # Results
     [{
     """  # noqa: E501
@@ -84,7 +86,7 @@ Each rater used their own independent judgement."""  # noqa: E501
         self.aspects_prompt = self.ASPECTS_NARRATIVE if aspects else ""
         self.multiple_prompt = self.MULTILPE_PROMPT if multiple else ""
 
-    def __build_message(
+    def _build_message(
         self,
         qid: str,
         did: str,
@@ -121,7 +123,7 @@ Each rater used their own independent judgement."""  # noqa: E501
         )
         return formatted_prompt
 
-    def __process_answer(self, answer: str) -> Dict[str, Any]:
+    def _process_answer(self, answer: str) -> Dict[str, Any]:
         try:
             ans = json.loads(answer)
         except json.decoder.JSONDecodeError:
