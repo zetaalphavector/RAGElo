@@ -8,7 +8,7 @@ from rageval.logger import logger
 
 
 @DocumentEvaluatorFactory.register("reasoner")
-class ReasonerDocEval(DocumentEvaluator):
+class ReasonerEvaluator(DocumentEvaluator):
     """
     A document Evaluator that only outputs the reasoning for why a document
     is relevant.

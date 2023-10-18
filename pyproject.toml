@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0", "wheel", "setuptools-git-versioning<2"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "RAGEval"
+name = "rageval"
 authors = [
     { name = "Zeta Alpha", email = "team@zeta-alpha.com" },
     { name = "Arthur Câmara", email = "camara@zeta-alpha.com" },
