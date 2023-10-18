@@ -1,6 +1,4 @@
-from rageval import __app_name__
-
-from . import cli
+from rageval import __app_name__, cli
 
 
 def main():

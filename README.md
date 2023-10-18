@@ -39,13 +39,13 @@ RAGeval is built with [Typer](https://github.com/tiangolo/typer) for pretty CLIs
 
 If you want to install RAGEval as a library, you can use pip directly:
 ```bash
-pip install RAGEval
+pip install rageval
 ```
 
-If you want to use RAGEval as a standalone CLI, use the `[CLI]` tag:
+If you want to use RAGEval as a standalone CLI, use the `[cli]` tag:
 
 ```bash
-pip install RAGEval[CLI]
+pip install rageval[cli]
 ```
 
 ## OpenAI credentials
@@ -88,7 +88,7 @@ RAGeval deals with the following entities:
 
 For evaluating a set of answers, we can use the `run-all` command like this:
 ```bash
-$ python -m rageval run-all queries.csv documents.csv answers.csv
+$ rageval run-all queries.csv documents.csv answers.csv
 
 ---------- Agent Scores by Elo ranking ----------
  agent1        : 1026.7
@@ -124,15 +124,15 @@ query_id,agent,answer
 It is also possible to run just either of the Evaluators individually. To do so, we use the `annotate-documents`, `annotate-answers` and `rank-agents` commands:
 
 ```bash
-$ python -m rageval annotate-documents queries.csv documents.csv reasoner reasonings.csv 
+$ rageval annotate-documents queries.csv documents.csv reasoner reasonings.csv 
 ```
 
 ```bash
-$ python -m rageval annotate-answers queries.csv answers.csv reasonings.csv answers_eval.jsonl
+$ rageval annotate-answers queries.csv answers.csv reasonings.csv answers_eval.jsonl
 ```
 
 ```bash
-$ python -m rageval rank-agents answers_eval.jsonl 
+$ rageval rank-agents answers_eval.jsonl 
 ```
 
 For additional information on the commands, use the `--help` flag.

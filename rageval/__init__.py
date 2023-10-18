@@ -1,7 +1,7 @@
 """CLI for automatically evaluating Retrieval Augmented Generation (RAG) models."""
 
-from .answer_evaluators import AnswerEvaluatorFactory
-from .doc_evaluators import DocumentEvaluatorFactory
+from rageval.answer_evaluators import AnswerEvaluatorFactory
+from rageval.doc_evaluators import DocumentEvaluatorFactory
 
 __version__ = "0.1.0"
 __app_name__ = "auto-eval"

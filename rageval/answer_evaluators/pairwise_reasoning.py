@@ -8,9 +8,11 @@ from typing import Dict, List, Tuple
 
 from tenacity import RetryError
 
+from rageval.answer_evaluators.base_answer_evaluator import (
+    AnswerEvaluator,
+    AnswerEvaluatorFactory,
+)
 from rageval.logger import logger
-
-from .base_answer_evaluator import AnswerEvaluator, AnswerEvaluatorFactory
 
 
 @AnswerEvaluatorFactory.register("PairwiseWithReasoning")
@@ -19,9 +21,9 @@ class PairwiseWithReasoning(AnswerEvaluator):
 
     prompt = """Please act as an impartial judge and evaluate the quality of the responses provided by two AI assistants tasked to answer the question displayed below, based on a set of documents retrieved by a search engine.
     You should choose the assistant that best answers the user question based on a set of reference documents that may or not be relevant.
-    Answers cite documents using square brackets.  For each reference document, you will be provided with a reasoning explaining why the document is or is not relevant. 
+    Answers cite documents using square brackets.  For each reference document, you will be provided with a reasoning explaining why the document is or is not relevant.
     Your evaluation should consider factors such as the correctness, helpfulness, completeness, accuracy, depth, and level of detail of their responses. Details are only useful if they answer the user question. If an answers contains non-relevant details, it should not be preferred over one that only use relevant information.
-    Begin your evaluation by explaining why each answer correctly answers the user question. Then, you should compare the two responses and provide a short explanation on their differences. Avoid any position biases and ensure that the order in which the responses were presented does not influence your decision. Do not allow the length of the responses to influence your evaluation. Be as objective as possible. After providing your explanation, output your final verdict by strictly following this format: "[[A]]" if assistant A is better, "[[B]]" if assistant B is better, and "[[C]]" for a tie. 
+    Begin your evaluation by explaining why each answer correctly answers the user question. Then, you should compare the two responses and provide a short explanation on their differences. Avoid any position biases and ensure that the order in which the responses were presented does not influence your decision. Do not allow the length of the responses to influence your evaluation. Be as objective as possible. After providing your explanation, output your final verdict by strictly following this format: "[[A]]" if assistant A is better, "[[B]]" if assistant B is better, and "[[C]]" for a tie.
     [User Question]
     {query}
     [Reference Documents]
@@ -41,8 +43,8 @@ class PairwiseWithReasoning(AnswerEvaluator):
         *args,
         **kwargs,
     ):
-        super().__init__(*args, **kwargs)
         self.k = k
+        super().__init__(*args, **kwargs)
         self.bidirectional = bidirectional
         self.pattern = re.compile(r"\[\[([^]]+)]].*$(?:(?!\[\[).)*", re.DOTALL)
         self.reasonings = self._load_reasonings(reasonings_file)
@@ -218,7 +220,7 @@ class PairwiseWithReasoning(AnswerEvaluator):
                 )
         return prompts
 
-    def ___check_validity(self):
+    def _check_validity(self):
         total_agents = len(self.agents)
         if total_agents < 2:
             raise ValueError(f"Need at least 2 agents, found {total_agents}")

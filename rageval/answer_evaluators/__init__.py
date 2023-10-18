@@ -1,2 +1,1 @@
-from .base_answer_evaluator import AnswerEvaluator, AnswerEvaluatorFactory
-from .pairwise_reasoning import PairwiseWithReasoning
+from rageval.answer_evaluators.pairwise_reasoning import *
