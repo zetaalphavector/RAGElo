@@ -1,7 +1,7 @@
 # RAGeval
 
 
-<img  align="left" src="RAGEval_logo_DallE.png" width="200">
+<img  align="left" src="RAGEval_logo_DallE.png" width="200">[^1]
 <p  align="center" ><em> For when you are too lazy to annotate everything manually</em></p>
 
 
@@ -110,15 +110,15 @@ $ python -m rageval rank-agents answers_eval.jsonl
 ```
 
 For additional information on the commands, use the `--help` flag.
----
-The RAGeval logo was created using Dall-E 3 with the following prompt:
-```
-Vector design of a minimalistic command line interface (CLI) window. Inside the window, there's a concise Python code snippet symbolizing retrieval and augmentation. Above the window, a single performance bar glows in green, indicating success.
 
-```
+---
+
 ### TODO
 - [ ] Publish on PyPi
 - [ ] Add custom types
 - [ ] Add more document evaluators (Microsoft)
+- [ ] Testing!
 - [x] Split Elo evaluator
 - [x] Install as standalone CLI
+
+[^1]: The RAGeval logo was created using Dall-E 3 and GPT-4 with the following prompt: " Vector design of a minimalistic command line interface (CLI) window. Inside the window, there's a concise Python code snippet symbolizing retrieval and augmentation. Above the window, a single performance bar glows in green, indicating success."
