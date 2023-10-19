@@ -43,6 +43,7 @@ class DocumentEvaluator:
                 qid, did, answer = line
                 skip_docs.add((qid, did))
         if self.force and os.path.isfile(self.output_file):
+            logger.warning(f"Removing existing {self.output_file}!")
             os.remove(self.output_file)
         if len(skip_docs) > 0:
             logger.warning(
