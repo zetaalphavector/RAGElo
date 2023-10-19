@@ -30,7 +30,7 @@ class DocumentEvaluator:
         self.queries = self._load_queries(query_path)
         self.documents = self._load_documents(documents_path)
 
-        if credentials_file and os.path.isfile(credentials_file):
+        if credentials_file:
             set_credentials_from_file(credentials_file)
 
         self.openai_client = OpenAiClient(model=model_name)
@@ -45,7 +45,10 @@ class DocumentEvaluator:
         if self.force and os.path.isfile(self.output_file):
             os.remove(self.output_file)
         if len(skip_docs) > 0:
-            logger.info(f"Skipping {len(skip_docs)} documents")
+            logger.warning(
+                f"Skipping {len(skip_docs)} documents already annotated! "
+                "If you want to reannotate them, please use the --force flag"
+            )
         q_iterator = self.queries
         if self.verbose:
             try:

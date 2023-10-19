@@ -15,7 +15,7 @@ logger.setLevel("INFO")
 
 app = typer.Typer()
 state = {
-    "verbose": False,
+    "verbose": True,
     "force": False,
     "credentials_file": None,
     "model_name": "gpt-4",
@@ -85,8 +85,8 @@ def answers_annotator(
         Optional[str],
         typer.Argument(
             help="csv file with reasonings for relevancy for each document, "
-            "Produced by the annotate-documents command. Only needed for the PairwiseWithReasoning "
-            "evaluator"
+            "Produced by the annotate-documents command. Only needed for the "
+            "PairwiseWithReasoning evaluator"
         ),
     ] = None,
     output_file: Annotated[
@@ -282,11 +282,11 @@ def _version_callback(value: bool) -> None:
 
 @app.callback()
 def main(
-    verbose: Optional[bool] = typer.Option(
+    silent: Optional[bool] = typer.Option(
         None,
-        "--verbose",
-        "-V",
-        help="Show debug information",
+        "--silent",
+        "-S",
+        help="Run in silent mode, with minimal output",
     ),
     force: Optional[bool] = typer.Option(
         None,
@@ -324,8 +324,8 @@ def main(
     """A CLI for auto-eval"""
     if force:
         state["force"] = force
-    if verbose:
-        state["verbose"] = verbose
+    if silent:
+        state["verbose"] = False
     if credentials_file:
         state["credentials_file"] = credentials_file
     if model_name:

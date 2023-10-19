@@ -81,7 +81,7 @@ While **RAGElo** is meant to be used as an end-to-end tool, we can also invoke e
 #### 📜 `documents-annotator`
 The `documents-annotator` tool annotates a set of documents based on their relevance to the user query. This is done regardless of the answers provided by the Agents. By default, it uses the `reasoner` annotator, that only outputs the reasoning for the relevance judgment:
 ```bash
-ragelo documents-annotator queries.csv documents.csv reasonings.csv reasoner
+ragelo documents-annotator queries.csv documents.csv reasonings.csv
 ```
 The `reasonings.csv` output file if also a CSV file:
 ```csv

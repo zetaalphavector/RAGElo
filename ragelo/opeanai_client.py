@@ -130,6 +130,8 @@ class OpenAiClient:
 def set_credentials_from_file(credentials_file: str):
     """Read credentials from a file and add them to the environment."""
     logger.info(f"Loading credentials from {credentials_file}")
+    if not os.path.isfile(credentials_file):
+        raise FileNotFoundError(f"Credentials file {credentials_file} not found")
     with open(credentials_file) as f:
         for line in f:
             key, value = line.strip().split("=")

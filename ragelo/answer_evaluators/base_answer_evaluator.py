@@ -31,7 +31,7 @@ class AnswerEvaluator:
         self.queries = self._load_queries(query_path)
         self.answers = self._load_answers(answers_file)
 
-        if credentials_file and os.path.isfile(credentials_file):
+        if credentials_file:
             set_credentials_from_file(credentials_file)
 
         self.openai_client = OpenAiClient(model=model_name)
