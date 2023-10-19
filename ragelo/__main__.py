@@ -1,4 +1,4 @@
-from rageval import __app_name__, cli
+from ragelo import __app_name__, cli
 
 
 def main():

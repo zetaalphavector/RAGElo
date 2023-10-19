@@ -1,8 +1,8 @@
 import random
 from typing import Dict, List, Tuple
 
-from rageval.answer_rankers.base_answer_ranker import AnswerRanker, AnswerRankerFactory
-from rageval.logger import logger
+from ragelo.answer_rankers.base_answer_ranker import AnswerRanker, AnswerRankerFactory
+from ragelo.logger import logger
 
 
 @AnswerRankerFactory.register("elo")
@@ -11,8 +11,8 @@ class EloRanker(AnswerRanker):
         super().__init__(*args, **kwargs)
         self.score_map = {"A": 1, "B": 0, "C": 0.5}
         self.name = "Elo ranking"
-        self.players = {}
-        self.games = []
+        self.players: Dict[str, float] = {}
+        self.games: List[Tuple[str, str, float]] = []
         self.computed = False
         self.initial_score = initial_score
         self.k = k
@@ -28,13 +28,13 @@ class EloRanker(AnswerRanker):
             raise ValueError("Ranking not computed yet, Run evaluate() first")
         return self.players
 
-    def __get_elo_scores(self) -> Tuple[List[Tuple[str, str, float]], Dict[str, float]]:
-        games = []
+    def __get_elo_scores(self) -> Tuple[List[Tuple[str, str, float]], Dict[str, int]]:
+        games: List[Tuple[str, str, float]] = []
         players = {}
         for agent_a, agent_b, score in self.evaluations:
-            score = self.score_map[score]
-            games.append((agent_a, agent_b, score))
-            logger.info(f"Game: {agent_a} vs {agent_b} -> {score}")
+            score_val = self.score_map[score]
+            games.append((agent_a, agent_b, score_val))
+            logger.info(f"Game: {agent_a} vs {agent_b} -> {score_val}")
             if agent_a not in players:
                 players[agent_a] = self.initial_score
             if agent_b not in players:

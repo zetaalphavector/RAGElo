@@ -7,8 +7,8 @@ from typing import Any, Callable, Dict, Type
 
 from tenacity import RetryError
 
-from rageval.logger import logger
-from rageval.opeanai_client import OpenAiClient, set_credentials_from_file
+from ragelo.logger import logger
+from ragelo.opeanai_client import OpenAiClient, set_credentials_from_file
 
 
 class DocumentEvaluator:
@@ -30,7 +30,7 @@ class DocumentEvaluator:
         self.queries = self._load_queries(query_path)
         self.documents = self._load_documents(documents_path)
 
-        if credentials_file and os.path.isfile(credentials_file):
+        if credentials_file:
             set_credentials_from_file(credentials_file)
 
         self.openai_client = OpenAiClient(model=model_name)
@@ -43,9 +43,13 @@ class DocumentEvaluator:
                 qid, did, answer = line
                 skip_docs.add((qid, did))
         if self.force and os.path.isfile(self.output_file):
+            logger.warning(f"Removing existing {self.output_file}!")
             os.remove(self.output_file)
         if len(skip_docs) > 0:
-            logger.info(f"Skipping {len(skip_docs)} documents")
+            logger.warning(
+                f"Skipping {len(skip_docs)} documents already annotated! "
+                "If you want to reannotate them, please use the --force flag"
+            )
         q_iterator = self.queries
         if self.verbose:
             try:
@@ -115,7 +119,7 @@ class DocumentEvaluator:
         return queries
 
     def _load_documents(self, documents_path: str) -> Dict[str, Dict[str, str]]:
-        rows = defaultdict(dict)
+        rows: Dict[str, Dict[str, str]] = defaultdict(lambda: dict())
         if not os.path.isfile(documents_path):
             logger.exception(f"Documents file {documents_path} not found")
             raise FileNotFoundError

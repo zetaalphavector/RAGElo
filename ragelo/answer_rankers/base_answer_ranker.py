@@ -5,7 +5,7 @@ from abc import abstractmethod
 from collections import defaultdict
 from typing import Dict, List, Tuple, Type
 
-from rageval.logger import logger
+from ragelo.logger import logger
 
 
 class AnswerRanker:
@@ -14,7 +14,7 @@ class AnswerRanker:
         name: str,
         output_file: str,
         evaluations_file: str | None = None,
-        evaluations: List[Dict[str, str]] | None = None,
+        evaluations: List[Tuple[str, str, str]] | None = None,
         print: bool = False,
         force: bool = False,
         **kwargs,
@@ -42,7 +42,7 @@ class AnswerRanker:
         else:
             raise ValueError("No evaluations found")
 
-        self.ranking = defaultdict(list)
+        self.ranking: defaultdict = defaultdict(list)
         self.name = name
         self.print = print
         self.force = force

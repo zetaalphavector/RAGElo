@@ -5,11 +5,11 @@ https://arxiv.org/abs/2309.10621
 import json
 from typing import Any, Dict
 
-from rageval.doc_evaluators.base_doc_evaluator import (
+from ragelo.doc_evaluators.base_doc_evaluator import (
     DocumentEvaluator,
     DocumentEvaluatorFactory,
 )
-from rageval.logger import logger
+from ragelo.logger import logger
 
 
 @DocumentEvaluatorFactory.register("RDNAM")

@@ -1,4 +1,4 @@
-from rageval.doc_evaluators import DocumentEvaluator, DocumentEvaluatorFactory
+from ragelo.doc_evaluators import DocumentEvaluator, DocumentEvaluatorFactory
 
 
 @DocumentEvaluatorFactory.register("reasoner")
