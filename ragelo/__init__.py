@@ -1,5 +1,4 @@
 """CLI for automatically evaluating Retrieval Augmented Generation (RAG) models."""
-
 from ragelo.answer_evaluators import AnswerEvaluatorFactory
 from ragelo.doc_evaluators import DocumentEvaluatorFactory
 

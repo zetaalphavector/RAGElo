@@ -14,8 +14,6 @@ from ragelo.logger import CLILogHandler, logger
 logger.addHandler(CLILogHandler())
 logger.setLevel("INFO")
 
-app = typer.Typer()
-
 
 @dataclass
 class State:
@@ -24,6 +22,9 @@ class State:
     credentials_file: str | None = None
     model_name: str = "gpt-4"
     data_path: str = "data"
+
+
+app = typer.Typer()
 
 
 state = State()
@@ -282,7 +283,7 @@ def run_all(
 
 def _version_callback(value: bool) -> None:
     if value:
-        logger.info(f"{__app_name__} v{__version__}")
+        print(f"{__app_name__} v{__version__}")
         raise typer.Exit()
 
 
@@ -291,7 +292,6 @@ def main(
     silent: Annotated[
         bool,
         typer.Option(
-            None,
             "--silent",
             "-S",
             help="Run in silent mode, with minimal output",
@@ -325,7 +325,6 @@ def main(
     data_path: Annotated[
         str,
         typer.Option(
-            "data",
             "--data-path",
             help="Base path to store output data",
         ),
@@ -340,7 +339,7 @@ def main(
             is_eager=True,
         ),
     ] = None,
-) -> None:
+):
     """A CLI for auto-eval"""
     state.verbose = not silent
     state.force = force
