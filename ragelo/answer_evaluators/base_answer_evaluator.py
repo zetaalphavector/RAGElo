@@ -3,7 +3,7 @@ import csv
 import os
 from abc import abstractmethod
 from collections import defaultdict
-from typing import Dict, Type
+from typing import Dict, Set, Type
 
 from ragelo.logger import logger
 from ragelo.opeanai_client import OpenAiClient, set_credentials_from_file
@@ -25,8 +25,7 @@ class AnswerEvaluator:
         self.name = evaluator_name
         self.print = print_answers
         self.force = force
-        self.pairs = []
-        self.agents = set()
+        self.agents: Set[str] = set()
         self.output_file = output_file
         self.queries = self._load_queries(query_path)
         self.answers = self._load_answers(answers_file)
@@ -57,7 +56,7 @@ class AnswerEvaluator:
         return queries
 
     def _load_answers(self, answers_path: str) -> Dict[str, Dict[str, str]]:
-        answers = defaultdict(dict)
+        answers: Dict[str, Dict[str, str]] = defaultdict(lambda: dict())
         for line in csv.DictReader(open(answers_path)):
             qid = line["query_id"]
             if qid not in self.queries:

@@ -119,7 +119,7 @@ class DocumentEvaluator:
         return queries
 
     def _load_documents(self, documents_path: str) -> Dict[str, Dict[str, str]]:
-        rows = defaultdict(dict)
+        rows: Dict[str, Dict[str, str]] = defaultdict(lambda: dict())
         if not os.path.isfile(documents_path):
             logger.exception(f"Documents file {documents_path} not found")
             raise FileNotFoundError

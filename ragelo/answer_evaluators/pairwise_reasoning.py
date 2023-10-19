@@ -48,7 +48,7 @@ class PairwiseWithReasoning(AnswerEvaluator):
         self.bidirectional = bidirectional
         self.pattern = re.compile(r"\[\[([^]]+)]].*$(?:(?!\[\[).)*", re.DOTALL)
         self.reasonings = self._load_reasonings(reasonings_file)
-        self.evaluations = []
+        self.evaluations: List[Dict[str, str]] = []
 
     def run(self) -> List[Dict[str, str]]:
         unparsed_answers = 0
@@ -68,14 +68,13 @@ class PairwiseWithReasoning(AnswerEvaluator):
         if len(self.prompts) - len(skip_tuples) > 0:
             logger.info(f"Running {len(self.prompts) - len(skip_tuples)} games...")
 
-        p_iterator = self.prompts
         if self.print:
             try:
                 from rich.progress import track
 
                 p_iterator = track(self.prompts, description="Evaluating games")
             except ImportError:
-                pass
+                p_iterator = self.prompts
         for p in p_iterator:
             qid = p["query_id"]
             agent_a = p["agent_a"]
@@ -162,16 +161,16 @@ class PairwiseWithReasoning(AnswerEvaluator):
         random.shuffle(second_agents)
 
         # use deque to pop from the left
-        first_agents = deque(first_agents)
-        second_agents = deque(second_agents)
+        first_agents_q = deque(first_agents)
+        second_agents_q = deque(second_agents)
 
         used_pairs = set()  # avoid re-using pairs
         pairs = []
-        while first_agents and len(pairs) < self.k:
-            agent_a = first_agents.popleft()
+        while first_agents_q and len(pairs) < self.k:
+            agent_a = first_agents_q.popleft()
 
             for _ in range(len(second_agents)):
-                agent_b = second_agents.popleft()
+                agent_b = second_agents_q.popleft()
                 if agent_b != agent_a and (agent_a, agent_b) not in used_pairs:
                     used_pairs.add((agent_a, agent_b))
                     pairs.append((agent_a, agent_b))
@@ -180,23 +179,22 @@ class PairwiseWithReasoning(AnswerEvaluator):
                         pairs.append((agent_b, agent_a))
                         used_pairs.add((agent_b, agent_a))
                         logger.debug(f"Created game {agent_b} vs {agent_a}")
-                    second_agents.append(agent_b)
+                    second_agents_q.append(agent_b)
                     break
-                second_agents.append(agent_b)
+                second_agents_q.append(agent_b)
         logger.info(f"Created {len(pairs)} games")
         return pairs
 
     def __create_all_prompts(self) -> List[Dict[str, str]]:
         prompts = []
         random_pairs = self.__generate_random_games()
-        a_iterator = self.answers
         if self.print:
             try:
                 from rich.progress import track
 
                 a_iterator = track(self.answers, description="Creating prompts")
             except ImportError:
-                pass
+                a_iterator = self.answers
         for qid in a_iterator:
             query = self.queries[qid]
             for a, b in random_pairs:
@@ -244,7 +242,7 @@ class PairwiseWithReasoning(AnswerEvaluator):
         return answer
 
     def _load_reasonings(self, reasonings_path: str) -> Dict[str, Dict[str, str]]:
-        reasonings = defaultdict(dict)
+        reasonings: Dict[str, Dict[str, str]] = defaultdict(lambda: dict())
         reasonings_read = 0
         for line in csv.DictReader(open(reasonings_path)):
             if line["query_id"] not in self.queries:
@@ -252,4 +250,4 @@ class PairwiseWithReasoning(AnswerEvaluator):
             reasonings_read += 1
             reasonings[line["query_id"]][line["did"]] = line["answer"]
         logger.info(f"Loaded {reasonings_read} reasonings")
-        return reasonings
+        return dict(reasonings)
