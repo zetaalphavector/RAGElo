@@ -3,12 +3,12 @@ requires = ["setuptools>=61.0", "wheel", "setuptools-git-versioning<2"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "rageval"
+name = "ragelo"
 authors = [
     { name = "Zeta Alpha", email = "team@zeta-alpha.com" },
     { name = "Arthur Câmara", email = "camara@zeta-alpha.com" },
 ]
-description = "RAGeval: A Tool for Evaluating Retrieval-Augmented Generation Models"
+description = "RAGElo: A Tool for Evaluating Retrieval-Augmented Generation Models"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
@@ -30,7 +30,7 @@ dependencies = ["openai", "tenacity", "typer"]
 CLI = ["typer[all]"]
 
 [project.scripts]
-rageval = "rageval.cli:app"
+ragelo = "ragelo.cli:app"
 
 [tool.setuptools.packages.find]
 exclude = ["data*"]
