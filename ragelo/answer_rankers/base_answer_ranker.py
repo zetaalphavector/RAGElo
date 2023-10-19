@@ -61,10 +61,12 @@ class AnswerRanker:
     @abstractmethod
     def evaluate(self):
         """Compute score for each agent"""
+        raise NotImplementedError
 
     @abstractmethod
     def get_agents_ratings(self) -> Dict[str, float]:
         """Returns the score of all players"""
+        raise NotImplementedError
 
     def print_ranking(self):
         if self.print:

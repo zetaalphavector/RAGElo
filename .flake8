@@ -1,0 +1,11 @@
+[flake8]
+show-source = True
+docstring-convention = google
+max-complexity = 22
+max-line-length = 88
+ignore = 
+    # See https://github.com/PyCQA/pycodestyle/issues/373
+    E203,
+    W503,
+    N818
+exclude = .git,__pycache__,.idea,__init__.py,.vscode

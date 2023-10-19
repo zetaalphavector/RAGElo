@@ -66,12 +66,12 @@ class AnswerEvaluator:
             self.agents.add(agent)
             answer = line["answer"]
             answers[qid][agent] = answer
-        self.___check_validity()
+        self._check_validity()
         return answers
 
     @abstractmethod
-    def ___check_validity(self):
-        pass
+    def _check_validity(self):
+        raise NotImplementedError
 
 
 class AnswerEvaluatorFactory:

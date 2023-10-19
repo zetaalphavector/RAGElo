@@ -1,6 +1,4 @@
-from ragelo import __app_name__
-
-from . import cli
+from ragelo import __app_name__, cli
 
 
 def main():

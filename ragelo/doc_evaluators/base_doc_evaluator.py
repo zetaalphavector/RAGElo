@@ -64,7 +64,6 @@ class DocumentEvaluator:
                     logger.debug(f"Skipping {qid} {did}")
                     continue
                 message = self._build_message(qid, did)
-
                 try:
                     answer = self.openai_client(message)
                     answer = self._process_answer(answer)
@@ -97,11 +96,12 @@ class DocumentEvaluator:
     @abstractmethod
     def _build_message(self, qid: str, did: str) -> str:
         """Builds the prompt to send to the LLM."""
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def _process_answer(self, answer: str) -> Any:
         """Processes the LLM evaluator output into some serializable format"""
+        raise NotImplementedError
 
     def _load_queries(self, queries_path: str) -> Dict[str, str]:
         queries = {}

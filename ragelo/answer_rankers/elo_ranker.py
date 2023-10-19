@@ -1,9 +1,8 @@
 import random
 from typing import Dict, List, Tuple
 
+from ragelo.answer_rankers.base_answer_ranker import AnswerRanker, AnswerRankerFactory
 from ragelo.logger import logger
-
-from .base_answer_ranker import AnswerRanker, AnswerRankerFactory
 
 
 @AnswerRankerFactory.register("elo")
