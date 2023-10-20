@@ -132,6 +132,7 @@ python -m build
 ```
 
 ### ✅ TODO
+- [ ] Add option to few-shot examples
 - [ ] Publish on PyPi
 - [ ] Add custom types
 - [ ] Testing!
