@@ -140,4 +140,4 @@ python -m build
 - [x] Split Elo evaluator
 - [x] Install as standalone CLI
 
-[^1]: The RAGElo logo was created using Dall-E 3 and GPT-4 with the following prompt: `Vector logo design for a toolkit named 'RAGElo'. The logo should have bold, modern typography with emphasis on 'RAG' in a contrasting color. Include a minimalist icon symbolizing retrieval or ranking.``
+[^1]: The RAGElo logo was created using Dall-E 3 and GPT-4 with the following prompt: "Vector logo design for a toolkit named 'RAGElo'. The logo should have bold, modern typography with emphasis on 'RAG' in a contrasting color. Include a minimalist icon symbolizing retrieval or ranking"
