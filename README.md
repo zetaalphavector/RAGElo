@@ -41,17 +41,17 @@ Below we describe the format of each file.
 `queries.csv`: 
 ```csv
 query_id,query
-0, What is the capital of Brazil?
-1, What is the capital of France?
+0, "What is the capital of Brazil?"
+1, "What is the capital of France?"
 ```
 
 `documents.csv`:
 ```csv
 query_id,doc_id,document_text
-0,0, Brasília is the capital of Brazil.
-0,1, Rio de Janeiro used to be the capital of Brazil.
-1,2, Paris is the capital of France.
-1,3, Lyon is the second largest city in France.
+0,0, "Brasília is the capital of Brazil."
+0,1, "Rio de Janeiro used to be the capital of Brazil."
+1,2, "Paris is the capital of France."
+1,3, "Lyon is the second largest city in France."
 ```
 
 `answers.csv`:
@@ -87,9 +87,9 @@ The `reasonings.csv` output file if also a CSV file:
 ```csv
 query_id,did,answer
 0,0,"Very relevant: The document directly states that Brasília is the capital of Brazil, answering the user question."
-0,1,Very relevant: The document directly answers the user question by stating that Rio de Janeiro used to be the capital of Brazil.
-1,2,Very relevant: The document directly answers the user question by stating that Paris is the capital of France.
-1,3,Not relevant: The document does not provide information about the capital of France.
+0,1,"Very relevant: The document directly answers the user question by stating that Rio de Janeiro used to be the capital of Brazil."
+1,2,"Very relevant: The document directly answers the user question by stating that Paris is the capital of France."
+1,3,"Not relevant: The document does not provide information about the capital of France."
 ```
 
 ### 💬 `answers-annotator`
