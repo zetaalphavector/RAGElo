@@ -74,7 +74,7 @@ ragelo --credentials credentials.txt run-all queries.csv documents.csv answers.c
 ## 🧩 Components
 While **RAGElo** is meant to be used as an end-to-end tool, we can also invoke each of its components individually:
 
-#### 📜 `documents-annotator`
+### 📜 `documents-annotator`
 The `documents-annotator` tool annotates documents based on their relevance to the user query. This is done regardless of the answers provided by the Agents. By default, it uses the `reasoner` annotator, which only outputs the reasoning for the relevance judgment:
 
 ```bash
