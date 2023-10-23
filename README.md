@@ -8,8 +8,14 @@
 </p>
 
 
+**RAGElo**[^1] is a streamlined toolkit for evaluating question answering systems built with Retrieval Augmented Generation (RAG)-powered Large Language Models (LLMs) using the Elo rating system.
 
-**RAGElo**[^1] is a lightweight yet powerful set of tools for ranking RAG (Retrieval Augmented Generated) LLM agents using the [Elo rating system](https://en.wikipedia.org/wiki/Elo_rating_system). RAGElo uses LLMs with battle-proved prompts and methods for calculating a preference ranking between multiple RAG pipelines. It can be used as a standalone CLI application or integrated into your existing code as a Python library.
+While it has become easier to prototype and incorporate generative LLMs in production, evaluation is still the most challenging part of the solution. Comparing different outputs from multiple prompt and pipeline variations to a "gold standard" is not easy. Still, we can ask a powerful LLM to judge between pairs of answers and a set of questions. 
+
+This led us to develop a simple tool for tournament-style Elo ranking of LLM outputs. By comparing answers from different RAG pipelines and prompts over multiple questions, RAGElo computes a ranking of the different settings, providing a good overview of what works (and what doesn't). 
+
+RAGElo was developed in a Generative AI project that Zeta Alpha developed with BASF. 
+
 
 ## ⚙️ Installation
 
