@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ragelo"
 authors = [
-    { name = "Zeta Alpha", email = "team@zeta-alpha.com" },
+    { name = "Zeta Alpha", email = "support@zeta-alpha.com" },
     { name = "Arthur Câmara", email = "camara@zeta-alpha.com" },
 ]
 description = "RAGElo: A Tool for Evaluating Retrieval-Augmented Generation Models"
@@ -32,6 +32,10 @@ dev = ["bandit==1.7.5", "black==23.10.0", "isort==5.12.0", "flake8==6.1.0", "fla
 
 [project.scripts]
 ragelo = "ragelo.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/zetaalphavector/RAGElo"
+Repository = "https://github.com/zetaalphavector/RAGElo"
 
 [tool.setuptools.packages.find]
 exclude = ["data*"]
