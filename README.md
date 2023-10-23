@@ -8,7 +8,7 @@
 </p>
 
 
-**RAGElo**[^1] is a streamlined toolkit for evaluating question answering systems built with Retrieval Augmented Generation (RAG)-powered Large Language Models (LLMs) using the Elo rating system.
+**RAGElo**[^1] is a streamlined toolkit for evaluating Retrieval Augmented Generation (RAG)-powered Large Language Models (LLMs) question answering agents using the Elo rating system.
 
 While it has become easier to prototype and incorporate generative LLMs in production, evaluation is still the most challenging part of the solution. Comparing different outputs from multiple prompt and pipeline variations to a "gold standard" is not easy. Still, we can ask a powerful LLM to judge between pairs of answers and a set of questions. 
 
