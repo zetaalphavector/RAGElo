@@ -1,6 +1,6 @@
 
 <h1 align="center">
-<img style="vertical-align:middle" src="docs/images/RAGElo_logo.png" height="200">
+<img style="vertical-align:middle" src="https://raw.githubusercontent.com/zetaalphavector/RAGElo/master/docs/images/RAGElo_logo.png" height="200">
 </h1>
 
 <p  align="center" >
