@@ -92,7 +92,7 @@ class DocumentEvaluator:
         """Runs the evaluator and saves the results to a file"""
         q_iterator = self._get_documents_iterator()
         skip_docs = self._get_skip_docs()
-        answers = defaultdict(lambda: dict())
+        answers: Dict[str, Dict[str, Any]] = defaultdict(lambda: dict())
         for qid in q_iterator:
             for did in self.documents[qid]:
                 if (qid, did) in skip_docs:
