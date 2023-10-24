@@ -125,10 +125,10 @@ python -m build
 
 ### ✅ TODO
 - [ ] Add option to few-shot examples
-- [x] Publish on PyPi
 - [ ] Add custom types
 - [ ] Testing!
 - [ ] Add CI/CD for publishing
+- [x] Publish on PyPi
 - [x] Add more document evaluators (Microsoft)
 - [x] Split Elo evaluator
 - [x] Install as standalone CLI

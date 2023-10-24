@@ -8,7 +8,7 @@ from typing import Any, Callable, Dict, Type
 from tenacity import RetryError
 
 from ragelo.logger import logger
-from ragelo.opeanai_client import OpenAiClient, set_credentials_from_file
+from ragelo.openai_client import OpenAiClient, set_credentials_from_file
 
 
 class DocumentEvaluator:
