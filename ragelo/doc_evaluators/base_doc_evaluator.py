@@ -3,7 +3,8 @@ import csv
 import os
 from abc import abstractmethod
 from collections import defaultdict
-from typing import Any, Callable, Dict, Type
+from collections.abc import Iterable
+from typing import Any, Callable, Dict, Set, Tuple, Type
 
 from tenacity import RetryError
 
@@ -35,8 +36,7 @@ class DocumentEvaluator:
 
         self.openai_client = OpenAiClient(model=model_name)
 
-    def get_answers(self):
-        """Runs the evaluator and saves the results to a file"""
+    def _get_skip_docs(self) -> Set[Tuple[str, str]]:
         skip_docs = set()
         if os.path.isfile(self.output_file) and not self.force:
             for line in csv.reader(open(self.output_file)):
@@ -50,14 +50,48 @@ class DocumentEvaluator:
                 f"Skipping {len(skip_docs)} documents already annotated! "
                 "If you want to reannotate them, please use the --force flag"
             )
+        return skip_docs
+
+    def _get_documents_iterator(self) -> Iterable[str] | Dict[str, str]:
         q_iterator = self.queries
         if self.verbose:
             try:
                 from rich.progress import track
 
-                q_iterator = track(self.queries, description="Annotating Documents")
+                return track(self.queries, description="Annotating Documents")
             except ImportError:
                 pass
+        return q_iterator
+
+    def _print_response(self, qid: str, did: str, answer: str) -> None:
+        if not self.verbose:
+            return
+        logger.info(
+            "[bold cyan]Query       [/bold cyan]: "
+            f"[not bold cyan]{self.queries[qid]}[/not bold cyan]"
+        )
+        logger.info(f"[bold cyan]Document ID [/bold cyan]: {did}")
+        logger.info(
+            "[bold cyan]Evaluation  [/bold cyan]: " f"[not bold]{answer}[/not bold]"
+        )
+        logger.info("")
+
+    def _dump_response(self, answer: str | List[str]) -> None:
+        if not os.path.isfile(self.output_file):
+            with open(self.output_file, "w") as f:
+                writer = csv.writer(f)
+                writer.writerow(["query_id", "did", "answer"])
+
+        with open(self.output_file, "a") as f:
+            writer = csv.writer(f)
+            if isinstance(answer, List):
+                answer = "\n".join(answer)
+            writer.writerow([qid, did, answer])
+
+    def get_answers(self):
+        """Runs the evaluator and saves the results to a file"""
+        q_iterator = self._get_documents_iterator()
+        skip_docs = self._get_skip_docs()
         for qid in q_iterator:
             for did in self.documents[qid]:
                 if (qid, did) in skip_docs:
@@ -73,25 +107,8 @@ class DocumentEvaluator:
                 except ValueError:
                     logger.warning(f"Failed to parse answer for document {qid} {did}")
                     continue
-                if self.verbose:
-                    logger.info(
-                        "[bold cyan]Query       [/bold cyan]: "
-                        f"[not bold cyan]{self.queries[qid]}[/not bold cyan]"
-                    )
-                    logger.info(f"[bold cyan]Document ID [/bold cyan]: {did}")
-                    logger.info(
-                        "[bold cyan]Evaluation  [/bold cyan]: "
-                        f"[not bold]{answer}[/not bold]"
-                    )
-                    logger.info("")
-                if not os.path.isfile(self.output_file):
-                    with open(self.output_file, "w") as f:
-                        writer = csv.writer(f)
-                        writer.writerow(["query_id", "did", "answer"])
-
-                with open(self.output_file, "a") as f:
-                    writer = csv.writer(f)
-                    writer.writerow([qid, did, answer])
+                self.__print_response(qid, did, answer)
+                self._dump_response(answer)
 
     @abstractmethod
     def _build_message(self, qid: str, did: str) -> str:
