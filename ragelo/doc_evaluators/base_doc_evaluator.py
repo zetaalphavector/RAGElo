@@ -4,7 +4,7 @@ import os
 from abc import abstractmethod
 from collections import defaultdict
 from collections.abc import Iterable
-from typing import Any, Callable, Dict, Set, Tuple, Type
+from typing import Any, Callable, Dict, List, Set, Tuple, Type
 
 from tenacity import RetryError
 
@@ -76,7 +76,7 @@ class DocumentEvaluator:
         )
         logger.info("")
 
-    def _dump_response(self, answer: str | List[str]) -> None:
+    def _dump_response(self, qid: str, did: str, answer: str | List[str]) -> None:
         if not os.path.isfile(self.output_file):
             with open(self.output_file, "w") as f:
                 writer = csv.writer(f)
@@ -92,7 +92,11 @@ class DocumentEvaluator:
         """Runs the evaluator and saves the results to a file"""
         q_iterator = self._get_documents_iterator()
         skip_docs = self._get_skip_docs()
+        max = 2
         for qid in q_iterator:
+            if max == 0:
+                break
+            max -= 1
             for did in self.documents[qid]:
                 if (qid, did) in skip_docs:
                     logger.debug(f"Skipping {qid} {did}")
@@ -107,8 +111,8 @@ class DocumentEvaluator:
                 except ValueError:
                     logger.warning(f"Failed to parse answer for document {qid} {did}")
                     continue
-                self.__print_response(qid, did, answer)
-                self._dump_response(answer)
+                self._print_response(qid, did, answer)
+                self._dump_response(qid, did, answer)
 
     @abstractmethod
     def _build_message(self, qid: str, did: str) -> str:
@@ -199,7 +203,7 @@ class DocumentEvaluatorFactory:
         return inner_wrapper
 
     @classmethod
-    def create(cls, evaluator_name: str, **kwargs) -> DocumentEvaluator:
+    def create(cls, evaluator_name: str, *args, **kwargs) -> DocumentEvaluator:
         if evaluator_name not in cls.registry:
             raise ValueError(f"Unknown evaluator {evaluator_name}")
-        return cls.registry[evaluator_name](prompt_name=evaluator_name, **kwargs)
+        return cls.registry[evaluator_name](prompt_name=evaluator_name, *args, **kwargs)
