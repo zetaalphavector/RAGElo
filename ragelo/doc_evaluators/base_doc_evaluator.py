@@ -92,12 +92,16 @@ class DocumentEvaluator:
         """Runs the evaluator and saves the results to a file"""
         q_iterator = self._get_documents_iterator()
         skip_docs = self._get_skip_docs()
-        max = 2
+        max = 1
         for qid in q_iterator:
             if max == 0:
                 break
             max -= 1
+            max_d = 5
             for did in self.documents[qid]:
+                if max_d == 0:
+                    break
+                max_d -= 1
                 if (qid, did) in skip_docs:
                     logger.debug(f"Skipping {qid} {did}")
                     continue

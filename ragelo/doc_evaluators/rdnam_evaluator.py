@@ -40,7 +40,7 @@ Consider the aspects above and relative importance of each, and decide on a fina
 Produce a JSON array of scores without providing any reasoning. Example: {example}
 
 # Results
-[{{"""  # noqa: E501
+"""  # noqa: E501
 
     NARRATIVE_PROMPT = " They were looking for: {narrative}"
     DESCRIPTION_PROMPT = " They were looking for: {description}"
@@ -87,6 +87,11 @@ Each rater used their own independent judgement."""  # noqa: E501
 
         self.aspects_prompt = self.ASPECTS_NARRATIVE if aspects else ""
         self.multiple_prompt = self.MULTILPE_PROMPT if multiple else ""
+        if multiple:
+            self.prompt += "\n[{{"
+        else:
+            self.prompt += "\n{{"
+        self.multiple = multiple
 
     def _build_message(
         self,
@@ -126,13 +131,16 @@ Each rater used their own independent judgement."""  # noqa: E501
         return formatted_prompt
 
     def _process_answer(self, answer: str) -> int:
-        answer = "[{" + answer
+        if self.multiple:
+            answer = "[{" + answer
+        else:
+            answer = "{" + answer
         try:
             ans = json.loads(answer)
         except json.decoder.JSONDecodeError:
             logger.warning(f"Failed to parse answer {answer}")
             raise ValueError
-        if self.multiple_prompt != "":
+        if self.multiple:
             scores = [int(a["O"]) for a in ans]
             return int(np.mean(scores))
-        return int(ans[0]["O"])
+        return int(ans["O"])
