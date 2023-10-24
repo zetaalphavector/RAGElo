@@ -72,6 +72,7 @@ Each rater used their own independent judgement."""  # noqa: E501
                 and T (trustworthy) for the document before computing the final score.
             multiple: Should the prompt ask the LLM to mimic multiple annotators?
         """
+        super().__init__(*args, **kwargs)
         self.role = role
         self.use_narratives = False
         self.use_description = False
