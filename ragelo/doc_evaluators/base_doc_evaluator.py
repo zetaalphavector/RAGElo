@@ -4,12 +4,21 @@ import os
 from abc import abstractmethod
 from collections import defaultdict
 from collections.abc import Iterable
+from sqlite3 import Time
+from turtle import update
 from typing import Any, Callable, Dict, List, Set, Tuple, Type
 
 from tenacity import RetryError
 
 from ragelo.logger import logger
 from ragelo.openai_client import OpenAiClient, set_credentials_from_file
+
+try:
+    from rich.progress import Progress
+
+    progress = Progress()
+except ImportError:
+    pass
 
 
 class DocumentEvaluator:
@@ -52,16 +61,24 @@ class DocumentEvaluator:
             )
         return skip_docs
 
-    def _get_documents_iterator(self) -> Iterable[str] | Dict[str, str]:
-        q_iterator = self.queries
-        if self.verbose:
-            try:
-                from rich.progress import track
+    def _get_documents_iterator(self) -> Dict[str, str]:
+        if self.verbose and "progress" in globals():
+            progress.start()
+            self.progress_bar = progress.add_task(
+                "[bold blue]Annotating Documents", total=len(self.queries)
+            )
 
-                return track(self.queries, description="Annotating Documents")
-            except ImportError:
-                pass
-        return q_iterator
+        return self.queries
+
+    def _maybe_update(self):
+        if self.verbose and "progress" in globals():
+            progress.update(self.progress_bar, advance=1, update=True)
+
+    def _maybe_close(self):
+        if self.verbose and "progress" in globals():
+            progress.refresh()
+            progress.stop()
+            progress.console.clear_live()
 
     def _print_response(self, qid: str, did: str, answer: str) -> None:
         if not self.verbose:
@@ -111,6 +128,8 @@ class DocumentEvaluator:
                 self._print_response(qid, did, answer)
                 self._dump_response(qid, did, answer)
                 answers[qid][did] = answer
+            self._maybe_update()
+        self._maybe_close()
         return answers
 
     @abstractmethod
