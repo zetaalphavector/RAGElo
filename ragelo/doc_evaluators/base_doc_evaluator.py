@@ -88,20 +88,13 @@ class DocumentEvaluator:
                 answer = "\n".join(answer)
             writer.writerow([qid, did, answer])
 
-    def get_answers(self):
+    def get_answers(self) -> Dict[str, Dict[str, Any]]:
         """Runs the evaluator and saves the results to a file"""
         q_iterator = self._get_documents_iterator()
         skip_docs = self._get_skip_docs()
-        max = 1
+        answers = defaultdict(lambda: dict())
         for qid in q_iterator:
-            if max == 0:
-                break
-            max -= 1
-            max_d = 5
             for did in self.documents[qid]:
-                if max_d == 0:
-                    break
-                max_d -= 1
                 if (qid, did) in skip_docs:
                     logger.debug(f"Skipping {qid} {did}")
                     continue
@@ -117,6 +110,8 @@ class DocumentEvaluator:
                     continue
                 self._print_response(qid, did, answer)
                 self._dump_response(qid, did, answer)
+                answers[qid][did] = answer
+        return answers
 
     @abstractmethod
     def _build_message(self, qid: str, did: str) -> str:
