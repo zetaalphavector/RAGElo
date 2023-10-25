@@ -138,9 +138,21 @@ Each rater used their own independent judgement."""  # noqa: E501
         try:
             ans = json.loads(answer)
         except json.decoder.JSONDecodeError:
-            logger.warning(f"Failed to parse answer {answer}")
+            logger.warning(f"Failed to parse answer: {answer}")
             raise ValueError
         if self.multiple:
-            scores = [int(a["O"]) for a in ans]
-            return int(np.mean(scores))
-        return int(ans["O"])
+            try:
+                scores = [int(a["O"]) for a in ans]
+                return int(np.mean(scores))
+            except (KeyError, ValueError):
+                logger.warning(f"Failed to parse answer: {answer}")
+                raise ValueError
+        try:
+            return int(ans["O"])
+        except KeyError:
+            # As a last try, try to simply get whatheve is after "O"
+            try:
+                return int(answer.split('"O":')[1].split(",")[0])
+            except IndexError:
+                logger.warning(f"Failed to parse answer: {answer}")
+                raise ValueError

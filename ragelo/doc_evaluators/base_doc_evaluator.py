@@ -4,21 +4,14 @@ import os
 from abc import abstractmethod
 from collections import defaultdict
 from collections.abc import Iterable
-from sqlite3 import Time
-from turtle import update
+from contextlib import nullcontext
+from functools import partial
 from typing import Any, Callable, Dict, List, Set, Tuple, Type
 
 from tenacity import RetryError
 
 from ragelo.logger import logger
-from ragelo.openai_client import OpenAiClient, set_credentials_from_file
-
-try:
-    from rich.progress import Progress
-
-    progress = Progress()
-except ImportError:
-    pass
+from ragelo.utils.openai_client import OpenAiClient, set_credentials_from_file
 
 
 class DocumentEvaluator:
@@ -44,92 +37,62 @@ class DocumentEvaluator:
             set_credentials_from_file(credentials_file)
 
         self.openai_client = OpenAiClient(model=model_name)
+        try:
+            from rich.progress import Progress
 
-    def _get_skip_docs(self) -> Set[Tuple[str, str]]:
-        skip_docs = set()
-        if os.path.isfile(self.output_file) and not self.force:
-            for line in csv.reader(open(self.output_file)):
-                qid, did, answer = line
-                skip_docs.add((qid, did))
-        if self.force and os.path.isfile(self.output_file):
-            logger.warning(f"Removing existing {self.output_file}!")
-            os.remove(self.output_file)
-        if len(skip_docs) > 0:
-            logger.warning(
-                f"Skipping {len(skip_docs)} documents already annotated! "
-                "If you want to reannotate them, please use the --force flag"
-            )
-        return skip_docs
-
-    def _get_documents_iterator(self) -> Dict[str, str]:
-        if self.verbose and "progress" in globals():
-            progress.start()
-            self.progress_bar = progress.add_task(
-                "[bold blue]Annotating Documents", total=len(self.queries)
-            )
-
-        return self.queries
-
-    def _maybe_update(self):
-        if self.verbose and "progress" in globals():
-            progress.update(self.progress_bar, advance=1, update=True)
-
-    def _maybe_close(self):
-        if self.verbose and "progress" in globals():
-            progress.refresh()
-            progress.stop()
-            progress.console.clear_live()
-
-    def _print_response(self, qid: str, did: str, answer: str) -> None:
-        if not self.verbose:
-            return
-        logger.info(
-            "[bold cyan]Query       [/bold cyan]: "
-            f"[not bold cyan]{self.queries[qid]}[/not bold cyan]"
-        )
-        logger.info(f"[bold cyan]Document ID [/bold cyan]: {did}")
-        logger.info(
-            "[bold cyan]Evaluation  [/bold cyan]: " f"[not bold]{answer}[/not bold]"
-        )
-        logger.info("")
-
-    def _dump_response(self, qid: str, did: str, answer: str | List[str]) -> None:
-        if not os.path.isfile(self.output_file):
-            with open(self.output_file, "w") as f:
-                writer = csv.writer(f)
-                writer.writerow(["query_id", "did", "answer"])
-
-        with open(self.output_file, "a") as f:
-            writer = csv.writer(f)
-            if isinstance(answer, List):
-                answer = "\n".join(answer)
-            writer.writerow([qid, did, answer])
+            self.progress_bar = partial(Progress, transient=True)
+            self.rich = True
+        except ImportError:
+            self.progress_bar = nullcontext
+            self.rich = False
 
     def get_answers(self) -> Dict[str, Dict[str, Any]]:
         """Runs the evaluator and saves the results to a file"""
-        q_iterator = self._get_documents_iterator()
+
+        use_bar = self.verbose and self.rich
         skip_docs = self._get_skip_docs()
         answers: Dict[str, Dict[str, Any]] = defaultdict(lambda: dict())
-        for qid in q_iterator:
-            for did in self.documents[qid]:
-                if (qid, did) in skip_docs:
-                    logger.debug(f"Skipping {qid} {did}")
-                    continue
-                message = self._build_message(qid, did)
-                try:
-                    answer = self.openai_client(message)
-                    answer = self._process_answer(answer)
-                except RetryError:
-                    logger.warning(f"Failed to fetch answers for document {qid} {did}")
-                    continue
-                except ValueError:
-                    logger.warning(f"Failed to parse answer for document {qid} {did}")
-                    continue
-                self._print_response(qid, did, answer)
-                self._dump_response(qid, did, answer)
-                answers[qid][did] = answer
-            self._maybe_update()
-        self._maybe_close()
+        with self.progress_bar() as progress:
+            # If we are using rich's progress bar, initialize a task for the queries
+            q_progress = q_progress = (
+                progress.add_task(
+                    "[bold blue]Annotating Documents", total=len(self.queries)
+                )
+                if use_bar and progress
+                else None
+            )
+            for qid in self.queries:
+                d_progress = (
+                    progress.add_task(
+                        f"[bold white]{qid}", total=len(self.documents[qid])
+                    )
+                    if use_bar and progress
+                    else None
+                )
+                for did in self.documents[qid]:
+                    if (qid, did) in skip_docs:
+                        logger.debug(f"Skipping {qid} {did}")
+                        continue
+                    message = self._build_message(qid, did)
+                    try:
+                        answer = self.openai_client(message)
+                        answer = self._process_answer(answer)
+                    except RetryError:
+                        logger.warning(f"Failed to FETCH answers for  {qid} {did}")
+                        answer = None
+                    except ValueError:
+                        logger.warning(f"Failed to PARSE answer for {qid} {did}")
+                        answer = None
+                    if answer:
+                        self._print_response(qid, did, answer)
+                        self._dump_response(qid, did, answer)
+                        answers[qid][did] = answer
+                    if progress and d_progress:
+                        progress.update(d_progress, advance=1, refresh=True)
+                if progress and q_progress:
+                    if d_progress:
+                        progress.stop_task(d_progress)
+                    progress.update(q_progress, advance=1, refresh=True)
         return answers
 
     @abstractmethod
@@ -192,7 +155,48 @@ class DocumentEvaluator:
         logger.info(f"Loaded {len(rows)} documents")
         return rows
 
-    def __load_from_csv(self, file_path: str) -> Dict[str, str]:
+    def _get_skip_docs(self) -> Set[Tuple[str, str]]:
+        skip_docs = set()
+        if os.path.isfile(self.output_file) and not self.force:
+            for line in csv.reader(open(self.output_file)):
+                qid, did, answer = line
+                skip_docs.add((qid, did))
+        if self.force and os.path.isfile(self.output_file):
+            logger.warning(f"Removing existing {self.output_file}!")
+            os.remove(self.output_file)
+        if len(skip_docs) > 0:
+            logger.warning(
+                f"Skipping {len(skip_docs)} documents already annotated! "
+                "If you want to reannotate them, please use the --force flag"
+            )
+        return skip_docs
+
+    def _print_response(self, qid: str, did: str, answer: str) -> None:
+        if not self.verbose:
+            return
+        logger.info(
+            "[bold cyan]Query       [/bold cyan]: "
+            f"[not bold cyan]{self.queries[qid]}[/not bold cyan]"
+        )
+        logger.info(f"[bold cyan]Document ID [/bold cyan]: {did}")
+        logger.info(
+            "[bold cyan]Evaluation  [/bold cyan]: " f"[not bold]{answer}[/not bold]"
+        )
+        logger.info("")
+
+    def _dump_response(self, qid: str, did: str, answer: str | List[str]) -> None:
+        if not os.path.isfile(self.output_file):
+            with open(self.output_file, "w") as f:
+                writer = csv.writer(f)
+                writer.writerow(["query_id", "did", "answer"])
+
+        with open(self.output_file, "a") as f:
+            writer = csv.writer(f)
+            if isinstance(answer, List):
+                answer = "\n".join(answer)
+            writer.writerow([qid, did, answer])
+
+    def _load_from_csv(self, file_path: str) -> Dict[str, str]:
         """extra content from a CSV file"""
         contents = {}
         for line in csv.reader(open(file_path, "r")):

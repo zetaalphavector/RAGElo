@@ -79,9 +79,8 @@ class DomainExpertEvaluator(DocumentEvaluator):
 
     def get_answers(self):
         """Implement a two_shot get_answers method"""
-        q_iterator = self._get_documents_iterator()
         skip_docs = self._get_skip_docs()
-        for qid in q_iterator:
+        for qid in self.queries:
             for did in self.documents[qid]:
                 pass
             for did in self.documents[qid]:
@@ -124,7 +123,7 @@ class DomainExpertEvaluator(DocumentEvaluator):
                     )
                     continue
                 self._print_response(qid, did, answer=f"Answer: {answer}")
-                self._dump_response(answer)
+                self._dump_response(qid, did, answer)
 
     def _build_reason_message(self, qid: str, did: str) -> str:
         query = self.queries[qid]
