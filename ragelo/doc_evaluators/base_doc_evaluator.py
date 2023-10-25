@@ -32,6 +32,8 @@ class DocumentEvaluator:
         self.output_file = output_file
         self.queries = self._load_queries(query_path)
         self.documents = self._load_documents(documents_path)
+        if verbose:
+            logger.setLevel("INFO")
 
         if credentials_file:
             set_credentials_from_file(credentials_file)
@@ -172,8 +174,6 @@ class DocumentEvaluator:
         return skip_docs
 
     def _print_response(self, qid: str, did: str, answer: str) -> None:
-        if not self.verbose:
-            return
         logger.info(
             "[bold cyan]Query       [/bold cyan]: "
             f"[not bold cyan]{self.queries[qid]}[/not bold cyan]"
@@ -184,13 +184,16 @@ class DocumentEvaluator:
         )
         logger.info("")
 
-    def _dump_response(self, qid: str, did: str, answer: str | List[str]) -> None:
-        if not os.path.isfile(self.output_file):
-            with open(self.output_file, "w") as f:
+    def _dump_response(
+        self, qid: str, did: str, answer: str | List[str], file: str = None
+    ) -> None:
+        output_file = file if file else self.output_file
+        if not os.path.isfile(output_file):
+            with open(output_file, "w") as f:
                 writer = csv.writer(f)
                 writer.writerow(["query_id", "did", "answer"])
 
-        with open(self.output_file, "a") as f:
+        with open(output_file, "a") as f:
             writer = csv.writer(f)
             if isinstance(answer, List):
                 answer = "\n".join(answer)
