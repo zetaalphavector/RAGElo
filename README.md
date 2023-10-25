@@ -14,7 +14,6 @@ While it has become easier to prototype and incorporate generative LLMs in produ
 
 This led us to develop a simple tool for tournament-style Elo ranking of LLM outputs. By comparing answers from different RAG pipelines and prompts over multiple questions, RAGElo computes a ranking of the different settings, providing a good overview of what works (and what doesn't). 
 
-The RAGElo tool finds its origin in a Generative AI project that [Zeta Alpha](https://www.zeta-alpha.com) developed with BASF.
 
 ## ⚙️ Installation
 
