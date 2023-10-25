@@ -6,7 +6,7 @@ from collections import defaultdict
 from typing import Dict, Set, Type
 
 from ragelo.logger import logger
-from ragelo.opeanai_client import OpenAiClient, set_credentials_from_file
+from ragelo.utils.openai_client import OpenAiClient, set_credentials_from_file
 
 
 class AnswerEvaluator:
