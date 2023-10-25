@@ -75,20 +75,14 @@ class DocumentEvaluator:
                     if (qid, did) in skip_docs:
                         logger.debug(f"Skipping {qid} {did}")
                         continue
-                    message = self._build_message(qid, did)
+
                     try:
-                        answer = self.openai_client(message)
-                        answer = self._process_answer(answer)
-                    except RetryError:
-                        logger.warning(f"Failed to FETCH answers for  {qid} {did}")
-                        answer = None
-                    except ValueError:
-                        logger.warning(f"Failed to PARSE answer for {qid} {did}")
-                        answer = None
-                    if answer:
-                        self._print_response(qid, did, answer)
-                        self._dump_response(qid, did, answer)
-                        answers[qid][did] = answer
+                        answer = self._process_single_answer(qid, did)
+                    except (RetryError, ValueError):
+                        continue
+                    self._print_response(qid, did, answer)
+                    self._dump_response(qid, did, answer)
+                    answers[qid][did] = answer
                     if progress and d_progress:
                         progress.update(d_progress, advance=1, refresh=True)
                 if progress and q_progress:
@@ -96,6 +90,23 @@ class DocumentEvaluator:
                         progress.stop_task(d_progress)
                     progress.update(q_progress, advance=1, refresh=True)
         return answers
+
+    def _process_single_answer(self, qid: str, did: str) -> str:
+        """Submites a single query-document pair to the LLM and returns the answer.
+        Override this method to implement a custom evaluator (e.g., two-shot)
+
+        """
+        message = self._build_message(qid, did)
+        try:
+            answer = self.openai_client(message)
+            answer = self._process_answer(answer)
+        except RetryError as e:
+            logger.warning(f"Failed to FETCH answers for  {qid} {did}")
+            raise e
+        except ValueError as e:
+            logger.warning(f"Failed to PARSE answer for {qid} {did}")
+            raise e
+        return answer
 
     @abstractmethod
     def _build_message(self, qid: str, did: str) -> str:

@@ -37,15 +37,13 @@ General Guidelines:
     - Content Overlap: Consider the extent of content overlap between the document and the query. Assess whether the document covers the core aspects of the query or only peripheral topics.
     - Neutrality: Base judgments solely on the content's relevance and avoid any personal opinions or biases.
     - Uncertainty: If uncertain about a relevance judgement, annotators default to a lower relevance.
-    {extra_guidelines}
-    """
+    {extra_guidelines}"""
 
     score_prompt = """Given the previous reasoning, please assign a score of 0, 1, or 2 to the retrieved document given the particular query. The score meaning is as follows:
 - 0: indicates that the retrieved document is not relevant to the query
 - 1: the document is somewhat relevant to the query
 - 2: the document is highly relevant to the query
-Please only answer with a single number.
-    """
+Please only answer with a single number."""
 
     COMPANY_PROMPT_1 = "You work for {company}."
     COMPANY_PROMPT_2 = "of {company}"
@@ -80,53 +78,6 @@ Please only answer with a single number.
         self.extra_guidelines = extra_guidelines if extra_guidelines else ""
         self.reasoning_file = self.output_file.replace(".csv", "_reasoning.csv")
 
-    def get_answers(self):
-        """Implement a two_shot get_answers method"""
-        skip_docs = self._get_skip_docs()
-        for qid in self.queries:
-            for did in self.documents[qid]:
-                if (qid, did) in skip_docs:
-                    logger.debug(f"Skipping {qid} {did}")
-                    continue
-                reason_message = self._build_reason_message(qid, did)
-                messages = [
-                    {"role": "system", "content": self.sys_prompt},
-                    {"role": "user", "content": reason_message},
-                ]
-                # Submit first message
-                try:
-                    answer = self.openai_client(messages)
-                except RetryError:
-                    logger.warning(
-                        f"Failed to fetch reasoning for document {qid} {did}"
-                    )
-                    continue
-                except ValueError:
-                    logger.warning(
-                        f"Failed to parse reasoning for document {qid} {did}"
-                    )
-                    continue
-                self._print_response(qid, did, answer=f"Reasoning: {answer}")
-                self._dump_response(qid, did, answer, self.reasoning_file)
-                # Submit second message
-                messages.append({"role": "assistant", "content": answer})
-                messages.append({"role": "user", "content": self.score_prompt})
-                try:
-                    answer = self.openai_client(messages)
-                    answer = self._process_second_answer(answer)
-                except RetryError:
-                    logger.warning(
-                        f"Failed to fetch evaluation for document {qid} {did}"
-                    )
-                    continue
-                except ValueError:
-                    logger.warning(
-                        f"Failed to parse evaluation for document {qid} {did}"
-                    )
-                    continue
-                self._print_response(qid, did, answer=f"Answer: {answer}")
-                self._dump_response(qid, did, answer)
-
     def _build_reason_message(self, qid: str, did: str) -> str:
         query = self.queries[qid]
         document = self.documents[qid][did]
@@ -139,4 +90,35 @@ Please only answer with a single number.
         return reason_prompt
 
     def _process_second_answer(self, answer: str) -> str:
+        return answer
+
+    def _process_single_answer(self, qid, did) -> str:
+        """Processes a single pair of qid, did in a two-shot manner"""
+        reason_message = self._build_reason_message(qid, did)
+        messages = [
+            {"role": "system", "content": self.sys_prompt},
+            {"role": "user", "content": reason_message},
+        ]
+        try:
+            answer = self.openai_client(messages)
+        except RetryError as e:
+            logger.warning(f"Failed to fetch reasoning for document {qid} {did}")
+            raise e
+        except ValueError as e:
+            logger.warning(f"Failed to parse reasoning for document {qid} {did}")
+            raise e
+        self._print_response(qid, did, answer=f"Reasoning: {answer}")
+        self._dump_response(qid, did, answer, self.reasoning_file)
+
+        messages.append({"role": "assistant", "content": answer})
+        messages.append({"role": "user", "content": self.score_prompt})
+        try:
+            answer = self.openai_client(messages)
+            answer = self._process_second_answer(answer)
+        except RetryError as e:
+            logger.warning(f"Failed to fetch evaluation for document {qid} {did}")
+            raise e
+        except ValueError as e:
+            logger.warning(f"Failed to parse evaluation for document {qid} {did}")
+            raise e
         return answer
