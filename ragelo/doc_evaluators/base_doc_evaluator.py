@@ -94,7 +94,6 @@ class DocumentEvaluator:
     def _process_single_answer(self, qid: str, did: str) -> str:
         """Submites a single query-document pair to the LLM and returns the answer.
         Override this method to implement a custom evaluator (e.g., two-shot)
-
         """
         message = self._build_message(qid, did)
         try:
