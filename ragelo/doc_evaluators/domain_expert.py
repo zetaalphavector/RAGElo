@@ -28,7 +28,7 @@ Use the following guidelines to reason about the relevance of the retrieved docu
     The information in the document is tangentially related to the query, but the primary focus remains different.
 - Highly Relevant:
     The document directly addresses the main points of the query and provides comprehensive and accurate information.
-    The document may cite relevant laws, regulations, or financial data directly applicable to the query.
+    The document may cite relevant information directly applicable to the query.
     The document may be recent and from the same field as the query, enhancing its relevance.
 General Guidelines:
     - Context Matters: Annotators should evaluate the relevance of documents within the specific{domain_short} context provided by the query. Understanding the nuances and domain-specific terminology is essential.
