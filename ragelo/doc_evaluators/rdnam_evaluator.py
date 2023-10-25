@@ -79,10 +79,10 @@ Each rater used their own independent judgement."""  # noqa: E501
         self.use_description = False
 
         if narrative_file:
-            self.narratives: Dict[str, str] = self.__load_from_csv(narrative_file)
+            self.narratives: Dict[str, str] = self._load_from_csv(narrative_file)
             self.use_narratives = True
         if description_file:
-            self.descriptions: Dict[str, str] = self.__load_from_csv(description_file)
+            self.descriptions: Dict[str, str] = self._load_from_csv(description_file)
             self.use_description = True
 
         self.aspects_prompt = self.ASPECTS_NARRATIVE if aspects else ""

@@ -39,13 +39,13 @@ class DocumentEvaluator:
             set_credentials_from_file(credentials_file)
 
         self.openai_client = OpenAiClient(model=model_name)
+        self.progress_bar: Callable = nullcontext
         try:
             from rich.progress import Progress
 
             self.progress_bar = partial(Progress, transient=True)
             self.rich = True
         except ImportError:
-            self.progress_bar = nullcontext
             self.rich = False
 
     def get_answers(self) -> Dict[str, Dict[str, Any]]:
@@ -185,7 +185,7 @@ class DocumentEvaluator:
         logger.info("")
 
     def _dump_response(
-        self, qid: str, did: str, answer: str | List[str], file: str = None
+        self, qid: str, did: str, answer: str | List[str], file: str | None = None
     ) -> None:
         output_file = file if file else self.output_file
         if not os.path.isfile(output_file):
