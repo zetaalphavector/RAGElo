@@ -1,8 +1,6 @@
 """Evaluator with a domain expert persona"""
 
 
-from typing import Any, Dict, List
-
 from tenacity import RetryError
 
 from ragelo.doc_evaluators.base_doc_evaluator import (

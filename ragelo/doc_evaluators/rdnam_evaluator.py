@@ -3,7 +3,7 @@ Bhaskar Mitra. Large language models can accurately predict searcher preferences
 https://arxiv.org/abs/2309.10621
 """
 import json
-from typing import Any, Dict
+from typing import Dict
 
 import numpy as np
 

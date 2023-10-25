@@ -3,7 +3,6 @@ import csv
 import os
 from abc import abstractmethod
 from collections import defaultdict
-from collections.abc import Iterable
 from contextlib import nullcontext
 from functools import partial
 from typing import Any, Callable, Dict, List, Set, Tuple, Type
