@@ -5,7 +5,6 @@ import re
 from abc import abstractmethod
 from collections import defaultdict
 from contextlib import nullcontext
-from functools import partial
 from typing import Any, Callable, ContextManager, Dict, List, Set, Tuple, Type
 
 from tenacity import RetryError
@@ -61,10 +60,9 @@ class DocumentEvaluator:
             )
 
             self.rich = True
-            self.print = rich.print
+            self.print_fn = rich.print
         except ImportError:
             self.rich = False
-            self.print = print
 
     def get_answers(self) -> Dict[str, Dict[str, Any]]:
         """Runs the evaluator and saves the results to a file"""
@@ -203,17 +201,20 @@ class DocumentEvaluator:
 
     def _print_response(self, qid: str, did: str, answer: str) -> None:
         strs = [
-            f"[bold cyan] Query       [/bold cyan]: "
-            "[not bold cyan]{self.queries[qid]}[/not bold cyan]",
+            "[bold cyan] Query       [/bold cyan]: "
+            f"[not bold cyan]{self.queries[qid]}[/not bold cyan]",
             f"[bold cyan] Document ID [/bold cyan]: {did}",
-            "[bold cyan] Evaluation  [/bold cyan]: " f"[not bold]{answer}[/not bold]",
+            f"[bold cyan] Evaluation  [/bold cyan]: " f"[not bold]{answer}[/not bold]",
             "",
         ]
         if not self.rich:
             strs = [re.sub(r"\[.*?\]", "", s) for s in strs]
-        if self.verbose and logger.level > 20:
+        if self.verbose and logger.level > 20:  # If verbose but logger not in info mode
             for s in strs:
-                self.print(s)
+                if self.rich:
+                    self.print_fn(s)
+                else:
+                    print(s)
         for s in strs:
             logger.info(s)
 
