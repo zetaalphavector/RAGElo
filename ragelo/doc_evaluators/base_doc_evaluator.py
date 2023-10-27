@@ -1,11 +1,12 @@
 """Base model for dealing with document evaluators"""
 import csv
 import os
+import re
 from abc import abstractmethod
 from collections import defaultdict
 from contextlib import nullcontext
 from functools import partial
-from typing import Any, Callable, Dict, List, Set, Tuple, Type
+from typing import Any, Callable, ContextManager, Dict, List, Set, Tuple, Type
 
 from tenacity import RetryError
 
@@ -31,41 +32,58 @@ class DocumentEvaluator:
         self.output_file = output_file
         self.queries = self._load_queries(query_path)
         self.documents = self._load_documents(documents_path)
-        if verbose:
-            logger.setLevel("INFO")
-
         if credentials_file:
             set_credentials_from_file(credentials_file)
 
         self.openai_client = OpenAiClient(model=model_name)
-        self.progress_bar: Callable = nullcontext
+        self.progress_bar: ContextManager = nullcontext()
         try:
-            from rich.progress import Progress
+            import rich
+            from rich.progress import (
+                BarColumn,
+                MofNCompleteColumn,
+                Progress,
+                TaskProgressColumn,
+                TextColumn,
+                TimeRemainingColumn,
+            )
 
-            self.progress_bar = partial(Progress, transient=True)
+            from ragelo.utils.progress_bar import RateColumn
+
+            self.progress_bar = Progress(
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TaskProgressColumn(),
+                TimeRemainingColumn(),
+                MofNCompleteColumn(),
+                RateColumn(),
+                transient=True,
+            )
+
             self.rich = True
+            self.print = rich.print
         except ImportError:
             self.rich = False
+            self.print = print
 
     def get_answers(self) -> Dict[str, Dict[str, Any]]:
         """Runs the evaluator and saves the results to a file"""
 
-        use_bar = self.verbose and self.rich
+        use_bar = self.rich
         skip_docs = self._get_skip_docs()
         answers: Dict[str, Dict[str, Any]] = defaultdict(lambda: dict())
-        with self.progress_bar() as progress:
+        with self.progress_bar as progress:  # type: ignore
             # If we are using rich's progress bar, initialize a task for the queries
-            q_progress = q_progress = (
-                progress.add_task(
-                    "[bold blue]Annotating Documents", total=len(self.queries)
-                )
+            q_progress = (
+                progress.add_task("[bold blue]Annotating Docs", total=len(self.queries))
                 if use_bar and progress
                 else None
             )
             for qid in self.queries:
                 d_progress = (
                     progress.add_task(
-                        f"[bold white]{qid}", total=len(self.documents[qid])
+                        f"[not bold blue]Query Id: {qid}",
+                        total=len(self.documents[qid]),
                     )
                     if use_bar and progress
                     else None
@@ -84,9 +102,10 @@ class DocumentEvaluator:
                     answers[qid][did] = answer
                     if progress and d_progress:
                         progress.update(d_progress, advance=1, refresh=True)
-                if progress and q_progress:
+
+                if progress and q_progress is not None:
                     if d_progress:
-                        progress.stop_task(d_progress)
+                        progress.remove_task(d_progress)
                     progress.update(q_progress, advance=1, refresh=True)
         return answers
 
@@ -183,15 +202,20 @@ class DocumentEvaluator:
         return skip_docs
 
     def _print_response(self, qid: str, did: str, answer: str) -> None:
-        logger.info(
-            "[bold cyan]Query       [/bold cyan]: "
-            f"[not bold cyan]{self.queries[qid]}[/not bold cyan]"
-        )
-        logger.info(f"[bold cyan]Document ID [/bold cyan]: {did}")
-        logger.info(
-            "[bold cyan]Evaluation  [/bold cyan]: " f"[not bold]{answer}[/not bold]"
-        )
-        logger.info("")
+        strs = [
+            f"[bold cyan] Query       [/bold cyan]: "
+            "[not bold cyan]{self.queries[qid]}[/not bold cyan]",
+            f"[bold cyan] Document ID [/bold cyan]: {did}",
+            "[bold cyan] Evaluation  [/bold cyan]: " f"[not bold]{answer}[/not bold]",
+            "",
+        ]
+        if not self.rich:
+            strs = [re.sub(r"\[.*?\]", "", s) for s in strs]
+        if self.verbose and logger.level > 20:
+            for s in strs:
+                self.print(s)
+        for s in strs:
+            logger.info(s)
 
     def _dump_response(
         self, qid: str, did: str, answer: str | List[str], file: str | None = None
