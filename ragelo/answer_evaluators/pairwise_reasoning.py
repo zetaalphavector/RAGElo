@@ -50,10 +50,10 @@ class PairwiseWithReasoning(AnswerEvaluator):
         self.reasonings = self._load_reasonings(reasonings_file)
         self.evaluations: List[Dict[str, str]] = []
 
-    def run(self) -> List[Dict[str, str]]:
+    def evaluate_all_answers(self) -> List[Dict[str, str]]:
         unparsed_answers = 0
         skip_tuples = set()
-        self.prompts = self.__create_all_prompts()
+        self.prompts = self._create_all_prompts()
         if os.path.exists(self.output_file) and not self.force:
             for line in open(self.output_file):
                 data = json.loads(line)
@@ -92,7 +92,7 @@ class PairwiseWithReasoning(AnswerEvaluator):
                 continue
             logger.debug(gpt_answer)
             try:
-                relevant = self.__extract_relevant(gpt_answer)
+                relevant = self._extract_relevant(gpt_answer)
             except ValueError:
                 unparsed_answers += 1
                 logger.warning(
@@ -185,7 +185,7 @@ class PairwiseWithReasoning(AnswerEvaluator):
         logger.info(f"Created {len(pairs)} games")
         return pairs
 
-    def __create_all_prompts(self) -> List[Dict[str, str]]:
+    def _create_all_prompts(self) -> List[Dict[str, str]]:
         prompts = []
         random_pairs = self.__generate_random_games()
         if self.print:
@@ -231,7 +231,7 @@ class PairwiseWithReasoning(AnswerEvaluator):
             logger.warning(f"Will create {possible_games} games per query instead")
             self.k = possible_games
 
-    def __extract_relevant(self, answer: str) -> str:
+    def _extract_relevant(self, answer: str) -> str:
         """Extracts the relevant part of an answer."""
         match_ans = self.pattern.search(answer)
         if not match_ans:

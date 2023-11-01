@@ -64,7 +64,7 @@ class DocumentEvaluator:
         except ImportError:
             self.rich = False
 
-    def get_answers(self) -> Dict[str, Dict[str, Any]]:
+    def get_all_annotations(self) -> Dict[str, Dict[str, Any]]:
         """Runs the evaluator and saves the results to a file"""
 
         use_bar = self.rich
@@ -93,7 +93,7 @@ class DocumentEvaluator:
                         continue
 
                     try:
-                        answer = self._process_single_answer(qid, did)
+                        answer = self._get_annotation(qid, did)
                     except (RetryError, ValueError):
                         continue
                     self._print_response(qid, did, answer)
@@ -108,7 +108,7 @@ class DocumentEvaluator:
                     progress.update(q_progress, advance=1, refresh=True)
         return answers
 
-    def _process_single_answer(self, qid: str, did: str) -> str:
+    def _get_annotation(self, qid: str, did: str) -> str:
         """Submites a single query-document pair to the LLM and returns the answer.
         Override this method to implement a custom evaluator (e.g., two-shot)
         """

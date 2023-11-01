@@ -72,7 +72,7 @@ def documents_annotator(
         force=state.force,
     )
 
-    doc_evaluator.get_answers()
+    doc_evaluator.get_all_annotations()
 
 
 @app.command()
@@ -137,7 +137,7 @@ def answers_annotator(
         print_answers=state.verbose,
         force=state.force,
     )
-    answer_evaluator.run()
+    answer_evaluator.evaluate_all_answers()
 
 
 @app.command()
@@ -252,7 +252,7 @@ def run_all(
         force=state.force,
     )
 
-    doc_evaluator.get_answers()
+    doc_evaluator.get_all_annotations()
     answer_evaluator = AnswerEvaluatorFactory.create(
         answer_evaluator_name,
         query_path=queries_file,
@@ -266,7 +266,7 @@ def run_all(
         print_answers=state.verbose,
         force=state.force,
     )
-    answer_evaluator.run()
+    answer_evaluator.evaluate_all_answers()
 
     agent_ranker = AnswerRankerFactory.create(
         name=answer_ranker_name,

@@ -36,7 +36,7 @@ class AnswerEvaluator:
         self.openai_client = OpenAiClient(model=model_name)
 
     @abstractmethod
-    def run(self):
+    def evaluate_all_answers(self):
         """Run and extract answers for all queries"""
         pass
 
