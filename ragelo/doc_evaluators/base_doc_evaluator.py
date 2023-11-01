@@ -70,10 +70,11 @@ class DocumentEvaluator:
         use_bar = self.rich
         skip_docs = self._get_skip_docs()
         answers: Dict[str, Dict[str, Any]] = defaultdict(lambda: dict())
+        all_docs = len([did for qid in self.documents for did in self.documents[qid]])
         with self.progress_bar as progress:  # type: ignore
             # If we are using rich's progress bar, initialize a task for the queries
             q_progress = (
-                progress.add_task("[bold blue]Annotating Docs", total=len(self.queries))
+                progress.add_task("[bold blue]Annotating Docs", total=all_docs)
                 if use_bar and progress
                 else None
             )
