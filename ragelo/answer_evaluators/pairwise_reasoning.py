@@ -4,11 +4,10 @@ import os
 import random
 import re
 from collections import defaultdict, deque
-from typing import Dict, List, Tuple
-
-from tenacity import RetryError
+from typing import Dict, List, Set, Tuple
 
 from ragelo.answer_evaluators.base_answer_evaluator import (
+    AnswerAnnotation,
     AnswerEvaluator,
     AnswerEvaluatorFactory,
 )
@@ -47,93 +46,89 @@ class PairwiseWithReasoning(AnswerEvaluator):
         super().__init__(*args, **kwargs)
         self.bidirectional = bidirectional
         self.pattern = re.compile(r"\[\[([^]]+)]].*$(?:(?!\[\[).)*", re.DOTALL)
-        self.reasonings = self._load_reasonings(reasonings_file)
-        self.evaluations: List[Dict[str, str]] = []
+        self.reasonings = self.__load_reasonings(reasonings_file)
 
-    def evaluate_all_answers(self) -> List[Dict[str, str]]:
-        unparsed_answers = 0
+    def _build_message(self, sample: AnswerAnnotation) -> str:
+        if sample.agent_b is None:
+            raise ValueError("Pairwise evaluator needs two agents!")
+        query = self.queries[sample.qid]
+        reasonings = "\n".join(
+            list(
+                [
+                    " ".join([f"[{a}]", b])
+                    for (a, b) in self.reasonings[sample.qid].items()
+                ]
+            )
+        )
+        ans_a = self.answers[sample.qid][sample.agent_a].strip()
+        ans_b = self.answers[sample.qid][sample.agent_b].strip()
+        return self.prompt.format(
+            query=query,
+            documents=reasonings,
+            answer_a=ans_a,
+            answer_b=ans_b,
+        )
+
+    def _extract_relevant(self, answer: str) -> str:
+        match_ans = self.pattern.search(answer)
+        if not match_ans:
+            logger.warning(
+                "Failed extracting relevant from answer!"
+                "Probably not enough tokens in the answer."
+                f"Full answer:\n{answer}",
+            )
+            raise ValueError(f"Could not find answer in {answer}")
+
+        answer = match_ans.group(1)
+        if answer not in ["A", "B", "C"]:
+            raise ValueError(f"Unknown answer: {answer}")
+        return answer
+
+    def _check_validity(self):
+        total_agents = len(self.agents)
+        if total_agents < 2:
+            raise ValueError(f"Need at least 2 agents, found {total_agents}")
+        logger.info(f"Loaded {total_agents} agents")
+        if (total_agents * (total_agents - 1)) < self.k:
+            possible_games = total_agents * (total_agents - 1)
+            logger.warning(
+                f"Requested {self.k} games but only {possible_games} are possible"
+            )
+            logger.warning(f"Will create {possible_games} games per query instead")
+            self.k = possible_games
+
+    def _get_skip_tuples(self) -> Set[AnswerAnnotation]:
         skip_tuples = set()
-        self.prompts = self._create_all_prompts()
-        if os.path.exists(self.output_file) and not self.force:
+        if os.path.isfile(self.output_file) and not self.force:
             for line in open(self.output_file):
                 data = json.loads(line)
-                qid = data["query_id"]
-                agent_a = data["agent_a"]
-                agent_b = data["agent_b"]
-                skip_tuples.add((qid, agent_a, agent_b))
-            logger.info(f"Skipping {len(skip_tuples)} games...")
-        if self.force and os.path.exists(self.output_file):
-            # remove the file
-            os.remove(self.output_file)
-        if len(self.prompts) - len(skip_tuples) > 0:
-            logger.info(f"Running {len(self.prompts) - len(skip_tuples)} games...")
-
-        if self.print:
-            try:
-                from rich.progress import track
-
-                p_iterator = track(self.prompts, description="Evaluating games")
-            except ImportError:
-                p_iterator = self.prompts
-        for p in p_iterator:
-            qid = p["query_id"]
-            agent_a = p["agent_a"]
-            agent_b = p["agent_b"]
-            prompt_str = p["prompt"]
-            if (qid, agent_a, agent_b) in skip_tuples:
-                continue
-            logger.debug(f"Running query id {qid} agent {agent_a} vs {agent_b}")
-            try:
-                gpt_answer = self.openai_client(prompt_str)
-            except RetryError:
-                logger.warning(
-                    f"Failed fetching answer for {qid}, {agent_a}, {agent_b}"
-                )
-                continue
-            logger.debug(gpt_answer)
-            try:
-                relevant = self._extract_relevant(gpt_answer)
-            except ValueError:
-                unparsed_answers += 1
-                logger.warning(
-                    f"Failed extracting answer for {qid}, {agent_a}, {agent_b}."
-                    "Probably not enough tokens in the answer."
-                    f"Full answer:\n{gpt_answer}",
-                )
-                continue
-            if self.print:
-                logger.info(
-                    f"[not bold white][{qid}][/not bold white] "
-                    f"[bold blue] {agent_a:<18} [/bold blue] 🆚  "
-                    f"[bold red] {agent_b}[/bold red]"
-                )
-                if relevant == "A":
-                    parser_ans = gpt_answer.replace("[[A]]", "[bold blue]A[/bold blue]")
-                elif relevant == "B":
-                    parser_ans = gpt_answer.replace("[[B]]", "[bold red]B[/bold red]")
-                else:
-                    parser_ans = gpt_answer.replace(
-                        "[[C]]", "[bold purple]C[/bold purple]"
+                skip_tuples.add(
+                    AnswerAnnotation(
+                        qid=data["query_id"],
+                        agent_a=data["agent_a"],
+                        agent_b=data["agent_b"],
                     )
-                logger.info("[bold white] Evaluator answer: [/bold white]")
-                logger.info(parser_ans)
-            with open(self.output_file, "a") as f:
-                d = {
-                    "query_id": qid,
-                    "agent_a": agent_a,
-                    "agent_b": agent_b,
-                    "prompt": prompt_str,
-                    "answer": gpt_answer,
-                    "relevant": relevant,
-                }
-                json.dump(d, f)
-                f.write("\n")
-                self.evaluations.append(d)
+                )
+        if len(skip_tuples) > 0:
+            logger.warning(
+                f"Skipping {len(skip_tuples)} tuples already annotated! "
+                "If you want to reannotate them, please use the --force flag"
+            )
+        return skip_tuples
 
-        logger.info("✅ Done!")
-        logger.info(f"Unparsed answers: {unparsed_answers}")
-        logger.info(f"Total evaluations: {len(self.prompts) - unparsed_answers}")
-        return self.evaluations
+    def _sample_answers(self) -> List[AnswerAnnotation]:
+        agent_pairs = []
+        random_pairs = self.__generate_random_games()
+        for qid in self.answers:
+            for a, b in random_pairs:
+                if a not in self.answers[qid] or b not in self.answers[qid]:
+                    if a not in self.answers[qid]:
+                        logger.warning(f"Missing answers from agent {a} to query {qid}")
+                    elif b not in self.answers[qid]:
+                        logger.warning(f"Missing answers from agent {b} to query {qid}")
+                    continue
+                agent_pairs.append(AnswerAnnotation(qid=qid, agent_a=a, agent_b=b))
+        return agent_pairs
 
     def __generate_random_games(self) -> List[Tuple[str, str]]:
         """Creates all prompts necessary for running the evaluator"""
@@ -185,63 +180,8 @@ class PairwiseWithReasoning(AnswerEvaluator):
         logger.info(f"Created {len(pairs)} games")
         return pairs
 
-    def _create_all_prompts(self) -> List[Dict[str, str]]:
-        prompts = []
-        random_pairs = self.__generate_random_games()
-        if self.print:
-            try:
-                from rich.progress import track
-
-                a_iterator = track(self.answers, description="Creating prompts")
-            except ImportError:
-                a_iterator = self.answers
-        for qid in a_iterator:
-            query = self.queries[qid]
-            for a, b in random_pairs:
-                if a not in self.answers[qid] or b not in self.answers[qid]:
-                    continue
-                reasonings = "\n".join(
-                    list(
-                        [
-                            " ".join([f"[{a}]", b])
-                            for (a, b) in self.reasonings[qid].items()
-                        ]
-                    )
-                )
-                ans_a = self.answers[qid][a].strip()
-                ans_b = self.answers[qid][b].strip()
-                prompt = self.prompt.format(
-                    query=query, documents=reasonings, answer_a=ans_a, answer_b=ans_b
-                )
-                prompts.append(
-                    {"query_id": qid, "agent_a": a, "agent_b": b, "prompt": prompt}
-                )
-        return prompts
-
-    def _check_validity(self):
-        total_agents = len(self.agents)
-        if total_agents < 2:
-            raise ValueError(f"Need at least 2 agents, found {total_agents}")
-        logger.info(f"Loaded {total_agents} agents")
-        if (total_agents * (total_agents - 1)) < self.k:
-            possible_games = total_agents * (total_agents - 1)
-            logger.warning(
-                f"Requested {self.k} games but only {possible_games} are possible"
-            )
-            logger.warning(f"Will create {possible_games} games per query instead")
-            self.k = possible_games
-
-    def _extract_relevant(self, answer: str) -> str:
-        """Extracts the relevant part of an answer."""
-        match_ans = self.pattern.search(answer)
-        if not match_ans:
-            raise ValueError(f"Could not find answer in {answer}")
-        answer = match_ans.group(1)
-        if answer not in ["A", "B", "C"]:
-            raise ValueError(f"Unknown answer: {answer}")
-        return answer
-
-    def _load_reasonings(self, reasonings_path: str) -> Dict[str, Dict[str, str]]:
+    def __load_reasonings(self, reasonings_path: str) -> Dict[str, Dict[str, str]]:
+        """Loads the reasonigs of the relevace of each document for each query"""
         reasonings: Dict[str, Dict[str, str]] = defaultdict(lambda: dict())
         reasonings_read = 0
         for line in csv.DictReader(open(reasonings_path)):

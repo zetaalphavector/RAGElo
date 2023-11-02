@@ -31,6 +31,7 @@ class DocumentEvaluator:
         self.output_file = output_file
         self.queries = self._load_queries(query_path)
         self.documents = self._load_documents(documents_path)
+
         if credentials_file:
             set_credentials_from_file(credentials_file)
 
@@ -64,13 +65,18 @@ class DocumentEvaluator:
         except ImportError:
             self.rich = False
 
-    def get_all_annotations(self) -> Dict[str, Dict[str, Any]]:
+    def annotate_all_docs(self) -> Dict[str, Dict[str, Any]]:
         """Runs the evaluator and saves the results to a file"""
 
         use_bar = self.rich
-        skip_docs = self._get_skip_docs()
+        skip_tuples = self._get_skip_tuples()
         answers: Dict[str, Dict[str, Any]] = defaultdict(lambda: dict())
         all_docs = len([did for qid in self.documents for did in self.documents[qid]])
+
+        if self.force and os.path.isfile(self.output_file):
+            logger.warning(f"Removing existing {self.output_file}!")
+            os.remove(self.output_file)
+
         with self.progress_bar as progress:  # type: ignore
             # If we are using rich's progress bar, initialize a task for the queries
             q_progress = (
@@ -88,7 +94,7 @@ class DocumentEvaluator:
                     else None
                 )
                 for did in self.documents[qid]:
-                    if (qid, did) in skip_docs:
+                    if (qid, did) in skip_tuples:
                         logger.debug(f"Skipping {qid} {did}")
                         continue
 
@@ -117,7 +123,7 @@ class DocumentEvaluator:
             answer = self.openai_client(message)
             answer = self._process_answer(answer)
         except RetryError as e:
-            logger.warning(f"Failed to FETCH answers for  {qid} {did}")
+            logger.warning(f"Failed to fetch answers for {qid} {did}")
             raise e
         except ValueError as e:
             logger.warning(f"Failed to PARSE answer for {qid} {did}")
@@ -184,21 +190,18 @@ class DocumentEvaluator:
         logger.info(f"Loaded {len(rows)} documents")
         return rows
 
-    def _get_skip_docs(self) -> Set[Tuple[str, str]]:
-        skip_docs = set()
+    def _get_skip_tuples(self) -> Set[Tuple[str, str]]:
+        skip_tuples = set()
         if os.path.isfile(self.output_file) and not self.force:
             for line in csv.reader(open(self.output_file)):
-                qid, did, answer = line
-                skip_docs.add((qid, did))
-        if self.force and os.path.isfile(self.output_file):
-            logger.warning(f"Removing existing {self.output_file}!")
-            os.remove(self.output_file)
-        if len(skip_docs) > 0:
+                qid, did, _ = line
+                skip_tuples.add((qid, did))
+        if len(skip_tuples) > 0:
             logger.warning(
-                f"Skipping {len(skip_docs)} documents already annotated! "
+                f"Skipping {len(skip_tuples)} documents already annotated! "
                 "If you want to reannotate them, please use the --force flag"
             )
-        return skip_docs
+        return skip_tuples
 
     def _print_response(self, qid: str, did: str, answer: str) -> None:
         strs = [

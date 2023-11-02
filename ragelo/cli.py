@@ -72,7 +72,7 @@ def documents_annotator(
         force=state.force,
     )
 
-    doc_evaluator.get_all_annotations()
+    doc_evaluator.annotate_all_docs()
 
 
 @app.command()
@@ -252,7 +252,7 @@ def run_all(
         force=state.force,
     )
 
-    doc_evaluator.get_all_annotations()
+    doc_evaluator.annotate_all_docs()
     answer_evaluator = AnswerEvaluatorFactory.create(
         answer_evaluator_name,
         query_path=queries_file,

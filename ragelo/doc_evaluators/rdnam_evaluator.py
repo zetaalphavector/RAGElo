@@ -156,3 +156,6 @@ Each rater used their own independent judgement."""  # noqa: E501
             except IndexError:
                 logger.warning(f"Failed to parse answer: {answer}")
                 raise ValueError
+
+    def _get_annotation(self, qid: str, did: str) -> str:
+        return super()._get_annotation(qid, did)
