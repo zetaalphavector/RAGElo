@@ -1,11 +1,11 @@
 """Base model for dealing with document evaluators"""
 import csv
 import os
+import re
 from abc import abstractmethod
 from collections import defaultdict
 from contextlib import nullcontext
-from functools import partial
-from typing import Any, Callable, Dict, List, Set, Tuple, Type
+from typing import Any, Callable, ContextManager, Dict, List, Set, Tuple, Type
 
 from tenacity import RetryError
 
@@ -31,52 +31,75 @@ class DocumentEvaluator:
         self.output_file = output_file
         self.queries = self._load_queries(query_path)
         self.documents = self._load_documents(documents_path)
-        if verbose:
-            logger.setLevel("INFO")
 
         if credentials_file:
             set_credentials_from_file(credentials_file)
 
         self.openai_client = OpenAiClient(model=model_name)
-        self.progress_bar: Callable = nullcontext
+        self.progress_bar: ContextManager = nullcontext()
         try:
-            from rich.progress import Progress
+            import rich
+            from rich.progress import (
+                BarColumn,
+                MofNCompleteColumn,
+                Progress,
+                TaskProgressColumn,
+                TextColumn,
+                TimeRemainingColumn,
+            )
 
-            self.progress_bar = partial(Progress, transient=True)
+            from ragelo.utils.progress_bar import RateColumn
+
+            self.progress_bar = Progress(
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TaskProgressColumn(),
+                TimeRemainingColumn(),
+                MofNCompleteColumn(),
+                RateColumn(),
+                transient=True,
+            )
+
             self.rich = True
+            self.print_fn = rich.print
         except ImportError:
             self.rich = False
 
-    def get_answers(self) -> Dict[str, Dict[str, Any]]:
+    def annotate_all_docs(self) -> Dict[str, Dict[str, Any]]:
         """Runs the evaluator and saves the results to a file"""
 
-        use_bar = self.verbose and self.rich
-        skip_docs = self._get_skip_docs()
+        use_bar = self.rich
+        skip_tuples = self._get_skip_tuples()
         answers: Dict[str, Dict[str, Any]] = defaultdict(lambda: dict())
-        with self.progress_bar() as progress:
+        all_docs = len([did for qid in self.documents for did in self.documents[qid]])
+
+        if self.force and os.path.isfile(self.output_file):
+            logger.warning(f"Removing existing {self.output_file}!")
+            os.remove(self.output_file)
+
+        with self.progress_bar as progress:  # type: ignore
             # If we are using rich's progress bar, initialize a task for the queries
-            q_progress = q_progress = (
-                progress.add_task(
-                    "[bold blue]Annotating Documents", total=len(self.queries)
-                )
+            q_progress = (
+                progress.add_task("[bold blue]Annotating Docs", total=all_docs)
                 if use_bar and progress
                 else None
             )
             for qid in self.queries:
                 d_progress = (
                     progress.add_task(
-                        f"[bold white]{qid}", total=len(self.documents[qid])
+                        f"[not bold blue]Query Id: {qid}",
+                        total=len(self.documents[qid]),
                     )
                     if use_bar and progress
                     else None
                 )
                 for did in self.documents[qid]:
-                    if (qid, did) in skip_docs:
+                    if (qid, did) in skip_tuples:
                         logger.debug(f"Skipping {qid} {did}")
                         continue
 
                     try:
-                        answer = self._process_single_answer(qid, did)
+                        answer = self._get_annotation(qid, did)
                     except (RetryError, ValueError):
                         continue
                     self._print_response(qid, did, answer)
@@ -84,13 +107,14 @@ class DocumentEvaluator:
                     answers[qid][did] = answer
                     if progress and d_progress:
                         progress.update(d_progress, advance=1, refresh=True)
-                if progress and q_progress:
+
+                if progress and q_progress is not None:
                     if d_progress:
-                        progress.stop_task(d_progress)
+                        progress.remove_task(d_progress)
                     progress.update(q_progress, advance=1, refresh=True)
         return answers
 
-    def _process_single_answer(self, qid: str, did: str) -> str:
+    def _get_annotation(self, qid: str, did: str) -> str:
         """Submites a single query-document pair to the LLM and returns the answer.
         Override this method to implement a custom evaluator (e.g., two-shot)
         """
@@ -99,7 +123,7 @@ class DocumentEvaluator:
             answer = self.openai_client(message)
             answer = self._process_answer(answer)
         except RetryError as e:
-            logger.warning(f"Failed to FETCH answers for  {qid} {did}")
+            logger.warning(f"Failed to fetch answers for {qid} {did}")
             raise e
         except ValueError as e:
             logger.warning(f"Failed to PARSE answer for {qid} {did}")
@@ -166,32 +190,37 @@ class DocumentEvaluator:
         logger.info(f"Loaded {len(rows)} documents")
         return rows
 
-    def _get_skip_docs(self) -> Set[Tuple[str, str]]:
-        skip_docs = set()
+    def _get_skip_tuples(self) -> Set[Tuple[str, str]]:
+        skip_tuples = set()
         if os.path.isfile(self.output_file) and not self.force:
             for line in csv.reader(open(self.output_file)):
-                qid, did, answer = line
-                skip_docs.add((qid, did))
-        if self.force and os.path.isfile(self.output_file):
-            logger.warning(f"Removing existing {self.output_file}!")
-            os.remove(self.output_file)
-        if len(skip_docs) > 0:
+                qid, did, _ = line
+                skip_tuples.add((qid, did))
+        if len(skip_tuples) > 0:
             logger.warning(
-                f"Skipping {len(skip_docs)} documents already annotated! "
+                f"Skipping {len(skip_tuples)} documents already annotated! "
                 "If you want to reannotate them, please use the --force flag"
             )
-        return skip_docs
+        return skip_tuples
 
     def _print_response(self, qid: str, did: str, answer: str) -> None:
-        logger.info(
-            "[bold cyan]Query       [/bold cyan]: "
-            f"[not bold cyan]{self.queries[qid]}[/not bold cyan]"
-        )
-        logger.info(f"[bold cyan]Document ID [/bold cyan]: {did}")
-        logger.info(
-            "[bold cyan]Evaluation  [/bold cyan]: " f"[not bold]{answer}[/not bold]"
-        )
-        logger.info("")
+        strs = [
+            "[bold cyan] Query       [/bold cyan]: "
+            f"[not bold cyan]{self.queries[qid]}[/not bold cyan]",
+            f"[bold cyan] Document ID [/bold cyan]: {did}",
+            f"[bold cyan] Evaluation  [/bold cyan]: " f"[not bold]{answer}[/not bold]",
+            "",
+        ]
+        if not self.rich:
+            strs = [re.sub(r"\[.*?\]", "", s) for s in strs]
+        if self.verbose and logger.level > 20:  # If verbose but logger not in info mode
+            for s in strs:
+                if self.rich:
+                    self.print_fn(s)
+                else:
+                    print(s)
+        for s in strs:
+            logger.info(s)
 
     def _dump_response(
         self, qid: str, did: str, answer: str | List[str], file: str | None = None

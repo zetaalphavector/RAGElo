@@ -90,7 +90,7 @@ Please only answer with a single number."""
     def _process_second_answer(self, answer: str) -> str:
         return answer
 
-    def _process_single_answer(self, qid, did) -> str:
+    def _get_annotation(self, qid, did) -> str:
         """Processes a single pair of qid, did in a two-shot manner"""
         reason_message = self._build_reason_message(qid, did)
         messages = [

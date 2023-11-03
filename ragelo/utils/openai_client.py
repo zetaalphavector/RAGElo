@@ -37,9 +37,9 @@ class OpenAiClient:
 
         key = os.environ.get("OPENAI_API_KEY_GPT4") or os.environ.get("OPENAI_API_KEY")
         model = (
-            model
-            or os.environ.get("OPENAI_GPT4_DEPLOYMENT")
+            os.environ.get("OPENAI_GPT4_DEPLOYMENT")
             or os.environ.get("OPENAI_GPT_DEPLOYMENT")
+            or model
         )
         if not key:
             raise Exception("No API key found")

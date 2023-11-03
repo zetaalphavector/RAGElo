@@ -26,3 +26,6 @@ class ReasonerEvaluator(DocumentEvaluator):
 
     def _process_answer(self, answer: str) -> str:
         return answer
+
+    def _get_annotation(self, qid: str, did: str) -> str:
+        return super()._get_annotation(qid, did)
