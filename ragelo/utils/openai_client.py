@@ -13,7 +13,6 @@ class OpenAiClient:
     def __init__(
         self,
         model: Optional[str] = "gpt-3.5-turbo",
-        request_type: Optional[str] = "chat",
     ):
         """Initialize the OpenAI client.
 
@@ -26,14 +25,13 @@ class OpenAiClient:
             version: The version of the API to use. Defaults to None.
 
         """
-        self.openai_type = os.environ.get("OPENAI_TYPE") or "open_ai"
-        if self.openai_type == "azure":
+        openai.api_type = os.environ.get("OPENAI_TYPE") or "open_ai"
+        if openai.api_type == "azure":
             service = os.environ.get("OPENAI_SERVICE_GPT4") or os.environ.get(
                 "OPENAI_SERVICE"
             )
-            base_url = f"https://{service}.openai.azure.com/"
-        else:
-            base_url = openai.api_base
+            openai.api_base = f"https://{service}.openai.azure.com/"
+            openai.api_version = os.environ.get("OPENAI_VERSION")
 
         key = os.environ.get("OPENAI_API_KEY_GPT4") or os.environ.get("OPENAI_API_KEY")
         model = (
@@ -46,12 +44,8 @@ class OpenAiClient:
         if not model:
             raise Exception("No model found")
 
-        openai.api_type = self.openai_type
-        openai.api_version = os.environ.get("OPENAI_VERSION") or openai.api_version
-        openai.api_base = base_url or openai.api_base
         openai.api_key = key
         self.model = model
-        self.completion_type = request_type
         self.__print_credentials(key, self.model, openai.api_base, openai.api_type)
 
     @retry(wait=wait_random_exponential(min=1, max=120), stop=stop_after_attempt(1))
@@ -71,44 +65,23 @@ class OpenAiClient:
         if isinstance(prompt, str):
             prompt = [{"role": "system", "content": prompt}]
 
-        if self.openai_type == "azure":
-            if self.completion_type == "completion":
-                answers = openai.Completion.create(
-                    engine=self.model,
-                    prompt=prompt,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                )
-            elif self.completion_type == "chat":
-                answers = openai.ChatCompletion.create(
-                    engine=self.model,
-                    messages=prompt,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                )
-            else:
-                raise Exception(f"Unknown completion type: {self.completion_type}")
-        elif self.openai_type == "open_ai":
-            if self.completion_type == "completion":
-                answers = openai.Completion.create(
-                    model=self.model,
-                    prompt=prompt,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                )
-            elif self.completion_type == "chat":
-                answers = openai.ChatCompletion.create(
-                    model=self.model,
-                    messages=prompt,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                )
-            else:
-                raise Exception(f"Unknown completion type: {self.completion_type}")
+        if openai.api_type == "azure":
+            answers = openai.ChatCompletion.create(
+                engine=self.model,
+                messages=prompt,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+        elif openai.api_type == "open_ai":
+            answers = openai.ChatCompletion.create(
+                model=self.model,
+                messages=prompt,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
         else:
-            raise Exception(f"Unknown type: {self.openai_type}")
-        full_text = answers.choices[0].message.content  # type: ignore
-        return full_text
+            raise Exception(f"Unknown type: {openai.api_type}")
+        return answers["choices"][0]["message"]["content"]
 
     def __print_credentials(
         self,
