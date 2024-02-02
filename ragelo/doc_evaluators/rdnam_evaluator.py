@@ -2,20 +2,24 @@
 Bhaskar Mitra. Large language models can accurately predict searcher preferences.
 https://arxiv.org/abs/2309.10621
 """
+
 import json
-from typing import Dict
+import logging
+from typing import Dict, Optional
 
 import numpy as np
 
-from ragelo.doc_evaluators.base_doc_evaluator import (
-    DocumentEvaluator,
-    DocumentEvaluatorFactory,
+from ragelo.doc_evaluators.base_retrieval_evaluator import (
+    RetrievalEvaluator,
+    RetrievalEvaluatorFactory,
 )
-from ragelo.logger import logger
+from ragelo.llm_providers.base_llm_provider import LLMProvider
+from ragelo.types import Document, Query
+from ragelo.types.configurations import RetrievalEvaluatorConfig
 
 
-@DocumentEvaluatorFactory.register("RDNAM")
-class RDNAMvaluator(DocumentEvaluator):
+@RetrievalEvaluatorFactory.register("RDNAM")
+class RDNAMvaluator(RetrievalEvaluator):
     prompt = """{role}Given a query and a document, you must provide a score on an integer scale of 0 to 2 with the following meanings:
 2 = highly relevant, very helpful for this query
 1 = relevant, may be partly helpful but might contain other irrelevant content
@@ -48,20 +52,17 @@ Produce a JSON array of scores without providing any reasoning. Example: {exampl
     Measure how trustworthy the web page is (T)."""  # noqa: E501
     ASPECTS_EXAMPLE = """[{{"M": 2, "T": 1, "O": 1}}, {{"M": 1..."""
     DEFAULT_EXAMPLE = """[{{"O": 1}}, {{"O": 2}}, {{"O": 0..."""
-    MULTILPE_PROMPT = """We asked five search engine raters to evaluate the relevance of the web page for the query.
+    MULTIPLE_PROMPT = """We asked five search engine raters to evaluate the relevance of the web page for the query.
 Each rater used their own independent judgement."""  # noqa: E501
 
     def __init__(
         self,
-        role: str = "",
-        aspects: bool = False,
-        multiple: bool = False,
-        narrative_file: str | None = None,
-        description_file: str | None = None,
-        *args,
-        **kwargs,
+        config: RetrievalEvaluatorConfig,
+        llm_provider: LLMProvider,
+        queries: Optional[Dict[str, Query]] = None,
+        documents: Optional[Dict[str, Dict[str, Document]]] = None,
     ):
-        """Initializes an evaluator based on RDNAM framweork.
+        """Initializes an evaluator based on RDNAM framework.
         Args:
             role: A String defining the type of user the LLM should mimic
                 (e.g.: "You are a search quality rater evaluating
@@ -73,25 +74,29 @@ Each rater used their own independent judgement."""  # noqa: E501
                 and T (trustworthy) for the document before computing the final score.
             multiple: Should the prompt ask the LLM to mimic multiple annotators?
         """
-        super().__init__(*args, **kwargs)
-        self.role = role
+        super().__init__(config, llm_provider, queries, documents)
+        self.role = self.config.role if self.config.role else ""
         self.use_narratives = False
         self.use_description = False
 
-        if narrative_file:
-            self.narratives: Dict[str, str] = self._load_from_csv(narrative_file)
+        if self.config.narrative_file:
+            self.narratives: Dict[str, str] = self._load_from_csv(
+                self.config.narrative_file
+            )
             self.use_narratives = True
-        if description_file:
-            self.descriptions: Dict[str, str] = self._load_from_csv(description_file)
+        if self.config.description_file:
+            self.descriptions: Dict[str, str] = self._load_from_csv(
+                self.config.description_file
+            )
             self.use_description = True
 
-        self.aspects_prompt = self.ASPECTS_NARRATIVE if aspects else ""
-        self.multiple_prompt = self.MULTILPE_PROMPT if multiple else ""
-        if multiple:
+        self.aspects_prompt = self.ASPECTS_NARRATIVE if self.config.aspects else ""
+        self.multiple_prompt = self.MULTIPLE_PROMPT if self.config.multiple else ""
+        if self.config.multiple:
             self.prompt += "\n[{{"
         else:
             self.prompt += "\n{{"
-        self.multiple = multiple
+        self.multiple = self.config.multiple
 
     def _build_message(
         self,
@@ -99,9 +104,9 @@ Each rater used their own independent judgement."""  # noqa: E501
         did: str,
     ) -> str:
         if self.use_narratives and qid not in self.narratives:
-            logger.warning(f"No narrative found for {qid}. Will not use it")
+            logging.warning(f"No narrative found for {qid}. Will not use it")
         if self.use_description and qid not in self.descriptions:
-            logger.warning(f"No description found for {qid}. Will not use it")
+            logging.warning(f"No description found for {qid}. Will not use it")
 
         description_str = (
             self.DESCRIPTION_PROMPT.format(description=self.descriptions[qid])
@@ -138,21 +143,18 @@ Each rater used their own independent judgement."""  # noqa: E501
         try:
             ans = json.loads(answer)
         except json.decoder.JSONDecodeError:
-            logger.warning(f"Failed to parse answer: {answer}")
-            raise ValueError
+            raise ValueError(f"Failed to parse answer: {answer}")
         if self.multiple:
             try:
                 scores = [int(a["O"]) for a in ans]
                 return int(np.mean(scores))
             except (KeyError, ValueError):
-                logger.warning(f"Failed to parse answer: {answer}")
-                raise ValueError
+                raise ValueError(f"Failed to parse answer: {answer}")
         try:
             return int(ans["O"])
         except KeyError:
-            # As a last try, try to simply get whatheve is after "O"
+            # As a last try, try to simply get whatever is after "O"
             try:
                 return int(answer.split('"O":')[1].split(",")[0])
             except IndexError:
-                logger.warning(f"Failed to parse answer: {answer}")
-                raise ValueError
+                raise ValueError(f"Failed to parse answer: {answer}")

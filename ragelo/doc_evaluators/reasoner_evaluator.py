@@ -1,14 +1,17 @@
-from ragelo.doc_evaluators import DocumentEvaluator, DocumentEvaluatorFactory
+from ragelo.doc_evaluators.base_retrieval_evaluator import (
+    RetrievalEvaluator,
+    RetrievalEvaluatorFactory,
+)
 
 
-@DocumentEvaluatorFactory.register("reasoner")
-class ReasonerEvaluator(DocumentEvaluator):
+@RetrievalEvaluatorFactory.register("reasoner")
+class ReasonerEvaluator(RetrievalEvaluator):
     """
     A document Evaluator that only outputs the reasoning for why a document
     is relevant.
     """
 
-    prompt = """You are an expert document annotator, evaluating if a document contains relevant information to anser a question submitted by a user. Please act as an impartial relevance annotator for a search engine. Your goal is to evaluate the relevancy of the documents given a user question.
+    prompt = """You are an expert document annotator, evaluating if a document contains relevant information to answer a question submitted by a user. Please act as an impartial relevance annotator for a search engine. Your goal is to evaluate the relevancy of the documents given a user question.
     You should write one sentence explaining why the document is relevant or not for the user question. A document can be:
     - Not relevant: The document is not on topic.
     - Somewhat relevant: The document is on topic but does not fully answer the user question.

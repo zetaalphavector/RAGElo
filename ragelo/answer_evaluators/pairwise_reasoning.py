@@ -1,18 +1,22 @@
 import csv
 import json
+import logging
 import os
 import random
 import re
 from collections import defaultdict, deque
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from tenacity import RetryError
+from tqdm.auto import tqdm
 
 from ragelo.answer_evaluators.base_answer_evaluator import (
     AnswerEvaluator,
     AnswerEvaluatorFactory,
 )
-from ragelo.logger import logger
+from ragelo.llm_providers.base_llm_provider import LLMProvider
+from ragelo.types import Query
+from ragelo.types.configurations import AnswerEvaluatorConfig
 
 
 @AnswerEvaluatorFactory.register("PairwiseWithReasoning")
@@ -37,110 +41,137 @@ class PairwiseWithReasoning(AnswerEvaluator):
 
     def __init__(
         self,
-        reasonings_file: str,
-        k: int = 100,
-        bidirectional: bool = False,
-        *args,
-        **kwargs,
+        config: AnswerEvaluatorConfig,
+        llm_provider: LLMProvider,
+        queries: Optional[Dict[str, Query]] = None,
+        answers: Optional[Dict[str, Dict[str, str]]] = None,
     ):
-        self.k = k
-        super().__init__(*args, **kwargs)
-        self.bidirectional = bidirectional
+        super().__init__(config, llm_provider, queries, answers)
+        if not self.config.output_file:
+            self.output_file = f"pairwise_reasoning_evaluator.log"
+        else:
+            self.output_file = self.config.output_file
+        if not self.config.reasoning_file:
+            raise ValueError("Reasoning file is required for PairwiseWithReasoning")
+        self.k = self.config.k
+        self.bidirectional = self.config.bidirectional
         self.pattern = re.compile(r"\[\[([^]]+)]].*$(?:(?!\[\[).)*", re.DOTALL)
-        self.reasonings = self._load_reasonings(reasonings_file)
+        self.reasoning = self._load_reasoning(self.config.reasoning_file)
         self.evaluations: List[Dict[str, str]] = []
 
     def run(self) -> List[Dict[str, str]]:
         unparsed_answers = 0
         skip_tuples = set()
         self.prompts = self.__create_all_prompts()
-        if os.path.exists(self.output_file) and not self.force:
+        if os.path.exists(self.output_file) and not self.config.force:
             for line in open(self.output_file):
                 data = json.loads(line)
                 qid = data["query_id"]
                 agent_a = data["agent_a"]
                 agent_b = data["agent_b"]
                 skip_tuples.add((qid, agent_a, agent_b))
-            logger.info(f"Skipping {len(skip_tuples)} games...")
-        if self.force and os.path.exists(self.output_file):
+            logging.info(f"Skipping {len(skip_tuples)} games...")
+        if self.config.force and os.path.exists(self.output_file):
             # remove the file
+            logging.info("Removing previous output file")
             os.remove(self.output_file)
         if len(self.prompts) - len(skip_tuples) > 0:
-            logger.info(f"Running {len(self.prompts) - len(skip_tuples)} games...")
-
-        if self.print:
-            try:
-                from rich.progress import track
-
-                p_iterator = track(self.prompts, description="Evaluating games")
-            except ImportError:
-                p_iterator = self.prompts
-        for p in p_iterator:
+            logging.info(f"Running {len(self.prompts) - len(skip_tuples)} games...")
+        for p in tqdm(
+            self.prompts,
+            desc="Evaluating games",
+            disable=not self.config.verbose,
+            ncols=100,
+        ):
             qid = p["query_id"]
             agent_a = p["agent_a"]
             agent_b = p["agent_b"]
             prompt_str = p["prompt"]
             if (qid, agent_a, agent_b) in skip_tuples:
                 continue
-            logger.debug(f"Running query id {qid} agent {agent_a} vs {agent_b}")
+            logging.debug(f"Running query id {qid} agent {agent_a} vs {agent_b}")
             try:
-                gpt_answer = self.openai_client(prompt_str)
+                llm_answer = self.llm_provider(prompt_str)
             except RetryError:
-                logger.warning(
+                logging.warning(
                     f"Failed fetching answer for {qid}, {agent_a}, {agent_b}"
                 )
                 continue
-            logger.debug(gpt_answer)
+            logging.debug(llm_answer)
             try:
-                relevant = self.__extract_relevant(gpt_answer)
+                relevant = self.__extract_relevant(llm_answer)
             except ValueError:
                 unparsed_answers += 1
-                logger.warning(
+                logging.warning(
                     f"Failed extracting answer for {qid}, {agent_a}, {agent_b}."
                     "Probably not enough tokens in the answer."
-                    f"Full answer:\n{gpt_answer}",
+                    f"Full answer:\n{llm_answer}",
                 )
                 continue
-            if self.print:
-                logger.info(
-                    f"[not bold white][{qid}][/not bold white] "
-                    f"[bold blue] {agent_a:<18} [/bold blue] 🆚  "
-                    f"[bold red] {agent_b}[/bold red]"
-                )
-                if relevant == "A":
-                    parser_ans = gpt_answer.replace("[[A]]", "[bold blue]A[/bold blue]")
-                elif relevant == "B":
-                    parser_ans = gpt_answer.replace("[[B]]", "[bold red]B[/bold red]")
-                else:
-                    parser_ans = gpt_answer.replace(
-                        "[[C]]", "[bold purple]C[/bold purple]"
-                    )
-                logger.info("[bold white] Evaluator answer: [/bold white]")
-                logger.info(parser_ans)
-            with open(self.output_file, "a") as f:
-                d = {
-                    "query_id": qid,
-                    "agent_a": agent_a,
-                    "agent_b": agent_b,
-                    "prompt": prompt_str,
-                    "answer": gpt_answer,
-                    "relevant": relevant,
-                }
-                json.dump(d, f)
-                f.write("\n")
-                self.evaluations.append(d)
-
-        logger.info("✅ Done!")
-        logger.info(f"Unparsed answers: {unparsed_answers}")
-        logger.info(f"Total evaluations: {len(self.prompts) - unparsed_answers}")
+            self.__print_response(qid, agent_a, agent_b, llm_answer, relevant)
+            self.__dump_response(
+                qid, agent_a, agent_b, prompt_str, llm_answer, relevant
+            )
+        if self.config.verbose:
+            print("✅ Done!")
+            print(f"Unparsed answers: {unparsed_answers}")
+            print(f"Total evaluations: {len(self.prompts) - unparsed_answers}")
         return self.evaluations
+
+    def __dump_response(
+        self,
+        qid: str,
+        agent_a: str,
+        agent_b: str,
+        prompt_str: str,
+        llm_answer: str,
+        relevant: str,
+    ):
+        with open(self.output_file, "a") as f:
+            d = {
+                "query_id": qid,
+                "agent_a": agent_a,
+                "agent_b": agent_b,
+                "prompt": prompt_str,
+                "answer": llm_answer,
+                "relevant": relevant,
+            }
+            json.dump(d, f)
+            f.write("\n")
+            self.evaluations.append(d)
+
+    def __print_response(
+        self, qid: str, did: str, agent_a: str, agent_b: str, answer: str, relevant: str
+    ):
+        """Prints the response to the console"""
+        if not self.config.verbose:
+            return
+        if self.config.rich_print:
+            try:
+                from rich import print
+            except ImportError:
+                logging.warning("Rich not installed. Using plain print")
+                self.config.rich_print = False
+            print(
+                f"[not bold white][{qid}][/not bold white] "
+                f"[bold blue] {agent_a:<18} [/bold blue] 🆚  "
+                f"[bold red] {agent_b}[/bold red]"
+            )
+            if relevant == "A":
+                parser_ans = answer.replace("[[A]]", "[bold blue]A[/bold blue]")
+            elif relevant == "B":
+                parser_ans = answer.replace("[[B]]", "[bold red]B[/bold red]")
+            else:
+                parser_ans = answer.replace("[[C]]", "[bold purple]C[/bold purple]")
+            print("[bold white] Evaluator answer: [/bold white]")
+            print(parser_ans)
 
     def __generate_random_games(self) -> List[Tuple[str, str]]:
         """Creates all prompts necessary for running the evaluator"""
         total_agents = len(self.agents)
         _agents = list(self.agents)
         if self.k == -1:
-            logger.info("Creating all possible games...")
+            logging.info("Creating all possible games...")
             pairs = []
             for i in range(total_agents):
                 for j in range(i + 1, total_agents):
@@ -174,15 +205,15 @@ class PairwiseWithReasoning(AnswerEvaluator):
                 if agent_b != agent_a and (agent_a, agent_b) not in used_pairs:
                     used_pairs.add((agent_a, agent_b))
                     pairs.append((agent_a, agent_b))
-                    logger.debug(f"Created game {agent_a} vs {agent_b}")
+                    logging.debug(f"Created game {agent_a} vs {agent_b}")
                     if self.bidirectional:
                         pairs.append((agent_b, agent_a))
                         used_pairs.add((agent_b, agent_a))
-                        logger.debug(f"Created game {agent_b} vs {agent_a}")
+                        logging.debug(f"Created game {agent_b} vs {agent_a}")
                     second_agents_q.append(agent_b)
                     break
                 second_agents_q.append(agent_b)
-        logger.info(f"Created {len(pairs)} games")
+        logging.info(f"Created {len(pairs)} games")
         return pairs
 
     def __create_all_prompts(self) -> List[Dict[str, str]]:
@@ -200,18 +231,18 @@ class PairwiseWithReasoning(AnswerEvaluator):
             for a, b in random_pairs:
                 if a not in self.answers[qid] or b not in self.answers[qid]:
                     continue
-                reasonings = "\n".join(
+                reasoning = "\n".join(
                     list(
                         [
                             " ".join([f"[{a}]", b])
-                            for (a, b) in self.reasonings[qid].items()
+                            for (a, b) in self.reasoning[qid].items()
                         ]
                     )
                 )
                 ans_a = self.answers[qid][a].strip()
                 ans_b = self.answers[qid][b].strip()
                 prompt = self.prompt.format(
-                    query=query, documents=reasonings, answer_a=ans_a, answer_b=ans_b
+                    query=query, documents=reasoning, answer_a=ans_a, answer_b=ans_b
                 )
                 prompts.append(
                     {"query_id": qid, "agent_a": a, "agent_b": b, "prompt": prompt}
@@ -222,13 +253,13 @@ class PairwiseWithReasoning(AnswerEvaluator):
         total_agents = len(self.agents)
         if total_agents < 2:
             raise ValueError(f"Need at least 2 agents, found {total_agents}")
-        logger.info(f"Loaded {total_agents} agents")
+        logging.info(f"Loaded {total_agents} agents")
         if (total_agents * (total_agents - 1)) < self.k:
             possible_games = total_agents * (total_agents - 1)
-            logger.warning(
+            logging.warning(
                 f"Requested {self.k} games but only {possible_games} are possible"
             )
-            logger.warning(f"Will create {possible_games} games per query instead")
+            logging.warning(f"Will create {possible_games} games per query instead")
             self.k = possible_games
 
     def __extract_relevant(self, answer: str) -> str:
@@ -241,13 +272,13 @@ class PairwiseWithReasoning(AnswerEvaluator):
             raise ValueError(f"Unknown answer: {answer}")
         return answer
 
-    def _load_reasonings(self, reasonings_path: str) -> Dict[str, Dict[str, str]]:
-        reasonings: Dict[str, Dict[str, str]] = defaultdict(lambda: dict())
-        reasonings_read = 0
-        for line in csv.DictReader(open(reasonings_path)):
+    def _load_reasoning(self, reasoning_path: str) -> Dict[str, Dict[str, str]]:
+        reasoning: Dict[str, Dict[str, str]] = defaultdict(lambda: dict())
+        reasoning_read = 0
+        for line in csv.DictReader(open(reasoning_path)):
             if line["query_id"] not in self.queries:
                 continue
-            reasonings_read += 1
-            reasonings[line["query_id"]][line["did"]] = line["answer"]
-        logger.info(f"Loaded {reasonings_read} reasonings")
-        return dict(reasonings)
+            reasoning_read += 1
+            reasoning[line["query_id"]][line["did"]] = line["answer"]
+        logging.info(f"Loaded {reasoning_read} reasonings")
+        return dict(reasoning)

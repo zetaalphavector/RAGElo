@@ -1,59 +1,44 @@
 """Base model for dealing with answer evaluators"""
+
 import csv
-import os
 from abc import abstractmethod
 from collections import defaultdict
-from typing import Dict, Set, Type
+from typing import Dict, Optional, Set, Type
 
+from ragelo.evaluators.base_evaluator import BaseEvaluator
+from ragelo.llm_providers.base_llm_provider import LLMProvider
 from ragelo.logger import logger
-from ragelo.utils.openai_client import OpenAiClient, set_credentials_from_file
+from ragelo.types import Query
+from ragelo.types.configurations import AnswerEvaluatorConfig
 
 
-class AnswerEvaluator:
+class AnswerEvaluator(BaseEvaluator):
     def __init__(
         self,
-        query_path: str,
-        answers_file: str,
-        output_file: str,
-        evaluator_name: str,
-        model_name: str = "gpt-4",
-        credentials_file: str | None = None,
-        print_answers: bool = False,
-        force: bool = False,
-        **kwargs,
+        config: AnswerEvaluatorConfig,
+        llm_provider: LLMProvider,
+        queries: Optional[Dict[str, Query]] = None,
+        answers: Optional[Dict[str, Dict[str, str]]] = None,
     ):
-        self.name = evaluator_name
-        self.print = print_answers
-        self.force = force
+        if not queries and not config.query_path:
+            raise ValueError(
+                "You are trying to use an Answer Evaluator without providing queries"
+            )
+        if not answers and not config.answers_file:
+            raise ValueError(
+                "You are trying to use an Answer Evaluator without providing answers"
+            )
+        self.queries = self.load_queries(config.query_path) if not queries else queries
+        self.answers = (
+            self._load_answers(config.answers_file) if not answers else answers
+        )
+
+        if not self.config.output_file:
+            self.output_file = f"answers_evaluator.log"
+        else:
+            self.output_file = self.config.output_file
         self.agents: Set[str] = set()
-        self.output_file = output_file
-        self.queries = self._load_queries(query_path)
-        self.answers = self._load_answers(answers_file)
-
-        if credentials_file:
-            set_credentials_from_file(credentials_file)
-
-        self.openai_client = OpenAiClient(model=model_name)
-
-    @abstractmethod
-    def run(self):
-        """Run and extract answers for all queries"""
-        pass
-
-    def _load_queries(self, queries_path: str) -> Dict[str, str]:
-        queries = {}
-        if not os.path.isfile(queries_path):
-            logger.exception(f"Queries file {queries_path} not found")
-            raise FileNotFoundError
-
-        for line in csv.reader(open(queries_path)):
-            if "query" in line:
-                continue
-            qid, query = line
-            queries[qid] = query
-        if self.print:
-            logger.info(f"Loaded {len(queries)} queries")
-        return queries
+        self.llm_provider = llm_provider
 
     def _load_answers(self, answers_path: str) -> Dict[str, Dict[str, str]]:
         answers: Dict[str, Dict[str, str]] = defaultdict(lambda: dict())
@@ -87,7 +72,13 @@ class AnswerEvaluatorFactory:
         return inner_wrapper
 
     @classmethod
-    def create(cls, name: str, **kwargs) -> AnswerEvaluator:
-        if name.lower() not in cls.registry:
-            raise ValueError(f"Name {name} not in registry")
-        return cls.registry[name.lower()](evaluator_name=name, **kwargs)
+    def create(
+        cls,
+        evaluator_name: str,
+        config: AnswerEvaluatorConfig,
+        queries: Optional[Dict[str, Query]] = None,
+        answers: Optional[Dict[str, Dict[str, str]]] = None,
+    ):
+        if evaluator_name not in cls.registry:
+            raise ValueError(f"Unknown evaluator {evaluator_name}")
+        return cls.registry[evaluator_name.lower()](config, queries, answers)

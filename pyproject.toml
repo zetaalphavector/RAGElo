@@ -37,6 +37,7 @@ dev = [
     "flake8-isort==6.1.0",
     "mypy==1.6.1",
     "Flake8-pyproject==1.2.3",
+    "types-tqdm==4.66.0",
 ]
 
 [project.scripts]
