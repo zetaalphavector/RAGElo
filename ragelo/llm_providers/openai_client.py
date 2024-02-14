@@ -43,12 +43,10 @@ class OpenAIProvider(BaseLLMProvider):
         return answers.choices[0].message.content
 
     @classmethod
-    def from_configuration(
-        cls, openai_config: Optional[OpenAIConfiguration], model: str = "gpt-3.5-turbo"
-    ):
+    def from_configuration(cls, openai_config: Optional[OpenAIConfiguration]):
         """Inits the OpenAI wrapper from a configuration object."""
         openai_client = cls.get_openai_client(openai_config)
-        return cls(openai_client, model)
+        return cls(openai_client, model=openai_config.openai_model)
 
     @staticmethod
     def get_openai_client(openai_config: OpenAIConfiguration) -> OpenAI:

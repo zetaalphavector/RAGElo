@@ -95,13 +95,13 @@ class BaseRetrievalEvaluator(BaseEvaluator):
     def __get_skip_docs(self) -> Set[Tuple[str, str]]:
         """Skips documents that have already been annotated"""
         skip_docs = set()
-        if os.path.isfile(self.output_file) and not self.force:
-            for line in csv.reader(open(self.output_file)):
+        if os.path.isfile(self.__output_file) and not self.__config.force:
+            for line in csv.reader(open(self.__output_file)):
                 qid, did, _ = line
                 skip_docs.add((qid, did))
-        if self.force and os.path.isfile(self.output_file):
-            logging.warning(f"Removing existing {self.output_file}!")
-            os.remove(self.output_file)
+        if self.__config.force and os.path.isfile(self.__output_file):
+            logging.warning(f"Removing existing {self.__output_file}!")
+            os.remove(self.__output_file)
         if len(skip_docs) > 0:
             logging.warning(
                 f"Skipping {len(skip_docs)} documents already annotated! "
@@ -110,7 +110,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         return skip_docs
 
     def __print_response(self, qid: str, did: str, answer: str) -> None:
-        if not self.verbose:
+        if not self.__config.verbose:
             return
         if self.rich_print:
             try:
@@ -137,7 +137,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         answer: str,
         file: str | None = None,
     ) -> None:
-        output_file = file if file else self.output_file
+        output_file = file if file else self.__output_file
         if not os.path.isfile(output_file):
             logging.debug(f"Creating new file {output_file}")
             with open(output_file, "w") as f:

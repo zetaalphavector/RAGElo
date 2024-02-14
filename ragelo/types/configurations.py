@@ -14,6 +14,7 @@ class OpenAIConfiguration(LLMProviderConfiguration):
     openai_api_type: Optional[str] = None
     openai_api_base: Optional[str] = None
     openai_api_version: Optional[str] = None
+    model_name: str = "gpt-3.5-turbo"
 
 
 @dataclass

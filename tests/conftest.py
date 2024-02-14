@@ -8,7 +8,10 @@ from openai.resources.chat.completions import Completions
 from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     BaseRetrievalEvaluator,
 )
-from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
+from ragelo.llm_providers.base_llm_provider import (
+    BaseLLMProvider,
+    LLMProviderConfiguration,
+)
 from ragelo.llm_providers.openai_client import OpenAIConfiguration
 from ragelo.types.configurations import RetrievalEvaluatorConfig
 
@@ -21,6 +24,13 @@ def openai_client_config():
         openai_api_type="open_ai",
         openai_api_base=None,
         openai_api_version=None,
+    )
+
+
+@pytest.fixture
+def llm_provider_config():
+    return LLMProviderConfiguration(
+        api_key="fake key",
     )
 
 
@@ -39,9 +49,9 @@ def openai_client_mock(mocker, chat_completion_mock):
     return openai_client
 
 
-@pytest.fixture
-def llm_provider_mock(mocker):
-    return mocker.Mock(BaseLLMProvider)
+# @pytest.fixture
+# def llm_provider_mock(mocker):
+#     return mocker.Mock(BaseLLMProvider)
 
 
 @pytest.fixture
@@ -50,7 +60,31 @@ def retrieval_eval_config():
         documents_path="tests/data/documents.csv",
         query_path="tests/data/queries.csv",
         output_file="tests/data/output.csv",
+        force=True,
     )
+
+
+class MockLLMProvider(BaseLLMProvider):
+    def __init__(self, config):
+        self.config = config
+
+    @classmethod
+    def from_configuration(cls, config: LLMProviderConfiguration):
+        return cls(config)
+
+    def inner_call(self, prompt) -> str:
+        return f"Processed {prompt}"
+
+    def __call__(self, prompt) -> str:
+        return self.inner_call(prompt)
+
+
+@pytest.fixture
+@patch.object(MockLLMProvider, "__call__", autospec=True)
+def llm_provider_mock(llm_provider_config):
+    provider = MockLLMProvider(llm_provider_config)
+    provider.inner_call = Mock(side_effect=lambda prompt: f"Processed {prompt}")
+    return provider
 
 
 # @pytest.fixture
