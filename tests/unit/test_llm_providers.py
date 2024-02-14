@@ -1,9 +1,10 @@
 from openai.types.chat.chat_completion import (
     ChatCompletion,
-    Choice,
     ChatCompletionMessage,
+    Choice,
 )
-from ragelo.llm_providers.openai_client import OpenAIModel
+
+from ragelo.llm_providers.openai_client import OpenAIProvider
 
 
 class TestOpenAIProvider:
@@ -24,7 +25,7 @@ class TestOpenAIProvider:
             model="fake model",
             object="chat.completion",
         )
-        openai_client = OpenAIModel(openai_client_mock, "fake model")
+        openai_client = OpenAIProvider(openai_client_mock, "fake model")
         prompt = "hello world"
         prompts = [
             {"role": "system", "content": "hello world"},

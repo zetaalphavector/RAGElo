@@ -18,7 +18,7 @@ from ragelo.types import Document, Query
 from ragelo.types.configurations import RetrievalEvaluatorConfig
 
 
-class RetrievalEvaluator(BaseEvaluator):
+class BaseRetrievalEvaluator(BaseEvaluator):
     def __init__(
         self,
         config: RetrievalEvaluatorConfig,
@@ -159,22 +159,25 @@ class RetrievalEvaluator(BaseEvaluator):
         return contents
 
     @classmethod
-    def create_from_config(
+    def from_config(
         cls, config: RetrievalEvaluatorConfig, llm_provider: BaseLLMProvider
     ):
         queries = cls.load_queries(config.query_path)
         documents = cls.load_documents(config.documents_path, queries)
         return cls(config, queries, documents, llm_provider)
 
+    def __len__(self) -> int:
+        return len(self.__queries)
+
 
 class RetrievalEvaluatorFactory:
-    registry: Dict[str, Type[RetrievalEvaluator]] = {}
+    registry: Dict[str, Type[BaseRetrievalEvaluator]] = {}
 
     @classmethod
     def register(cls, evaluator_name: str) -> Callable:
         def inner_wrapper(
-            wrapped_class: Type[RetrievalEvaluator],
-        ) -> Type[RetrievalEvaluator]:
+            wrapped_class: Type[BaseRetrievalEvaluator],
+        ) -> Type[BaseRetrievalEvaluator]:
             cls.registry[evaluator_name] = wrapped_class
             return wrapped_class
 
@@ -188,7 +191,7 @@ class RetrievalEvaluatorFactory:
         llm_provider: BaseLLMProvider,
         queries: Optional[Dict[str, Query]] = None,
         documents: Optional[Dict[str, List[Document]]] = None,
-    ) -> RetrievalEvaluator:
+    ) -> BaseRetrievalEvaluator:
         if evaluator_name not in cls.registry:
             raise ValueError(f"Unknown evaluator {evaluator_name}")
         return cls.registry[evaluator_name](config, llm_provider, queries, documents)

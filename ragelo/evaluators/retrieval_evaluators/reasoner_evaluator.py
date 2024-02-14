@@ -1,4 +1,4 @@
-from ragelo.doc_evaluators.base_retrieval_evaluator import (
+from ragelo.retrieval_evaluators.base_retrieval_evaluator import (
     RetrievalEvaluator,
     RetrievalEvaluatorFactory,
 )

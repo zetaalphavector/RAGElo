@@ -4,15 +4,14 @@ from typing import Dict, List, Optional
 from openai import AzureOpenAI, OpenAI
 from tenacity import retry, stop_after_attempt, wait_random_exponential
 
-from ragelo.types import OpenAIConfiguration
-
 from ragelo.llm_providers.base_llm_provider import (
     BaseLLMProvider,
     set_credentials_from_file,
 )
+from ragelo.types import OpenAIConfiguration
 
 
-class OpenAIModel(BaseLLMProvider):
+class OpenAIProvider(BaseLLMProvider):
     """A Wrapper over the OpenAI client."""
 
     def __init__(self, openai_client: OpenAI | AzureOpenAI, model: str):

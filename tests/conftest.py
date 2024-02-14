@@ -1,14 +1,16 @@
-import os
-import tempfile
 from unittest.mock import Mock, patch
 
 import pytest
-from ragelo.types.configurations import RetrievalEvaluatorConfig
-from ragelo.doc_evaluators.base_retrieval_evaluator import RetrievalEvaluator
-from ragelo.llm_providers.openai_client import OpenAIConfiguration
+from openai import OpenAI
 from openai.resources.chat import Chat
 from openai.resources.chat.completions import Completions
-from openai import OpenAI
+
+from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
+    BaseRetrievalEvaluator,
+)
+from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
+from ragelo.llm_providers.openai_client import OpenAIConfiguration
+from ragelo.types.configurations import RetrievalEvaluatorConfig
 
 
 @pytest.fixture
@@ -38,81 +40,80 @@ def openai_client_mock(mocker, chat_completion_mock):
 
 
 @pytest.fixture
-def temp_file():
-    with tempfile.NamedTemporaryFile(mode="w+", delete=False) as f:
-        yield f.name
-    os.unlink(f.name)
+def llm_provider_mock(mocker):
+    return mocker.Mock(BaseLLMProvider)
+
+
+@pytest.fixture
+def retrieval_eval_config():
+    return RetrievalEvaluatorConfig(
+        documents_path="tests/data/documents.csv",
+        query_path="tests/data/queries.csv",
+        output_file="tests/data/output.csv",
+    )
 
 
 # @pytest.fixture
-# def mock_openai_client():
+# def base_retrieval_evaluator_mock(retrieval_eval_config, LLM_provider_mock):
+
+
+# @pytest.fixture
+# def temp_file():
+#     with tempfile.NamedTemporaryFile(mode="w+", delete=False) as f:
+#         yield f.name
+#     os.unlink(f.name)
+
+
+# @pytest.fixture
+# def mock_logger():
+#     with patch("ragelo.doc_evaluators.base_retrieval_evaluator.logger") as mock:
+#         yield mock
+
+
+# @pytest.fixture
+# def mock_progress_bar():
+#     with patch("ragelo.doc_evaluators.base_retrieval_evaluator.Progress") as mock:
+#         yield mock
+
+
+# @pytest.fixture
+# def reasoner_evaluator():
+#     from ragelo.retrieval_evaluators.reasoner_evaluator import ReasonerEvaluator
+
+#     return ReasonerEvaluator
+
+
+# @pytest.fixture
+# def mock_retrieval_evaluator_config(temp_file):
+#     config = RetrievalEvaluatorConfig(
+#         documents_path="tests/data/documents.csv",
+#         query_path="tests/data/queries.csv",
+#         output_file=temp_file,
+#     )
+#     return config
+
+
+# @pytest.fixture
+# def document_evaluator(mock_openai_client, mock_retrieval_evaluator_config):
+#     evaluator = MockRetrievalEvaluator.create_from_config(
+#         config=mock_retrieval_evaluator_config,
+#         llm_provider=mock_openai_client,
+#     )
+#     return evaluator
+
+
+# @pytest.fixture
+# def mock_openai_client_call():
 #     with patch(
-#         "ragelo.llm_providers.OpenAIModel.__call__",
-#         autospec=True,
-#         return_value="mocked response",
+#         "ragelo.llm_providers.openai_client.OpenAIModel.__call__", autospec=True
 #     ) as mock:
-#         mock.return_value = Mock()
-#     yield mock
+#         yield mock
 
 
-@pytest.fixture
-def mock_logger():
-    with patch("ragelo.doc_evaluators.base_retrieval_evaluator.logger") as mock:
-        yield mock
-
-
-@pytest.fixture
-def mock_progress_bar():
-    with patch("ragelo.doc_evaluators.base_retrieval_evaluator.Progress") as mock:
-        yield mock
-
-
-@pytest.fixture
-def reasoner_evaluator():
-    from ragelo.doc_evaluators.reasoner_evaluator import ReasonerEvaluator
-
-    return ReasonerEvaluator
-
-
-class MockRetrievalEvaluator(RetrievalEvaluator):
-    def _build_message(self, qid: str, did: str) -> str:
-        return f"Mock message for query {qid} and document {did}"
-
-    def _process_answer(self, answer: str) -> str:
-        return f"Processed {answer}"
-
-
-@pytest.fixture
-def mock_retrieval_evaluator_config(temp_file):
-    config = RetrievalEvaluatorConfig(
-        documents_path="tests/data/documents.csv",
-        query_path="tests/data/queries.csv",
-        output_file=temp_file,
-    )
-    return config
-
-
-@pytest.fixture
-def document_evaluator(mock_openai_client, mock_retrieval_evaluator_config):
-    evaluator = MockRetrievalEvaluator.create_from_config(
-        config=mock_retrieval_evaluator_config,
-        llm_provider=mock_openai_client,
-    )
-    return evaluator
-
-
-@pytest.fixture
-def mock_openai_client_call():
-    with patch(
-        "ragelo.llm_providers.openai_client.OpenAIModel.__call__", autospec=True
-    ) as mock:
-        yield mock
-
-
-@pytest.fixture
-def mock_process_answer():
-    with patch(
-        "ragelo.doc_evaluators.base_retrieval_evaluator.RetrievalEvaluator._process_answer",
-        autospec=True,
-    ) as mock:
-        yield mock
+# @pytest.fixture
+# def mock_process_answer():
+#     with patch(
+#         "ragelo.doc_evaluators.base_retrieval_evaluator.RetrievalEvaluator._process_answer",
+#         autospec=True,
+#     ) as mock:
+#         yield mock

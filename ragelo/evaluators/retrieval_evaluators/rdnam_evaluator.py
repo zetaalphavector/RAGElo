@@ -9,11 +9,11 @@ from typing import Dict, Optional
 
 import numpy as np
 
-from ragelo.doc_evaluators.base_retrieval_evaluator import (
+from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
+from ragelo.retrieval_evaluators.base_retrieval_evaluator import (
     RetrievalEvaluator,
     RetrievalEvaluatorFactory,
 )
-from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.types import Document, Query
 from ragelo.types.configurations import RetrievalEvaluatorConfig
 

@@ -1,1 +1,1 @@
-from .openai_client import OpenAIModel
+from .openai_client import OpenAIProvider

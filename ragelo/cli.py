@@ -8,8 +8,8 @@ from typing_extensions import Annotated
 from ragelo import __app_name__, __version__
 from ragelo.answer_evaluators import AnswerEvaluatorFactory
 from ragelo.answer_rankers import AnswerRankerFactory
-from ragelo.doc_evaluators import DocumentEvaluatorFactory
 from ragelo.logger import CLILogHandler, logger
+from ragelo.retrieval_evaluators import DocumentEvaluatorFactory
 
 logger.addHandler(CLILogHandler())
 logger.setLevel("INFO")
