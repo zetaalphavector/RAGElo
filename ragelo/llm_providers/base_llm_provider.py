@@ -7,21 +7,15 @@ from abc import ABC, abstractmethod
 from ragelo.types.configurations import LLMProviderConfiguration
 
 
-class LLMProvider(ABC):
+class BaseLLMProvider(ABC):
     @abstractmethod
-    def __call__(self, message: str) -> str:
+    def __call__(self, prompt: str) -> str:
         """Submits a single query-document pair to the LLM and returns the answer."""
         raise NotImplementedError
 
     @abstractmethod
     def from_configuration(cls, config: LLMProviderConfiguration):
-        """Creates an LLMProvider from a configuration object."""
-        raise NotImplementedError
-
-    @staticmethod
-    @abstractmethod
-    def get_configurations() -> LLMProviderConfiguration:
-        """Returns the configurations for the LLMProvider."""
+        """Creates an BaseLLMProvider from a configuration object."""
         raise NotImplementedError
 
 

@@ -14,7 +14,7 @@ from ragelo.answer_evaluators.base_answer_evaluator import (
     AnswerEvaluator,
     AnswerEvaluatorFactory,
 )
-from ragelo.llm_providers.base_llm_provider import LLMProvider
+from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.types import Query
 from ragelo.types.configurations import AnswerEvaluatorConfig
 
@@ -42,7 +42,7 @@ class PairwiseWithReasoning(AnswerEvaluator):
     def __init__(
         self,
         config: AnswerEvaluatorConfig,
-        llm_provider: LLMProvider,
+        llm_provider: BaseLLMProvider,
         queries: Optional[Dict[str, Query]] = None,
         answers: Optional[Dict[str, Dict[str, str]]] = None,
     ):

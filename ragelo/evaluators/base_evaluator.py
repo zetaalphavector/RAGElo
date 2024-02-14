@@ -6,7 +6,7 @@ import os
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional
 
-from ragelo.llm_providers.base_llm_provider import LLMProvider
+from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.types import Document, Query
 from ragelo.types.configurations import EvaluatorConfig
 
@@ -16,22 +16,20 @@ class BaseEvaluator(ABC):
     def __init__(
         self,
         queries: List[Query],
-        llm_provider: LLMProvider,
+        llm_provider: BaseLLMProvider,
         config: EvaluatorConfig,
     ):
         raise NotImplementedError
 
     @abstractmethod
     def run(self):
-        """Runs the evaluator."""
-        raise NotImplementedError
-
-    @abstractmethod
-    def evaluate_single_sample(self):
+        """Runs the evaluator for all loaded samples."""
         raise NotImplementedError
 
     @staticmethod
     def load_queries(queries_path: str) -> Dict[str, Query]:
+        """Loads the queries from a CSV file and returns a dictionary with the queries.
+        The key is the query id and the value is the query object."""
         queries = {}
         if not os.path.isfile(queries_path):
             raise FileNotFoundError(f"Queries file {queries_path} not found")
@@ -49,7 +47,7 @@ class BaseEvaluator(ABC):
     def load_documents(
         documents_path: str, queries: Optional[List[Query]] = None
     ) -> Dict[str, Dict[str, Document]]:
-        documents: {}
+        documents = {}
         documents_read = 0
         if not os.path.isfile(documents_path):
             raise FileNotFoundError(f"Documents file {documents_path} not found")
@@ -63,7 +61,7 @@ class BaseEvaluator(ABC):
                 continue
             if qid not in documents:
                 documents[qid] = {}
-            documents[qid][did] = Document(did, text)
+            documents[qid][did] = Document(qid, did, text)
             documents_read += 1
         logging.info(f"Loaded {documents_read} documents")
         return documents

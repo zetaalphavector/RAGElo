@@ -6,7 +6,7 @@ from collections import defaultdict
 from typing import Dict, Optional, Set, Type
 
 from ragelo.evaluators.base_evaluator import BaseEvaluator
-from ragelo.llm_providers.base_llm_provider import LLMProvider
+from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.logger import logger
 from ragelo.types import Query
 from ragelo.types.configurations import AnswerEvaluatorConfig
@@ -16,7 +16,7 @@ class AnswerEvaluator(BaseEvaluator):
     def __init__(
         self,
         config: AnswerEvaluatorConfig,
-        llm_provider: LLMProvider,
+        llm_provider: BaseLLMProvider,
         queries: Optional[Dict[str, Query]] = None,
         answers: Optional[Dict[str, Dict[str, str]]] = None,
     ):

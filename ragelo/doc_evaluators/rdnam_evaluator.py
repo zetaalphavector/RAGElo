@@ -13,7 +13,7 @@ from ragelo.doc_evaluators.base_retrieval_evaluator import (
     RetrievalEvaluator,
     RetrievalEvaluatorFactory,
 )
-from ragelo.llm_providers.base_llm_provider import LLMProvider
+from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.types import Document, Query
 from ragelo.types.configurations import RetrievalEvaluatorConfig
 
@@ -58,7 +58,7 @@ Each rater used their own independent judgement."""  # noqa: E501
     def __init__(
         self,
         config: RetrievalEvaluatorConfig,
-        llm_provider: LLMProvider,
+        llm_provider: BaseLLMProvider,
         queries: Optional[Dict[str, Query]] = None,
         documents: Optional[Dict[str, Dict[str, Document]]] = None,
     ):

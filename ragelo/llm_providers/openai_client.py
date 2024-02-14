@@ -6,7 +6,10 @@ from tenacity import retry, stop_after_attempt, wait_random_exponential
 
 from ragelo.types import OpenAIConfiguration
 
-from .base_llm_provider import BaseLLMProvider, set_credentials_from_file
+from ragelo.llm_providers.base_llm_provider import (
+    BaseLLMProvider,
+    set_credentials_from_file,
+)
 
 
 class OpenAIModel(BaseLLMProvider):
