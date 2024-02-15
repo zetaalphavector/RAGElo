@@ -56,6 +56,15 @@ class TestRetrievalEvaluator:
         assert call_args[2][0][0] == "Mock message for query 1 and document 2"
         assert call_args[3][0][0] == "Mock message for query 1 and document 3"
 
+    def test_rich_printing(self, llm_provider_mock, retrieval_eval_config, capsys):
+        retrieval_eval_config.rich_print = True
+        evaluator = BaseRetrievalEvaluator.from_config(
+            config=retrieval_eval_config, llm_provider=llm_provider_mock
+        )
+        _ = evaluator.run()
+        captured = capsys.readouterr()
+        assert "🔎" in captured.out
+
 
 class TestRDNAMEvaluator:
     def test_creation(self, llm_provider_mock, rdnam_config):

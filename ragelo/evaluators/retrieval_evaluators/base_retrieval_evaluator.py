@@ -112,22 +112,28 @@ class BaseRetrievalEvaluator(BaseEvaluator):
     def __print_response(self, qid: str, did: str, answer: str) -> None:
         if not self.config.verbose:
             return
-        if self.rich_print:
+        if self.config.rich_print:
+            print("OK")
             try:
-                from rich import print
+                import rich
+
+                rich.print(
+                    "[bold cyan]🔎Query       [/bold cyan]: [not bold cyan]"
+                    f"{self.queries[qid].query}[/not bold cyan]"
+                )
+                rich.print(f"[bold cyan]Document ID [/bold cyan]: {did}")
+                rich.print(
+                    f"[bold cyan]Evaluation  [/bold cyan]: [not bold]{answer}[/not bold]"
+                )
+                rich.print("")
+
             except ImportError:
                 logging.warning("Rich not installed. Using plain print")
-                self.rich_print = False
-            print(
-                "[bold cyan]Query       [/bold cyan]: [not bold cyan]"
-                f"{self.queries[qid]}[/not bold cyan]"
-            )
-            print(f"[bold cyan]Document ID [/bold cyan]: {did}")
-            print(f"[bold cyan]Evaluation  [/bold cyan]: [not bold]{answer}[/not bold]")
-            print("")
+                self.config.rich_print = False
+
         else:
             print(
-                f"Query: {self.queries[qid]}, Document ID: {did}, Evaluation: {answer}"
+                f"Query: {self.queries[qid].query}, Document ID: {did}, Evaluation: {answer}"
             )
 
     def __dump_response(

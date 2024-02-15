@@ -54,6 +54,7 @@ def retrieval_eval_config():
         query_path="tests/data/queries.csv",
         output_file="tests/data/output.csv",
         force=True,
+        verbose=True,
     )
 
 
