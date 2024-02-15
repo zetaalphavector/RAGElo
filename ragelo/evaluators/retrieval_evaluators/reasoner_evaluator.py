@@ -1,11 +1,11 @@
-from ragelo.retrieval_evaluators.base_retrieval_evaluator import (
-    RetrievalEvaluator,
+from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
+    BaseRetrievalEvaluator,
     RetrievalEvaluatorFactory,
 )
 
 
 @RetrievalEvaluatorFactory.register("reasoner")
-class ReasonerEvaluator(RetrievalEvaluator):
+class ReasonerEvaluator(BaseRetrievalEvaluator):
     """
     A document Evaluator that only outputs the reasoning for why a document
     is relevant.
@@ -25,7 +25,7 @@ class ReasonerEvaluator(RetrievalEvaluator):
     def _build_message(self, qid: str, did: str) -> str:
         query = self.queries[qid]
         document = self.documents[qid][did]
-        return self.prompt.format(user_question=query, doc_content=document)
+        return self.prompt.format(user_question=query.query, doc_content=document.text)
 
     def _process_answer(self, answer: str) -> str:
         return answer

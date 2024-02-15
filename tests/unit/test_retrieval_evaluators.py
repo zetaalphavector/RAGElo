@@ -6,6 +6,7 @@ from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     BaseRetrievalEvaluator,
 )
 from ragelo.evaluators.retrieval_evaluators.rdnam_evaluator import RDNAMvaluator
+from ragelo.evaluators.retrieval_evaluators.reasoner_evaluator import ReasonerEvaluator
 
 
 class BaseRetrievalEvaluator(BaseRetrievalEvaluator):
@@ -74,3 +75,24 @@ class TestRDNAMEvaluator:
         assert call_args[0][0][0].startswith(
             "You are a search quality rater evaluating"
         )
+
+
+class TestReasonerEvaluator:
+    def test_creation(self, llm_provider_mock, retrieval_eval_config):
+        evaluator = ReasonerEvaluator.from_config(
+            config=retrieval_eval_config, llm_provider=llm_provider_mock
+        )
+        assert len(evaluator) == 2
+
+    def test_process_single_answer(self, llm_provider_mock, retrieval_eval_config):
+        evaluator = ReasonerEvaluator.from_config(
+            config=retrieval_eval_config, llm_provider=llm_provider_mock
+        )
+        results = evaluator.evaluate_single_sample("0", "0")
+        formatted_prompt = evaluator.prompt.format(
+            user_question=evaluator.queries["0"].query,
+            doc_content=evaluator.documents["0"]["0"].text,
+        )
+        assert formatted_prompt in results
+        call_args = llm_provider_mock.inner_call.call_args_list
+        assert call_args[0][0][0] == formatted_prompt
