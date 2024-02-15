@@ -78,11 +78,11 @@ ragelo --credentials credentials.txt run-all queries.csv documents.csv answers.c
 ## 🧩 Components
 While **RAGElo** is meant to be used as an end-to-end tool, we can also invoke each of its components individually:
 
-### 📜 `documents-annotator`
-The `documents-annotator` tool annotates documents based on their relevance to the user query. This is done regardless of the answers provided by the Agents. By default, it uses the `reasoner` annotator, which only outputs the reasoning for the relevance judgment:
+### 📜 `retrieval-annotator`
+The `retrieval-annotator` tool annotates retrieved documents based on their relevance to the user query. This is done regardless of the answers provided by the Agents. By default, it uses the `reasoner` annotator, which only outputs the reasoning for the relevance judgment:
 
 ```bash
-ragelo documents-annotator queries.csv documents.csv reasonings.csv
+ragelo retrieval-annotator queries.csv documents.csv reasonings.csv
 ```
 The `reasonings.csv` output file is a csv file with query_id, document_id and answer columns: [tests/data/reasonings.csv](https://github.com/zetaalphavector/RAGElo/blob/master/tests/data/reasonings.csv).
 
@@ -124,9 +124,8 @@ python -m build
 
 ### ✅ TODO
 - [ ] Add option to few-shot examples
-- [ ] Add custom types
-- [ ] Testing!
 - [ ] Add CI/CD for publishing
+- [x] Testing!
 - [x] Publish on PyPi
 - [x] Add more document evaluators (Microsoft)
 - [x] Split Elo evaluator

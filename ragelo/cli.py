@@ -6,10 +6,12 @@ import typer
 from typing_extensions import Annotated
 
 from ragelo import __app_name__, __version__
-from ragelo.answer_evaluators import AnswerEvaluatorFactory
 from ragelo.answer_rankers import AnswerRankerFactory
-from ragelo.doc_evaluators import DocumentEvaluatorFactory
+from ragelo.evaluators.answer_evaluators import AnswerEvaluatorFactory
+from ragelo.evaluators.retrieval_evaluators import RetrievalEvaluatorFactory
+from ragelo.llm_providers.openai_client import OpenAIProvider
 from ragelo.logger import CLILogHandler, logger
+from ragelo.types.configurations import AnswerEvaluatorConfig, RetrievalEvaluatorConfig
 
 logger.addHandler(CLILogHandler())
 logger.setLevel("INFO")
@@ -30,8 +32,13 @@ app = typer.Typer()
 state = State()
 
 
+def get_openai_provider(credentials_path, model_name):
+    openai_config = OpenAIProvider.get_openai_config(credentials_path, model_name)
+    return OpenAIProvider.from_configuration(openai_config)
+
+
 @app.command()
-def documents_annotator(
+def retrieval_annotator(
     queries_file: Annotated[
         str,
         typer.Argument(
@@ -41,7 +48,7 @@ def documents_annotator(
     documents_file: Annotated[
         str,
         typer.Argument(
-            help="csv file with documents to evaluate"
+            help="csv file with retrieved documents to evaluate"
             "Each row should have query_id, doc_id, passage"
         ),
     ],
@@ -61,18 +68,19 @@ def documents_annotator(
         output_file = os.path.join(state.data_path, "reasonings.csv")
         logger.info(f"Using default output file: {output_file}")
 
-    doc_evaluator = DocumentEvaluatorFactory.create(
-        evaluator_name,
+    llm_provider = get_openai_provider(state.credentials_file, state.model_name)
+    config = RetrievalEvaluatorConfig(
         query_path=queries_file,
         documents_path=documents_file,
         output_file=output_file,
-        model_name=state.model_name,
-        credentials_file=state.credentials_file,
-        verbose=state.verbose,
         force=state.force,
+        verbose=state.verbose,
+    )
+    doc_evaluator = RetrievalEvaluatorFactory.create(
+        evaluator_name, config, llm_provider
     )
 
-    doc_evaluator.get_answers()
+    doc_evaluator.run()
 
 
 @app.command()
@@ -124,19 +132,21 @@ def answers_annotator(
         output_file = os.path.join(state.data_path, "answers_eval.jsonl")
         logger.info(f"Using default output file: {output_file}")
 
-    answer_evaluator = AnswerEvaluatorFactory.create(
-        evaluator_name,
+    llm_provider = get_openai_provider(state.credentials_file, state.model_name)
+    config = AnswerEvaluatorConfig(
         query_path=queries_file,
-        answers_file=answers_file,
-        reasonings_file=reasonings_file,
         output_file=output_file,
+        answers_file=answers_file,
+        reasoning_file=reasonings_file,
         k=k,
         bidirectional=bidirectional,
-        model_name=state.model_name,
-        credentials_file=state.credentials_file,
-        print_answers=state.verbose,
         force=state.force,
+        verbose=state.verbose,
     )
+    answer_evaluator = AnswerEvaluatorFactory.create(
+        evaluator_name, config, llm_provider
+    )
+
     answer_evaluator.run()
 
 
@@ -149,9 +159,9 @@ def agents_ranker(
         ),
     ],
     output_file: Annotated[
-        str,
+        Optional[str],
         typer.Argument(help="csv file to rank to"),
-    ],
+    ] = None,
     evaluator_name: Annotated[
         str,
         typer.Option("--ranker", help="Name of the evaluator to use."),
@@ -241,31 +251,37 @@ def run_all(
     evaluations_file = os.path.join(state.data_path, "answers_eval.jsonl")
     reasonings_file = os.path.join(state.data_path, "reasonings.csv")
 
-    doc_evaluator = DocumentEvaluatorFactory.create(
-        document_evaluator_name,
+    llm_provider = get_openai_provider(state.credentials_file, state.model_name)
+    retrieval_eval_config = RetrievalEvaluatorConfig(
         query_path=queries_file,
         documents_path=documents_file,
         output_file=reasonings_file,
-        model_name=state.model_name,
-        credentials_file=state.credentials_file,
-        verbose=state.verbose,
         force=state.force,
+        verbose=state.verbose,
     )
+    doc_evaluator = RetrievalEvaluatorFactory.create(
+        document_evaluator_name,
+        retrieval_eval_config,
+        llm_provider,
+    )
+    doc_evaluator.run()
 
-    doc_evaluator.get_answers()
-    answer_evaluator = AnswerEvaluatorFactory.create(
-        answer_evaluator_name,
+    answer_eval_config = AnswerEvaluatorConfig(
         query_path=queries_file,
+        output_file=output_file,
         answers_file=answers_file,
-        reasonings_file=reasonings_file,
-        output_file=evaluations_file,
+        reasoning_file=reasonings_file,
         k=k,
         bidirectional=bidirectional,
-        model_name=state.model_name,
-        credentials_file=state.credentials_file,
-        print_answers=state.verbose,
         force=state.force,
+        verbose=state.verbose,
     )
+    answer_evaluator = AnswerEvaluatorFactory.create(
+        answer_evaluator_name,
+        answer_eval_config,
+        llm_provider,
+    )
+
     answer_evaluator.run()
 
     agent_ranker = AnswerRankerFactory.create(
