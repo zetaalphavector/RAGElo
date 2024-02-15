@@ -59,6 +59,21 @@ def retrieval_eval_config():
 
 
 @pytest.fixture
+def expert_retrieval_eval_config():
+    return RetrievalEvaluatorConfig(
+        documents_path="tests/data/documents.csv",
+        query_path="tests/data/queries.csv",
+        output_file="tests/data/output.csv",
+        force=True,
+        verbose=True,
+        domain_long="Computer Science",
+        domain_short="computer scientists",
+        company="Zeta Alpha",
+        extra_guidelines="-Super precise answers only!",
+    )
+
+
+@pytest.fixture
 def rdnam_config():
     return RetrievalEvaluatorConfig(
         documents_path="tests/data/documents.csv",
@@ -88,11 +103,26 @@ class MockLLMProvider(BaseLLMProvider):
         return self.inner_call(prompt)
 
 
-# @patch.object(MockLLMProvider, "__call__", autospec=True)
+@patch.object(MockLLMProvider, "__call__", autospec=True)
 @pytest.fixture
 def llm_provider_mock(llm_provider_config):
     provider = MockLLMProvider(llm_provider_config)
-    provider.inner_call = Mock(side_effect=lambda prompt: f"Processed {prompt}")
+    # provider.inner_call = Mock(side_effect=lambda prompt: f"Processed {prompt}")
+    provider.inner_call = Mock(return_value=lambda prompt: f"Processed {prompt}")
+    return provider
+
+
+@pytest.fixture
+def llm_provider_mock_mock(mocker):
+    return mocker.Mock(MockLLMProvider)
+
+
+@pytest.fixture
+def llm_provider_domain_expert_mock(llm_provider_config):
+    provider = MockLLMProvider(llm_provider_config)
+    provider.inner_call = Mock(
+        side_effect=["Reasoning answer", "2", "Reasoning_answer 2", "0"]
+    )
     return provider
 
 

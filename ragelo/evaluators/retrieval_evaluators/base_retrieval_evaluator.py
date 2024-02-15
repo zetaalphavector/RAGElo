@@ -62,8 +62,8 @@ class BaseRetrievalEvaluator(BaseEvaluator):
                     answer = self.evaluate_single_sample(qid, did)
                 except (RetryError, ValueError):
                     continue
-                self.__print_response(qid, did, answer)
-                self.__dump_response(qid, did, answer)
+                self._print_response(qid, did, answer)
+                self._dump_response(qid, did, answer)
                 answers[qid][did] = answer
         return answers
 
@@ -109,7 +109,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             )
         return skip_docs
 
-    def __print_response(self, qid: str, did: str, answer: str) -> None:
+    def _print_response(self, qid: str, did: str, answer: str) -> None:
         if not self.config.verbose:
             return
         if self.config.rich_print:
@@ -136,7 +136,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
                 f"Query: {self.queries[qid].query}, Document ID: {did}, Evaluation: {answer}"
             )
 
-    def __dump_response(
+    def _dump_response(
         self,
         qid: str,
         did: str,
