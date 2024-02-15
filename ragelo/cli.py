@@ -251,31 +251,37 @@ def run_all(
     evaluations_file = os.path.join(state.data_path, "answers_eval.jsonl")
     reasonings_file = os.path.join(state.data_path, "reasonings.csv")
 
-    doc_evaluator = DocumentEvaluatorFactory.create(
-        document_evaluator_name,
+    llm_provider = get_openai_provider(state.credentials_file, state.model_name)
+    retrieval_eval_config = RetrievalEvaluatorConfig(
         query_path=queries_file,
         documents_path=documents_file,
         output_file=reasonings_file,
-        model_name=state.model_name,
-        credentials_file=state.credentials_file,
-        verbose=state.verbose,
         force=state.force,
+        verbose=state.verbose,
     )
+    doc_evaluator = RetrievalEvaluatorFactory.create(
+        document_evaluator_name,
+        retrieval_eval_config,
+        llm_provider,
+    )
+    doc_evaluator.run()
 
-    doc_evaluator.get_answers()
-    answer_evaluator = AnswerEvaluatorFactory.create(
-        answer_evaluator_name,
+    answer_eval_config = AnswerEvaluatorConfig(
         query_path=queries_file,
+        output_file=output_file,
         answers_file=answers_file,
-        reasonings_file=reasonings_file,
-        output_file=evaluations_file,
+        reasoning_file=reasonings_file,
         k=k,
         bidirectional=bidirectional,
-        model_name=state.model_name,
-        credentials_file=state.credentials_file,
-        print_answers=state.verbose,
         force=state.force,
+        verbose=state.verbose,
     )
+    answer_evaluator = AnswerEvaluatorFactory.create(
+        answer_evaluator_name,
+        answer_eval_config,
+        llm_provider,
+    )
+
     answer_evaluator.run()
 
     agent_ranker = AnswerRankerFactory.create(
