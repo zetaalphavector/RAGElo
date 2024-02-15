@@ -1,7 +1,7 @@
 """Evaluator with a domain expert persona"""
 
 import logging
-from typing import List, Optional
+from typing import Dict
 
 from tenacity import RetryError
 
@@ -54,11 +54,11 @@ Please only answer with a single number."""
     def __init__(
         self,
         config: RetrievalEvaluatorConfig,
+        queries: Dict[str, Query],
+        documents: Dict[str, Dict[str, Document]],
         llm_provider: BaseLLMProvider,
-        queries: Optional[List[Query]] = None,
-        documents: Optional[List[Document]] = None,
     ):
-        super().__init__(config, llm_provider, queries, documents)
+        super().__init__(config, queries, documents, llm_provider)
         if not self.config.domain_long:
             raise ValueError(
                 "You are tying to use the Domain Expert Retrieval Evaluator. "

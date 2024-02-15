@@ -1,5 +1,5 @@
 """A Retrieval Evaluator is a class that evaluates the results of a retrieval system.
-It receives a set of queries used to retrieve a document and their respective retrieved documents, 
+It receives a set of queries used to retrieve a document and their respective retrieved documents,
 and returns a score or a label for each document."""
 
 import csv
@@ -7,7 +7,7 @@ import logging
 import os
 from abc import abstractmethod
 from collections import defaultdict
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type
+from typing import Any, Callable, Dict, List, Set, Tuple, Type
 
 from tenacity import RetryError
 from tqdm.auto import tqdm

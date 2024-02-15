@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Optional
 
 
 @dataclass
@@ -10,7 +10,7 @@ class LLMProviderConfiguration:
 @dataclass
 class OpenAIConfiguration(LLMProviderConfiguration):
     api_key: str
-    openai_org: str
+    openai_org: Optional[str] = None
     openai_api_type: Optional[str] = None
     openai_api_base: Optional[str] = None
     openai_api_version: Optional[str] = None

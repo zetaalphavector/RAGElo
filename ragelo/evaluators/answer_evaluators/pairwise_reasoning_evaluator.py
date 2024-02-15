@@ -53,7 +53,7 @@ Begin your evaluation by explaining why each answer correctly answers the user q
     ):
         super().__init__(config, queries, answers, agents, llm_provider)
         if not self.config.output_file:
-            self.output_file = f"pairwise_reasoning_evaluator.log"
+            self.output_file = "pairwise_reasoning_evaluator.log"
         else:
             self.output_file = self.config.output_file
         if not self.config.reasoning_file:

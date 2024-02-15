@@ -3,19 +3,13 @@
 import logging
 import os
 from abc import ABC, abstractmethod
-
-from ragelo.types.configurations import LLMProviderConfiguration
+from typing import Dict, List
 
 
 class BaseLLMProvider(ABC):
     @abstractmethod
-    def __call__(self, prompt: str) -> str:
+    def __call__(self, prompt: str | List[Dict[str, str]]) -> str:
         """Submits a single query-document pair to the LLM and returns the answer."""
-        raise NotImplementedError
-
-    @abstractmethod
-    def from_configuration(cls, config: LLMProviderConfiguration):
-        """Creates an BaseLLMProvider from a configuration object."""
         raise NotImplementedError
 
 

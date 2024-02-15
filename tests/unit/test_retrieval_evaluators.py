@@ -71,7 +71,6 @@ class TestRDNAMEvaluator:
         assert len(evaluator) == 2
 
     def test_process_single_answer(self, llm_provider_mock_rdnam, rdnam_config):
-
         evaluator = RDNAMEvaluator.from_config(
             config=rdnam_config, llm_provider=llm_provider_mock_rdnam
         )

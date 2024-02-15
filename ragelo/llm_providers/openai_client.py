@@ -36,10 +36,16 @@ class OpenAIProvider(BaseLLMProvider):
             prompt = [{"role": "system", "content": prompt}]
         answers = self.__openai_client.chat.completions.create(
             model=self.__model,
-            messages=prompt,
+            messages=prompt,  # type: ignore
             temperature=temperature,
             max_tokens=max_tokens,
         )
+        if (
+            not answers.choices
+            or not answers.choices[0].message
+            or not answers.choices[0].message.content
+        ):
+            raise ValueError("OpenAI did not return any completions.")
         return answers.choices[0].message.content
 
     @classmethod
@@ -79,7 +85,7 @@ class OpenAIProvider(BaseLLMProvider):
             set_credentials_from_file(credential_file)
         return OpenAIConfiguration(
             api_key=os.getenv("OPENAI_API_KEY", "fake key"),
-            openai_org=os.getenv("OPENAI_ORG", None),
+            openai_org=os.getenv("OPENAI_ORG"),
             openai_api_type=os.getenv("OPENAI_API_TYPE"),
             openai_api_base=os.getenv("OPENAI_API_BASE"),
             openai_api_version=os.getenv("OPENAI_API_VERSION"),

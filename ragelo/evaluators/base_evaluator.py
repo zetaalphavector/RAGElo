@@ -48,7 +48,7 @@ class BaseEvaluator(ABC):
     def load_documents(
         documents_path: str, queries: Optional[Dict[str, Query]] = None
     ) -> Dict[str, Dict[str, Document]]:
-        documents: Dict[str, Document] = {}
+        documents: Dict[str, Dict[str, Document]] = {}
         documents_read = 0
         if not os.path.isfile(documents_path):
             raise FileNotFoundError(f"Documents file {documents_path} not found")
@@ -69,7 +69,7 @@ class BaseEvaluator(ABC):
 
     @staticmethod
     def load_answers_and_agents(
-        answers_path: str, queries: List[Query]
+        answers_path: str, queries: Dict[str, Query]
     ) -> Tuple[Dict[str, Dict[str, str]], Set[str]]:
         answers: Dict[str, Dict[str, str]] = defaultdict(lambda: dict())
         agents: Set[str] = set()

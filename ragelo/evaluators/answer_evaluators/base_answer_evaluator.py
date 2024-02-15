@@ -30,7 +30,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
         self.answers = answers
 
         if not config.output_file:
-            self.output_file = f"answers_evaluator.log"
+            self.output_file = "answers_evaluator.log"
         else:
             self.output_file = config.output_file
 
@@ -41,6 +41,8 @@ class BaseAnswerEvaluator(BaseEvaluator):
     @classmethod
     def from_config(cls, config: AnswerEvaluatorConfig, llm_provider: BaseLLMProvider):
         queries = cls._load_queries(config.query_path)
+        if config.answers_file is None:
+            raise ValueError("No answers file provided")
         answers, agents = cls.load_answers_and_agents(config.answers_file, queries)
         return cls(config, queries, answers, agents, llm_provider)
 
