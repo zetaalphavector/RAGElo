@@ -1,3 +1,4 @@
+import json
 from unittest.mock import Mock, patch
 
 import pytest
@@ -5,9 +6,6 @@ from openai import OpenAI
 from openai.resources.chat import Chat
 from openai.resources.chat.completions import Completions
 
-from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
-    BaseRetrievalEvaluator,
-)
 from ragelo.llm_providers.base_llm_provider import (
     BaseLLMProvider,
     LLMProviderConfiguration,
@@ -49,11 +47,6 @@ def openai_client_mock(mocker, chat_completion_mock):
     return openai_client
 
 
-# @pytest.fixture
-# def llm_provider_mock(mocker):
-#     return mocker.Mock(BaseLLMProvider)
-
-
 @pytest.fixture
 def retrieval_eval_config():
     return RetrievalEvaluatorConfig(
@@ -61,6 +54,21 @@ def retrieval_eval_config():
         query_path="tests/data/queries.csv",
         output_file="tests/data/output.csv",
         force=True,
+    )
+
+
+@pytest.fixture
+def rdnam_config():
+    return RetrievalEvaluatorConfig(
+        documents_path="tests/data/documents.csv",
+        query_path="tests/data/queries.csv",
+        output_file="tests/data/output.csv",
+        force=True,
+        role="You are a search quality rater evaluating the relevance of web pages. ",
+        aspects=True,
+        multiple=True,
+        narrative_file="tests/data/rdnam_narratives.csv",
+        description_file="tests/data/rdnam_descriptions.csv",
     )
 
 
@@ -79,11 +87,19 @@ class MockLLMProvider(BaseLLMProvider):
         return self.inner_call(prompt)
 
 
+# @patch.object(MockLLMProvider, "__call__", autospec=True)
 @pytest.fixture
-@patch.object(MockLLMProvider, "__call__", autospec=True)
 def llm_provider_mock(llm_provider_config):
     provider = MockLLMProvider(llm_provider_config)
     provider.inner_call = Mock(side_effect=lambda prompt: f"Processed {prompt}")
+    return provider
+
+
+@pytest.fixture
+def llm_provider_mock_rdnam(llm_provider_config):
+    mocked_scores = [{"M": 2, "T": 1, "O": 1}, {"M": 1, "T": 1, "O": 2}]
+    provider = MockLLMProvider(llm_provider_config)
+    provider.inner_call = Mock(side_effect=lambda _: json.dumps(mocked_scores)[2:])
     return provider
 
 

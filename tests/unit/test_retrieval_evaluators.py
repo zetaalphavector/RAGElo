@@ -1,8 +1,11 @@
-from unittest.mock import patch
+import json
+
+import numpy as np
 
 from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     BaseRetrievalEvaluator,
 )
+from ragelo.evaluators.retrieval_evaluators.rdnam_evaluator import RDNAMvaluator
 
 
 class BaseRetrievalEvaluator(BaseRetrievalEvaluator):
@@ -23,7 +26,6 @@ class TestRetrievalEvaluator:
         assert len(evaluator) == 2
 
     def test_process_single_answer(self, llm_provider_mock, retrieval_eval_config):
-        # mock_llm_provider.return_value = "mocked API response"
         evaluator = BaseRetrievalEvaluator.from_config(
             config=retrieval_eval_config, llm_provider=llm_provider_mock
         )
@@ -52,3 +54,23 @@ class TestRetrievalEvaluator:
         assert call_args[1][0][0] == "Mock message for query 0 and document 1"
         assert call_args[2][0][0] == "Mock message for query 1 and document 2"
         assert call_args[3][0][0] == "Mock message for query 1 and document 3"
+
+
+class TestRDNAMEvaluator:
+    def test_creation(self, llm_provider_mock, rdnam_config):
+        evaluator = RDNAMvaluator.from_config(
+            config=rdnam_config, llm_provider=llm_provider_mock
+        )
+        assert len(evaluator) == 2
+
+    def test_process_single_answer(self, llm_provider_mock_rdnam, rdnam_config):
+
+        evaluator = RDNAMvaluator.from_config(
+            config=rdnam_config, llm_provider=llm_provider_mock_rdnam
+        )
+        results = evaluator.evaluate_single_sample("0", "0")
+        assert results == 1
+        call_args = llm_provider_mock_rdnam.inner_call.call_args_list
+        assert call_args[0][0][0].startswith(
+            "You are a search quality rater evaluating"
+        )

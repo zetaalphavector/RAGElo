@@ -43,7 +43,7 @@ class OpenAIProvider(BaseLLMProvider):
         return answers.choices[0].message.content
 
     @classmethod
-    def from_configuration(cls, openai_config: Optional[OpenAIConfiguration]):
+    def from_configuration(cls, openai_config: OpenAIConfiguration):
         """Inits the OpenAI wrapper from a configuration object."""
         openai_client = cls.get_openai_client(openai_config)
         return cls(openai_client, model=openai_config.openai_model)

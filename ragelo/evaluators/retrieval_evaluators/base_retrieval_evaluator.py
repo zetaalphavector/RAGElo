@@ -26,29 +26,29 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         documents: Dict[str, Dict[str, Document]],
         llm_provider: BaseLLMProvider,
     ):
-        self.__queries = queries
-        self.__documents = documents
+        self.queries = queries
+        self.documents = documents
         if not config.output_file:
-            self.__output_file = "retrieval_evaluator.log"
+            self.output_file = "retrieval_evaluator.log"
         else:
-            self.__output_file = config.output_file
+            self.output_file = config.output_file
 
-        self.__llm_provider = llm_provider
-        self.__config = config
+        self.llm_provider = llm_provider
+        self.config = config
 
     def run(self) -> Dict[str, Dict[str, str]]:
         """Evaluate all the documents for each query"""
-        use_progress_bar = self.__config.verbose
+        use_progress_bar = self.config.verbose
         skip_docs = self.__get_skip_docs()
         answers: Dict[str, Dict[str, str]] = defaultdict(lambda: dict())
         for qid in tqdm(
-            self.__queries,
+            self.queries,
             desc="Annotating Documents",
             disable=not use_progress_bar,
             ncols=100,
         ):
             for did in tqdm(
-                self.__documents[qid],
+                self.documents[qid],
                 desc=qid,
                 disable=not use_progress_bar,
                 ncols=100,
@@ -71,7 +71,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         """Evaluates a single query-document pair"""
         message = self._build_message(qid, did)
         try:
-            answer = self.__llm_provider(message)
+            answer = self.llm_provider(message)
         except RetryError as e:
             logging.warning(f"Failed to FETCH answers for {qid} {did}")
             raise e
@@ -95,13 +95,13 @@ class BaseRetrievalEvaluator(BaseEvaluator):
     def __get_skip_docs(self) -> Set[Tuple[str, str]]:
         """Skips documents that have already been annotated"""
         skip_docs = set()
-        if os.path.isfile(self.__output_file) and not self.__config.force:
-            for line in csv.reader(open(self.__output_file)):
+        if os.path.isfile(self.output_file) and not self.config.force:
+            for line in csv.reader(open(self.output_file)):
                 qid, did, _ = line
                 skip_docs.add((qid, did))
-        if self.__config.force and os.path.isfile(self.__output_file):
-            logging.warning(f"Removing existing {self.__output_file}!")
-            os.remove(self.__output_file)
+        if self.config.force and os.path.isfile(self.output_file):
+            logging.warning(f"Removing existing {self.output_file}!")
+            os.remove(self.output_file)
         if len(skip_docs) > 0:
             logging.warning(
                 f"Skipping {len(skip_docs)} documents already annotated! "
@@ -110,7 +110,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         return skip_docs
 
     def __print_response(self, qid: str, did: str, answer: str) -> None:
-        if not self.__config.verbose:
+        if not self.config.verbose:
             return
         if self.rich_print:
             try:
@@ -137,7 +137,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         answer: str,
         file: str | None = None,
     ) -> None:
-        output_file = file if file else self.__output_file
+        output_file = file if file else self.output_file
         if not os.path.isfile(output_file):
             logging.debug(f"Creating new file {output_file}")
             with open(output_file, "w") as f:
@@ -167,7 +167,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         return cls(config, queries, documents, llm_provider)
 
     def __len__(self) -> int:
-        return len(self.__queries)
+        return len(self.queries)
 
 
 class RetrievalEvaluatorFactory:
