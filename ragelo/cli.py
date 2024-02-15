@@ -48,7 +48,7 @@ def retrieval_annotator(
     documents_file: Annotated[
         str,
         typer.Argument(
-            help="csv file with documents to evaluate"
+            help="csv file with retrieved documents to evaluate"
             "Each row should have query_id, doc_id, passage"
         ),
     ],
@@ -70,13 +70,17 @@ def retrieval_annotator(
 
     llm_provider = get_openai_provider(state.credentials_file, state.model_name)
     config = RetrievalEvaluatorConfig(
-        query_path=queries_file, documents_path=documents_file, output_file=output_file
+        query_path=queries_file,
+        documents_path=documents_file,
+        output_file=output_file,
+        force=state.force,
+        verbose=state.verbose,
     )
-    doc_evaluator = RetrievalEvaluatorConfig.create(
+    doc_evaluator = RetrievalEvaluatorFactory.create(
         evaluator_name, config, llm_provider
     )
 
-    doc_evaluator.get_answers()
+    doc_evaluator.run()
 
 
 @app.command()

@@ -79,7 +79,7 @@ class OpenAIProvider(BaseLLMProvider):
             set_credentials_from_file(credential_file)
         return OpenAIConfiguration(
             api_key=os.getenv("OPENAI_API_KEY", "fake key"),
-            openai_org=os.getenv("OPENAI_ORG", "fake org"),
+            openai_org=os.getenv("OPENAI_ORG", None),
             openai_api_type=os.getenv("OPENAI_API_TYPE"),
             openai_api_base=os.getenv("OPENAI_API_BASE"),
             openai_api_version=os.getenv("OPENAI_API_VERSION"),
