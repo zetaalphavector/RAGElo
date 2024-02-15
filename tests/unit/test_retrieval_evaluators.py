@@ -16,9 +16,9 @@ class BaseRetrievalEvaluator(BaseRetrievalEvaluator):
 
 
 class TestRetrievalEvaluator:
-    def test_creation(self, llm_provider, retrieval_eval_config):
+    def test_creation(self, llm_provider_mock, retrieval_eval_config):
         evaluator = BaseRetrievalEvaluator.from_config(
-            config=retrieval_eval_config, llm_provider=llm_provider
+            config=retrieval_eval_config, llm_provider=llm_provider_mock
         )
         assert len(evaluator) == 2
 
