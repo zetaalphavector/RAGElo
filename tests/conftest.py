@@ -107,8 +107,7 @@ class MockLLMProvider(BaseLLMProvider):
 @pytest.fixture
 def llm_provider_mock(llm_provider_config):
     provider = MockLLMProvider(llm_provider_config)
-    # provider.inner_call = Mock(side_effect=lambda prompt: f"Processed {prompt}")
-    provider.inner_call = Mock(return_value=lambda prompt: f"Processed {prompt}")
+    provider.inner_call = Mock(side_effect=lambda prompt: f"Processed {prompt}")
     return provider
 
 
