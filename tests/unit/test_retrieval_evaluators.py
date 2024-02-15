@@ -1,18 +1,12 @@
-import json
-
-import numpy as np
-
-from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
+from ragelo.evaluators.retrieval_evaluators import (
     BaseRetrievalEvaluator,
-)
-from ragelo.evaluators.retrieval_evaluators.domain_expert_evaluator import (
     DomainExpertEvaluator,
+    RDNAMEvaluator,
+    ReasonerEvaluator,
 )
-from ragelo.evaluators.retrieval_evaluators.rdnam_evaluator import RDNAMvaluator
-from ragelo.evaluators.retrieval_evaluators.reasoner_evaluator import ReasonerEvaluator
 
 
-class BaseRetrievalEvaluator(BaseRetrievalEvaluator):
+class RetrievalEvaluator(BaseRetrievalEvaluator):
     def _build_message(self, qid: str, did: str) -> str:
         return f"Mock message for query {qid} and document {did}"
 
@@ -24,13 +18,13 @@ class BaseRetrievalEvaluator(BaseRetrievalEvaluator):
 
 class TestRetrievalEvaluator:
     def test_creation(self, llm_provider_mock, retrieval_eval_config):
-        evaluator = BaseRetrievalEvaluator.from_config(
+        evaluator = RetrievalEvaluator.from_config(
             config=retrieval_eval_config, llm_provider=llm_provider_mock
         )
         assert len(evaluator) == 2
 
     def test_process_single_answer(self, llm_provider_mock, retrieval_eval_config):
-        evaluator = BaseRetrievalEvaluator.from_config(
+        evaluator = RetrievalEvaluator.from_config(
             config=retrieval_eval_config, llm_provider=llm_provider_mock
         )
         results = evaluator.evaluate_single_sample("0", "0")
@@ -39,7 +33,7 @@ class TestRetrievalEvaluator:
         assert call_args[0][0][0] == "Mock message for query 0 and document 0"
 
     def test_run(self, llm_provider_mock, retrieval_eval_config):
-        evaluator = BaseRetrievalEvaluator.from_config(
+        evaluator = RetrievalEvaluator.from_config(
             config=retrieval_eval_config, llm_provider=llm_provider_mock
         )
         results = evaluator.run()
@@ -61,7 +55,7 @@ class TestRetrievalEvaluator:
 
     def test_rich_printing(self, llm_provider_mock, retrieval_eval_config, capsys):
         retrieval_eval_config.rich_print = True
-        evaluator = BaseRetrievalEvaluator.from_config(
+        evaluator = RetrievalEvaluator.from_config(
             config=retrieval_eval_config, llm_provider=llm_provider_mock
         )
         _ = evaluator.run()
@@ -71,14 +65,14 @@ class TestRetrievalEvaluator:
 
 class TestRDNAMEvaluator:
     def test_creation(self, llm_provider_mock, rdnam_config):
-        evaluator = RDNAMvaluator.from_config(
+        evaluator = RDNAMEvaluator.from_config(
             config=rdnam_config, llm_provider=llm_provider_mock
         )
         assert len(evaluator) == 2
 
     def test_process_single_answer(self, llm_provider_mock_rdnam, rdnam_config):
 
-        evaluator = RDNAMvaluator.from_config(
+        evaluator = RDNAMEvaluator.from_config(
             config=rdnam_config, llm_provider=llm_provider_mock_rdnam
         )
         results = evaluator.evaluate_single_sample("0", "0")

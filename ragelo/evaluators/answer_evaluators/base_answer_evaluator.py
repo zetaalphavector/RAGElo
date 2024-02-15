@@ -3,7 +3,7 @@
 import csv
 from abc import abstractmethod
 from collections import defaultdict
-from typing import Dict, Optional, Set, Type
+from typing import Dict, List, Set, Type
 
 from ragelo.evaluators.base_evaluator import BaseEvaluator
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
@@ -12,58 +12,51 @@ from ragelo.types import Query
 from ragelo.types.configurations import AnswerEvaluatorConfig
 
 
-class AnswerEvaluator(BaseEvaluator):
+class BaseAnswerEvaluator(BaseEvaluator):
     def __init__(
         self,
         config: AnswerEvaluatorConfig,
+        queries: Dict[str, Query],
+        answers: Dict[str, Dict[str, str]],
+        agents: Set[str],
         llm_provider: BaseLLMProvider,
-        queries: Optional[Dict[str, Query]] = None,
-        answers: Optional[Dict[str, Dict[str, str]]] = None,
     ):
-        if not queries and not config.query_path:
+        if not queries:
             raise ValueError(
                 "You are trying to use an Answer Evaluator without providing queries"
             )
-        if not answers and not config.answers_file:
+        if not answers:
             raise ValueError(
                 "You are trying to use an Answer Evaluator without providing answers"
             )
-        self.queries = self.load_queries(config.query_path) if not queries else queries
-        self.answers = (
-            self._load_answers(config.answers_file) if not answers else answers
-        )
+        self.queries = queries
+        self.answers = answers
 
-        if not self.config.output_file:
+        if not config.output_file:
             self.output_file = f"answers_evaluator.log"
         else:
-            self.output_file = self.config.output_file
-        self.agents: Set[str] = set()
+            self.output_file = config.output_file
+
+        self.agents = agents
         self.llm_provider = llm_provider
+        self.config = config
 
-    def _load_answers(self, answers_path: str) -> Dict[str, Dict[str, str]]:
-        answers: Dict[str, Dict[str, str]] = defaultdict(lambda: dict())
-        for line in csv.DictReader(open(answers_path)):
-            qid = line["query_id"]
-            if qid not in self.queries:
-                continue
-            agent = line["agent"]
-            self.agents.add(agent)
-            answer = line["answer"]
-            answers[qid][agent] = answer
-        self._check_validity()
-        return answers
+    @classmethod
+    def from_config(cls, config: AnswerEvaluatorConfig, llm_provider: BaseLLMProvider):
+        queries = cls._load_queries(config.query_path)
+        answers, agents = cls.load_answers_and_agents(config.answers_file, queries)
+        return cls(config, queries, answers, agents, llm_provider)
 
-    @abstractmethod
-    def _check_validity(self):
-        raise NotImplementedError
+    def __len__(self):
+        return len(self.queries)
 
 
 class AnswerEvaluatorFactory:
-    registry: Dict[str, Type[AnswerEvaluator]] = {}
+    registry: Dict[str, Type[BaseAnswerEvaluator]] = {}
 
     @classmethod
     def register(cls, name: str):
-        def inner_wrapper(wrapped_class: Type[AnswerEvaluator]):
+        def inner_wrapper(wrapped_class: Type[BaseAnswerEvaluator]):
             if name in cls.registry:
                 logger.warning(f"Overwriting {name} in registry")
             cls.registry[name.lower()] = wrapped_class
@@ -76,9 +69,8 @@ class AnswerEvaluatorFactory:
         cls,
         evaluator_name: str,
         config: AnswerEvaluatorConfig,
-        queries: Optional[Dict[str, Query]] = None,
-        answers: Optional[Dict[str, Dict[str, str]]] = None,
+        llm_provider: BaseLLMProvider,
     ):
         if evaluator_name not in cls.registry:
             raise ValueError(f"Unknown evaluator {evaluator_name}")
-        return cls.registry[evaluator_name.lower()](config, queries, answers)
+        return cls.registry[evaluator_name.lower()].from_config(config, llm_provider)

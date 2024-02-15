@@ -19,7 +19,7 @@ class OpenAIConfiguration(LLMProviderConfiguration):
 
 @dataclass
 class EvaluatorConfig:
-    query_path: Optional[str] = field(
+    query_path: str = field(
         default="queries.csv", metadata={"help": "Path to the queries file"}
     )
     output_file: Optional[str] = field(
@@ -35,7 +35,7 @@ class EvaluatorConfig:
 
 @dataclass
 class RetrievalEvaluatorConfig(EvaluatorConfig):
-    documents_path: Optional[str] = field(
+    documents_path: str = field(
         default="documents.csv", metadata={"help": "Path to the documents file"}
     )
     # Configurations for the domain_expert evaluator

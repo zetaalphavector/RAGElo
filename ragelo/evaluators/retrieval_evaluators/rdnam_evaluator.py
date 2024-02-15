@@ -19,7 +19,7 @@ from ragelo.types.configurations import RetrievalEvaluatorConfig
 
 
 @RetrievalEvaluatorFactory.register("RDNAM")
-class RDNAMvaluator(BaseRetrievalEvaluator):
+class RDNAMEvaluator(BaseRetrievalEvaluator):
     prompt = """{role}Given a query and a document, you must provide a score on an integer scale of 0 to 2 with the following meanings:
 2 = highly relevant, very helpful for this query
 1 = relevant, may be partly helpful but might contain other irrelevant content

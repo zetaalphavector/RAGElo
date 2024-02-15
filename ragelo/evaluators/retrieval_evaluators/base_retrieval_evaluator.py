@@ -26,6 +26,14 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         documents: Dict[str, Dict[str, Document]],
         llm_provider: BaseLLMProvider,
     ):
+        if not queries:
+            raise ValueError(
+                "You are trying to use a Retrieval Evaluator without providing queries"
+            )
+        if not documents:
+            raise ValueError(
+                "You are trying to use a Retrieval Evaluator without providing documents"
+            )
         self.queries = queries
         self.documents = documents
         if not config.output_file:
@@ -113,7 +121,6 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         if not self.config.verbose:
             return
         if self.config.rich_print:
-            print("OK")
             try:
                 import rich
 
@@ -168,7 +175,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
     def from_config(
         cls, config: RetrievalEvaluatorConfig, llm_provider: BaseLLMProvider
     ):
-        queries = cls.load_queries(config.query_path)
+        queries = cls._load_queries(config.query_path)
         documents = cls.load_documents(config.documents_path, queries)
         return cls(config, queries, documents, llm_provider)
 
@@ -195,9 +202,7 @@ class RetrievalEvaluatorFactory:
         evaluator_name: str,
         config: RetrievalEvaluatorConfig,
         llm_provider: BaseLLMProvider,
-        queries: Optional[Dict[str, Query]] = None,
-        documents: Optional[Dict[str, List[Document]]] = None,
     ) -> BaseRetrievalEvaluator:
         if evaluator_name not in cls.registry:
             raise ValueError(f"Unknown evaluator {evaluator_name}")
-        return cls.registry[evaluator_name](config, llm_provider, queries, documents)
+        return cls.registry[evaluator_name].from_config(config, llm_provider)

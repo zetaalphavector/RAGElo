@@ -4,7 +4,8 @@ import csv
 import logging
 import os
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional
+from collections import defaultdict
+from typing import Dict, List, Optional, Set, Tuple
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.types import Document, Query
@@ -27,7 +28,7 @@ class BaseEvaluator(ABC):
         raise NotImplementedError
 
     @staticmethod
-    def load_queries(queries_path: str) -> Dict[str, Query]:
+    def _load_queries(queries_path: str) -> Dict[str, Query]:
         """Loads the queries from a CSV file and returns a dictionary with the queries.
         The key is the query id and the value is the query object."""
         queries = {}
@@ -45,9 +46,9 @@ class BaseEvaluator(ABC):
 
     @staticmethod
     def load_documents(
-        documents_path: str, queries: Optional[List[Query]] = None
+        documents_path: str, queries: Optional[Dict[str, Query]] = None
     ) -> Dict[str, Dict[str, Document]]:
-        documents = {}
+        documents: Dict[str, Document] = {}
         documents_read = 0
         if not os.path.isfile(documents_path):
             raise FileNotFoundError(f"Documents file {documents_path} not found")
@@ -65,3 +66,20 @@ class BaseEvaluator(ABC):
             documents_read += 1
         logging.info(f"Loaded {documents_read} documents")
         return documents
+
+    @staticmethod
+    def load_answers_and_agents(
+        answers_path: str, queries: List[Query]
+    ) -> Tuple[Dict[str, Dict[str, str]], Set[str]]:
+        answers: Dict[str, Dict[str, str]] = defaultdict(lambda: dict())
+        agents: Set[str] = set()
+        for line in csv.DictReader(open(answers_path)):
+            qid = line["query_id"]
+            if qid not in queries:
+                continue
+            agent = line["agent"]
+            agents.add(agent)
+            answer = line["answer"]
+            answers[qid][agent] = answer
+
+        return answers, agents

@@ -1,1 +1,1 @@
-from .base_answer_evaluator import AnswerEvaluatorFactory
+from .base_answer_evaluator import AnswerEvaluatorFactory, BaseAnswerEvaluator

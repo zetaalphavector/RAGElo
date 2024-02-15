@@ -11,7 +11,7 @@ from ragelo.llm_providers.base_llm_provider import (
     LLMProviderConfiguration,
 )
 from ragelo.llm_providers.openai_client import OpenAIConfiguration
-from ragelo.types.configurations import RetrievalEvaluatorConfig
+from ragelo.types.configurations import AnswerEvaluatorConfig, RetrievalEvaluatorConfig
 
 
 @pytest.fixture
@@ -53,6 +53,18 @@ def retrieval_eval_config():
         documents_path="tests/data/documents.csv",
         query_path="tests/data/queries.csv",
         output_file="tests/data/output.csv",
+        force=True,
+        verbose=True,
+    )
+
+
+@pytest.fixture
+def answer_eval_config():
+    return AnswerEvaluatorConfig(
+        answers_file="tests/data/answers.csv",
+        query_path="tests/data/queries.csv",
+        output_file="tests/data/output_answers.csv",
+        reasoning_file="tests/data/reasonings.csv",
         force=True,
         verbose=True,
     )
@@ -103,11 +115,24 @@ class MockLLMProvider(BaseLLMProvider):
         return self.inner_call(prompt)
 
 
-@patch.object(MockLLMProvider, "__call__", autospec=True)
 @pytest.fixture
 def llm_provider_mock(llm_provider_config):
     provider = MockLLMProvider(llm_provider_config)
     provider.inner_call = Mock(side_effect=lambda prompt: f"Processed {prompt}")
+    return provider
+
+
+@pytest.fixture
+def llm_provider_answer_mock(llm_provider_config):
+    provider = MockLLMProvider(llm_provider_config)
+    provider.inner_call = Mock(
+        side_effect=[
+            "Agent [[A]] is better",
+            "Agent [[B]] is better",
+            "A tie. Therefore, [[C]]",
+            "I don't know. [[C]]",
+        ]
+    )
     return provider
 
 

@@ -5,14 +5,14 @@ import os
 import random
 import re
 from collections import defaultdict, deque
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Set, Tuple
 
 from tenacity import RetryError
 from tqdm.auto import tqdm
 
-from ragelo.answer_evaluators.base_answer_evaluator import (
-    AnswerEvaluator,
+from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
     AnswerEvaluatorFactory,
+    BaseAnswerEvaluator,
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.types import Query
@@ -20,33 +20,38 @@ from ragelo.types.configurations import AnswerEvaluatorConfig
 
 
 @AnswerEvaluatorFactory.register("PairwiseWithReasoning")
-class PairwiseWithReasoning(AnswerEvaluator):
+class PairwiseWithReasoningEvaluator(BaseAnswerEvaluator):
     """A evaluator that evaluates RAG-based answers pairwise, with document reasoning"""
 
     prompt = """Please act as an impartial judge and evaluate the quality of the responses provided by two AI assistants tasked to answer the question displayed below, based on a set of documents retrieved by a search engine.
-    You should choose the assistant that best answers the user question based on a set of reference documents that may or not be relevant.
-    Answers cite documents using square brackets.  For each reference document, you will be provided with a reasoning explaining why the document is or is not relevant.
-    Your evaluation should consider factors such as the correctness, helpfulness, completeness, accuracy, depth, and level of detail of their responses. Details are only useful if they answer the user question. If an answers contains non-relevant details, it should not be preferred over one that only use relevant information.
-    Begin your evaluation by explaining why each answer correctly answers the user question. Then, you should compare the two responses and provide a short explanation on their differences. Avoid any position biases and ensure that the order in which the responses were presented does not influence your decision. Do not allow the length of the responses to influence your evaluation. Be as objective as possible. After providing your explanation, output your final verdict by strictly following this format: "[[A]]" if assistant A is better, "[[B]]" if assistant B is better, and "[[C]]" for a tie.
-    [User Question]
-    {query}
-    [Reference Documents]
-    {documents}
-    [The Start of Assistant A's Answer]
-    {answer_a}
-    [The End of Assistant A's Answer]
-    [The Start of Assistant B's Answer]
-    {answer_b}
-    [The End of Assistant B's Answer]"""  # noqa: E501
+You should choose the assistant that best answers the user question based on a set of reference documents that may or not be relevant.
+Answers cite documents using square brackets.  For each reference document, you will be provided with a reasoning explaining why the document is or is not relevant.
+Your evaluation should consider factors such as the correctness, helpfulness, completeness, accuracy, depth, and level of detail of their responses. Details are only useful if they answer the user question. If an answers contains non-relevant details, it should not be preferred over one that only use relevant information.
+Begin your evaluation by explaining why each answer correctly answers the user question. Then, you should compare the two responses and provide a short explanation on their differences. Avoid any position biases and ensure that the order in which the responses were presented does not influence your decision. Do not allow the length of the responses to influence your evaluation. Be as objective as possible. After providing your explanation, output your final verdict by strictly following this format: "[[A]]" if assistant A is better, "[[B]]" if assistant B is better, and "[[C]]" for a tie.
+
+[User Question]
+{query}
+
+[Reference Documents]
+{documents}
+
+[The Start of Assistant A's Answer]
+{answer_a}
+[The End of Assistant A's Answer]
+
+[The Start of Assistant B's Answer]
+{answer_b}
+[The End of Assistant B's Answer]"""  # noqa: E501
 
     def __init__(
         self,
         config: AnswerEvaluatorConfig,
+        queries: Dict[str, Query],
+        answers: Dict[str, Dict[str, str]],
+        agents: Set[str],
         llm_provider: BaseLLMProvider,
-        queries: Optional[Dict[str, Query]] = None,
-        answers: Optional[Dict[str, Dict[str, str]]] = None,
     ):
-        super().__init__(config, llm_provider, queries, answers)
+        super().__init__(config, queries, answers, agents, llm_provider)
         if not self.config.output_file:
             self.output_file = f"pairwise_reasoning_evaluator.log"
         else:
@@ -59,10 +64,13 @@ class PairwiseWithReasoning(AnswerEvaluator):
         self.reasoning = self._load_reasoning(self.config.reasoning_file)
         self.evaluations: List[Dict[str, str]] = []
 
+    # def evaluate_single_answer(self, qid: str)
+
     def run(self) -> List[Dict[str, str]]:
+        use_progress_bar = self.config.verbose
         unparsed_answers = 0
         skip_tuples = set()
-        self.prompts = self.__create_all_prompts()
+        prompts = self.__create_all_prompts(use_progress_bar)
         if os.path.exists(self.output_file) and not self.config.force:
             for line in open(self.output_file):
                 data = json.loads(line)
@@ -75,10 +83,10 @@ class PairwiseWithReasoning(AnswerEvaluator):
             # remove the file
             logging.info("Removing previous output file")
             os.remove(self.output_file)
-        if len(self.prompts) - len(skip_tuples) > 0:
-            logging.info(f"Running {len(self.prompts) - len(skip_tuples)} games...")
+        if len(prompts) - len(skip_tuples) > 0:
+            logging.info(f"Running {len(prompts) - len(skip_tuples)} games...")
         for p in tqdm(
-            self.prompts,
+            prompts,
             desc="Evaluating games",
             disable=not self.config.verbose,
             ncols=100,
@@ -115,7 +123,7 @@ class PairwiseWithReasoning(AnswerEvaluator):
         if self.config.verbose:
             print("✅ Done!")
             print(f"Unparsed answers: {unparsed_answers}")
-            print(f"Total evaluations: {len(self.prompts) - unparsed_answers}")
+            print(f"Total evaluations: {len(prompts) - unparsed_answers}")
         return self.evaluations
 
     def __dump_response(
@@ -141,30 +149,33 @@ class PairwiseWithReasoning(AnswerEvaluator):
             self.evaluations.append(d)
 
     def __print_response(
-        self, qid: str, did: str, agent_a: str, agent_b: str, answer: str, relevant: str
+        self, qid: str, agent_a: str, agent_b: str, answer: str, relevant: str
     ):
         """Prints the response to the console"""
         if not self.config.verbose:
             return
         if self.config.rich_print:
             try:
-                from rich import print
+                import rich
+
+                rich.print(
+                    f"[not bold white][{qid}][/not bold white] "
+                    f"[bold blue] {agent_a:<18} [/bold blue] 🆚  "
+                    f"[bold red] {agent_b}[/bold red]"
+                )
+                rich.print("[bold white] Evaluator answer: [/bold white]")
+                if relevant == "A":
+                    parser_ans = answer.replace("[[A]]", "[bold blue]A[/bold blue]")
+                elif relevant == "B":
+                    parser_ans = answer.replace("[[B]]", "[bold red]B[/bold red]")
+                else:
+                    parser_ans = answer.replace("[[C]]", "[bold purple]C[/bold purple]")
+                    rich.print(parser_ans)
             except ImportError:
                 logging.warning("Rich not installed. Using plain print")
                 self.config.rich_print = False
-            print(
-                f"[not bold white][{qid}][/not bold white] "
-                f"[bold blue] {agent_a:<18} [/bold blue] 🆚  "
-                f"[bold red] {agent_b}[/bold red]"
-            )
-            if relevant == "A":
-                parser_ans = answer.replace("[[A]]", "[bold blue]A[/bold blue]")
-            elif relevant == "B":
-                parser_ans = answer.replace("[[B]]", "[bold red]B[/bold red]")
-            else:
-                parser_ans = answer.replace("[[C]]", "[bold purple]C[/bold purple]")
-            print("[bold white] Evaluator answer: [/bold white]")
-            print(parser_ans)
+            print(f"{qid}: {agent_a} vs {agent_b}")
+            print(f"Evaluator full answer: {answer}")
 
     def __generate_random_games(self) -> List[Tuple[str, str]]:
         """Creates all prompts necessary for running the evaluator"""
@@ -216,18 +227,18 @@ class PairwiseWithReasoning(AnswerEvaluator):
         logging.info(f"Created {len(pairs)} games")
         return pairs
 
-    def __create_all_prompts(self) -> List[Dict[str, str]]:
+    def __create_all_prompts(
+        self, use_progress_bar: bool = True
+    ) -> List[Dict[str, str]]:
         prompts = []
         random_pairs = self.__generate_random_games()
-        if self.print:
-            try:
-                from rich.progress import track
-
-                a_iterator = track(self.answers, description="Creating prompts")
-            except ImportError:
-                a_iterator = self.answers
-        for qid in a_iterator:
-            query = self.queries[qid]
+        for qid in tqdm(
+            self.answers,
+            desc="Creating prompts",
+            disable=not use_progress_bar,
+            ncols=100,
+        ):
+            query = self.queries[qid].query
             for a, b in random_pairs:
                 if a not in self.answers[qid] or b not in self.answers[qid]:
                     continue

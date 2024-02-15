@@ -5,7 +5,7 @@ from typing import List, Optional
 
 from tenacity import RetryError
 
-from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
+from ragelo.evaluators.retrieval_evaluators import (
     BaseRetrievalEvaluator,
     RetrievalEvaluatorFactory,
 )
