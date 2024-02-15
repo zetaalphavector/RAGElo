@@ -11,7 +11,7 @@ from ragelo.evaluators.answer_evaluators import AnswerEvaluatorFactory
 from ragelo.evaluators.retrieval_evaluators import RetrievalEvaluatorFactory
 from ragelo.llm_providers.openai_client import OpenAIProvider
 from ragelo.logger import CLILogHandler, logger
-from ragelo.types.configurations import RetrievalEvaluatorConfig
+from ragelo.types.configurations import AnswerEvaluatorConfig, RetrievalEvaluatorConfig
 
 logger.addHandler(CLILogHandler())
 logger.setLevel("INFO")
@@ -132,19 +132,21 @@ def answers_annotator(
         output_file = os.path.join(state.data_path, "answers_eval.jsonl")
         logger.info(f"Using default output file: {output_file}")
 
-    answer_evaluator = AnswerEvaluatorFactory.create(
-        evaluator_name,
+    llm_provider = get_openai_provider(state.credentials_file, state.model_name)
+    config = AnswerEvaluatorConfig(
         query_path=queries_file,
-        answers_file=answers_file,
-        reasonings_file=reasonings_file,
         output_file=output_file,
+        answers_file=answers_file,
+        reasoning_file=reasonings_file,
         k=k,
         bidirectional=bidirectional,
-        model_name=state.model_name,
-        credentials_file=state.credentials_file,
-        print_answers=state.verbose,
         force=state.force,
+        verbose=state.verbose,
     )
+    answer_evaluator = AnswerEvaluatorFactory.create(
+        evaluator_name, config, llm_provider
+    )
+
     answer_evaluator.run()
 
 

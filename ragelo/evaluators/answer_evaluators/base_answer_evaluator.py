@@ -1,9 +1,6 @@
 """Base model for dealing with answer evaluators"""
 
-import csv
-from abc import abstractmethod
-from collections import defaultdict
-from typing import Dict, List, Set, Type
+from typing import Callable, Dict, Set, Type
 
 from ragelo.evaluators.base_evaluator import BaseEvaluator
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
@@ -55,7 +52,7 @@ class AnswerEvaluatorFactory:
     registry: Dict[str, Type[BaseAnswerEvaluator]] = {}
 
     @classmethod
-    def register(cls, name: str):
+    def register(cls, name: str) -> Callable:
         def inner_wrapper(wrapped_class: Type[BaseAnswerEvaluator]):
             if name in cls.registry:
                 logger.warning(f"Overwriting {name} in registry")
@@ -71,6 +68,6 @@ class AnswerEvaluatorFactory:
         config: AnswerEvaluatorConfig,
         llm_provider: BaseLLMProvider,
     ):
-        if evaluator_name not in cls.registry:
+        if evaluator_name.lower() not in cls.registry:
             raise ValueError(f"Unknown evaluator {evaluator_name}")
         return cls.registry[evaluator_name.lower()].from_config(config, llm_provider)
