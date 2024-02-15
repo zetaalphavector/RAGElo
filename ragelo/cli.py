@@ -161,7 +161,7 @@ def agents_ranker(
     output_file: Annotated[
         str,
         typer.Argument(help="csv file to rank to"),
-    ],
+    ] = None,
     evaluator_name: Annotated[
         str,
         typer.Option("--ranker", help="Name of the evaluator to use."),
