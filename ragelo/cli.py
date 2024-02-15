@@ -6,10 +6,12 @@ import typer
 from typing_extensions import Annotated
 
 from ragelo import __app_name__, __version__
-from ragelo.answer_evaluators import AnswerEvaluatorFactory
 from ragelo.answer_rankers import AnswerRankerFactory
+from ragelo.evaluators.answer_evaluators import AnswerEvaluatorFactory
+from ragelo.evaluators.retrieval_evaluators import RetrievalEvaluatorFactory
+from ragelo.llm_providers.openai_client import OpenAIProvider
 from ragelo.logger import CLILogHandler, logger
-from ragelo.retrieval_evaluators import DocumentEvaluatorFactory
+from ragelo.types.configurations import RetrievalEvaluatorConfig
 
 logger.addHandler(CLILogHandler())
 logger.setLevel("INFO")
@@ -30,8 +32,13 @@ app = typer.Typer()
 state = State()
 
 
+def get_openai_provider(credentials_path, model_name):
+    openai_config = OpenAIProvider.get_openai_config(credentials_path, model_name)
+    return OpenAIProvider.from_configuration(openai_config)
+
+
 @app.command()
-def documents_annotator(
+def retrieval_annotator(
     queries_file: Annotated[
         str,
         typer.Argument(
@@ -61,15 +68,12 @@ def documents_annotator(
         output_file = os.path.join(state.data_path, "reasonings.csv")
         logger.info(f"Using default output file: {output_file}")
 
-    doc_evaluator = DocumentEvaluatorFactory.create(
-        evaluator_name,
-        query_path=queries_file,
-        documents_path=documents_file,
-        output_file=output_file,
-        model_name=state.model_name,
-        credentials_file=state.credentials_file,
-        verbose=state.verbose,
-        force=state.force,
+    llm_provider = get_openai_provider(state.credentials_file, state.model_name)
+    config = RetrievalEvaluatorConfig(
+        query_path=queries_file, documents_path=documents_file, output_file=output_file
+    )
+    doc_evaluator = RetrievalEvaluatorConfig.create(
+        evaluator_name, config, llm_provider
     )
 
     doc_evaluator.get_answers()

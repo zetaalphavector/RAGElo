@@ -24,7 +24,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: System :: Benchmark",
 ]
-dependencies = ["openai", "tenacity", "typer", "numpy"]
+dependencies = ["openai>=1.10", "tenacity", "typer", "numpy"]
 
 [project.optional-dependencies]
 cli = ["typer[all]"]

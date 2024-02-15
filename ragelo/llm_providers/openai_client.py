@@ -46,7 +46,7 @@ class OpenAIProvider(BaseLLMProvider):
     def from_configuration(cls, openai_config: OpenAIConfiguration):
         """Inits the OpenAI wrapper from a configuration object."""
         openai_client = cls.get_openai_client(openai_config)
-        return cls(openai_client, model=openai_config.openai_model)
+        return cls(openai_client, model=openai_config.model_name)
 
     @staticmethod
     def get_openai_client(openai_config: OpenAIConfiguration) -> OpenAI:
@@ -58,7 +58,10 @@ class OpenAIProvider(BaseLLMProvider):
                 api_key=openai_config.api_key,
                 api_version=openai_config.openai_api_version,
             )
-        elif openai_config.openai_api_type == "open_ai":
+        elif (
+            openai_config.openai_api_type == "open_ai"
+            or openai_config.openai_api_type is None
+        ):
             return OpenAI(
                 base_url=openai_config.openai_api_base,
                 api_key=openai_config.api_key,
@@ -68,7 +71,9 @@ class OpenAIProvider(BaseLLMProvider):
             raise Exception(f"Unknown OpenAI api type: {openai_config.openai_api_type}")
 
     @staticmethod
-    def get_openai_config(credential_file: Optional[str]) -> OpenAIConfiguration:
+    def get_openai_config(
+        credential_file: Optional[str], model_name: str
+    ) -> OpenAIConfiguration:
         """Get the OpenAI configuration."""
         if credential_file:
             set_credentials_from_file(credential_file)
@@ -78,4 +83,5 @@ class OpenAIProvider(BaseLLMProvider):
             openai_api_type=os.getenv("OPENAI_API_TYPE"),
             openai_api_base=os.getenv("OPENAI_API_BASE"),
             openai_api_version=os.getenv("OPENAI_API_VERSION"),
+            model_name=model_name,
         )
