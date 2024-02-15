@@ -1,0 +1,5 @@
+query_id,did,answer
+0,0,Processed answer for query 0 and document 0
+0,1,Processed answer for query 0 and document 1
+1,2,Processed answer for query 1 and document 2
+1,3,Processed answer for query 1 and document 3
