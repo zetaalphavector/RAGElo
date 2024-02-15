@@ -6,12 +6,13 @@ from openai import OpenAI
 from openai.resources.chat import Chat
 from openai.resources.chat.completions import Completions
 
-from ragelo.llm_providers.base_llm_provider import (
-    BaseLLMProvider,
-    LLMProviderConfiguration,
-)
+from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.llm_providers.openai_client import OpenAIConfiguration
-from ragelo.types.configurations import AnswerEvaluatorConfig, RetrievalEvaluatorConfig
+from ragelo.types.configurations import (
+    AnswerEvaluatorConfig,
+    LLMProviderConfiguration,
+    RetrievalEvaluatorConfig,
+)
 
 
 @pytest.fixture
