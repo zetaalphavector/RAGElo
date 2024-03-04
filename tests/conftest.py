@@ -10,8 +10,10 @@ from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.llm_providers.openai_client import OpenAIConfiguration
 from ragelo.types.configurations import (
     AnswerEvaluatorConfig,
+    BaseEvaluatorConfig,
+    DomainExpertEvaluatorConfig,
     LLMProviderConfiguration,
-    RetrievalEvaluatorConfig,
+    RDNAMEvaluatorConfig,
 )
 
 
@@ -50,7 +52,7 @@ def openai_client_mock(mocker, chat_completion_mock):
 
 @pytest.fixture
 def retrieval_eval_config():
-    return RetrievalEvaluatorConfig(
+    return BaseEvaluatorConfig(
         documents_path="tests/data/documents.csv",
         query_path="tests/data/queries.csv",
         output_file="tests/data/output.csv",
@@ -73,7 +75,7 @@ def answer_eval_config():
 
 @pytest.fixture
 def expert_retrieval_eval_config():
-    return RetrievalEvaluatorConfig(
+    return DomainExpertEvaluatorConfig(
         documents_path="tests/data/documents.csv",
         query_path="tests/data/queries.csv",
         output_file="tests/data/output.csv",
@@ -88,7 +90,7 @@ def expert_retrieval_eval_config():
 
 @pytest.fixture
 def rdnam_config():
-    return RetrievalEvaluatorConfig(
+    return RDNAMEvaluatorConfig(
         documents_path="tests/data/documents.csv",
         query_path="tests/data/queries.csv",
         output_file="tests/data/output.csv",

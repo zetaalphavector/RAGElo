@@ -19,7 +19,7 @@ from ragelo.types import Query
 from ragelo.types.configurations import AnswerEvaluatorConfig
 
 
-@AnswerEvaluatorFactory.register("PairwiseWithReasoning")
+@AnswerEvaluatorFactory.register("pairwise_reasoning")
 class PairwiseWithReasoningEvaluator(BaseAnswerEvaluator):
     """A evaluator that evaluates RAG-based answers pairwise, with document reasoning"""
 
@@ -53,7 +53,7 @@ Begin your evaluation by explaining why each answer correctly answers the user q
     ):
         super().__init__(config, queries, answers, agents, llm_provider)
         if not self.config.output_file:
-            self.output_file = "pairwise_reasoning_evaluator.log"
+            self.output_file = "pairwise_reasoning_evaluator.csv"
         else:
             self.output_file = self.config.output_file
         if not self.config.reasoning_file:
@@ -174,8 +174,9 @@ Begin your evaluation by explaining why each answer correctly answers the user q
             except ImportError:
                 logging.warning("Rich not installed. Using plain print")
                 self.config.rich_print = False
-            print(f"{qid}: {agent_a} vs {agent_b}")
-            print(f"Evaluator full answer: {answer}")
+        if not self.config.rich_print:
+            tqdm.write(f"{qid}: {agent_a} vs {agent_b}")
+            tqdm.write(f"Evaluator full answer: {answer}")
 
     def __generate_random_games(self) -> List[Tuple[str, str]]:
         """Creates all prompts necessary for running the evaluator"""
