@@ -32,6 +32,14 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         documents: Dict[str, Dict[str, Document]],
         llm_provider: BaseLLMProvider,
     ):
+        if not queries:
+            raise ValueError(
+                "You are trying to use a Retrieval Evaluator without providing queries"
+            )
+        if not documents:
+            raise ValueError(
+                "You are trying to use a Retrieval Evaluator without providing documents"
+            )
         self.config = config
         self.queries = queries
         self.documents = documents
@@ -88,7 +96,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         return answer
 
     @abstractmethod
-    def _build_message(self, qid: str, did: str) -> str:
+    def _build_message(self, qid: str, did: str) -> str | List[Dict[str, str]]:
         """Builds the prompt to send to the LLM."""
         raise NotImplementedError
 

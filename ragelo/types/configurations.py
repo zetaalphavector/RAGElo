@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import List, Optional
 
 
 @dataclass
@@ -99,6 +99,43 @@ class DomainExpertEvaluatorConfig(BaseEvaluatorConfig):
             "help": "Extra guidelines to be used when reasoning about the "
             "relevancy of the document. The string should be in bullet "
             "point format and will be split at new lines."
+        },
+    )
+
+
+@dataclass(kw_only=True)
+class CustomPromptEvaluatorConfig(BaseEvaluatorConfig):
+    prompt: str = field(
+        default="query: {} document: {}",
+        metadata={
+            "help": "The prompt to be used to evaluate the documents. It should contain a {query} and a {document} placeholder"
+        },
+    )
+
+
+@dataclass
+class FewShotExample:
+    """A few-shot example."""
+
+    passage: str
+    query: str
+    relevance: int
+    reasoning: str
+
+
+@dataclass(kw_only=True)
+class FewShotEvaluatorConfig(BaseEvaluatorConfig):
+    system_prompt: str = field(
+        default="You are a helpful assistant.",
+        metadata={"help": "The system prompt to be used to evaluate the documents."},
+    )
+    few_shots: List[FewShotExample] = field(
+        metadata={"help": "A list of few-shot examples to be used in the prompt"}
+    )
+    prompt: str = field(
+        default="Query: {query}\n\nPassage:{passage}",
+        metadata={
+            "help": "The individual prompt to be used to evaluate the documents. It should contain a {query} and a {passage} placeholder"
         },
     )
 
