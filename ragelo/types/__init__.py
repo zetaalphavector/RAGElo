@@ -1,2 +1,2 @@
-from .configurations import *
-from .types import *
+from ragelo.types.configurations import *
+from ragelo.types.types import *

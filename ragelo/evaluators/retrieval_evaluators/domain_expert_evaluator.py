@@ -11,7 +11,7 @@ from ragelo.evaluators.retrieval_evaluators import (
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.types import Document, Query
-from ragelo.types.configurations import RetrievalEvaluatorConfig
+from ragelo.types.configurations import DomainExpertEvaluatorConfig
 
 
 @RetrievalEvaluatorFactory.register("domain_expert")
@@ -53,12 +53,16 @@ Please only answer with a single number."""
 
     def __init__(
         self,
-        config: RetrievalEvaluatorConfig,
+        config: DomainExpertEvaluatorConfig,
         queries: Dict[str, Query],
         documents: Dict[str, Dict[str, Document]],
         llm_provider: BaseLLMProvider,
     ):
-        super().__init__(config, queries, documents, llm_provider)
+        self.config = config
+        self.queries = queries
+        self.documents = documents
+        self.llm_provider = llm_provider
+        self.output_file = config.output_file
         if not self.config.domain_long:
             raise ValueError(
                 "You are tying to use the Domain Expert Retrieval Evaluator. "

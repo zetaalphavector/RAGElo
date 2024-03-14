@@ -9,7 +9,7 @@ from typing import Dict, List, Optional, Set, Tuple
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.types import Document, Query
-from ragelo.types.configurations import EvaluatorConfig
+from ragelo.types.configurations import BaseEvaluatorConfig
 
 
 class BaseEvaluator(ABC):
@@ -18,7 +18,7 @@ class BaseEvaluator(ABC):
         self,
         queries: List[Query],
         llm_provider: BaseLLMProvider,
-        config: EvaluatorConfig,
+        config: BaseEvaluatorConfig,
     ):
         raise NotImplementedError
 

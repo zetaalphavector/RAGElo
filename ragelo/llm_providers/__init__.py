@@ -1,1 +1,2 @@
-from .openai_client import OpenAIProvider
+from ragelo.llm_providers.base_llm_provider import LLMProviderFactory
+from ragelo.llm_providers.openai_client import OpenAIProvider

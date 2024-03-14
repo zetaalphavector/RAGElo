@@ -15,34 +15,28 @@ from tqdm.auto import tqdm
 from ragelo.evaluators.base_evaluator import BaseEvaluator
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.types import Document, Query
-from ragelo.types.configurations import RetrievalEvaluatorConfig
+from ragelo.types.configurations import BaseEvaluatorConfig
 
 
 class BaseRetrievalEvaluator(BaseEvaluator):
+    config: BaseEvaluatorConfig
+    queries: Dict[str, Query]
+    documents: Dict[str, Dict[str, Document]]
+    llm_provider: BaseLLMProvider
+    output_file: str
+
     def __init__(
         self,
-        config: RetrievalEvaluatorConfig,
+        config: BaseEvaluatorConfig,
         queries: Dict[str, Query],
         documents: Dict[str, Dict[str, Document]],
         llm_provider: BaseLLMProvider,
     ):
-        if not queries:
-            raise ValueError(
-                "You are trying to use a Retrieval Evaluator without providing queries"
-            )
-        if not documents:
-            raise ValueError(
-                "You are trying to use a Retrieval Evaluator without providing documents"
-            )
+        self.config = config
         self.queries = queries
         self.documents = documents
-        if not config.output_file:
-            self.output_file = "retrieval_evaluator.log"
-        else:
-            self.output_file = config.output_file
-
         self.llm_provider = llm_provider
-        self.config = config
+        self.output_file = config.output_file
 
     def run(self) -> Dict[str, Dict[str, str]]:
         """Evaluate all the documents for each query"""
@@ -54,6 +48,8 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             desc="Annotating Documents",
             disable=not use_progress_bar,
             ncols=100,
+            leave=False,
+            position=0,
         ):
             for did in tqdm(
                 self.documents[qid],
@@ -61,6 +57,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
                 disable=not use_progress_bar,
                 ncols=100,
                 leave=False,
+                position=1,
             ):
                 if (qid, did) in skip_docs:
                     logging.debug(f"Skipping {qid} {did}")
@@ -139,7 +136,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
                 self.config.rich_print = False
 
         else:
-            print(
+            tqdm.write(
                 f"Query: {self.queries[qid].query}, Document ID: {did}, Evaluation: {answer}"
             )
 
@@ -172,9 +169,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         return contents
 
     @classmethod
-    def from_config(
-        cls, config: RetrievalEvaluatorConfig, llm_provider: BaseLLMProvider
-    ):
+    def from_config(cls, config: BaseEvaluatorConfig, llm_provider):
         queries = cls._load_queries(config.query_path)
         documents = cls.load_documents(config.documents_path, queries)
         return cls(config, queries, documents, llm_provider)
@@ -200,7 +195,7 @@ class RetrievalEvaluatorFactory:
     def create(
         cls,
         evaluator_name: str,
-        config: RetrievalEvaluatorConfig,
+        config: BaseEvaluatorConfig,
         llm_provider: BaseLLMProvider,
     ) -> BaseRetrievalEvaluator:
         if evaluator_name not in cls.registry:

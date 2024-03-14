@@ -15,7 +15,7 @@ from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.types import Document, Query
-from ragelo.types.configurations import RetrievalEvaluatorConfig
+from ragelo.types.configurations import RDNAMEvaluatorConfig
 
 
 @RetrievalEvaluatorFactory.register("RDNAM")
@@ -57,7 +57,7 @@ Each rater used their own independent judgement."""  # noqa: E501
 
     def __init__(
         self,
-        config: RetrievalEvaluatorConfig,
+        config: RDNAMEvaluatorConfig,
         queries: Dict[str, Query],
         documents: Dict[str, Dict[str, Document]],
         llm_provider: BaseLLMProvider,
@@ -74,7 +74,24 @@ Each rater used their own independent judgement."""  # noqa: E501
                 and T (trustworthy) for the document before computing the final score.
             multiple: Should the prompt ask the LLM to mimic multiple annotators?
         """
-        super().__init__(config, queries, documents, llm_provider)
+        if not queries:
+            raise ValueError(
+                "You are trying to use a Retrieval Evaluator without providing queries"
+            )
+        if not documents:
+            raise ValueError(
+                "You are trying to use a Retrieval Evaluator without providing documents"
+            )
+        self.queries = queries
+        self.documents = documents
+        if not config.output_file:
+            self.output_file = "retrieval_evaluator.log"
+        else:
+            self.output_file = config.output_file
+
+        self.llm_provider = llm_provider
+        self.config = config
+
         self.__role = self.config.role if self.config.role else ""
         self.__use_narratives = False
         self.__use_description = False
