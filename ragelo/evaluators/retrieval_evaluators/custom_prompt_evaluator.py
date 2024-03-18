@@ -1,3 +1,4 @@
+import json
 from typing import Dict
 
 from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
@@ -36,9 +37,16 @@ class CustomPromptEvaluator(RetrievalEvaluatorFactory):
         self.llm_provider = llm_provider
         self.config = config
 
-        self.__prompt = config.prompt
+        self.prompt = config.prompt
 
     def _build_message(self, qid: str, did: str) -> str:
         query = self.queries[qid]
         document = self.documents[qid][did]
         return self.__prompt.format(query=query.query, document=document.text)
+
+    def _process_answer(self, answer: str) -> str:
+        try:
+            answer = json.loads(answer.strip().split("\n")[-1])["relevance"]
+        except KeyError:
+            raise ValueError(f"Answer {answer} does not contain a relevance field")
+        return answer
