@@ -42,7 +42,7 @@ class CustomPromptEvaluator(BaseRetrievalEvaluator):
     def _build_message(self, qid: str, did: str) -> str:
         query = self.queries[qid]
         document = self.documents[qid][did]
-        return self.__prompt.format(query=query.query, document=document.text)
+        return self.__prompt.format(query=query.query, passage=document.text)
 
     def _process_answer(self, answer: str) -> str:
         try:
