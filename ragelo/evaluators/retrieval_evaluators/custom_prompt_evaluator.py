@@ -11,7 +11,7 @@ from ragelo.types.configurations import CustomPromptEvaluatorConfig
 
 
 @RetrievalEvaluatorFactory.register("custom_prompt")
-class CustomPromptEvaluator(RetrievalEvaluatorFactory):
+class CustomPromptEvaluator(BaseRetrievalEvaluator):
     def __init__(
         self,
         config: CustomPromptEvaluatorConfig,
