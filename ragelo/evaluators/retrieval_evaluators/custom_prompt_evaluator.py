@@ -19,25 +19,8 @@ class CustomPromptEvaluator(BaseRetrievalEvaluator):
         documents: Dict[str, Dict[str, Document]],
         llm_provider: BaseLLMProvider,
     ):
-        if not queries:
-            raise ValueError(
-                "You are trying to use a Retrieval Evaluator without providing queries"
-            )
-        if not documents:
-            raise ValueError(
-                "You are trying to use a Retrieval Evaluator without providing documents"
-            )
-
-        self.queries = queries
-        self.documents = documents
-        if not config.output_file:
-            self.output_file = "retrieval_evaluator.log"
-        else:
-            self.output_file = config.output_file
-        self.llm_provider = llm_provider
-        self.config = config
-
-        self.prompt = config.prompt
+        super().__init__(config, queries, documents, llm_provider)
+        self.__prompt = config.prompt
 
     def _build_message(self, qid: str, did: str) -> str:
         query = self.queries[qid]
@@ -45,8 +28,4 @@ class CustomPromptEvaluator(BaseRetrievalEvaluator):
         return self.__prompt.format(query=query.query, passage=document.text)
 
     def _process_answer(self, answer: str) -> str:
-        try:
-            answer = json.loads(answer.strip().split("\n")[-1])["relevance"]
-        except KeyError:
-            raise ValueError(f"Answer {answer} does not contain a relevance field")
-        return answer
+        return self.json_answer_parser(answer, "relevance")

@@ -5,6 +5,7 @@ and returns a score or a label for each document."""
 import csv
 import logging
 import os
+import json
 from abc import abstractmethod
 from collections import defaultdict
 from typing import Any, Callable, Dict, List, Set, Tuple, Type
@@ -44,7 +45,9 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         self.queries = queries
         self.documents = documents
         self.llm_provider = llm_provider
-        self.output_file = config.output_file
+        self.output_file = (
+            config.output_file if config.output_file else "retrieval_evaluator.log"
+        )
 
     def run(self) -> Dict[str, Dict[str, str]]:
         """Evaluate all the documents for each query"""
@@ -181,6 +184,29 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         queries = cls._load_queries(config.query_path)
         documents = cls.load_documents(config.documents_path, queries)
         return cls(config, queries, documents, llm_provider)
+
+    @staticmethod
+    def json_answer_parser(answer: str, key: str) -> Any:
+        """Parses a Json answer from the LLM and returns a specific key"""
+
+        # Finds all valid JSON objects in the answer that contain the key
+        json_objects = []
+        for line in answer.strip().split("\n"):
+            try:
+                json_object = json.loads(line)
+                if key in json_object:
+                    json_objects.append(json_object)
+            except json.JSONDecodeError:
+                pass
+
+        # Assumes the valid JSON object is the last one
+        if not json_objects:
+            raise ValueError(
+                "Answer does not contain a valid json object\n"
+                f"with the key {key}\n{answer}"
+            )
+        json_dict = json_objects[-1]
+        return json_dict[key]
 
     def __len__(self) -> int:
         return len(self.queries)
