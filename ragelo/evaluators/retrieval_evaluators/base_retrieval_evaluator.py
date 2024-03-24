@@ -3,9 +3,9 @@ It receives a set of queries used to retrieve a document and their respective re
 and returns a score or a label for each document."""
 
 import csv
+import json
 import logging
 import os
-import json
 from abc import abstractmethod
 from collections import defaultdict
 from typing import Any, Callable, Dict, List, Set, Tuple, Type
@@ -142,8 +142,14 @@ class BaseRetrievalEvaluator(BaseEvaluator):
                 import rich
 
                 for key in answer_dict:
+                    if "qid" in key or "query" in key:
+                        rich.print(
+                            f"[bold magenta]🔎{key.capitalize()}[/bold magenta]: ",
+                            f"[not bold magenta]{answer_dict[key]}[/not bold magenta]",
+                        )
                     rich.print(
-                        f"[bold cyan]{key.capitalize()}[/bold cyan]: [not bold cyan]{answer_dict[key]}[/not bold cyan]"
+                        f"[bold cyan]{key.capitalize()}[/bold cyan]: "
+                        f"[not bold cyan]{answer_dict[key]}[/not bold cyan]"
                     )
                 rich.print("")
 
@@ -164,8 +170,8 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         if not os.path.isfile(output_file):
             logging.debug(f"Creating new file {output_file}")
             with open(output_file, "w") as f:
-                writer = csv.writer(f)
-                writer.writerow(self.output_columns)
+                writer = csv.DictWriter(f, fieldnames=self.output_columns)
+                writer.writeheader()
         self._print_response(answer_dict)
         with open(output_file, "a") as f:
             writer = csv.DictWriter(f, fieldnames=self.output_columns)

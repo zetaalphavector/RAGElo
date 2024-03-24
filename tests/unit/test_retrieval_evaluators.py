@@ -28,7 +28,9 @@ class TestRetrievalEvaluator:
             config=retrieval_eval_config, llm_provider=llm_provider_mock
         )
         results = evaluator.evaluate_single_sample("0", "0")
-        assert results == "Processed answer for query 0 and document 0"
+        assert results["qid"] == "0"
+        assert results["did"] == "0"
+        assert results["answer"] == "Processed answer for query 0 and document 0"
         call_args = llm_provider_mock.inner_call.call_args_list
         assert call_args[0][0][0] == "Mock message for query 0 and document 0"
 
@@ -75,7 +77,10 @@ class TestRDNAMEvaluator:
             config=rdnam_config, llm_provider=llm_provider_mock_rdnam
         )
         results = evaluator.evaluate_single_sample("0", "0")
-        assert results == 1
+        assert isinstance(results, dict)
+        assert results["answer"] == 1
+        assert results["qid"] == "0"
+        assert results["did"] == "0"
         call_args = llm_provider_mock_rdnam.inner_call.call_args_list
         assert call_args[0][0][0].startswith(
             "You are a search quality rater evaluating"
@@ -94,11 +99,15 @@ class TestReasonerEvaluator:
             config=retrieval_eval_config, llm_provider=llm_provider_mock
         )
         results = evaluator.evaluate_single_sample("0", "0")
+        assert results["qid"] == "0"
+        assert results["did"] == "0"
+
         formatted_prompt = evaluator.prompt.format(
-            user_question=evaluator.queries["0"].query,
-            doc_content=evaluator.documents["0"]["0"].text,
+            query=evaluator.queries["0"].query,
+            document=evaluator.documents["0"]["0"].text,
         )
-        assert formatted_prompt in results
+        assert formatted_prompt in results["raw_answer"]
+        assert results["raw_answer"] == results["answer"]
         call_args = llm_provider_mock.inner_call.call_args_list
         assert call_args[0][0][0] == formatted_prompt
 
@@ -123,7 +132,9 @@ class TestDomainExpertEvaluator:
             config=expert_retrieval_eval_config,
             llm_provider=llm_provider_mock_mock,
         )
-        _ = evaluator.evaluate_single_sample("0", "0")
+        results = evaluator.evaluate_single_sample("0", "0")
+        assert results["qid"] == "0"
+        assert results["did"] == "0"
 
         assert llm_provider_mock_mock.call_count == 2
         call_args = llm_provider_mock_mock.call_args_list

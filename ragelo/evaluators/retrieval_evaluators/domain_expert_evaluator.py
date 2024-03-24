@@ -1,7 +1,7 @@
 """Evaluator with a domain expert persona"""
 
 import logging
-from typing import Dict, List, Any
+from typing import Any, Dict, List
 
 from tenacity import RetryError
 
@@ -63,7 +63,7 @@ or only peripheral topics.
 personal opinions or biases.
     - Uncertainty: If uncertain about a relevance judgement, annotators default to a \
 lower relevance.
-{extra_guidelines}
+    {extra_guidelines}
 """.strip()
 
     score_prompt = """
@@ -89,7 +89,6 @@ Please only answer with a single number.
         documents: Dict[str, Dict[str, Document]],
         llm_provider: BaseLLMProvider,
     ):
-
         super().__init__(config, queries, documents, llm_provider)
         if not self.config.domain_long:
             raise ValueError(
@@ -173,5 +172,5 @@ Please only answer with a single number.
     def _build_message(self, qid: str, did: str) -> str:
         return self.sys_prompt
 
-    def _process_answer(self, answer: str) -> int:
-        return int(answer)
+    def _process_answer(self, answer: str) -> str:
+        return answer
