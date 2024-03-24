@@ -1,4 +1,3 @@
-import json
 from typing import Dict, List
 
 from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
@@ -12,6 +11,8 @@ from ragelo.types.configurations import FewShotEvaluatorConfig
 
 @RetrievalEvaluatorFactory.register("few_shot")
 class FewShotEvaluator(BaseRetrievalEvaluator):
+    config: FewShotEvaluatorConfig
+
     def __init__(
         self,
         config: FewShotEvaluatorConfig,
@@ -19,23 +20,7 @@ class FewShotEvaluator(BaseRetrievalEvaluator):
         documents: Dict[str, Dict[str, Document]],
         llm_provider: BaseLLMProvider,
     ):
-        if not queries:
-            raise ValueError(
-                "You are trying to use a Retrieval Evaluator without providing queries"
-            )
-        if not documents:
-            raise ValueError(
-                "You are trying to use a Retrieval Evaluator without providing documents"
-            )
-
-        self.queries = queries
-        self.documents = documents
-        if not config.output_file:
-            self.output_file = "retrieval_evaluator.log"
-        else:
-            self.output_file = config.output_file
-        self.llm_provider = llm_provider
-        self.config = config
+        super().__init__(config, queries, documents, llm_provider)
 
         self.prompt = config.prompt
         self.sys_prompt = config.system_prompt
@@ -65,8 +50,4 @@ class FewShotEvaluator(BaseRetrievalEvaluator):
         return few_shot_messages
 
     def _process_answer(self, answer: str) -> str:
-        try:
-            answer = json.loads(answer.strip().split("\n")[-1])["relevance"]
-        except KeyError:
-            raise ValueError(f"Answer {answer} does not contain a relevance field")
-        return answer
+        return self.json_answer_parser(answer, "relevance")

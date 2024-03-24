@@ -25,6 +25,8 @@ class BaseRetrievalEvaluator(BaseEvaluator):
     documents: Dict[str, Dict[str, Document]]
     llm_provider: BaseLLMProvider
     output_file: str
+    output_columns: List[str] = ["qid", "did", "raw_answer", "answer"]
+    scoring_key: str = "answer"
 
     def __init__(
         self,
@@ -75,28 +77,33 @@ class BaseRetrievalEvaluator(BaseEvaluator):
                     continue
 
                 try:
-                    answer = self.evaluate_single_sample(qid, did)
+                    answer_dict = self.evaluate_single_sample(qid, did)
                 except (RetryError, ValueError):
                     continue
-                self._print_response(qid, did, answer)
-                self._dump_response(qid, did, answer)
-                answers[qid][did] = answer
+                self._dump_response(answer_dict)
+
+                answers[qid][did] = answer_dict["answer"]
         return answers
 
-    def evaluate_single_sample(self, qid: str, did: str) -> str:
-        """Evaluates a single query-document pair"""
+    def evaluate_single_sample(self, qid: str, did: str) -> Dict[str, Any]:
+        """Evaluates a single query-document pair. Returns the raw answer and the processed answer."""
         message = self._build_message(qid, did)
         try:
-            answer = self.llm_provider(message)
+            raw_answer = self.llm_provider(message)
         except RetryError as e:
             logging.warning(f"Failed to FETCH answers for {qid} {did}")
             raise e
         try:
-            answer = self._process_answer(answer)
+            answer = self._process_answer(raw_answer)
         except ValueError as e:
             logging.warning(f"Failed to PARSE answer for {qid} {did}")
             raise e
-        return answer
+        return {
+            "qid": qid,
+            "did": did,
+            "raw_answer": raw_answer,
+            "answer": answer,
+        }
 
     @abstractmethod
     def _build_message(self, qid: str, did: str) -> str | List[Dict[str, str]]:
@@ -112,9 +119,11 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         """Skips documents that have already been annotated"""
         skip_docs = set()
         if os.path.isfile(self.output_file) and not self.config.force:
-            for line in csv.reader(open(self.output_file)):
-                qid, did, _ = line
-                skip_docs.add((qid, did))
+            line: Dict[str, str]
+            for line in csv.DictReader(
+                open(self.output_file), fieldnames=self.output_columns
+            ):
+                skip_docs.add((line["qid"], line["did"]))
         if self.config.force and os.path.isfile(self.output_file):
             logging.warning(f"Removing existing {self.output_file}!")
             os.remove(self.output_file)
@@ -125,21 +134,17 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             )
         return skip_docs
 
-    def _print_response(self, qid: str, did: str, answer: str) -> None:
+    def _print_response(self, answer_dict: Dict[str, str]) -> None:
         if not self.config.verbose:
             return
         if self.config.rich_print:
             try:
                 import rich
 
-                rich.print(
-                    "[bold cyan]🔎Query       [/bold cyan]: [not bold cyan]"
-                    f"{self.queries[qid].query}[/not bold cyan]"
-                )
-                rich.print(f"[bold cyan]Document ID [/bold cyan]: {did}")
-                rich.print(
-                    f"[bold cyan]Evaluation  [/bold cyan]: [not bold]{answer}[/not bold]"
-                )
+                for key in answer_dict:
+                    rich.print(
+                        f"[bold cyan]{key.capitalize()}[/bold cyan]: [not bold cyan]{answer_dict[key]}[/not bold cyan]"
+                    )
                 rich.print("")
 
             except ImportError:
@@ -147,15 +152,12 @@ class BaseRetrievalEvaluator(BaseEvaluator):
                 self.config.rich_print = False
 
         else:
-            tqdm.write(
-                f"Query: {self.queries[qid].query}, Document ID: {did}, Evaluation: {answer}"
-            )
+            for key in answer_dict:
+                tqdm.write(f"{key.capitalize()}: {answer_dict[key]}")
 
     def _dump_response(
         self,
-        qid: str,
-        did: str,
-        answer: str,
+        answer_dict: Dict[str, str],
         file: str | None = None,
     ) -> None:
         output_file = file if file else self.output_file
@@ -163,13 +165,11 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             logging.debug(f"Creating new file {output_file}")
             with open(output_file, "w") as f:
                 writer = csv.writer(f)
-                writer.writerow(["query_id", "did", "answer"])
-
+                writer.writerow(self.output_columns)
+        self._print_response(answer_dict)
         with open(output_file, "a") as f:
-            writer = csv.writer(f)
-            if isinstance(answer, List):
-                answer = "\n".join(answer)
-            writer.writerow([qid, did, answer])
+            writer = csv.DictWriter(f, fieldnames=self.output_columns)
+            writer.writerow(answer_dict)
 
     @staticmethod
     def _load_from_csv(file_path: str) -> Dict[str, str]:

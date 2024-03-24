@@ -20,11 +20,16 @@ from ragelo.types.configurations import RDNAMEvaluatorConfig
 
 @RetrievalEvaluatorFactory.register("RDNAM")
 class RDNAMEvaluator(BaseRetrievalEvaluator):
-    prompt = """{role}Given a query and a document, you must provide a score on an integer scale of 0 to 2 with the following meanings:
+    prompt = """
+{role}Given a query and a document, you must provide a score on an integer scale \
+of 0 to 2 with the following meanings:
 2 = highly relevant, very helpful for this query
 1 = relevant, may be partly helpful but might contain other irrelevant content
 0 = not relevant, should never be shown for this query
-Assume that you are writing a report on the subject of the topic. If you would use any of the information contained in the document in such a report, mark it 1. If the document is primarily about the topic, or contains vital information about the topic, mark it 2. Otherwise, mark it 0.
+Assume that you are writing a report on the subject of the topic. If you would \
+use any of the information contained in the document in such a report, mark it 1. \
+If the document is primarily about the topic, or contains vital information about \
+the topic, mark it 2. Otherwise, mark it 0.
 
 # Query
 A person has typed {query} into a search engine.
@@ -40,20 +45,26 @@ Consider the following document.
 Split this problem into steps:
 Consider the underlying intent of the search.
 {aspects}
-Consider the aspects above and relative importance of each, and decide on a final score (O).
+Consider the aspects above and relative importance of each, and decide on a final \
+score (O).
 {multiple}
 Produce a JSON array of scores without providing any reasoning. Example: {example}
 
 # Results
-"""  # noqa: E501
+""".strip()
 
     NARRATIVE_DESCRIPTION_PROMPT = "They were looking for: {description} {narrative}"
-    ASPECTS_NARRATIVE = """Measure how well the content matches a likely intent of the query (M).
-    Measure how trustworthy the web page is (T)."""  # noqa: E501
+    ASPECTS_NARRATIVE = """Measure how well the content matches a likely intent \
+of the query (M).
+Measure how trustworthy the web page is (T).""".strip()
     ASPECTS_EXAMPLE = """[{{"M": 2, "T": 1, "O": 1}}, {{"M": 1..."""
     DEFAULT_EXAMPLE = """[{{"O": 1}}, {{"O": 2}}, {{"O": 0..."""
-    MULTIPLE_PROMPT = """We asked five search engine raters to evaluate the relevance of the web page for the query.
-Each rater used their own independent judgement."""  # noqa: E501
+    MULTIPLE_PROMPT = """We asked five search engine raters to evaluate \
+the relevance of the web page for the query.
+Each rater used their own independent judgement."""
+    config: RDNAMEvaluatorConfig
+    output_columns = ["qid", "did", "raw_answer", "answer"]
+    scoring_key = "answer"
 
     def __init__(
         self,
@@ -62,35 +73,8 @@ Each rater used their own independent judgement."""  # noqa: E501
         documents: Dict[str, Dict[str, Document]],
         llm_provider: BaseLLMProvider,
     ):
-        """Initializes an evaluator based on RDNAM framework.
-        Args:
-            role: A String defining the type of user the LLM should mimic
-                (e.g.: "You are a search quality rater evaluating
-                the relevance of web pages")
-            description: Will a description of the task be provided to the LLM?
-            narrative: Will a narrative of the task be provided to the LLM?
-            aspects: Should the prompt include aspects to get tot he final score?
-                If true, will prompt the LLM to compute scores for M (intent match)
-                and T (trustworthy) for the document before computing the final score.
-            multiple: Should the prompt ask the LLM to mimic multiple annotators?
-        """
-        if not queries:
-            raise ValueError(
-                "You are trying to use a Retrieval Evaluator without providing queries"
-            )
-        if not documents:
-            raise ValueError(
-                "You are trying to use a Retrieval Evaluator without providing documents"
-            )
-        self.queries = queries
-        self.documents = documents
-        if not config.output_file:
-            self.output_file = "retrieval_evaluator.log"
-        else:
-            self.output_file = config.output_file
-
-        self.llm_provider = llm_provider
-        self.config = config
+        """Initializes an evaluator based on RDNAM framework."""
+        super().__init__(config, queries, documents, llm_provider)
 
         self.__role = self.config.role if self.config.role else ""
         self.__use_narratives = False

@@ -111,6 +111,14 @@ class CustomPromptEvaluatorConfig(BaseEvaluatorConfig):
             "help": "The prompt to be used to evaluate the documents. It should contain a {query} and a {document} placeholder"
         },
     )
+    query_placeholder: str = field(
+        default="query",
+        metadata={"help": "The placeholder for the query in the prompt"},
+    )
+    document_placeholder: str = field(
+        default="document",
+        metadata={"help": "The placeholder for the document in the prompt"},
+    )
 
 
 @dataclass

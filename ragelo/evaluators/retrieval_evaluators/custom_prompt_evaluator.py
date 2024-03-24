@@ -1,4 +1,3 @@
-import json
 from typing import Dict
 
 from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
@@ -12,6 +11,8 @@ from ragelo.types.configurations import CustomPromptEvaluatorConfig
 
 @RetrievalEvaluatorFactory.register("custom_prompt")
 class CustomPromptEvaluator(BaseRetrievalEvaluator):
+    config: CustomPromptEvaluatorConfig
+
     def __init__(
         self,
         config: CustomPromptEvaluatorConfig,
@@ -23,9 +24,12 @@ class CustomPromptEvaluator(BaseRetrievalEvaluator):
         self.__prompt = config.prompt
 
     def _build_message(self, qid: str, did: str) -> str:
-        query = self.queries[qid]
-        document = self.documents[qid][did]
-        return self.__prompt.format(query=query.query, passage=document.text)
+        formatters = {
+            self.config.query_path: self.queries[qid],
+            self.config.document_placeholder: self.documents[qid][did],
+        }
+
+        return self.__prompt.format(**formatters)
 
     def _process_answer(self, answer: str) -> str:
         return self.json_answer_parser(answer, "relevance")
