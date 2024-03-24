@@ -11,10 +11,13 @@ from ragelo.evaluators.retrieval_evaluators import (
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.types import Document, Query
-from ragelo.types.configurations import DomainExpertEvaluatorConfig
+from ragelo.types.configurations import (
+    DomainExpertEvaluatorConfig,
+    RetrievalEvaluatorTypes,
+)
 
 
-@RetrievalEvaluatorFactory.register("domain_expert")
+@RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.DOMAIN_EXPERT)
 class DomainExpertEvaluator(BaseRetrievalEvaluator):
     sys_prompt = """
 You are a domain expert in {domain_long}.{company_prompt_1} You are tasked \

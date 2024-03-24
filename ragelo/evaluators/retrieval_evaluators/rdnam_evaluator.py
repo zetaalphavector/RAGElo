@@ -15,10 +15,10 @@ from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.types import Document, Query
-from ragelo.types.configurations import RDNAMEvaluatorConfig
+from ragelo.types.configurations import RDNAMEvaluatorConfig, RetrievalEvaluatorTypes
 
 
-@RetrievalEvaluatorFactory.register("RDNAM")
+@RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.RDNAM)
 class RDNAMEvaluator(BaseRetrievalEvaluator):
     prompt = """
 {role}Given a query and a document, you must provide a score on an integer scale \

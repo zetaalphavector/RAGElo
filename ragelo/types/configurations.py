@@ -1,5 +1,16 @@
 from dataclasses import dataclass, field
-from typing import List, Optional
+from enum import Enum
+from typing import Dict, List, Optional, Type
+
+
+class RetrievalEvaluatorTypes(str, Enum):
+    """Enum that contains the names of the available retrieval evaluators"""
+
+    CUSTOM_PROMPT = "custom_prompt"
+    DOMAIN_EXPERT = "domain_expert"
+    FEW_SHOT = "few_shot"
+    RDNAM = "RDNAM"
+    REASONER = "reasoner"
 
 
 @dataclass

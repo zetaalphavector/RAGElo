@@ -8,7 +8,7 @@ import logging
 import os
 from abc import abstractmethod
 from collections import defaultdict
-from typing import Any, Callable, Dict, List, Set, Tuple, Type
+from typing import Any, Callable, Dict, List, Set, Tuple, Type, get_type_hints
 
 from tenacity import RetryError
 from tqdm.auto import tqdm
@@ -16,7 +16,7 @@ from tqdm.auto import tqdm
 from ragelo.evaluators.base_evaluator import BaseEvaluator
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.types import Document, Query
-from ragelo.types.configurations import BaseEvaluatorConfig
+from ragelo.types.configurations import BaseEvaluatorConfig, RetrievalEvaluatorTypes
 
 
 class BaseRetrievalEvaluator(BaseEvaluator):
@@ -177,6 +177,9 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             writer = csv.DictWriter(f, fieldnames=self.output_columns)
             writer.writerow(answer_dict)
 
+    def __len__(self) -> int:
+        return len(self.queries)
+
     @staticmethod
     def _load_from_csv(file_path: str) -> Dict[str, str]:
         """extra content from a CSV file"""
@@ -184,12 +187,6 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         for line in csv.reader(open(file_path, "r")):
             contents[line[0]] = line[1]
         return contents
-
-    @classmethod
-    def from_config(cls, config: BaseEvaluatorConfig, llm_provider):
-        queries = cls._load_queries(config.query_path)
-        documents = cls.load_documents(config.documents_path, queries)
-        return cls(config, queries, documents, llm_provider)
 
     @staticmethod
     def json_answer_parser(answer: str, key: str) -> Any:
@@ -214,15 +211,22 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         json_dict = json_objects[-1]
         return json_dict[key]
 
-    def __len__(self) -> int:
-        return len(self.queries)
+    @classmethod
+    def from_config(cls, config: BaseEvaluatorConfig, llm_provider):
+        queries = cls._load_queries(config.query_path)
+        documents = cls.load_documents(config.documents_path, queries)
+        return cls(config, queries, documents, llm_provider)
+
+    @classmethod
+    def get_config_class(cls) -> Type[BaseEvaluatorConfig]:
+        return get_type_hints(cls)["config"]
 
 
 class RetrievalEvaluatorFactory:
-    registry: Dict[str, Type[BaseRetrievalEvaluator]] = {}
+    registry: Dict[RetrievalEvaluatorTypes, Type[BaseRetrievalEvaluator]] = {}
 
     @classmethod
-    def register(cls, evaluator_name: str) -> Callable:
+    def register(cls, evaluator_name: RetrievalEvaluatorTypes) -> Callable:
         def inner_wrapper(
             wrapped_class: Type[BaseRetrievalEvaluator],
         ) -> Type[BaseRetrievalEvaluator]:
@@ -241,3 +245,15 @@ class RetrievalEvaluatorFactory:
         if evaluator_name not in cls.registry:
             raise ValueError(f"Unknown evaluator {evaluator_name}")
         return cls.registry[evaluator_name].from_config(config, llm_provider)
+
+    @classmethod
+    def from_name(
+        cls,
+        evaluator_name: RetrievalEvaluatorTypes,
+        llm_provider: BaseLLMProvider,
+        **kwargs,
+    ) -> BaseRetrievalEvaluator:
+        class_ = cls.registry[evaluator_name]
+        type_config = class_.get_config_class()
+        config = type_config(**kwargs)
+        return class_.from_config(config, llm_provider)

@@ -2,9 +2,10 @@ from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     BaseRetrievalEvaluator,
     RetrievalEvaluatorFactory,
 )
+from ragelo.types.configurations import RetrievalEvaluatorTypes
 
 
-@RetrievalEvaluatorFactory.register("reasoner")
+@RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.REASONER)
 class ReasonerEvaluator(BaseRetrievalEvaluator):
     """
     A document Evaluator that only outputs the reasoning for why a document

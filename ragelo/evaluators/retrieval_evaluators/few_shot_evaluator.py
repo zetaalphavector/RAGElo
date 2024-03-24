@@ -6,10 +6,10 @@ from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.types import Document, Query
-from ragelo.types.configurations import FewShotEvaluatorConfig
+from ragelo.types.configurations import FewShotEvaluatorConfig, RetrievalEvaluatorTypes
 
 
-@RetrievalEvaluatorFactory.register("few_shot")
+@RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.FEW_SHOT)
 class FewShotEvaluator(BaseRetrievalEvaluator):
     config: FewShotEvaluatorConfig
 

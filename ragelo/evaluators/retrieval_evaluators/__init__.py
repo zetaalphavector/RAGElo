@@ -2,6 +2,9 @@ from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     BaseRetrievalEvaluator,
     RetrievalEvaluatorFactory,
 )
+from ragelo.evaluators.retrieval_evaluators.custom_prompt_evaluator import (
+    CustomPromptEvaluator,
+)
 from ragelo.evaluators.retrieval_evaluators.domain_expert_evaluator import (
     DomainExpertEvaluator,
 )

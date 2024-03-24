@@ -6,10 +6,13 @@ from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.types import Document, Query
-from ragelo.types.configurations import CustomPromptEvaluatorConfig
+from ragelo.types.configurations import (
+    CustomPromptEvaluatorConfig,
+    RetrievalEvaluatorTypes,
+)
 
 
-@RetrievalEvaluatorFactory.register("custom_prompt")
+@RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.CUSTOM_PROMPT)
 class CustomPromptEvaluator(BaseRetrievalEvaluator):
     config: CustomPromptEvaluatorConfig
 
