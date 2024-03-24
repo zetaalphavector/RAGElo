@@ -30,10 +30,8 @@ user question.
     [document content]
     {document}"""  # noqa: E501
 
-    def _build_message(self, qid: str, did: str) -> str:
-        query = self.queries[qid]
-        document = self.documents[qid][did]
-        return self.prompt.format(query=query.query, document=document.text)
+    def _build_message(self, query: str, document: str) -> str:
+        return self.prompt.format(query=query, document=document)
 
     def _process_answer(self, answer: str) -> str:
         return answer

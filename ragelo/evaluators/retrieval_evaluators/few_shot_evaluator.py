@@ -16,19 +16,15 @@ class FewShotEvaluator(BaseRetrievalEvaluator):
     def __init__(
         self,
         config: FewShotEvaluatorConfig,
-        queries: Dict[str, Query],
-        documents: Dict[str, Dict[str, Document]],
         llm_provider: BaseLLMProvider,
     ):
-        super().__init__(config, queries, documents, llm_provider)
+        super().__init__(config, llm_provider)
 
         self.prompt = config.prompt
         self.sys_prompt = config.system_prompt
         self.few_shots = config.few_shots
 
-    def _build_message(self, qid: str, did: str) -> List[Dict[str, str]]:
-        query = self.queries[qid].query
-        document = self.documents[qid][did].text
+    def _build_message(self, query: str, document: str) -> List[Dict[str, str]]:
         system_prompt_msg = {"role": "system", "content": self.sys_prompt}
         messages = [system_prompt_msg] + self.__build_few_shot_samples()
         user_message = self.prompt.format(query=query, passage=document)

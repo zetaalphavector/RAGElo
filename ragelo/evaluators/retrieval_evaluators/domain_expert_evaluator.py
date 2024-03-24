@@ -88,11 +88,9 @@ Please only answer with a single number.
     def __init__(
         self,
         config: DomainExpertEvaluatorConfig,
-        queries: Dict[str, Query],
-        documents: Dict[str, Dict[str, Document]],
         llm_provider: BaseLLMProvider,
     ):
-        super().__init__(config, queries, documents, llm_provider)
+        super().__init__(config, llm_provider)
         if not self.config.domain_long:
             raise ValueError(
                 "You are tying to use the Domain Expert Retrieval Evaluator. "
@@ -125,11 +123,8 @@ Please only answer with a single number.
         self.extra_guidelines = (
             self.config.extra_guidelines if self.config.extra_guidelines else ""
         )
-        # self.reasoning_file = self.output_file.replace(".csv", "_reasoning.csv")
 
-    def __build_reason_message(self, qid: str, did: str) -> str:
-        query = self.queries[qid].query
-        document = self.documents[qid][did].text
+    def __build_reason_message(self, query: str, document: str) -> str:
         reason_prompt = self.reason_prompt.format(
             query=query,
             doc_content=document,
@@ -138,15 +133,20 @@ Please only answer with a single number.
         )
         return reason_prompt
 
-    def evaluate_single_sample(self, qid: str, did: str) -> Dict[str, Any]:
+    def evaluate_single_sample(
+        self, query: Query, document: Document
+    ) -> Dict[str, Any]:
         """Processes a single pair of qid, did in a two-shot manner"""
-        reason_message = self.__build_reason_message(qid, did)
+        qid = query.qid
+        did = document.did
+        reason_message = self.__build_reason_message(query.query, document.text)
         messages_reasoning = [
             {"role": "system", "content": self.sys_prompt},
             {"role": "user", "content": reason_message},
         ]
         try:
             reasoning_answer = self.llm_provider(messages_reasoning)
+
         except RetryError as e:
             logging.warning(f"Failed to fetch reasoning for document {qid} {did}")
             raise e
@@ -171,9 +171,6 @@ Please only answer with a single number.
             "reasoning": reasoning_answer,
             "score": score_answer,
         }
-
-    def _build_message(self, qid: str, did: str) -> str:
-        return self.sys_prompt
 
     def _process_answer(self, answer: str) -> str:
         return answer

@@ -21,8 +21,6 @@ from ragelo.types.configurations import BaseEvaluatorConfig, RetrievalEvaluatorT
 
 class BaseRetrievalEvaluator(BaseEvaluator):
     config: BaseEvaluatorConfig
-    queries: Dict[str, Query]
-    documents: Dict[str, Dict[str, Document]]
     llm_provider: BaseLLMProvider
     output_file: str
     output_columns: List[str] = ["qid", "did", "raw_answer", "answer"]
@@ -31,63 +29,57 @@ class BaseRetrievalEvaluator(BaseEvaluator):
     def __init__(
         self,
         config: BaseEvaluatorConfig,
-        queries: Dict[str, Query],
-        documents: Dict[str, Dict[str, Document]],
         llm_provider: BaseLLMProvider,
     ):
-        if not queries:
-            raise ValueError(
-                "You are trying to use a Retrieval Evaluator without providing queries"
-            )
-        if not documents:
-            raise ValueError(
-                "You are trying to use a Retrieval Evaluator without providing documents"
-            )
         self.config = config
-        self.queries = queries
-        self.documents = documents
         self.llm_provider = llm_provider
         self.output_file = (
             config.output_file if config.output_file else "retrieval_evaluator.log"
         )
 
-    def run(self) -> Dict[str, Dict[str, str]]:
+    def run(
+        self, queries: List[Query], documents: Dict[str, List[Document]]
+    ) -> Dict[str, Dict[str, str]]:
         """Evaluate all the documents for each query"""
         use_progress_bar = self.config.verbose
         skip_docs = self.__get_skip_docs()
         answers: Dict[str, Dict[str, str]] = defaultdict(lambda: dict())
-        for qid in tqdm(
-            self.queries,
+        for query in tqdm(
+            queries,
             desc="Annotating Documents",
             disable=not use_progress_bar,
             ncols=100,
             leave=False,
             position=0,
         ):
-            for did in tqdm(
-                self.documents[qid],
-                desc=qid,
+            for document in tqdm(
+                documents[query.qid],
+                desc=query.qid,
                 disable=not use_progress_bar,
                 ncols=100,
                 leave=False,
                 position=1,
             ):
-                if (qid, did) in skip_docs:
-                    logging.debug(f"Skipping {qid} {did}")
+                if (query.qid, document.did) in skip_docs:
+                    logging.debug(f"Skipping {query.qid} {document.did}")
                     continue
 
                 try:
-                    answer_dict = self.evaluate_single_sample(qid, did)
+                    answer_dict = self.evaluate_single_sample(query, document)
                 except (RetryError, ValueError):
                     continue
                 self._dump_response(answer_dict)
 
-                answers[qid][did] = answer_dict["answer"]
+                answers[query.qid][document.did] = answer_dict["answer"]
         return answers
 
-    def evaluate_single_sample(self, qid: str, did: str) -> Dict[str, Any]:
+    def evaluate_single_sample(
+        self, query: Query, document: Document
+    ) -> Dict[str, Any]:
         """Evaluates a single query-document pair. Returns the raw answer and the processed answer."""
-        message = self._build_message(qid, did)
+        qid = query.qid
+        did = document.did
+        message = self._build_message(query.query, document.text)
         try:
             raw_answer = self.llm_provider(message)
         except RetryError as e:
@@ -105,8 +97,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             "answer": answer,
         }
 
-    @abstractmethod
-    def _build_message(self, qid: str, did: str) -> str | List[Dict[str, str]]:
+    def _build_message(self, query: str, document: str) -> str | List[Dict[str, str]]:
         """Builds the prompt to send to the LLM."""
         raise NotImplementedError
 
@@ -177,9 +168,6 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             writer = csv.DictWriter(f, fieldnames=self.output_columns)
             writer.writerow(answer_dict)
 
-    def __len__(self) -> int:
-        return len(self.queries)
-
     @staticmethod
     def _load_from_csv(file_path: str) -> Dict[str, str]:
         """extra content from a CSV file"""
@@ -213,8 +201,8 @@ class BaseRetrievalEvaluator(BaseEvaluator):
 
     @classmethod
     def from_config(cls, config: BaseEvaluatorConfig, llm_provider):
-        queries = cls._load_queries(config.query_path)
-        documents = cls.load_documents(config.documents_path, queries)
+        queries = cls.load_queries_from_file(config.query_path)
+        documents = cls.load_documents_from_file(config.documents_path, queries)
         return cls(config, queries, documents, llm_provider)
 
     @classmethod

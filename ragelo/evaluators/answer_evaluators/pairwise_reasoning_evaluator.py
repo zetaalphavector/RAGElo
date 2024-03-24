@@ -15,7 +15,7 @@ from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
     BaseAnswerEvaluator,
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
-from ragelo.types import Query
+from ragelo.types import Answer, Query
 from ragelo.types.configurations import AnswerEvaluatorConfig
 
 
@@ -23,11 +23,27 @@ from ragelo.types.configurations import AnswerEvaluatorConfig
 class PairwiseWithReasoningEvaluator(BaseAnswerEvaluator):
     """A evaluator that evaluates RAG-based answers pairwise, with document reasoning"""
 
-    prompt = """Please act as an impartial judge and evaluate the quality of the responses provided by two AI assistants tasked to answer the question displayed below, based on a set of documents retrieved by a search engine.
-You should choose the assistant that best answers the user question based on a set of reference documents that may or not be relevant.
-Answers cite documents using square brackets.  For each reference document, you will be provided with a reasoning explaining why the document is or is not relevant.
-Your evaluation should consider factors such as the correctness, helpfulness, completeness, accuracy, depth, and level of detail of their responses. Details are only useful if they answer the user question. If an answers contains non-relevant details, it should not be preferred over one that only use relevant information.
-Begin your evaluation by explaining why each answer correctly answers the user question. Then, you should compare the two responses and provide a short explanation on their differences. Avoid any position biases and ensure that the order in which the responses were presented does not influence your decision. Do not allow the length of the responses to influence your evaluation. Be as objective as possible. After providing your explanation, output your final verdict by strictly following this format: "[[A]]" if assistant A is better, "[[B]]" if assistant B is better, and "[[C]]" for a tie.
+    prompt = """
+Please act as an impartial judge and evaluate the quality of the responses provided \
+by two AI assistants tasked to answer the question displayed below, based on a set \
+of documents retrieved by a search engine.
+You should choose the assistant that best answers the user question based on a set \
+of reference documents that may or not be relevant.
+Answers cite documents using square brackets. For each reference document, you will \
+be provided with a reasoning explaining why the document is or is not relevant.
+Your evaluation should consider factors such as the correctness, helpfulness, \
+completeness, accuracy, depth, and level of detail of their responses.\
+Details are only useful if they answer the user question. If an answer \
+contains non-relevant details, it should not be preferred over one that only \
+use relevant information.
+Begin your evaluation by explaining why each answer correctly answers the user \
+question. Then, you should compare the two responses and provide a short explanation \
+on their differences. Avoid any position biases and ensure that the order in which \
+the responses were presented does not influence your decision. Do not allow the \
+length of the responses to influence your evaluation. Be as objective as possible.
+After providing your explanation, output your final verdict by strictly following \
+this format: "[[A]]" if assistant A is better, "[[B]]" if assistant B is better, \
+and "[[C]]" for a tie.
 
 [User Question]
 {query}
@@ -41,17 +57,15 @@ Begin your evaluation by explaining why each answer correctly answers the user q
 
 [The Start of Assistant B's Answer]
 {answer_b}
-[The End of Assistant B's Answer]"""  # noqa: E501
+[The End of Assistant B's Answer]
+""".strip()
 
     def __init__(
         self,
         config: AnswerEvaluatorConfig,
-        queries: Dict[str, Query],
-        answers: Dict[str, Dict[str, str]],
-        agents: Set[str],
         llm_provider: BaseLLMProvider,
     ):
-        super().__init__(config, queries, answers, agents, llm_provider)
+        super().__init__(config, llm_provider)
         if not self.config.output_file:
             self.output_file = "pairwise_reasoning_evaluator.csv"
         else:
@@ -64,13 +78,11 @@ Begin your evaluation by explaining why each answer correctly answers the user q
         self.reasoning = self._load_reasoning(self.config.reasoning_file)
         self.evaluations: List[Dict[str, str]] = []
 
-    # def evaluate_single_answer(self, qid: str)
-
-    def run(self) -> List[Dict[str, str]]:
+    def run(self, queries: List[Query]) -> List[Dict[str, str]]:
         use_progress_bar = self.config.verbose
         unparsed_answers = 0
         skip_tuples = set()
-        prompts = self.__create_all_prompts(use_progress_bar)
+        prompts = self.__create_all_prompts(queries, use_progress_bar)
         if os.path.exists(self.output_file) and not self.config.force:
             for line in open(self.output_file):
                 data = json.loads(line)
@@ -178,10 +190,11 @@ Begin your evaluation by explaining why each answer correctly answers the user q
             tqdm.write(f"{qid}: {agent_a} vs {agent_b}")
             tqdm.write(f"Evaluator full answer: {answer}")
 
-    def __generate_random_games(self) -> List[Tuple[str, str]]:
+    def __generate_random_games(self, answers: List[Answer]) -> List[Tuple[str, str]]:
         """Creates all prompts necessary for running the evaluator"""
-        total_agents = len(self.agents)
-        _agents = list(self.agents)
+        all_agents = set([a.agent for a in answers])
+        total_agents = len(all_agents)
+        _agents = list(all_agents)
         if self.k == -1:
             logging.info("Creating all possible games...")
             pairs = []
@@ -229,30 +242,40 @@ Begin your evaluation by explaining why each answer correctly answers the user q
         return pairs
 
     def __create_all_prompts(
-        self, use_progress_bar: bool = True
+        self,
+        answers: List[Answer],
+        queries: Dict[str, Query],
+        use_progress_bar: bool = True,
     ) -> List[Dict[str, str]]:
         prompts = []
-        random_pairs = self.__generate_random_games()
+        random_pairs = self.__generate_random_games(answers)
+        answers_per_agent = defaultdict(lambda: defaultdict(lambda: str()))
+        queries_per_agent = defaultdict(lambda: set())
+        for answer in answers:
+            answers_per_agent[answer.agent][answer.qid] = answer.text
+            queries_per_agent[answer.agent].add(answer.qid)
+        all_qids = list(set(queries.keys()))
+
         for qid in tqdm(
-            self.answers,
+            all_qids,
             desc="Creating prompts",
             disable=not use_progress_bar,
             ncols=100,
         ):
-            query = self.queries[qid].query
+            query = queries[qid].query
             for a, b in random_pairs:
-                if a not in self.answers[qid] or b not in self.answers[qid]:
+                # if either of these agent has not answered this query, skip
+                if qid not in queries_per_agent[a] or qid not in queries_per_agent[b]:
                     continue
+                # Reasonings for the relevance of all documents
                 reasoning = "\n".join(
-                    list(
-                        [
-                            " ".join([f"[{a}]", b])
-                            for (a, b) in self.reasoning[qid].items()
-                        ]
-                    )
+                    [
+                        " ".join([f"[{idx}]", r])
+                        for (idx, r) in self.reasoning[qid].items()
+                    ]
                 )
-                ans_a = self.answers[qid][a].strip()
-                ans_b = self.answers[qid][b].strip()
+                ans_a = answers_per_agent[a][qid]
+                ans_b = answers_per_agent[b][qid]
                 prompt = self.prompt.format(
                     query=query, documents=reasoning, answer_a=ans_a, answer_b=ans_b
                 )
@@ -260,19 +283,6 @@ Begin your evaluation by explaining why each answer correctly answers the user q
                     {"query_id": qid, "agent_a": a, "agent_b": b, "prompt": prompt}
                 )
         return prompts
-
-    def _check_validity(self):
-        total_agents = len(self.agents)
-        if total_agents < 2:
-            raise ValueError(f"Need at least 2 agents, found {total_agents}")
-        logging.info(f"Loaded {total_agents} agents")
-        if (total_agents * (total_agents - 1)) < self.k:
-            possible_games = total_agents * (total_agents - 1)
-            logging.warning(
-                f"Requested {self.k} games but only {possible_games} are possible"
-            )
-            logging.warning(f"Will create {possible_games} games per query instead")
-            self.k = possible_games
 
     def __extract_relevant(self, answer: str) -> str:
         """Extracts the relevant part of an answer."""
@@ -288,8 +298,6 @@ Begin your evaluation by explaining why each answer correctly answers the user q
         reasoning: Dict[str, Dict[str, str]] = defaultdict(lambda: dict())
         reasoning_read = 0
         for line in csv.DictReader(open(reasoning_path)):
-            if line["query_id"] not in self.queries:
-                continue
             reasoning_read += 1
             reasoning[line["query_id"]][line["did"]] = line["answer"]
         logging.info(f"Loaded {reasoning_read} reasonings")

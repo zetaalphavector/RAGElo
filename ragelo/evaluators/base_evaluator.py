@@ -28,7 +28,7 @@ class BaseEvaluator(ABC):
         raise NotImplementedError
 
     @staticmethod
-    def _load_queries(queries_path: str) -> Dict[str, Query]:
+    def load_queries_from_file(queries_path: str) -> Dict[str, Query]:
         """Loads the queries from a CSV file and returns a dictionary with the queries.
         The key is the query id and the value is the query object."""
         queries = {}
@@ -45,9 +45,10 @@ class BaseEvaluator(ABC):
         return queries
 
     @staticmethod
-    def load_documents(
+    def load_documents_from_file(
         documents_path: str, queries: Optional[Dict[str, Query]] = None
     ) -> Dict[str, Dict[str, Document]]:
+        # TODO: Change to read a runfile format and a json with the documents
         documents: Dict[str, Dict[str, Document]] = {}
         documents_read = 0
         if not os.path.isfile(documents_path):

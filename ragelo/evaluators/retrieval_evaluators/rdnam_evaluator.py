@@ -8,6 +8,7 @@ import logging
 from typing import Dict
 
 import numpy as np
+from tenacity import RetryError
 
 from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     BaseRetrievalEvaluator,
@@ -69,12 +70,10 @@ Each rater used their own independent judgement."""
     def __init__(
         self,
         config: RDNAMEvaluatorConfig,
-        queries: Dict[str, Query],
-        documents: Dict[str, Dict[str, Document]],
         llm_provider: BaseLLMProvider,
     ):
         """Initializes an evaluator based on RDNAM framework."""
-        super().__init__(config, queries, documents, llm_provider)
+        super().__init__(config, llm_provider)
 
         self.__role = self.config.role if self.config.role else ""
         self.__use_narratives = False
@@ -99,11 +98,31 @@ Each rater used their own independent judgement."""
             self.prompt += "\n{{"
         self.multiple = self.config.multiple
 
-    def _build_message(
-        self,
-        qid: str,
-        did: str,
-    ) -> str:
+    def evaluate_single_sample(
+        self, query: Query, document: Document
+    ) -> Dict[str, str]:
+        """Evaluates a single query-document pair. Returns the raw answer and the processed answer."""
+        qid = query.qid
+        did = document.did
+        message = self._build_message(query.query, document.text, qid, did)
+        try:
+            raw_answer = self.llm_provider(message)
+        except RetryError as e:
+            logging.warning(f"Failed to FETCH answers for {qid} {did}")
+            raise e
+        try:
+            answer = self._process_answer(raw_answer)
+        except ValueError as e:
+            logging.warning(f"Failed to PARSE answer for {qid} {did}")
+            raise e
+        return {
+            "qid": qid,
+            "did": did,
+            "raw_answer": raw_answer,
+            "answer": answer,
+        }
+
+    def _build_message(self, query: str, document: str, qid: str, did: str) -> str:
         if self.__use_narratives and qid not in self.__narratives:
             logging.warning(f"No narrative found for {qid}. Will not use it")
         if self.__use_description and qid not in self.descriptions:
@@ -122,8 +141,6 @@ Each rater used their own independent judgement."""
         narrative_description_str = self.NARRATIVE_DESCRIPTION_PROMPT.format(
             narrative=narrative, description=description
         )
-        query = self.queries[qid]
-        document = self.documents[qid][did]
 
         example = (
             self.ASPECTS_EXAMPLE if self.__aspects_prompt else self.DEFAULT_EXAMPLE
