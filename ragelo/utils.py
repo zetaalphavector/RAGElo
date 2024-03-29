@@ -38,7 +38,7 @@ def load_queries_from_csv(
 
 def load_documents_from_csv(
     documents_path: str,
-    queries: dict[str, Query],
+    queries: dict[str, Query] | str,
     query_id_col: str = "query_id",
     document_id_col: str = "doc_id",
     document_text_col: str = "document_text",
@@ -64,6 +64,8 @@ def load_documents_from_csv(
     documents_read = 0
     if not os.path.isfile(documents_path):
         raise FileNotFoundError(f"Documents file {documents_path} not found")
+    if isinstance(queries, str):
+        queries = load_queries_from_csv(queries)
 
     for line in csv.DictReader(open(documents_path)):
         qid = line[query_id_col].strip()
@@ -82,7 +84,7 @@ def load_documents_from_csv(
 def load_documents_from_run_file(
     run_file_path: str,
     documents_path: str,
-    queries: dict[str, Query],
+    queries: dict[str, Query] | str,
     document_id_col: str = "document_id",
     document_text_col: str = "document_text",
 ) -> dict[str, dict[str, Document]]:
@@ -95,6 +97,8 @@ def load_documents_from_run_file(
         raise FileNotFoundError(f"Documents file {documents_path} not found")
     # A dictionary with all queries associated with each document
     query_per_doc = defaultdict(set)
+    if isinstance(queries, str):
+        queries = load_queries_from_csv(queries)
 
     for _line in open(run_file_path, "r"):
         qid, _, did, _, _, _ = _line.strip().split()
@@ -117,7 +121,7 @@ def load_documents_from_run_file(
 
 def load_answers_from_csv(
     answers_path: str,
-    queries: dict[str, Query],
+    queries: dict[str, Query] | str,
     query_id_col: str = "query_id",
     agent_col: str = "agent",
     answer_col: str = "answer",
@@ -134,6 +138,10 @@ def load_answers_from_csv(
         dict[str, list[AgentAnswer]]: Dictionary with the answers for each query.
     """
     answers: dict[str, list[AgentAnswer]] = defaultdict(list)
+    if not os.path.isfile(answers_path):
+        raise FileNotFoundError(f"Answers file {answers_path} not found")
+    if isinstance(queries, str):
+        queries = load_queries_from_csv(queries)
     for line in csv.DictReader(open(answers_path)):
         qid = line[query_id_col]
         if qid not in queries:

@@ -1,3 +1,4 @@
+from ragelo import get_answer_evaluator
 from ragelo.evaluators.answer_evaluators.pairwise_reasoning_evaluator import (
     PairwiseWithReasoningEvaluator,
 )
@@ -7,11 +8,11 @@ class TestPairwiseWithReasoningEvaluator:
     def test_run(
         self,
         llm_provider_answer_mock,
-        answer_eval_config,
+        pairwise_answer_eval_config,
         answers_test,
     ):
         evaluator = PairwiseWithReasoningEvaluator.from_config(
-            config=answer_eval_config, llm_provider=llm_provider_answer_mock
+            config=pairwise_answer_eval_config, llm_provider=llm_provider_answer_mock
         )
         answers = evaluator.run(answers_test)
         assert len(answers) == 4
@@ -23,3 +24,12 @@ class TestPairwiseWithReasoningEvaluator:
         assert len(llm_call_args) == 4
         assert isinstance(llm_call_args[0][0][0], str)
         assert llm_call_args[0][0][0] != llm_call_args[1][0][0]
+
+
+def test_get_by_name(llm_provider_answer_mock, pairwise_answer_eval_config):
+    evaluator = get_answer_evaluator(
+        "pairwise_reasoning",
+        llm_provider_answer_mock,
+        reasoning_file=pairwise_answer_eval_config.reasoning_file,
+    )
+    assert isinstance(evaluator, PairwiseWithReasoningEvaluator)

@@ -1,9 +1,9 @@
+from ragelo import get_retrieval_evaluator
 from ragelo.evaluators.retrieval_evaluators import (
     BaseRetrievalEvaluator,
     DomainExpertEvaluator,
     RDNAMEvaluator,
     ReasonerEvaluator,
-    RetrievalEvaluatorFactory,
 )
 from ragelo.types import Document
 
@@ -69,26 +69,21 @@ class TestRetrievalEvaluator:
         assert "🔎" in captured.out
 
     def test_get_by_name(self, llm_provider_mock, expert_retrieval_eval_config):
-        domain_expert_evaluator = RetrievalEvaluatorFactory.create(
+        domain_expert_evaluator = get_retrieval_evaluator(
             "domain_expert",
             llm_provider_mock,
             domain_long=expert_retrieval_eval_config.domain_long,
-            output_file="tests/data/output.csv",
         )
         assert isinstance(domain_expert_evaluator, DomainExpertEvaluator)
-        reasoner_evaluator = RetrievalEvaluatorFactory.create(
+        reasoner_evaluator = get_retrieval_evaluator(
             "reasoner",
             llm_provider_mock,
-            output_file="tests/data/output.csv",
         )
         assert isinstance(reasoner_evaluator, ReasonerEvaluator)
-        rdna_evaluator = RetrievalEvaluatorFactory.create(
-            "RDNAM",
-            llm_provider_mock,
-            output_file="tests/data/output.csv",
-        )
+        rdna_evaluator = get_retrieval_evaluator("RDNAM", llm_provider_mock)
+
         assert isinstance(rdna_evaluator, RDNAMEvaluator)
-        custom_evaluator = RetrievalEvaluatorFactory.create(
+        custom_evaluator = get_retrieval_evaluator(
             "custom_prompt",
             llm_provider_mock,
             output_file="tests/data/output.csv",

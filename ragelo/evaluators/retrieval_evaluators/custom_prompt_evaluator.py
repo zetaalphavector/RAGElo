@@ -3,11 +3,8 @@ from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     RetrievalEvaluatorFactory,
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
-from ragelo.types import Document
-from ragelo.types.configurations import (
-    CustomPromptEvaluatorConfig,
-    RetrievalEvaluatorTypes,
-)
+from ragelo.types import Document, RetrievalEvaluatorTypes
+from ragelo.types.configurations import CustomPromptEvaluatorConfig
 
 
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.CUSTOM_PROMPT)

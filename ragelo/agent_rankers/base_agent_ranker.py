@@ -4,7 +4,7 @@ import csv
 import json
 from abc import abstractmethod
 from collections import defaultdict
-from typing import Dict, List, Tuple, Type
+from typing import Type
 
 from ragelo.logger import logger
 from ragelo.types import AgentRankerConfig
@@ -12,21 +12,24 @@ from ragelo.types import AgentRankerConfig
 
 class AgentRanker:
     config: AgentRankerConfig
-    evaluations: List[Tuple[str, str, str]]
+    evaluations: list[tuple[str, str, str]]
     ranking: defaultdict
+    output_file: str = "agents_ranking.csv"
+    name: str = "Agent Ranker"
 
     def __init__(
         self,
         config: AgentRankerConfig,
-        evaluations: List[Tuple[str, str, str]],
+        evaluations: list[tuple[str, str, str]],
     ):
         self.config = config
         self.evaluations = evaluations
         self.ranking = defaultdict(list)
-        self.output_file = config.output_file
+        if config.output_file is not None:
+            self.output_file = config.output_file
 
     @staticmethod
-    def load_evaluations(answers_file: str) -> List[Tuple[str, str, str]]:
+    def load_evaluations(answers_file: str) -> list[tuple[str, str, str]]:
         evaluations = []
         for line in open(answers_file, "r"):
             data = json.loads(line)
@@ -47,7 +50,7 @@ class AgentRanker:
         raise NotImplementedError
 
     @abstractmethod
-    def get_agents_ratings(self) -> Dict[str, float]:
+    def get_agents_ratings(self) -> dict[str, float]:
         """Returns the score of all players"""
         raise NotImplementedError
 
@@ -86,7 +89,7 @@ class AgentRanker:
 
 
 class AgentRankerFactory:
-    registry: Dict[str, Type[AgentRanker]] = {}
+    registry: dict[str, Type[AgentRanker]] = {}
 
     @classmethod
     def register(cls, name: str):

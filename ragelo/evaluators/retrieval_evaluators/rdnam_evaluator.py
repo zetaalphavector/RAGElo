@@ -5,7 +5,6 @@ https://arxiv.org/abs/2309.10621
 
 import json
 import logging
-from typing import Dict
 
 import numpy as np
 from tenacity import RetryError
@@ -15,8 +14,8 @@ from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     RetrievalEvaluatorFactory,
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
-from ragelo.types import Document
-from ragelo.types.configurations import RDNAMEvaluatorConfig, RetrievalEvaluatorTypes
+from ragelo.types import Document, RetrievalEvaluatorTypes
+from ragelo.types.configurations import RDNAMEvaluatorConfig
 
 
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.RDNAM)
@@ -66,6 +65,7 @@ Each rater used their own independent judgement."""
     config: RDNAMEvaluatorConfig
     output_columns = ["qid", "did", "raw_answer", "answer"]
     scoring_key = "answer"
+    output_file = "rdnam_evaluations.csv"
 
     def __init__(
         self,
@@ -80,12 +80,12 @@ Each rater used their own independent judgement."""
         self.__use_description = False
 
         if self.config.narrative_file:
-            self.__narratives: Dict[str, str] = self._load_from_csv(
+            self.__narratives: dict[str, str] = self._load_from_csv(
                 self.config.narrative_file
             )
             self.__use_narratives = True
         if self.config.description_file:
-            self.descriptions: Dict[str, str] = self._load_from_csv(
+            self.descriptions: dict[str, str] = self._load_from_csv(
                 self.config.description_file
             )
             self.__use_description = True
@@ -98,7 +98,7 @@ Each rater used their own independent judgement."""
             self.prompt += "\n{{"
         self.multiple = self.config.multiple
 
-    def evaluate_single_sample(self, document: Document) -> Dict[str, str | int]:
+    def evaluate_single_sample(self, document: Document) -> dict[str, str | int]:
         """Evaluates a single query-document pair. Returns the raw answer and the processed answer."""
 
         message = self._build_message(document)

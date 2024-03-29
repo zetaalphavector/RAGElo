@@ -1,7 +1,7 @@
 """Evaluator with a domain expert persona"""
 
 import logging
-from typing import Any, Dict, List
+from typing import Any
 
 from tenacity import RetryError
 
@@ -10,11 +10,8 @@ from ragelo.evaluators.retrieval_evaluators import (
     RetrievalEvaluatorFactory,
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
-from ragelo.types import Document
-from ragelo.types.configurations import (
-    DomainExpertEvaluatorConfig,
-    RetrievalEvaluatorTypes,
-)
+from ragelo.types import Document, RetrievalEvaluatorTypes
+from ragelo.types.configurations import DomainExpertEvaluatorConfig
 
 
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.DOMAIN_EXPERT)
@@ -86,8 +83,9 @@ Please only answer with a single number.
     COMPANY_PROMPT_2 = " of {company}"
     DOMAIN_SHORT = " but it also serves some of your external users like {domain_short}"
     config: DomainExpertEvaluatorConfig
-    output_columns: List[str] = ["qid", "did", "reasoning", "score"]
+    output_columns: list[str] = ["qid", "did", "reasoning", "score"]
     scoring_key: str = "score"
+    output_file: str = "domain_expert_evaluations.csv"
 
     def __init__(
         self,
@@ -137,7 +135,7 @@ Please only answer with a single number.
         )
         return reason_prompt
 
-    def evaluate_single_sample(self, document: Document) -> Dict[str, Any]:
+    def evaluate_single_sample(self, document: Document) -> dict[str, Any]:
         """Processes a single pair of qid, did in a two-shot manner"""
         query = document.query
         qid = query.qid

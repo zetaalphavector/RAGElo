@@ -1,29 +1,18 @@
 from dataclasses import dataclass, field
-from enum import Enum
 from typing import List, Optional
 
 
-class RetrievalEvaluatorTypes(str, Enum):
-    """Enum that contains the names of the available retrieval evaluators"""
-
-    CUSTOM_PROMPT = "custom_prompt"
-    DOMAIN_EXPERT = "domain_expert"
-    FEW_SHOT = "few_shot"
-    RDNAM = "RDNAM"
-    REASONER = "reasoner"
-
-
 @dataclass
-class LLMProviderConfiguration:
+class LLMProviderConfig:
     api_key: str
 
 
-@dataclass(kw_only=True)
-class OpenAIConfiguration(LLMProviderConfiguration):
-    openai_org: Optional[str] = None
-    openai_api_type: Optional[str] = None
-    openai_api_base: Optional[str] = None
-    openai_api_version: Optional[str] = None
+@dataclass
+class OpenAIConfiguration(LLMProviderConfig):
+    org: Optional[str] = None
+    api_type: Optional[str] = None
+    api_base: Optional[str] = None
+    api_version: Optional[str] = None
     model_name: str = "gpt-3.5-turbo"
 
 
@@ -195,21 +184,28 @@ class RDNAMEvaluatorConfig(BaseEvaluatorConfig):
     )
 
 
-@dataclass(kw_only=True)
-class AnswerEvaluatorConfig(BaseEvaluatorConfig):
+@dataclass
+class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
     answers_file: str = field(
         default="data/answers.csv", metadata={"help": "Path to the answers file"}
     )
     reasoning_file: Optional[str] = field(
-        default=None, metadata={"help": "Path to the reasoning file"}
+        default=None,
+        metadata={"help": "CSV file with the reasoning for each retrieved document"},
     )
+
+
+@dataclass
+class PairWiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
+    """Configuration for the pairwise evaluator."""
+
     bidirectional: bool = field(
         default=False,
         metadata={"help": "Wether or not to run each game in both directions"},
     )
     k: int = field(
         default=100,
-        metadata={"help": "Maximum number of games to run"},
+        metadata={"help": "Maximum number of pairwise comparisons to generate"},
     )
 
 

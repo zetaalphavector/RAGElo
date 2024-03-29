@@ -1,6 +1,7 @@
 """Base model for dealing with answer evaluators"""
 
 import csv
+import dataclasses
 import logging
 import os
 from abc import abstractmethod
@@ -9,30 +10,31 @@ from typing import Any, Callable, Optional, Type, get_type_hints
 from tqdm import tqdm
 
 from ragelo.evaluators.base_evaluator import BaseEvaluator
-from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
+from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
 from ragelo.logger import logger
-from ragelo.types import AgentAnswer
-from ragelo.types.configurations import AnswerEvaluatorConfig
+from ragelo.types import AgentAnswer, AnswerEvaluatorTypes
+from ragelo.types.configurations import BaseAnswerEvaluatorConfig
 
 
 class BaseAnswerEvaluator(BaseEvaluator):
     output_columns = ["qid", "did", "raw_answer", "answer"]
+    config: BaseAnswerEvaluatorConfig
+    output_file: str = "answers_evaluations.csv"
 
     def __init__(
         self,
-        config: AnswerEvaluatorConfig,
+        config: BaseAnswerEvaluatorConfig,
         llm_provider: BaseLLMProvider,
     ):
-        if not config.output_file:
-            self.output_file = "answers_evaluator.log"
-        else:
+        self.config = config
+        self.llm_provider = llm_provider
+        if config.output_file is not None:
             self.output_file = config.output_file
 
-        self.llm_provider = llm_provider
-        self.config = config
-
     @classmethod
-    def from_config(cls, config: AnswerEvaluatorConfig, llm_provider: BaseLLMProvider):
+    def from_config(
+        cls, config: BaseAnswerEvaluatorConfig, llm_provider: BaseLLMProvider
+    ):
         return cls(config, llm_provider)
 
     @abstractmethod
@@ -89,15 +91,15 @@ class BaseAnswerEvaluator(BaseEvaluator):
             tqdm.write("")
 
     @classmethod
-    def get_config_class(cls) -> Type[AnswerEvaluatorConfig]:
+    def get_config_class(cls) -> Type[BaseAnswerEvaluatorConfig]:
         return get_type_hints(cls)["config"]
 
 
 class AnswerEvaluatorFactory:
-    registry: dict[str, Type[BaseAnswerEvaluator]] = {}
+    registry: dict[AnswerEvaluatorTypes | str, Type[BaseAnswerEvaluator]] = {}
 
     @classmethod
-    def register(cls, name: str) -> Callable:
+    def register(cls, name: AnswerEvaluatorTypes) -> Callable:
         def inner_wrapper(wrapped_class: Type[BaseAnswerEvaluator]):
             if name in cls.registry:
                 logger.warning(f"Overwriting {name} in registry")
@@ -110,14 +112,37 @@ class AnswerEvaluatorFactory:
     def create(
         cls,
         evaluator_name: str,
-        llm_provider: BaseLLMProvider,
-        config: Optional[AnswerEvaluatorConfig] = None,
+        llm_provider: BaseLLMProvider | str,
+        config: Optional[BaseAnswerEvaluatorConfig] = None,
         **kwargs,
-    ):
+    ) -> BaseAnswerEvaluator:
         if evaluator_name.lower() not in cls.registry:
             raise ValueError(f"Unknown evaluator {evaluator_name}")
+        if isinstance(llm_provider, str):
+            llm_provider_instance = get_llm_provider(llm_provider, **kwargs)
+        else:
+            llm_provider_instance = llm_provider
         if config is None:
             class_ = cls.registry[evaluator_name]
             type_config = class_.get_config_class()
+            valid_keys = [field.name for field in dataclasses.fields(type_config)]
+            valid_args = {k: v for k, v in kwargs.items() if k in valid_keys}
+            config = type_config(**valid_args)
             config = type_config(**kwargs)
-        return cls.registry[evaluator_name.lower()].from_config(config, llm_provider)
+        return cls.registry[evaluator_name.lower()].from_config(
+            config, llm_provider_instance
+        )
+
+
+def get_answer_evaluator(
+    evaluator_name: AnswerEvaluatorTypes | str,
+    llm_provider: BaseLLMProvider | str,
+    config: Optional[BaseAnswerEvaluatorConfig] = None,
+    **kwargs,
+) -> BaseAnswerEvaluator:
+    return AnswerEvaluatorFactory.create(
+        evaluator_name,
+        llm_provider=llm_provider,
+        config=config,
+        **kwargs,
+    )

@@ -9,10 +9,10 @@ from openai.resources.chat.completions import Completions
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.llm_providers.openai_client import OpenAIConfiguration
 from ragelo.types.configurations import (
-    AnswerEvaluatorConfig,
     BaseEvaluatorConfig,
     DomainExpertEvaluatorConfig,
-    LLMProviderConfiguration,
+    LLMProviderConfig,
+    PairWiseEvaluatorConfig,
     RDNAMEvaluatorConfig,
 )
 from ragelo.utils import (
@@ -41,16 +41,17 @@ def answers_test(queries_test):
 def openai_client_config():
     return OpenAIConfiguration(
         api_key="fake key",
-        openai_org="fake org",
-        openai_api_type="open_ai",
-        openai_api_base=None,
-        openai_api_version=None,
+        org="fake org",
+        api_type="open_ai",
+        api_base=None,
+        api_version=None,
+        model_name="fake model",
     )
 
 
 @pytest.fixture
 def llm_provider_config():
-    return LLMProviderConfiguration(
+    return LLMProviderConfig(
         api_key="fake key",
     )
 
@@ -82,10 +83,8 @@ def retrieval_eval_config():
 
 
 @pytest.fixture
-def answer_eval_config():
-    return AnswerEvaluatorConfig(
-        # answers_file="tests/data/answers.csv",
-        # query_path="tests/data/queries.csv",
+def pairwise_answer_eval_config():
+    return PairWiseEvaluatorConfig(
         output_file="tests/data/output_answers.csv",
         reasoning_file="tests/data/reasonings.csv",
         force=True,
@@ -128,7 +127,7 @@ class MockLLMProvider(BaseLLMProvider):
         self.config = config
 
     @classmethod
-    def from_configuration(cls, config: LLMProviderConfiguration):
+    def from_configuration(cls, config: LLMProviderConfig):
         return cls(config)
 
     def inner_call(self, prompt) -> str:

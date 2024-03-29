@@ -3,7 +3,7 @@
 import dataclasses
 import inspect
 from dataclasses import fields
-from typing import Any, Callable, Dict, get_type_hints
+from typing import Any, Callable, get_type_hints
 
 from typer.models import ArgumentInfo, OptionInfo, ParameterInfo, ParamMeta
 
@@ -19,7 +19,7 @@ arguments = {
 }
 
 
-def get_params_from_function(func: Callable[..., Any]) -> Dict[str, ParamMeta]:
+def get_params_from_function(func: Callable[..., Any]) -> dict[str, ParamMeta]:
     signature = inspect.signature(func)
 
     type_hints = get_type_hints(func)

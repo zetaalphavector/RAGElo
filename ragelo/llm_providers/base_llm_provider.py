@@ -1,29 +1,39 @@
 """A LLM provider is a class that can be called with a string and returns with another string as an answer from an LLM model."""
 
+import dataclasses
 import logging
 import os
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional
+from typing import Optional, Type, get_type_hints
 
-from ragelo.types import LLMProviderConfiguration
+from ragelo.types import LLMProviderConfig, LLMProviderTypes
 
 
 class BaseLLMProvider(ABC):
+    config: LLMProviderConfig
+
+    def __init__(self, config: LLMProviderConfig):
+        self.config = config
+
     @abstractmethod
-    def __call__(self, prompt: str | List[Dict[str, str]]) -> str:
+    def __call__(self, prompt: str | list[dict[str, str]]) -> str:
         """Submits a single query-document pair to the LLM and returns the answer."""
         raise NotImplementedError
 
     @classmethod
-    def from_config(cls, config: LLMProviderConfiguration):
-        """Inits the LLM provider from a configuration object."""
-        raise NotImplementedError
-
-    @classmethod
-    def from_credentials_file(
-        cls, credentials_file: Optional[str], model_name: str
+    def from_config(
+        cls,
+        config: LLMProviderConfig,
     ) -> "BaseLLMProvider":
         """Inits the LLM provider from a credentials file."""
+        return cls(config)
+
+    @classmethod
+    def get_config_class(cls) -> Type[LLMProviderConfig]:
+        return get_type_hints(cls)["config"]
+
+    @staticmethod
+    def get_api_instance(config: LLMProviderConfig):
         raise NotImplementedError
 
 
@@ -41,33 +51,48 @@ def set_credentials_from_file(credentials_file: str):
 
 
 class LLMProviderFactory:
-    registry: Dict[str, BaseLLMProvider] = {}
+    registry: dict[str | LLMProviderTypes, Type[BaseLLMProvider]] = {}
 
     @classmethod
-    def register(cls, name: str):
+    def register(cls, name: LLMProviderTypes):
         """Registers a new LLM provider"""
 
-        def decorator(llm_provider: BaseLLMProvider):
-            cls.registry[name] = llm_provider
-            return llm_provider
+        def inner_wrapper(
+            wrapped_class: Type[BaseLLMProvider],
+        ) -> Type[BaseLLMProvider]:
+            cls.registry[name] = wrapped_class
+            return wrapped_class
 
-        return decorator
-
-    @classmethod
-    def create(cls, name: str, config: LLMProviderConfiguration) -> BaseLLMProvider:
-        """Creates a new LLM provider"""
-        if name not in cls.registry:
-            raise ValueError(f"LLM provider {name} not found")
-        return cls.registry[name].from_config(config)
+        return inner_wrapper
 
     @classmethod
-    def create_from_credentials_file(
+    def create(
         cls,
-        name: str,
-        credentials_file: Optional[str],
-        model_name: str,
+        name: LLMProviderTypes | str,
+        config: Optional[LLMProviderConfig] = None,
+        credentials_file: Optional[str] = None,
+        **kwargs,
     ) -> BaseLLMProvider:
         """Creates a new LLM provider"""
         if name not in cls.registry:
             raise ValueError(f"LLM provider {name} not found")
-        return cls.registry[name].from_credentials_file(credentials_file, model_name)
+        if credentials_file and os.path.isfile(credentials_file):
+            set_credentials_from_file(credentials_file)
+        if config is None:
+            class_ = cls.registry[name]
+            type_config = class_.get_config_class()
+            valid_keys = [field.name for field in dataclasses.fields(type_config)]
+            valid_args = {k: v for k, v in kwargs.items() if k in valid_keys}
+            config = type_config(**valid_args)
+        return cls.registry[name].from_config(config)
+
+
+def get_llm_provider(
+    name: str | LLMProviderTypes,
+    config: Optional[LLMProviderConfig] = None,
+    credentials_file: Optional[str] = None,
+    **kwargs,
+) -> BaseLLMProvider:
+    """Creates a new LLM provider"""
+    print(kwargs)
+    return LLMProviderFactory.create(name, config, credentials_file, **kwargs)

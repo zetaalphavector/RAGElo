@@ -16,18 +16,30 @@ This led us to develop a simple tool for tournament-style Elo ranking of LLM out
 
 
 ## ⚙️ Installation
+For using RAGElo as a Python library, install it using pip:
 
 ```bash
 pip install ragelo
 ```
 
-If you want to use RAGElo as a standalone CLI app, use the `[cli]` tag:
+If you want to (also) use RAGElo as a standalone CLI app, use the `[cli]` tag:
 
 ```bash
 pip install ragelo[cli]
 ```
+## 🚀 Library Quickstart
 
-## 🚀 Quickstart 
+To use RAGElo as a library. all you need to do is import RagELO, initialize an `Evaluator` and call either `evaluate_single_sample()` for evaluating a retrieved document or an LLM answer, or `run()` to run a batch_evaluation:
+```python
+from ragelo import RetrievalEvaluatorFactory
+
+evaluator = 
+
+evaluator = RetrievalEvaluatorFactory.create("custom_prompt")
+```
+
+
+## 🚀 CLI Quickstart 
 After installing RAGElo as a CLI app, you can run it with the following command:
 ```bash
 ragelo run-all queries.csv documents.csv answers.csv

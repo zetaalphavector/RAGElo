@@ -1,6 +1,7 @@
 from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     BaseRetrievalEvaluator,
     RetrievalEvaluatorFactory,
+    get_retrieval_evaluator,
 )
 from ragelo.evaluators.retrieval_evaluators.custom_prompt_evaluator import (
     CustomPromptEvaluator,

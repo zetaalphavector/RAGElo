@@ -14,15 +14,16 @@ from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
     BaseAnswerEvaluator,
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
-from ragelo.types import AgentAnswer
-from ragelo.types.configurations import AnswerEvaluatorConfig
+from ragelo.types import AgentAnswer, AnswerEvaluatorTypes
+from ragelo.types.configurations import PairWiseEvaluatorConfig
 
 
-@AnswerEvaluatorFactory.register("pairwise_reasoning")
+@AnswerEvaluatorFactory.register(AnswerEvaluatorTypes.PAIRWISE_REASONING)
 class PairwiseWithReasoningEvaluator(BaseAnswerEvaluator):
     """A evaluator that evaluates RAG-based answers pairwise, with document reasoning"""
 
     output_columns: list[str] = ["qid", "agent_a", "agent_b", "raw_answer", "answer"]
+    config: PairWiseEvaluatorConfig
     prompt = """
 Please act as an impartial judge and evaluate the quality of the responses provided \
 by two AI assistants tasked to answer the question displayed below, based on a set \
@@ -59,23 +60,20 @@ and "[[C]]" for a tie.
 {answer_b}
 [The End of Assistant B's Answer]
 """.strip()
+    output_file: str = "pairwise_answers_evaluations.csv"
 
     def __init__(
         self,
-        config: AnswerEvaluatorConfig,
+        config: PairWiseEvaluatorConfig,
         llm_provider: BaseLLMProvider,
     ):
         super().__init__(config, llm_provider)
-        if not self.config.output_file:
-            self.output_file = "pairwise_reasoning_evaluator.csv"
-        else:
-            self.output_file = self.config.output_file
         if not self.config.reasoning_file:
             raise ValueError("Reasoning file is required for PairwiseWithReasoning")
         self.k = self.config.k
         self.bidirectional = self.config.bidirectional
         self.pattern = re.compile(r"\[\[([^]]+)]].*$(?:(?!\[\[).)*", re.DOTALL)
-        self.reasoning = self.__load_reasonings(self.config.reasoning_file)
+        self.reasonings = self.__load_reasonings(self.config.reasoning_file)
 
     def run(self, answers: dict[str, list[AgentAnswer]]) -> list[dict[str, str]]:
         use_progress_bar = self.config.verbose
@@ -122,7 +120,7 @@ and "[[C]]" for a tie.
         agent_a_id = answer[0].agent
         agent_b_id = answer[1].agent
         reasoning = "\n".join(
-            [" ".join([f"[{idx}]", r]) for (idx, r) in self.reasoning[qid].items()]
+            [" ".join([f"[{idx}]", r]) for (idx, r) in self.reasonings[qid].items()]
         )
         answer_agent_a = answer[0].text
         answer_agent_b = answer[1].text
