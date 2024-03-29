@@ -8,7 +8,7 @@ import logging
 import os
 from abc import abstractmethod
 from collections import defaultdict
-from typing import Any, Callable, Dict, List, Set, Tuple, Type, get_type_hints
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, get_type_hints
 
 from tenacity import RetryError
 from tqdm.auto import tqdm
@@ -109,15 +109,17 @@ class BaseRetrievalEvaluator(BaseEvaluator):
     def __get_skip_docs(self) -> Set[Tuple[str, str]]:
         """Skips documents that have already been annotated"""
         skip_docs = set()
-        if os.path.isfile(self.output_file) and not self.config.force:
+        if self.config.force and os.path.isfile(self.output_file):
+            logging.warning(f"Removing existing {self.output_file}!")
+            os.remove(self.output_file)
+
+        if os.path.isfile(self.output_file):
             line: Dict[str, str]
             for line in csv.DictReader(
                 open(self.output_file), fieldnames=self.output_columns
             ):
                 skip_docs.add((line["qid"], line["did"]))
-        if self.config.force and os.path.isfile(self.output_file):
-            logging.warning(f"Removing existing {self.output_file}!")
-            os.remove(self.output_file)
+
         if len(skip_docs) > 0:
             logging.warning(
                 f"Skipping {len(skip_docs)} documents already annotated! "
@@ -125,7 +127,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             )
         return skip_docs
 
-    def _print_response(self, answer_dict: Dict[str, str]) -> None:
+    def _print_response(self, answer_dict: Dict[str, str]):
         if not self.config.verbose:
             return
         if self.config.rich_print:
@@ -152,11 +154,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             for key in answer_dict:
                 tqdm.write(f"{key.capitalize()}: {answer_dict[key]}")
 
-    def _dump_response(
-        self,
-        answer_dict: Dict[str, str],
-        file: str | None = None,
-    ) -> None:
+    def _dump_response(self, answer_dict: Dict[str, str], file: Optional[str] = None):
         output_file = file if file else self.output_file
         if not os.path.isfile(output_file):
             logging.debug(f"Creating new file {output_file}")

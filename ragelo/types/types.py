@@ -9,13 +9,13 @@ class Query:
 
 @dataclass
 class Document:
-    qid: str
+    query: Query
     did: str
     text: str
 
 
 @dataclass
-class Answer:
-    qid: str
+class AgentAnswer:
+    query: Query
     agent: str
     text: str

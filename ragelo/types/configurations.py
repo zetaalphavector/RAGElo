@@ -197,9 +197,9 @@ class RDNAMEvaluatorConfig(BaseEvaluatorConfig):
 
 @dataclass(kw_only=True)
 class AnswerEvaluatorConfig(BaseEvaluatorConfig):
-    answers_file: str = field(
-        default="data/answers.csv", metadata={"help": "Path to the answers file"}
-    )
+    # answers_file: str = field(
+    #     default="data/answers.csv", metadata={"help": "Path to the answers file"}
+    # )
     reasoning_file: Optional[str] = field(
         default=None, metadata={"help": "Path to the reasoning file"}
     )
