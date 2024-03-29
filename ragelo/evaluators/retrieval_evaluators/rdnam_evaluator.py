@@ -15,7 +15,7 @@ from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     RetrievalEvaluatorFactory,
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
-from ragelo.types import Document, Query
+from ragelo.types import Document
 from ragelo.types.configurations import RDNAMEvaluatorConfig, RetrievalEvaluatorTypes
 
 
@@ -98,7 +98,7 @@ Each rater used their own independent judgement."""
             self.prompt += "\n{{"
         self.multiple = self.config.multiple
 
-    def evaluate_single_sample(self, document: Document) -> Dict[str, str]:
+    def evaluate_single_sample(self, document: Document) -> Dict[str, str | int]:
         """Evaluates a single query-document pair. Returns the raw answer and the processed answer."""
 
         message = self._build_message(document)
@@ -123,7 +123,7 @@ Each rater used their own independent judgement."""
             "answer": answer,
         }
 
-    def _build_message(self, document: str) -> str:
+    def _build_message(self, document: Document) -> str:
         qid = document.query.qid
         if self.__use_narratives and qid not in self.__narratives:
             logging.warning(f"No narrative found for {qid}. Will not use it")

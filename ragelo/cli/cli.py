@@ -16,8 +16,13 @@ from ragelo.types import (
     BaseEvaluatorConfig,
     EloAgentRankerConfig,
 )
+from ragelo.utils import (
+    load_answers_from_csv,
+    load_documents_from_csv,
+    load_queries_from_csv,
+)
 
-typer.main.get_params_from_function = get_params_from_function
+typer.main.get_params_from_function = get_params_from_function  # type: ignore
 
 app = typer.Typer()
 
@@ -56,9 +61,13 @@ def run_all(config: AllConfig = AllConfig(), **kwargs):
         documents_path=config.documents_path,
     )
     retrieval_evaluator = RetrievalEvaluatorFactory.create(
-        "reasoner", retrieval_evaluator_config, llm_provider
+        "reasoner", llm_provider, config=retrieval_evaluator_config
     )
-    retrieval_evaluator.run()
+    queries = load_queries_from_csv(retrieval_evaluator_config.query_path)
+    documents = load_documents_from_csv(
+        retrieval_evaluator_config.documents_path, queries=queries
+    )
+    retrieval_evaluator.run(documents)
 
     answer_evaluator_config = AnswerEvaluatorConfig(
         force=config.force,
@@ -73,9 +82,12 @@ def run_all(config: AllConfig = AllConfig(), **kwargs):
         k=config.k,
     )
     answer_evaluator = AnswerEvaluatorFactory.create(
-        "pairwise_reasoning", answer_evaluator_config, llm_provider
+        "pairwise_reasoning", llm_provider, answer_evaluator_config
     )
-    answer_evaluator.run()
+    answers = load_answers_from_csv(
+        answer_evaluator_config.answers_file, queries=queries
+    )
+    answer_evaluator.run(answers)
 
     ranker_config = EloAgentRankerConfig(
         force=config.force,

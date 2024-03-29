@@ -6,8 +6,9 @@ from ragelo.cli.args import get_params_from_function
 from ragelo.evaluators.answer_evaluators import AnswerEvaluatorFactory
 from ragelo.llm_providers import LLMProviderFactory
 from ragelo.types.configurations import AnswerEvaluatorConfig
+from ragelo.utils import load_answers_from_csv, load_queries_from_csv
 
-typer.main.get_params_from_function = get_params_from_function
+typer.main.get_params_from_function = get_params_from_function  # type: ignore
 app = typer.Typer()
 
 
@@ -25,6 +26,8 @@ def pairwise_reasoning(
         config.llm_provider, config.credentials_file, config.model_name
     )
     evaluator = AnswerEvaluatorFactory.create(
-        "pairwise_reasoning", config, llm_provider
+        "pairwise_reasoning", llm_provider, config=config
     )
-    evaluator.run()
+    queries = load_queries_from_csv(config.query_path)
+    answers = load_answers_from_csv(config.answers_file, queries=queries)
+    evaluator.run(answers)

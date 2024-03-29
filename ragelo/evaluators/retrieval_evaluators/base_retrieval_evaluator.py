@@ -15,7 +15,7 @@ from tqdm.auto import tqdm
 
 from ragelo.evaluators.base_evaluator import BaseEvaluator
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
-from ragelo.types import Document, Query
+from ragelo.types import Document
 from ragelo.types.configurations import BaseEvaluatorConfig, RetrievalEvaluatorTypes
 
 
@@ -207,7 +207,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
 
 
 class RetrievalEvaluatorFactory:
-    registry: Dict[RetrievalEvaluatorTypes, Type[BaseRetrievalEvaluator]] = {}
+    registry: Dict[RetrievalEvaluatorTypes | str, Type[BaseRetrievalEvaluator]] = {}
 
     @classmethod
     def register(cls, evaluator_name: RetrievalEvaluatorTypes) -> Callable:
@@ -222,22 +222,15 @@ class RetrievalEvaluatorFactory:
     @classmethod
     def create(
         cls,
-        evaluator_name: str,
-        config: BaseEvaluatorConfig,
+        evaluator_name: RetrievalEvaluatorTypes | str,
         llm_provider: BaseLLMProvider,
+        config: Optional[BaseEvaluatorConfig] = None,
+        **kwargs,
     ) -> BaseRetrievalEvaluator:
         if evaluator_name not in cls.registry:
             raise ValueError(f"Unknown evaluator {evaluator_name}")
+        if config is None:
+            class_ = cls.registry[evaluator_name]
+            type_config = class_.get_config_class()
+            config = type_config(**kwargs)
         return cls.registry[evaluator_name].from_config(config, llm_provider)
-
-    @classmethod
-    def from_name(
-        cls,
-        evaluator_name: RetrievalEvaluatorTypes,
-        llm_provider: BaseLLMProvider,
-        **kwargs,
-    ) -> BaseRetrievalEvaluator:
-        class_ = cls.registry[evaluator_name]
-        type_config = class_.get_config_class()
-        config = type_config(**kwargs)
-        return class_.from_config(config, llm_provider)

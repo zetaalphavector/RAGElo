@@ -1,11 +1,11 @@
 from typing import Dict, List
 
-from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
+from ragelo.evaluators.retrieval_evaluators import (
     BaseRetrievalEvaluator,
     RetrievalEvaluatorFactory,
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
-from ragelo.types import Document, Query
+from ragelo.types import Document
 from ragelo.types.configurations import FewShotEvaluatorConfig, RetrievalEvaluatorTypes
 
 
@@ -24,10 +24,12 @@ class FewShotEvaluator(BaseRetrievalEvaluator):
         self.sys_prompt = config.system_prompt
         self.few_shots = config.few_shots
 
-    def _build_message(self, query: str, document: str) -> List[Dict[str, str]]:
+    def _build_message(self, document: Document) -> List[Dict[str, str]]:
         system_prompt_msg = {"role": "system", "content": self.sys_prompt}
         messages = [system_prompt_msg] + self.__build_few_shot_samples()
-        user_message = self.prompt.format(query=query, passage=document)
+        user_message = self.prompt.format(
+            query=document.query.query, passage=document.text
+        )
         messages.append({"role": "user", "content": user_message})
         return messages
 

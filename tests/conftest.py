@@ -8,7 +8,6 @@ from openai.resources.chat.completions import Completions
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.llm_providers.openai_client import OpenAIConfiguration
-from ragelo.types import AgentAnswer, Document, Query
 from ragelo.types.configurations import (
     AnswerEvaluatorConfig,
     BaseEvaluatorConfig,
@@ -17,8 +16,8 @@ from ragelo.types.configurations import (
     RDNAMEvaluatorConfig,
 )
 from ragelo.utils import (
-    load_answers_and_agents_from_csv,
-    load_documents_from_file,
+    load_answers_from_csv,
+    load_documents_from_csv,
     load_queries_from_csv,
 )
 
@@ -30,14 +29,12 @@ def queries_test():
 
 @pytest.fixture
 def documents_test(queries_test):
-    return load_documents_from_file("tests/data/documents.csv", queries=queries_test)
+    return load_documents_from_csv("tests/data/documents.csv", queries=queries_test)
 
 
 @pytest.fixture
 def answers_test(queries_test):
-    return load_answers_and_agents_from_csv(
-        "tests/data/answers.csv", queries=queries_test
-    )
+    return load_answers_from_csv("tests/data/answers.csv", queries=queries_test)
 
 
 @pytest.fixture

@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Optional, Type
+from typing import List, Optional
 
 
 class RetrievalEvaluatorTypes(str, Enum):
@@ -197,9 +197,9 @@ class RDNAMEvaluatorConfig(BaseEvaluatorConfig):
 
 @dataclass(kw_only=True)
 class AnswerEvaluatorConfig(BaseEvaluatorConfig):
-    # answers_file: str = field(
-    #     default="data/answers.csv", metadata={"help": "Path to the answers file"}
-    # )
+    answers_file: str = field(
+        default="data/answers.csv", metadata={"help": "Path to the answers file"}
+    )
     reasoning_file: Optional[str] = field(
         default=None, metadata={"help": "Path to the reasoning file"}
     )

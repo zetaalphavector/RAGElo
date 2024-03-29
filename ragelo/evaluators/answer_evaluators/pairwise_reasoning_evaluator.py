@@ -14,7 +14,7 @@ from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
     BaseAnswerEvaluator,
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
-from ragelo.types import AgentAnswer, Query
+from ragelo.types import AgentAnswer
 from ragelo.types.configurations import AnswerEvaluatorConfig
 
 
@@ -139,6 +139,7 @@ and "[[C]]" for a tie.
             logging.warning(
                 f"Failed to FETCH answers for {qid} {agent_a_id}, {agent_b_id}"
             )
+            raise e
         try:
             processed_answer = self._process_answer(raw_answer)
         except ValueError as e:
@@ -198,13 +199,13 @@ and "[[C]]" for a tie.
             except ImportError:
                 logging.warning("Rich not installed. Using plain print")
                 self.config.rich_print = False
-        if not self.config.rich_print:
+        else:
             tqdm.write(f"{qid}: {agent_a} vs {agent_b}")
             tqdm.write(f"Evaluator full answer: {raw_answer}")
             tqdm.write(f"Relevant answer: {relevant}")
 
     def __generate_random_games(
-        self, answers: list[AgentAnswer]
+        self, answers: dict[str, list[AgentAnswer]]
     ) -> list[tuple[str, str]]:
         """Creates all prompts necessary for running the evaluator"""
         all_agents = list({x.agent for ans in answers.values() for x in ans})
@@ -257,7 +258,7 @@ and "[[C]]" for a tie.
 
     def __prepare_all_tuples(
         self,
-        answers: dict[str, AgentAnswer],
+        answers: dict[str, list[AgentAnswer]],
         use_progress_bar: bool = True,
     ) -> list[tuple[AgentAnswer, AgentAnswer]]:
         all_tuples = []

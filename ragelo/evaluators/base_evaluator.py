@@ -12,8 +12,3 @@ class BaseEvaluator(ABC):
         config: BaseEvaluatorConfig,
     ):
         raise NotImplementedError
-
-    @abstractmethod
-    def run(self):
-        """Runs the evaluator for all loaded samples."""
-        raise NotImplementedError

@@ -4,7 +4,6 @@ import csv
 import logging
 import os
 from collections import defaultdict
-from typing import Optional
 
 from ragelo.types import AgentAnswer, Document, Query
 
@@ -37,7 +36,7 @@ def load_queries_from_csv(
     return queries
 
 
-def load_documents_from_file(
+def load_documents_from_csv(
     documents_path: str,
     queries: dict[str, Query],
     query_id_col: str = "query_id",
@@ -70,7 +69,7 @@ def load_documents_from_file(
         qid = line[query_id_col].strip()
         did = line[document_id_col].strip()
         text = line[document_text_col].strip()
-        if queries and qid not in queries.keys():
+        if qid not in queries:
             continue
         if qid not in documents:
             documents[qid] = {}
@@ -83,7 +82,7 @@ def load_documents_from_file(
 def load_documents_from_run_file(
     run_file_path: str,
     documents_path: str,
-    queries: Optional[dict[str, Query]] = None,
+    queries: dict[str, Query],
     document_id_col: str = "document_id",
     document_text_col: str = "document_text",
 ) -> dict[str, dict[str, Document]]:
@@ -97,9 +96,9 @@ def load_documents_from_run_file(
     # A dictionary with all queries associated with each document
     query_per_doc = defaultdict(set)
 
-    for line in open(run_file_path, "r"):
-        qid, _, did, _, _, _ = line.strip().split()
-        if queries and qid not in queries:
+    for _line in open(run_file_path, "r"):
+        qid, _, did, _, _, _ = _line.strip().split()
+        if qid not in queries:
             continue
         query_per_doc[did].add(qid)
 
@@ -109,14 +108,14 @@ def load_documents_from_run_file(
             continue
         text = line[document_text_col].strip()
         for qid in query_per_doc[did]:
-            documents[qid][did] = Document(qid, did, text)
+            documents[qid][did] = Document(queries[qid], did, text)
             documents_read += 1
     logging.info(f"Loaded {documents_read} documents")
 
     return documents
 
 
-def load_answers_and_agents_from_csv(
+def load_answers_from_csv(
     answers_path: str,
     queries: dict[str, Query],
     query_id_col: str = "query_id",

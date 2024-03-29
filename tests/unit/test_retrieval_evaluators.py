@@ -69,36 +69,28 @@ class TestRetrievalEvaluator:
         assert "🔎" in captured.out
 
     def test_get_by_name(self, llm_provider_mock, expert_retrieval_eval_config):
-        domain_expert_evaluator = RetrievalEvaluatorFactory.from_name(
+        domain_expert_evaluator = RetrievalEvaluatorFactory.create(
             "domain_expert",
             llm_provider_mock,
             domain_long=expert_retrieval_eval_config.domain_long,
-            documents_path="tests/data/documents.csv",
-            query_path="tests/data/queries.csv",
             output_file="tests/data/output.csv",
         )
         assert isinstance(domain_expert_evaluator, DomainExpertEvaluator)
-        reasoner_evaluator = RetrievalEvaluatorFactory.from_name(
+        reasoner_evaluator = RetrievalEvaluatorFactory.create(
             "reasoner",
             llm_provider_mock,
-            documents_path="tests/data/documents.csv",
-            query_path="tests/data/queries.csv",
             output_file="tests/data/output.csv",
         )
         assert isinstance(reasoner_evaluator, ReasonerEvaluator)
-        rdna_evaluator = RetrievalEvaluatorFactory.from_name(
+        rdna_evaluator = RetrievalEvaluatorFactory.create(
             "RDNAM",
             llm_provider_mock,
-            documents_path="tests/data/documents.csv",
-            query_path="tests/data/queries.csv",
             output_file="tests/data/output.csv",
         )
         assert isinstance(rdna_evaluator, RDNAMEvaluator)
-        custom_evaluator = RetrievalEvaluatorFactory.from_name(
+        custom_evaluator = RetrievalEvaluatorFactory.create(
             "custom_prompt",
             llm_provider_mock,
-            documents_path="tests/data/documents.csv",
-            query_path="tests/data/queries.csv",
             output_file="tests/data/output.csv",
         )
         assert isinstance(custom_evaluator, BaseRetrievalEvaluator)

@@ -10,7 +10,7 @@ from ragelo.evaluators.retrieval_evaluators import (
     RetrievalEvaluatorFactory,
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
-from ragelo.types import Document, Query
+from ragelo.types import Document
 from ragelo.types.configurations import (
     DomainExpertEvaluatorConfig,
     RetrievalEvaluatorTypes,
@@ -28,10 +28,10 @@ in a retrieval system that provides relevant passages based on their questions.
 """.strip()
 
     reason_prompt = """
-User query: 
+User query:
 {query}
 
-Document passage: 
+Document passage:
 {doc_content}
 
 Please think in steps about the relevance of the retrieved document given the \

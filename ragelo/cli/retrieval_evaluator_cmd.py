@@ -1,18 +1,42 @@
 import typer
 
 from ragelo.cli.args import get_params_from_function
-from ragelo.evaluators.retrieval_evaluators import RetrievalEvaluatorFactory
-from ragelo.llm_providers import LLMProviderFactory
+from ragelo.evaluators.retrieval_evaluators import (
+    BaseRetrievalEvaluator,
+    RetrievalEvaluatorFactory,
+)
+from ragelo.llm_providers import BaseLLMProvider, LLMProviderFactory
+from ragelo.types import Document
 from ragelo.types.configurations import (
     BaseEvaluatorConfig,
     DomainExpertEvaluatorConfig,
     RDNAMEvaluatorConfig,
 )
+from ragelo.utils import load_documents_from_csv, load_queries_from_csv
 
-typer.main.get_params_from_function = get_params_from_function
+typer.main.get_params_from_function = get_params_from_function  # type: ignore
 
 
 app = typer.Typer()
+
+
+def create_evaluator(
+    evaluator_name: str,
+    llm_provider: BaseLLMProvider,
+    output_file: str,
+    config: BaseEvaluatorConfig,
+) -> BaseRetrievalEvaluator:
+    return RetrievalEvaluatorFactory.create(
+        evaluator_name, llm_provider, output_file=output_file, config=config
+    )
+
+
+def load_documents(
+    query_path: str, documents_path: str
+) -> dict[str, dict[str, Document]]:
+    queries = load_queries_from_csv(query_path)
+    documents = load_documents_from_csv(documents_path, queries=queries)
+    return documents
 
 
 @app.command()
@@ -32,11 +56,16 @@ def domain_expert(
     if kwargs["output_file"] is None:
         kwargs["output_file"] = "domain_expert_evaluations.csv"
     config = DomainExpertEvaluatorConfig(**kwargs)
+
     llm_provider = LLMProviderFactory.create_from_credentials_file(
         config.llm_provider, config.credentials_file, config.model_name
     )
-    evaluator = RetrievalEvaluatorFactory.create("domain_expert", config, llm_provider)
-    evaluator.run()
+    evaluator = create_evaluator(
+        "domain_expert", llm_provider, output_file=config.output_file, **kwargs
+    )
+    documents = load_documents(config.query_path, config.documents_path)
+
+    evaluator.run(documents)
 
 
 @app.command()
@@ -49,8 +78,12 @@ def reasoner(config: BaseEvaluatorConfig = BaseEvaluatorConfig(), **kwargs):
     llm_provider = LLMProviderFactory.create_from_credentials_file(
         config.llm_provider, config.credentials_file, config.model_name
     )
-    evaluator = RetrievalEvaluatorFactory.create("reasoner", config, llm_provider)
-    evaluator.run()
+    evaluator = create_evaluator(
+        "reasoner", llm_provider, output_file=config.output_file, **kwargs
+    )
+    documents = load_documents(config.query_path, config.documents_path)
+
+    evaluator.run(documents)
 
 
 @app.command()
@@ -62,8 +95,12 @@ def rdnam(config: RDNAMEvaluatorConfig = RDNAMEvaluatorConfig(), **kwargs):
     llm_provider = LLMProviderFactory.create_from_credentials_file(
         config.llm_provider, config.credentials_file, config.model_name
     )
-    evaluator = RetrievalEvaluatorFactory.create("rdnam", config, llm_provider)
-    evaluator.run()
+    evaluator = create_evaluator(
+        "rdnam", llm_provider, output_file=config.output_file, **kwargs
+    )
+    documents = load_documents(config.query_path, config.documents_path)
+
+    evaluator.run(documents)
 
 
 if __name__ == "__main__":
