@@ -39,9 +39,9 @@ def load_queries_from_csv(
 
 def load_documents_from_file(
     documents_path: str,
-    queries: Optional[dict[str, Query]] = None,
+    queries: dict[str, Query],
     query_id_col: str = "query_id",
-    document_id_col: str = "document_id",
+    document_id_col: str = "doc_id",
     document_text_col: str = "document_text",
 ) -> dict[str, dict[str, Document]]:
     """Loads documents from a CSV and returns a dictionary with their content.
@@ -53,7 +53,7 @@ def load_documents_from_file(
             loaded. Defaults to None.
         query_id_col (str): Name of the column with the query id. Defaults to 'query_id'.
         document_id_col (str): Name of the column with the document id.
-            Defaults to 'document_id'.
+            Defaults to 'doc_id'.
         document_text_col (str): Name of the column with the document text.
             Defaults to 'document_text'.
 
@@ -70,11 +70,11 @@ def load_documents_from_file(
         qid = line[query_id_col].strip()
         did = line[document_id_col].strip()
         text = line[document_text_col].strip()
-        if queries and qid not in queries:
+        if queries and qid not in queries.keys():
             continue
         if qid not in documents:
             documents[qid] = {}
-        documents[qid][did] = Document(qid, did, text)
+        documents[qid][did] = Document(queries[qid], did, text)
         documents_read += 1
     logging.info(f"Loaded {documents_read} documents")
     return documents

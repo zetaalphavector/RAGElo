@@ -38,14 +38,14 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         )
 
     def run(
-        self, queries: List[Query], documents: Dict[str, List[Document]]
+        self, documents: dict[str, dict[str, Document]]
     ) -> Dict[str, Dict[str, str]]:
         """Evaluate all the documents for each query"""
         use_progress_bar = self.config.verbose
         skip_docs = self.__get_skip_docs()
         answers: Dict[str, Dict[str, str]] = defaultdict(lambda: dict())
-        for query in tqdm(
-            queries,
+        for qid in tqdm(
+            documents.keys(),
             desc="Annotating Documents",
             disable=not use_progress_bar,
             ncols=100,
@@ -53,51 +53,51 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             position=0,
         ):
             for document in tqdm(
-                documents[query.qid],
-                desc=query.qid,
+                documents[qid].values(),
+                desc=qid,
                 disable=not use_progress_bar,
                 ncols=100,
                 leave=False,
                 position=1,
             ):
-                if (query.qid, document.did) in skip_docs:
-                    logging.debug(f"Skipping {query.qid} {document.did}")
+                if (qid, document.did) in skip_docs:
+                    logging.debug(f"Skipping {qid} {document.did}")
                     continue
 
                 try:
-                    answer_dict = self.evaluate_single_sample(query, document)
+                    answer_dict = self.evaluate_single_sample(document)
                 except (RetryError, ValueError):
                     continue
                 self._dump_response(answer_dict)
 
-                answers[query.qid][document.did] = answer_dict["answer"]
+                answers[qid][document.did] = answer_dict["answer"]
         return answers
 
-    def evaluate_single_sample(
-        self, query: Query, document: Document
-    ) -> Dict[str, Any]:
+    def evaluate_single_sample(self, document: Document) -> Dict[str, Any]:
         """Evaluates a single query-document pair. Returns the raw answer and the processed answer."""
-        qid = query.qid
-        did = document.did
-        message = self._build_message(query.query, document.text)
+        message = self._build_message(document)
         try:
             raw_answer = self.llm_provider(message)
         except RetryError as e:
-            logging.warning(f"Failed to FETCH answers for {qid} {did}")
+            logging.warning(
+                f"Failed to FETCH answers for {document.query.qid} {document.did}"
+            )
             raise e
         try:
             answer = self._process_answer(raw_answer)
         except ValueError as e:
-            logging.warning(f"Failed to PARSE answer for {qid} {did}")
+            logging.warning(
+                f"Failed to PARSE answer for {document.query.qid} {document.did}"
+            )
             raise e
         return {
-            "qid": qid,
-            "did": did,
+            "qid": document.query.qid,
+            "did": document.did,
             "raw_answer": raw_answer,
             "answer": answer,
         }
 
-    def _build_message(self, query: str, document: str) -> str | List[Dict[str, str]]:
+    def _build_message(self, document: Document) -> str | List[Dict[str, str]]:
         """Builds the prompt to send to the LLM."""
         raise NotImplementedError
 
@@ -199,9 +199,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
 
     @classmethod
     def from_config(cls, config: BaseEvaluatorConfig, llm_provider):
-        queries = cls.load_queries_from_file(config.query_path)
-        documents = cls.load_documents_from_file(config.documents_path, queries)
-        return cls(config, queries, documents, llm_provider)
+        return cls(config, llm_provider)
 
     @classmethod
     def get_config_class(cls) -> Type[BaseEvaluatorConfig]:

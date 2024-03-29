@@ -5,10 +5,13 @@ from ragelo.evaluators.retrieval_evaluators import (
     ReasonerEvaluator,
     RetrievalEvaluatorFactory,
 )
+from ragelo.types import Document
 
 
 class RetrievalEvaluator(BaseRetrievalEvaluator):
-    def _build_message(self, qid: str, did: str) -> str:
+    def _build_message(self, document: Document) -> str:
+        qid = document.query.qid
+        did = document.did
         return f"Mock message for query {qid} and document {did}"
 
     def _process_answer(self, answer: str) -> str:
@@ -18,28 +21,26 @@ class RetrievalEvaluator(BaseRetrievalEvaluator):
 
 
 class TestRetrievalEvaluator:
-    def test_creation(self, llm_provider_mock, retrieval_eval_config):
+    def test_process_single_answer(
+        self, llm_provider_mock, retrieval_eval_config, documents_test
+    ):
         evaluator = RetrievalEvaluator.from_config(
             config=retrieval_eval_config, llm_provider=llm_provider_mock
         )
-        assert len(evaluator) == 2
-
-    def test_process_single_answer(self, llm_provider_mock, retrieval_eval_config):
-        evaluator = RetrievalEvaluator.from_config(
-            config=retrieval_eval_config, llm_provider=llm_provider_mock
-        )
-        results = evaluator.evaluate_single_sample("0", "0")
+        results = evaluator.evaluate_single_sample(documents_test["0"]["0"])
         assert results["qid"] == "0"
         assert results["did"] == "0"
-        assert results["answer"] == "Processed answer for query 0 and document 0"
+        assert (
+            results["raw_answer"] == "Processed Mock message for query 0 and document 0"
+        )
         call_args = llm_provider_mock.inner_call.call_args_list
         assert call_args[0][0][0] == "Mock message for query 0 and document 0"
 
-    def test_run(self, llm_provider_mock, retrieval_eval_config):
+    def test_run(self, llm_provider_mock, retrieval_eval_config, documents_test):
         evaluator = RetrievalEvaluator.from_config(
             config=retrieval_eval_config, llm_provider=llm_provider_mock
         )
-        results = evaluator.run()
+        results = evaluator.run(documents_test)
         assert results == {
             "0": {
                 "0": "Processed answer for query 0 and document 0",
@@ -56,12 +57,14 @@ class TestRetrievalEvaluator:
         assert call_args[2][0][0] == "Mock message for query 1 and document 2"
         assert call_args[3][0][0] == "Mock message for query 1 and document 3"
 
-    def test_rich_printing(self, llm_provider_mock, retrieval_eval_config, capsys):
+    def test_rich_printing(
+        self, llm_provider_mock, retrieval_eval_config, documents_test, capsys
+    ):
         retrieval_eval_config.rich_print = True
         evaluator = RetrievalEvaluator.from_config(
             config=retrieval_eval_config, llm_provider=llm_provider_mock
         )
-        _ = evaluator.run()
+        _ = evaluator.run(documents_test)
         captured = capsys.readouterr()
         assert "🔎" in captured.out
 
@@ -102,17 +105,13 @@ class TestRetrievalEvaluator:
 
 
 class TestRDNAMEvaluator:
-    def test_creation(self, llm_provider_mock, rdnam_config):
-        evaluator = RDNAMEvaluator.from_config(
-            config=rdnam_config, llm_provider=llm_provider_mock
-        )
-        assert len(evaluator) == 2
-
-    def test_process_single_answer(self, llm_provider_mock_rdnam, rdnam_config):
+    def test_process_single_answer(
+        self, llm_provider_mock_rdnam, rdnam_config, documents_test
+    ):
         evaluator = RDNAMEvaluator.from_config(
             config=rdnam_config, llm_provider=llm_provider_mock_rdnam
         )
-        results = evaluator.evaluate_single_sample("0", "0")
+        results = evaluator.evaluate_single_sample(documents_test["0"]["0"])
         assert isinstance(results, dict)
         assert results["answer"] == 1
         assert results["qid"] == "0"
@@ -124,23 +123,19 @@ class TestRDNAMEvaluator:
 
 
 class TestReasonerEvaluator:
-    def test_creation(self, llm_provider_mock, retrieval_eval_config):
+    def test_process_single_answer(
+        self, llm_provider_mock, retrieval_eval_config, documents_test
+    ):
         evaluator = ReasonerEvaluator.from_config(
             config=retrieval_eval_config, llm_provider=llm_provider_mock
         )
-        assert len(evaluator) == 2
-
-    def test_process_single_answer(self, llm_provider_mock, retrieval_eval_config):
-        evaluator = ReasonerEvaluator.from_config(
-            config=retrieval_eval_config, llm_provider=llm_provider_mock
-        )
-        results = evaluator.evaluate_single_sample("0", "0")
+        results = evaluator.evaluate_single_sample(documents_test["0"]["0"])
         assert results["qid"] == "0"
         assert results["did"] == "0"
 
         formatted_prompt = evaluator.prompt.format(
-            query=evaluator.queries["0"].query,
-            document=evaluator.documents["0"]["0"].text,
+            query=documents_test["0"]["0"].query.query,
+            document=documents_test["0"]["0"].text,
         )
         assert formatted_prompt in results["raw_answer"]
         assert results["raw_answer"] == results["answer"]
@@ -153,7 +148,6 @@ class TestDomainExpertEvaluator:
         evaluator = DomainExpertEvaluator.from_config(
             config=expert_retrieval_eval_config, llm_provider=llm_provider_mock
         )
-        assert len(evaluator) == 2
         assert expert_retrieval_eval_config.domain_long in evaluator.sys_prompt
         assert expert_retrieval_eval_config.domain_short in evaluator.sys_prompt
         assert (
@@ -162,13 +156,13 @@ class TestDomainExpertEvaluator:
         )
 
     def test_process_single_answer(
-        self, llm_provider_mock_mock, expert_retrieval_eval_config
+        self, llm_provider_mock_mock, expert_retrieval_eval_config, documents_test
     ):
         evaluator = DomainExpertEvaluator.from_config(
             config=expert_retrieval_eval_config,
             llm_provider=llm_provider_mock_mock,
         )
-        results = evaluator.evaluate_single_sample("0", "0")
+        results = evaluator.evaluate_single_sample(documents_test["0"]["0"])
         assert results["qid"] == "0"
         assert results["did"] == "0"
 

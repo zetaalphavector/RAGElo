@@ -2,6 +2,7 @@ from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     BaseRetrievalEvaluator,
     RetrievalEvaluatorFactory,
 )
+from ragelo.types import Document
 from ragelo.types.configurations import RetrievalEvaluatorTypes
 
 
@@ -30,8 +31,8 @@ user question.
     [document content]
     {document}"""  # noqa: E501
 
-    def _build_message(self, query: str, document: str) -> str:
-        return self.prompt.format(query=query, document=document)
+    def _build_message(self, document: Document) -> str:
+        return self.prompt.format(query=document.query.query, document=document.text)
 
     def _process_answer(self, answer: str) -> str:
         return answer

@@ -28,8 +28,12 @@ in a retrieval system that provides relevant passages based on their questions.
 """.strip()
 
     reason_prompt = """
-Query: {query}
-Document passage: {doc_content}
+User query: 
+{query}
+
+Document passage: 
+{doc_content}
+
 Please think in steps about the relevance of the retrieved document given the \
 original query. Consider the query, the document title, and the document \
 passage. Reason whether the document is not relevant to the query, somewhat relevant \
@@ -124,22 +128,21 @@ Please only answer with a single number.
             self.config.extra_guidelines if self.config.extra_guidelines else ""
         )
 
-    def __build_reason_message(self, query: str, document: str) -> str:
+    def __build_reason_message(self, document: Document) -> str:
         reason_prompt = self.reason_prompt.format(
-            query=query,
-            doc_content=document,
+            query=document.query.query,
+            doc_content=document.text,
             domain_short=self.domain_short if self.domain_short else "",
             extra_guidelines=self.extra_guidelines if self.extra_guidelines else "",
         )
         return reason_prompt
 
-    def evaluate_single_sample(
-        self, query: Query, document: Document
-    ) -> Dict[str, Any]:
+    def evaluate_single_sample(self, document: Document) -> Dict[str, Any]:
         """Processes a single pair of qid, did in a two-shot manner"""
+        query = document.query
         qid = query.qid
         did = document.did
-        reason_message = self.__build_reason_message(query.query, document.text)
+        reason_message = self.__build_reason_message(document)
         messages_reasoning = [
             {"role": "system", "content": self.sys_prompt},
             {"role": "user", "content": reason_message},

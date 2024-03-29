@@ -16,12 +16,21 @@ from ragelo.types.configurations import (
     LLMProviderConfiguration,
     RDNAMEvaluatorConfig,
 )
-from ragelo.utils import load_answers_and_agents_from_csv, load_queries_from_csv
+from ragelo.utils import (
+    load_answers_and_agents_from_csv,
+    load_documents_from_file,
+    load_queries_from_csv,
+)
 
 
 @pytest.fixture
 def queries_test():
     return load_queries_from_csv("tests/data/queries.csv")
+
+
+@pytest.fixture
+def documents_test(queries_test):
+    return load_documents_from_file("tests/data/documents.csv", queries=queries_test)
 
 
 @pytest.fixture

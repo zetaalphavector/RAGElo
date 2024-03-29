@@ -98,31 +98,33 @@ Each rater used their own independent judgement."""
             self.prompt += "\n{{"
         self.multiple = self.config.multiple
 
-    def evaluate_single_sample(
-        self, query: Query, document: Document
-    ) -> Dict[str, str]:
+    def evaluate_single_sample(self, document: Document) -> Dict[str, str]:
         """Evaluates a single query-document pair. Returns the raw answer and the processed answer."""
-        qid = query.qid
-        did = document.did
-        message = self._build_message(query.query, document.text, qid, did)
+
+        message = self._build_message(document)
         try:
             raw_answer = self.llm_provider(message)
         except RetryError as e:
-            logging.warning(f"Failed to FETCH answers for {qid} {did}")
+            logging.warning(
+                f"Failed to FETCH answers for {document.query.qid} {document.did}"
+            )
             raise e
         try:
             answer = self._process_answer(raw_answer)
         except ValueError as e:
-            logging.warning(f"Failed to PARSE answer for {qid} {did}")
+            logging.warning(
+                f"Failed to PARSE answer for {document.query.qid} {document.did}"
+            )
             raise e
         return {
-            "qid": qid,
-            "did": did,
+            "qid": document.query.qid,
+            "did": document.did,
             "raw_answer": raw_answer,
             "answer": answer,
         }
 
-    def _build_message(self, query: str, document: str, qid: str, did: str) -> str:
+    def _build_message(self, document: str) -> str:
+        qid = document.query.qid
         if self.__use_narratives and qid not in self.__narratives:
             logging.warning(f"No narrative found for {qid}. Will not use it")
         if self.__use_description and qid not in self.descriptions:
@@ -148,7 +150,7 @@ Each rater used their own independent judgement."""
 
         formatted_prompt = self.prompt.format(
             role=self.__role,
-            query=query,
+            query=document.query.query,
             doc_content=document,
             narrative_description=narrative_description_str,
             aspects=self.__aspects_prompt,
