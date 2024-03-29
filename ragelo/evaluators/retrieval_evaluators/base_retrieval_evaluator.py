@@ -4,7 +4,6 @@ and returns a score or a label for each document."""
 
 import csv
 import dataclasses
-import json
 import os
 from abc import abstractmethod
 from collections import defaultdict
@@ -172,29 +171,6 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         for line in csv.reader(open(file_path, "r")):
             contents[line[0]] = line[1]
         return contents
-
-    @staticmethod
-    def json_answer_parser(answer: str, key: str) -> Any:
-        """Parses a Json answer from the LLM and returns a specific key"""
-
-        # Finds all valid JSON objects in the answer that contain the key
-        json_objects = []
-        for line in answer.strip().split("\n"):
-            try:
-                json_object = json.loads(line)
-                if key in json_object:
-                    json_objects.append(json_object)
-            except json.JSONDecodeError:
-                pass
-
-        # Assumes the valid JSON object is the last one
-        if not json_objects:
-            raise ValueError(
-                "Answer does not contain a valid json object\n"
-                f"with the key {key}\n{answer}"
-            )
-        json_dict = json_objects[-1]
-        return json_dict[key]
 
     @classmethod
     def from_config(cls, config: BaseEvaluatorConfig, llm_provider: BaseLLMProvider):

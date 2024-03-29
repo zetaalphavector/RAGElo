@@ -1,10 +1,8 @@
 import csv
 import logging
-import os
 import random
 import re
 from collections import defaultdict, deque
-from typing import Optional
 
 from tenacity import RetryError
 from tqdm.auto import tqdm
@@ -23,6 +21,7 @@ class PairwiseWithReasoningEvaluator(BaseAnswerEvaluator):
     """A evaluator that evaluates RAG-based answers pairwise, with document reasoning"""
 
     output_columns: list[str] = ["qid", "agent_a", "agent_b", "raw_answer", "answer"]
+    tuple_columns: list[str] = ["qid", "agent_a", "agent_b"]
     config: PairWiseEvaluatorConfig
     prompt = """
 Please act as an impartial judge and evaluate the quality of the responses provided \
@@ -78,7 +77,7 @@ and "[[C]]" for a tie.
     def run(self, answers: dict[str, list[AgentAnswer]]) -> list[dict[str, str]]:
         use_progress_bar = self.config.verbose
         unparsed_answers = 0
-        skip_tuples = self.__get_skip_tuples()
+        skip_tuples = self._get_skip_tuples()
         evaluations: list[dict[str, str]] = []
         tuples = self.__prepare_all_tuples(answers, use_progress_bar)
         if len(tuples) - len(skip_tuples) > 0:
@@ -113,24 +112,29 @@ and "[[C]]" for a tie.
             print(f"Total evaluations: {len(evaluations)}")
         return evaluations
 
-    def evaluate_single_sample(
-        self, answer: tuple[AgentAnswer, AgentAnswer]
-    ) -> dict[str, str]:
+    def _build_message(self, answer: tuple[AgentAnswer, AgentAnswer]) -> str:
         qid = answer[0].query.qid
-        agent_a_id = answer[0].agent
-        agent_b_id = answer[1].agent
+        answer_agent_a = answer[0].text
+        answer_agent_b = answer[1].text
         reasoning = "\n".join(
             [" ".join([f"[{idx}]", r]) for (idx, r) in self.reasonings[qid].items()]
         )
-        answer_agent_a = answer[0].text
-        answer_agent_b = answer[1].text
-
         prompt = self.prompt.format(
             query=answer[0].query.query,
             documents=reasoning,
             answer_a=answer_agent_a,
             answer_b=answer_agent_b,
         )
+        return prompt
+
+    def evaluate_single_sample(
+        self, answer: tuple[AgentAnswer, AgentAnswer]
+    ) -> dict[str, str]:
+        prompt = self._build_message(answer)
+        qid = answer[0].query.qid
+        agent_a_id = answer[0].agent
+        agent_b_id = answer[1].agent
+
         try:
             raw_answer = self.llm_provider(prompt)
         except RetryError as e:
@@ -154,18 +158,6 @@ and "[[C]]" for a tie.
             "raw_answer": raw_answer,
             "answer": processed_answer,
         }
-
-    def _dump_response(self, answer_dict: dict[str, str], file: Optional[str] = None):
-        output_file = file if file else self.output_file
-        if not os.path.isfile(output_file):
-            logging.debug(f"Creating new file {output_file}")
-            with open(output_file, "w") as f:
-                writer = csv.DictWriter(f, fieldnames=self.output_columns)
-                writer.writeheader()
-        with open(output_file, "a") as f:
-            writer = csv.DictWriter(f, fieldnames=self.output_columns)
-            writer.writerow(answer_dict)
-        self._print_response(answer_dict)
 
     def _print_response(self, answer_dict: dict[str, str]):
         if not self.config.verbose:
@@ -283,25 +275,6 @@ and "[[C]]" for a tie.
                     (answers_per_agent[a][qid], answers_per_agent[b][qid])
                 )
         return all_tuples
-
-    def __get_skip_tuples(self) -> set[tuple[str, str, str]]:
-        skip_tuples = set()
-        if self.config.force and os.path.exists(self.output_file):
-            logging.warning(f"Removing existing {self.output_file}!")
-            os.remove(self.output_file)
-
-        if os.path.isfile(self.output_file):
-            line: dict[str, str]
-            for line in csv.DictReader(
-                open(self.output_file), fieldnames=self.output_columns
-            ):
-                skip_tuples.add((line["qid"], line["agent_a"], line["agent_b"]))
-        if len(skip_tuples) > 0:
-            logging.warning(
-                f"Skipping {len(skip_tuples)} games already evaluated! "
-                "If you want to re-evaluate them, please use the --force flag"
-            )
-        return skip_tuples
 
     def _process_answer(self, answer: str) -> str:
         """Extracts the relevant part of an answer."""

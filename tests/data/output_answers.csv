@@ -1,5 +1,1 @@
 qid,agent_a,agent_b,raw_answer,answer
-0,agent2,agent2,Agent [[A]] is better,A
-0,agent1,agent1,Agent [[B]] is better,B
-1,agent2,agent2,"A tie. Therefore, [[C]]",C
-1,agent1,agent1,I don't know. [[C]],C

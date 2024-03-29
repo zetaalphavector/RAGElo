@@ -5,8 +5,9 @@ import dataclasses
 import logging
 import os
 from abc import abstractmethod
-from typing import Any, Callable, Optional, Type, get_type_hints
+from typing import Any, Callable, Optional, Sequence, Type, get_type_hints
 
+from tenacity import RetryError
 from tqdm import tqdm
 
 from ragelo.evaluators.base_evaluator import BaseEvaluator
@@ -17,9 +18,10 @@ from ragelo.types.configurations import BaseAnswerEvaluatorConfig
 
 
 class BaseAnswerEvaluator(BaseEvaluator):
-    output_columns = ["qid", "did", "raw_answer", "answer"]
+    output_columns = ["qid", "agent", "raw_answer", "answer"]
     config: BaseAnswerEvaluatorConfig
     output_file: str = "answers_evaluations.csv"
+    tuple_columns: list[str] = ["qid", "agent"]
 
     def __init__(
         self,
@@ -39,10 +41,87 @@ class BaseAnswerEvaluator(BaseEvaluator):
 
     @abstractmethod
     def run(self, answers: dict[str, list[AgentAnswer]]) -> list[dict[str, str]]:
-        raise NotImplementedError
+        use_progress_bar = self.config.verbose
+        unparsed_answers = 0
+        skip_tuples = self._get_skip_tuples()
+        evaluations: list[dict[str, str]] = []
+        for qid in tqdm(
+            answers,
+            desc="Annotating Answers",
+            disable=not use_progress_bar,
+            ncols=100,
+            leave=False,
+        ):
+            for answer in tqdm(
+                answers[qid],
+                desc=qid,
+                disable=not use_progress_bar,
+                ncols=100,
+                leave=False,
+            ):
+                if (qid, answer.agent) in skip_tuples:
+                    logging.debug(f"Skipping {qid} {answer.agent}")
+                    continue
+                try:
+                    answer_dict = self.evaluate_single_sample(answer)
+                except RetryError:
+                    continue
+                except ValueError:
+                    unparsed_answers += 1
+                    continue
+                self._dump_response(answer_dict)
+                evaluations.append(answer_dict)
+        if self.config.verbose:
+            print("✅ Done!")
+            print(f"Unparsed answers: {unparsed_answers}")
+            print(f"Total evaluations: {len(evaluations)}")
+        return evaluations
+
+    def evaluate_single_sample(self, answer) -> dict[str, str]:
+        message = self._build_message(answer)
+        try:
+            raw_answer = self.llm_provider(message)
+        except RetryError as e:
+            logger.warning(f"Failed to get answer for {answer.qid} {answer.agent}")
+            raise e
+        try:
+            answer = self._process_answer(raw_answer)
+
+        except ValueError as e:
+            logger.error(
+                f"Failed to parse answer for {answer.qid} {answer.agent}"
+                f"Full answer: {raw_answer}"
+            )
+            raise e
+        return {
+            "qid": answer.qid,
+            "agent": answer.agent,
+            "raw_answer": raw_answer,
+            "answer": answer.answer,
+        }
+
+    def _get_skip_tuples(self) -> set[Sequence[str]]:
+        skip_tuples: set[Sequence[str]] = set()
+        if self.config.force and os.path.exists(self.output_file):
+            logging.warning(f"Removing existing {self.output_file}!")
+            os.remove(self.output_file)
+
+        if os.path.isfile(self.output_file):
+            line: dict[str, str]
+            for line in csv.DictReader(
+                open(self.output_file), fieldnames=self.output_columns
+            ):
+                skip_tuples.add(tuple(line[col] for col in self.tuple_columns))
+        if len(skip_tuples) > 0:
+            logging.warning(
+                f"Skipping {len(skip_tuples)} games already evaluated! "
+                "If you want to re-evaluate them, please use the --force flag"
+            )
+        return skip_tuples
 
     @abstractmethod
-    def evaluate_single_sample(self, answer) -> dict[str, str]:
+    def _build_message(self, answer) -> str:
+        """Builds the message to send to the LLM evaluator"""
         raise NotImplementedError
 
     @abstractmethod
@@ -57,9 +136,9 @@ class BaseAnswerEvaluator(BaseEvaluator):
             with open(output_file, "w") as f:
                 writer = csv.DictWriter(f, fieldnames=self.output_columns)
                 writer.writeheader()
-        self._print_response(answer_dict)
         with open(output_file, "a") as f:
             writer = csv.DictWriter(f, fieldnames=self.output_columns)
+        self._print_response(answer_dict)
 
     def _print_response(self, answer_dict: dict[str, str]):
         qid = answer_dict["qid"]

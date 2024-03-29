@@ -10,6 +10,7 @@ from ragelo.types.configurations import CustomPromptEvaluatorConfig
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.CUSTOM_PROMPT)
 class CustomPromptEvaluator(BaseRetrievalEvaluator):
     config: CustomPromptEvaluatorConfig
+    scoring_key: str = "relevance"
 
     def __init__(
         self,
@@ -28,4 +29,4 @@ class CustomPromptEvaluator(BaseRetrievalEvaluator):
         return self.__prompt.format(**formatters)
 
     def _process_answer(self, answer: str) -> str:
-        return self.json_answer_parser(answer, "relevance")
+        return self.json_answer_parser(answer, self.scoring_key)

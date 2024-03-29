@@ -106,7 +106,7 @@ class DomainExpertEvaluatorConfig(BaseEvaluatorConfig):
 @dataclass(kw_only=True)
 class CustomPromptEvaluatorConfig(BaseEvaluatorConfig):
     prompt: str = field(
-        default="query: {} document: {}",
+        default="query: {query} document: {document}",
         metadata={
             "help": "The prompt to be used to evaluate the documents. It should contain a {query} and a {document} placeholder"
         },
@@ -206,6 +206,24 @@ class PairWiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     k: int = field(
         default=100,
         metadata={"help": "Maximum number of pairwise comparisons to generate"},
+    )
+
+
+@dataclass
+class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
+    prompt: str = field(
+        default="query: {query} answer: {answer}",
+        metadata={
+            "help": "The prompt to be used to evaluate the documents. It should contain a {query} and a {document} placeholder"
+        },
+    )
+    query_placeholder: str = field(
+        default="query",
+        metadata={"help": "The placeholder for the query in the prompt"},
+    )
+    answer_placeholder: str = field(
+        default="answer",
+        metadata={"help": "The placeholder for the answer in the prompt"},
     )
 
 

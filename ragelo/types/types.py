@@ -22,6 +22,7 @@ class AnswerEvaluatorTypes(str, Enum):
     """Enum that contains the names of the available answer evaluators"""
 
     PAIRWISE_REASONING = "pairwise_reasoning"
+    CUSTOM_PROMPT = "custom_prompt"
 
 
 @dataclass
