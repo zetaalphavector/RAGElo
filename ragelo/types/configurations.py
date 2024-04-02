@@ -152,15 +152,38 @@ class FewShotEvaluatorConfig(BaseEvaluatorConfig):
     few_shots: List[FewShotExample] = field(
         metadata={"help": "A list of few-shot examples to be used in the prompt"}
     )
-    prompt: str = field(
+    few_shot_user_prompt: str = field(
         default="Query: {query}\n\nPassage:{passage}",
         metadata={
             "help": "The individual prompt to be used to evaluate the documents. It should contain a {query} and a {passage} placeholder"
         },
     )
+    few_shot_assistant_answer: str = field(
+        default='{reasoning}\n\n{{"relevance": {relevance}}}',
+        metadata={
+            "help": "The expected answer format from the LLM for each evaluated document "
+            "It should contain a {reasoning} and a {relevance} placeholder"
+        },
+    )
     output_file: str = field(
         default="few_shot_evaluations.csv",
         metadata={"help": "Path to the output file"},
+    )
+    query_placeholder: str = field(
+        default="query",
+        metadata={"help": "The placeholder for the query in the prompt"},
+    )
+    document_placeholder: str = field(
+        default="document",
+        metadata={"help": "The placeholder for the document in the prompt"},
+    )
+    reasoning_placeholder: str = field(
+        default="reasoning",
+        metadata={"help": "The placeholder for the reasoning in the prompt"},
+    )
+    relevance_placeholder: str = field(
+        default="relevance",
+        metadata={"help": "The placeholder for the relevance in the prompt"},
     )
 
 

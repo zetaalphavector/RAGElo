@@ -3,6 +3,7 @@ from ragelo.evaluators.retrieval_evaluators import (
     BaseRetrievalEvaluator,
     CustomPromptEvaluator,
     DomainExpertEvaluator,
+    FewShotEvaluator,
     RDNAMEvaluator,
     ReasonerEvaluator,
 )
@@ -198,3 +199,26 @@ class TestDomainExpertEvaluator:
             expert_retrieval_eval_config.extra_guidelines
         )
         assert prompts_score[3]["content"].startswith("Given the previous reasoning")
+
+
+class TestFewShotEvaluator:
+    def test_process_single_answer(
+        self, llm_provider_mock, few_shot_retrieval_eval_config, documents_test
+    ):
+        evaluator = FewShotEvaluator.from_config(
+            config=few_shot_retrieval_eval_config, llm_provider=llm_provider_mock
+        )
+        results = evaluator.evaluate_single_sample(documents_test["0"]["0"])
+        assert results["query_id"] == "0"
+        assert results["did"] == "0"
+        call_args = llm_provider_mock.inner_call.call_args_list
+        call_messages = call_args[0][0][0]
+        assert len(call_messages) == 6
+        assert call_messages[0]["role"] == "system"
+        assert (
+            call_messages[1]["role"]
+            == call_messages[3]["role"]
+            == call_messages[5]["role"]
+            == "user"
+        )
+        assert call_messages[2]["role"] == call_messages[4]["role"] == "assistant"

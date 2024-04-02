@@ -13,6 +13,7 @@ from ragelo.types.configurations import (
     CustomPromptEvaluatorConfig,
     DomainExpertEvaluatorConfig,
     FewShotEvaluatorConfig,
+    FewShotExample,
     LLMProviderConfig,
     PairwiseEvaluatorConfig,
     RDNAMEvaluatorConfig,
@@ -151,6 +152,41 @@ def custom_prompt_retrieval_eval_config():
         prompt="query: {query_placeholder} doc: {document_placeholder}",
         query_placeholder="query_placeholder",
         document_placeholder="document_placeholder",
+    )
+
+
+@pytest.fixture
+def few_shot_retrieval_eval_config():
+    few_shot_samples = [
+        FewShotExample(
+            passage="Few shot example 1",
+            query="Few shot query 1",
+            relevance=2,
+            reasoning="This is a good document",
+        ),
+        FewShotExample(
+            passage="Few shot example 2",
+            query="Few shot query 2",
+            relevance=0,
+            reasoning="This is a bad document",
+        ),
+    ]
+    return FewShotEvaluatorConfig(
+        documents_path="tests/data/documents.csv",
+        query_path="tests/data/queries.csv",
+        output_file="tests/data/output.csv",
+        force=True,
+        verbose=True,
+        system_prompt="System prompt",
+        few_shot_user_prompt="query: {query_placeholder} doc: {document_placeholder}",
+        few_shot_assistant_answer=(
+            '{reasoning_placeholder} {{"relevance": {relevance_placeholder}}}'
+        ),
+        query_placeholder="query_placeholder",
+        document_placeholder="document_placeholder",
+        reasoning_placeholder="reasoning_placeholder",
+        relevance_placeholder="relevance_placeholder",
+        few_shots=few_shot_samples,
     )
 
 
