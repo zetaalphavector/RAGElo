@@ -13,16 +13,22 @@ from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.types import AgentAnswer, AnswerEvaluatorTypes
-from ragelo.types.configurations import PairWiseEvaluatorConfig
+from ragelo.types.configurations import PairwiseEvaluatorConfig
 
 
 @AnswerEvaluatorFactory.register(AnswerEvaluatorTypes.PAIRWISE_REASONING)
 class PairwiseWithReasoningEvaluator(BaseAnswerEvaluator):
     """A evaluator that evaluates RAG-based answers pairwise, with document reasoning"""
 
-    output_columns: list[str] = ["qid", "agent_a", "agent_b", "raw_answer", "answer"]
-    tuple_columns: list[str] = ["qid", "agent_a", "agent_b"]
-    config: PairWiseEvaluatorConfig
+    output_columns: list[str] = [
+        "query_id",
+        "agent_a",
+        "agent_b",
+        "raw_answer",
+        "answer",
+    ]
+    tuple_columns: list[str] = ["query_id", "agent_a", "agent_b"]
+    config: PairwiseEvaluatorConfig
     prompt = """
 Please act as an impartial judge and evaluate the quality of the responses provided \
 by two AI assistants tasked to answer the question displayed below, based on a set \
@@ -63,16 +69,16 @@ and "[[C]]" for a tie.
 
     def __init__(
         self,
-        config: PairWiseEvaluatorConfig,
+        config: PairwiseEvaluatorConfig,
         llm_provider: BaseLLMProvider,
     ):
         super().__init__(config, llm_provider)
-        if not self.config.reasoning_file:
+        if not self.config.reasoning_path:
             raise ValueError("Reasoning file is required for PairwiseWithReasoning")
         self.k = self.config.k
         self.bidirectional = self.config.bidirectional
         self.pattern = re.compile(r"\[\[([^]]+)]].*$(?:(?!\[\[).)*", re.DOTALL)
-        self.reasonings = self.__load_reasonings(self.config.reasoning_file)
+        self.reasonings = self.__load_reasonings(self.config.reasoning_path)
 
     def run(self, answers: dict[str, list[AgentAnswer]]) -> list[dict[str, str]]:
         use_progress_bar = self.config.verbose
@@ -97,7 +103,7 @@ and "[[C]]" for a tie.
                 logging.debug(f"Skipping {qid} {agent_a} {agent_b}")
                 continue
             try:
-                answer_dict = self.evaluate_single_sample((answer_a, answer_a))
+                answer_dict = self.evaluate_single_sample((answer_a, answer_b))
             except RetryError:
                 continue
             except ValueError:
@@ -152,7 +158,7 @@ and "[[C]]" for a tie.
             )
             raise e
         return {
-            "qid": qid,
+            "query_id": qid,
             "agent_a": agent_a_id,
             "agent_b": agent_b_id,
             "raw_answer": raw_answer,
@@ -162,7 +168,7 @@ and "[[C]]" for a tie.
     def _print_response(self, answer_dict: dict[str, str]):
         if not self.config.verbose:
             return
-        qid = answer_dict["qid"]
+        qid = answer_dict["query_id"]
         agent_a = answer_dict["agent_a"]
         agent_b = answer_dict["agent_b"]
         raw_answer = answer_dict["raw_answer"]
@@ -240,6 +246,8 @@ and "[[C]]" for a tie.
                         pairs.append((agent_b, agent_a))
                         used_pairs.add((agent_b, agent_a))
                         logging.debug(f"Created game {agent_b} vs {agent_a}")
+                    else:
+                        used_pairs.add((agent_b, agent_a))
                     second_agents_q.append(agent_b)
                     break
                 second_agents_q.append(agent_b)

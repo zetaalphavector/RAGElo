@@ -1,4 +1,4 @@
-import os
+from dataclasses import asdict
 
 import typer
 
@@ -8,17 +8,9 @@ from ragelo.cli.agent_rankers_cmd import app as ranker_app
 from ragelo.cli.answer_evaluators_cmd import app as answer_evaluator_app
 from ragelo.cli.args import get_params_from_function
 from ragelo.cli.retrieval_evaluator_cmd import app as retrieval_evaluator_app
-from ragelo.types import (
-    AllConfig,
-    BaseAnswerEvaluatorConfig,
-    BaseEvaluatorConfig,
-    EloAgentRankerConfig,
-)
-from ragelo.utils import (
-    load_answers_from_csv,
-    load_documents_from_csv,
-    load_queries_from_csv,
-)
+from ragelo.cli.utils import get_path
+from ragelo.types import AllConfig, EloAgentRankerConfig
+from ragelo.utils import load_answers_from_csv, load_documents_from_csv
 
 typer.main.get_params_from_function = get_params_from_function  # type: ignore
 
@@ -33,11 +25,7 @@ app.add_typer(ranker_app, name="agents-ranker")
 @app.command()
 def run_all(config: AllConfig = AllConfig(), **kwargs):
     """Run all the commands."""
-    print("Running all commands")
-    if kwargs["output_file"] is None:
-        kwargs["output_file"] = os.path.join(
-            kwargs.get("data_path", ""), "agents_ranking.csv"
-        )
+
     config = AllConfig(**kwargs)
     if config.retrieval_evaluator_name != "reasoner":
         raise ValueError("The retrieval evaluator must be a reasoner")
@@ -45,36 +33,45 @@ def run_all(config: AllConfig = AllConfig(), **kwargs):
         raise ValueError("The answer evaluator must be a pairwise_reasoning")
     if config.answer_ranker_name != "elo":
         raise ValueError("The answer ranker must be an elo")
+
     llm_provider = get_llm_provider(config.llm_provider, **kwargs)
 
-    args_without_output = {k: v for k, v in kwargs.items() if k != "output_file"}
-    retrieval_evaluator_config = BaseEvaluatorConfig(
-        output_file=config.reasoning_file, **args_without_output
-    )
-    retrieval_evaluator = get_retrieval_evaluator(
-        config.retrieval_evaluator_name,
-        config=retrieval_evaluator_config,
-        llm_provider=llm_provider,
-    )
+    args_to_remove = {
+        "output_file",
+        "llm_provider",
+    }
 
-    queries = load_queries_from_csv(retrieval_evaluator_config.query_path)
+    # Clean the data paths
+    config.query_path = get_path(config.data_path, config.query_path)
+    config.documents_path = get_path(config.data_path, config.documents_path)
+    config.answers_path = get_path(config.data_path, config.answers_path)
+    config.reasoning_path = get_path(config.data_path, config.reasoning_path)
+    config.evaluations_file = get_path(config.data_path, config.evaluations_file)
+
+    args_clean = {k: v for k, v in asdict(config).items() if k not in args_to_remove}
+
+    retrieval_evaluator = get_retrieval_evaluator(
+        "reasoner",
+        llm_provider=llm_provider,
+        output_file=config.reasoning_path,
+        **args_clean,
+    )
     documents = load_documents_from_csv(
-        retrieval_evaluator_config.documents_path, queries=queries
+        documents_path=config.documents_path, queries=config.query_path
+    )
+    answers = load_answers_from_csv(
+        answers_path=config.answers_path, queries=config.query_path
     )
     retrieval_evaluator.run(documents)
-    answer_evaluator_config = BaseAnswerEvaluatorConfig(
-        output_file=config.evaluations_file, **args_without_output
-    )
-    answer_evaluator = get_answer_evaluator(
-        config.answer_evaluator_name,
-        config=answer_evaluator_config,
+
+    answers_evaluator = get_answer_evaluator(
+        "pairwise_reasoning",
         llm_provider=llm_provider,
+        output_file=config.evaluations_file,
+        **args_clean,
     )
 
-    answers = load_answers_from_csv(
-        answer_evaluator_config.answers_file, queries=queries
-    )
-    answer_evaluator.run(answers)
+    answers_evaluator.run(answers)
 
     ranker_config = EloAgentRankerConfig(
         force=config.force,

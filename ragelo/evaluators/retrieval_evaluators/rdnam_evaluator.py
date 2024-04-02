@@ -64,7 +64,7 @@ Measure how trustworthy the web page is (T).""".strip()
 the relevance of the web page for the query.
 Each rater used their own independent judgement."""
     config: RDNAMEvaluatorConfig
-    output_columns = ["qid", "did", "raw_answer", "answer"]
+    output_columns = ["query_id", "did", "raw_answer", "answer"]
     scoring_key = "answer"
     output_file = "rdnam_evaluations.csv"
 
@@ -127,7 +127,7 @@ Each rater used their own independent judgement."""
             )
             raise e
         return {
-            "qid": document.query.qid,
+            "query_id": document.query.qid,
             "did": document.did,
             "raw_answer": raw_answer,
             "answer": answer,
@@ -144,12 +144,12 @@ Each rater used their own independent judgement."""
 
         narrative = (
             self.__narratives[qid]
-            if qid in self.__narratives and self.__use_narratives
+            if self.__use_narratives and qid in self.__narratives
             else ""
         )
         description = (
             self.descriptions[qid]
-            if qid in self.descriptions and self.__use_description
+            if self.__use_description and qid in self.descriptions
             else ""
         )
         narrative_description_str = self.NARRATIVE_DESCRIPTION_PROMPT.format(

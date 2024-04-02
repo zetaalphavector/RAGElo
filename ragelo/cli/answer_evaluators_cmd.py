@@ -2,7 +2,9 @@ import typer
 
 from ragelo import get_answer_evaluator, get_llm_provider
 from ragelo.cli.args import get_params_from_function
-from ragelo.types.configurations import PairWiseEvaluatorConfig
+from ragelo.cli.utils import get_path
+from ragelo.types import AnswerEvaluatorTypes
+from ragelo.types.configurations import PairwiseEvaluatorConfig
 from ragelo.utils import load_answers_from_csv
 
 typer.main.get_params_from_function = get_params_from_function  # type: ignore
@@ -11,13 +13,20 @@ app = typer.Typer()
 
 @app.command()
 def pairwise_reasoning(
-    config: PairWiseEvaluatorConfig = PairWiseEvaluatorConfig(), **kwargs
+    config: PairwiseEvaluatorConfig = PairwiseEvaluatorConfig(), **kwargs
 ):
     """A evaluator that evaluates RAG-based answers pairwise, with document reasoning"""
-    config = PairWiseEvaluatorConfig(**kwargs)
+    config = PairwiseEvaluatorConfig(**kwargs)
+    config.query_path = get_path(config.data_path, config.query_path)
+    config.answers_path = get_path(config.data_path, config.answers_path)
+    config.output_file = get_path(config.data_path, config.output_file)
+    config.reasoning_path = get_path(config.data_path, config.reasoning_path)
+
     llm_provider = get_llm_provider(config.llm_provider, **kwargs)
     evaluator = get_answer_evaluator(
-        "pairwise_reasoning", config=config, llm_provider=llm_provider
+        AnswerEvaluatorTypes.PAIRWISE_REASONING,
+        config=config,
+        llm_provider=llm_provider,
     )
-    answers = load_answers_from_csv(config.answers_file, queries=config.query_path)
+    answers = load_answers_from_csv(config.answers_path, queries=config.query_path)
     evaluator.run(answers)

@@ -21,9 +21,11 @@ from ragelo.types.configurations import BaseEvaluatorConfig
 
 class BaseRetrievalEvaluator(BaseEvaluator):
     config: BaseEvaluatorConfig
-    output_columns: list[str] = ["qid", "did", "raw_answer", "answer"]
+    output_columns: list[str] = ["query_id", "did", "raw_answer", "answer"]
     scoring_key: str = "answer"
     output_file: str = "retrieval_evaluations.csv"
+    query_id: str = "query_id"
+    document_id: str = "did"
 
     def __init__(
         self,
@@ -99,8 +101,8 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             )
             raise e
         return {
-            "qid": document.query.qid,
-            "did": document.did,
+            self.query_id: document.query.qid,
+            self.document_id: document.did,
             "raw_answer": raw_answer,
             "answer": answer,
         }
@@ -126,7 +128,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             for line in csv.DictReader(
                 open(self.output_file), fieldnames=self.output_columns
             ):
-                skip_docs.add((line["qid"], line["did"]))
+                skip_docs.add((line[self.query_id], line[self.document_id]))
 
         if len(skip_docs) > 0:
             logger.warning(
@@ -143,7 +145,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
                 import rich
 
                 for key in answer_dict:
-                    if "qid" in key or "query" in key:
+                    if "query_id" in key or "query" in key:
                         rich.print(
                             f"[bold magenta]🔎{key.capitalize()}[/bold magenta]: ",
                             f"[not bold magenta]{answer_dict[key]}[/not bold magenta]",
@@ -163,13 +165,15 @@ class BaseRetrievalEvaluator(BaseEvaluator):
                 tqdm.write(f"{key.capitalize()}: {answer_dict[key]}")
 
     def _dump_response(self, answer_dict: dict[str, str], file: Optional[str] = None):
+        self._print_response(answer_dict)
+        if not self.config.write_output:
+            return
         output_file = file if file else self.output_file
         if not os.path.isfile(output_file):
             logger.debug(f"Creating new file {output_file}")
             with open(output_file, "w") as f:
                 writer = csv.DictWriter(f, fieldnames=self.output_columns)
                 writer.writeheader()
-        self._print_response(answer_dict)
         with open(output_file, "a") as f:
             writer = csv.DictWriter(f, fieldnames=self.output_columns)
             writer.writerow(answer_dict)
@@ -200,7 +204,7 @@ class RetrievalEvaluatorFactory:
             wrapped_class: Type[BaseRetrievalEvaluator],
         ) -> Type[BaseRetrievalEvaluator]:
             if evaluator_name in cls.registry:
-                logger.warning(f"Overwriting {evaluator_name} in registry")
+                logger.debug(f"Overwriting {evaluator_name} in registry")
             cls.registry[evaluator_name] = wrapped_class
             return wrapped_class
 

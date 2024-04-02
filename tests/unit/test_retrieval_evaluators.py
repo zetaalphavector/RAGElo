@@ -30,7 +30,7 @@ class TestRetrievalEvaluator:
             config=retrieval_eval_config, llm_provider=llm_provider_mock
         )
         results = evaluator.evaluate_single_sample(documents_test["0"]["0"])
-        assert results["qid"] == "0"
+        assert results["query_id"] == "0"
         assert results["did"] == "0"
         assert (
             results["raw_answer"] == "Processed Mock message for query 0 and document 0"
@@ -103,7 +103,7 @@ class TestRDNAMEvaluator:
         results = evaluator.evaluate_single_sample(documents_test["0"]["0"])
         assert isinstance(results, dict)
         assert results["answer"] == 1
-        assert results["qid"] == "0"
+        assert results["query_id"] == "0"
         assert results["did"] == "0"
         call_args = llm_provider_mock_rdnam.inner_call.call_args_list
         assert call_args[0][0][0].startswith(
@@ -119,7 +119,7 @@ class TestReasonerEvaluator:
             config=retrieval_eval_config, llm_provider=llm_provider_mock
         )
         results = evaluator.evaluate_single_sample(documents_test["0"]["0"])
-        assert results["qid"] == "0"
+        assert results["query_id"] == "0"
         assert results["did"] == "0"
 
         formatted_prompt = evaluator.prompt.format(
@@ -152,7 +152,7 @@ class TestDomainExpertEvaluator:
             llm_provider=llm_provider_mock_mock,
         )
         results = evaluator.evaluate_single_sample(documents_test["0"]["0"])
-        assert results["qid"] == "0"
+        assert results["query_id"] == "0"
         assert results["did"] == "0"
 
         assert llm_provider_mock_mock.call_count == 2

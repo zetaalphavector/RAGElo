@@ -12,7 +12,7 @@ from ragelo.types.configurations import (
     BaseEvaluatorConfig,
     DomainExpertEvaluatorConfig,
     LLMProviderConfig,
-    PairWiseEvaluatorConfig,
+    PairwiseEvaluatorConfig,
     RDNAMEvaluatorConfig,
 )
 from ragelo.utils import (
@@ -84,9 +84,10 @@ def retrieval_eval_config():
 
 @pytest.fixture
 def pairwise_answer_eval_config():
-    return PairWiseEvaluatorConfig(
+    return PairwiseEvaluatorConfig(
         output_file="tests/data/output_answers.csv",
-        reasoning_file="tests/data/reasonings.csv",
+        reasoning_path="tests/data/reasonings.csv",
+        bidirectional=False,
         force=True,
         verbose=True,
     )

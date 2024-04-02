@@ -51,20 +51,24 @@ class BaseConfig:
         default="openai",
         metadata={"help": "The name of the LLM provider"},
     )
+    write_output: bool = field(
+        default=True,
+        metadata={"help": "Wether or not to write the output to a file"},
+    )
 
 
 @dataclass(kw_only=True)
 class BaseEvaluatorConfig(BaseConfig):
-    output_file: str = field(
-        default="data/output.csv",
+    output_file: Optional[str] = field(
+        default=None,
         metadata={"help": "Path to the output file"},
     )
     query_path: str = field(
-        default="data/queries.csv",
+        default="queries.csv",
         metadata={"help": "Path to the queries file"},
     )
     documents_path: str = field(
-        default="data/documents.csv", metadata={"help": "Path to the documents file"}
+        default="documents.csv", metadata={"help": "Path to the documents file"}
     )
 
 
@@ -101,6 +105,10 @@ class DomainExpertEvaluatorConfig(BaseEvaluatorConfig):
             "point format and will be split at new lines."
         },
     )
+    output_file: str = field(
+        default="domain_expert_evaluations.csv",
+        metadata={"help": "Path to the output file"},
+    )
 
 
 @dataclass(kw_only=True)
@@ -118,6 +126,10 @@ class CustomPromptEvaluatorConfig(BaseEvaluatorConfig):
     document_placeholder: str = field(
         default="document",
         metadata={"help": "The placeholder for the document in the prompt"},
+    )
+    output_file: str = field(
+        default="custom_prompt_evaluations.csv",
+        metadata={"help": "Path to the output file"},
     )
 
 
@@ -145,6 +157,10 @@ class FewShotEvaluatorConfig(BaseEvaluatorConfig):
         metadata={
             "help": "The individual prompt to be used to evaluate the documents. It should contain a {query} and a {passage} placeholder"
         },
+    )
+    output_file: str = field(
+        default="few_shot_evaluations.csv",
+        metadata={"help": "Path to the output file"},
     )
 
 
@@ -182,21 +198,25 @@ class RDNAMEvaluatorConfig(BaseEvaluatorConfig):
         default=None,
         metadata={"help": "Path to the file containing descriptions for each query"},
     )
+    output_file: str = field(
+        default="rdnam_evaluations.csv",
+        metadata={"help": "Path to the output file"},
+    )
 
 
 @dataclass
 class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
-    answers_file: str = field(
-        default="data/answers.csv", metadata={"help": "Path to the answers file"}
+    answers_path: str = field(
+        default="answers.csv", metadata={"help": "Path to the answers file"}
     )
-    reasoning_file: Optional[str] = field(
-        default=None,
+    reasoning_path: str = field(
+        default="reasonings.csv",
         metadata={"help": "CSV file with the reasoning for each retrieved document"},
     )
 
 
 @dataclass
-class PairWiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
+class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     """Configuration for the pairwise evaluator."""
 
     bidirectional: bool = field(
@@ -206,6 +226,10 @@ class PairWiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     k: int = field(
         default=100,
         metadata={"help": "Maximum number of pairwise comparisons to generate"},
+    )
+    output_file: str = field(
+        default="pairwise_answers_evaluations.csv",
+        metadata={"help": "Path to the output file"},
     )
 
 
@@ -229,13 +253,13 @@ class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
 
 @dataclass(kw_only=True)
 class AgentRankerConfig(BaseConfig):
-    output_file: Optional[str] = field(
-        default=None,
-        metadata={"help": "Path to the output file"},
-    )
     evaluations_file: str = field(
         default="data/evaluations.csv",
         metadata={"help": "Path with the pairwise evaluations of answers"},
+    )
+    output_file: Optional[str] = field(
+        default=None,
+        metadata={"help": "Path to the output file"},
     )
 
 
@@ -249,19 +273,28 @@ class EloAgentRankerConfig(AgentRankerConfig):
         default=1000,
         metadata={"help": "The initial score for each agent"},
     )
+    output_file: str = field(
+        default="elo_ranking.csv",
+        metadata={"help": "Path to the output file"},
+    )
 
 
 @dataclass
 class AllConfig(BaseEvaluatorConfig):
-    reasoning_file: str = field(
-        default="data/reasonings.csv", metadata={"help": "Path to the reasoning file"}
+    reasoning_path: str = field(
+        default="reasonings.csv",
+        metadata={"help": "CSV file with the reasoning for each retrieved document"},
     )
-    answers_file: str = field(
-        default="data/answers.csv", metadata={"help": "Path to the answers file"}
+    answers_path: str = field(
+        default="answers.csv", metadata={"help": "Path to the answers file"}
     )
     evaluations_file: str = field(
-        default="data/answers_eval.jsonl",
-        metadata={"help": "Path with the pairwise evaluations of answers"},
+        default="answers_evaluations.csv",
+        metadata={"help": "Path to write the pairwise evaluations of answers"},
+    )
+    output_file: str = field(
+        default="agents_ranking.csv",
+        metadata={"help": "Path to the output file with the ranking of agents"},
     )
     retrieval_evaluator_name: str = field(
         default="reasoner",

@@ -18,10 +18,10 @@ from ragelo.types.configurations import BaseAnswerEvaluatorConfig
 
 
 class BaseAnswerEvaluator(BaseEvaluator):
-    output_columns = ["qid", "agent", "raw_answer", "answer"]
+    output_columns = ["query_id", "agent", "raw_answer", "answer"]
     config: BaseAnswerEvaluatorConfig
     output_file: str = "answers_evaluations.csv"
-    tuple_columns: list[str] = ["qid", "agent"]
+    tuple_columns: list[str] = ["query_id", "agent"]
 
     def __init__(
         self,
@@ -94,7 +94,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
             )
             raise e
         return {
-            "qid": answer.qid,
+            "query_id": answer.qid,
             "agent": answer.agent,
             "raw_answer": raw_answer,
             "answer": answer.answer,
@@ -108,10 +108,10 @@ class BaseAnswerEvaluator(BaseEvaluator):
 
         if os.path.isfile(self.output_file):
             line: dict[str, str]
-            for line in csv.DictReader(
-                open(self.output_file), fieldnames=self.output_columns
-            ):
-                skip_tuples.add(tuple(line[col] for col in self.tuple_columns))
+            with open(self.output_file, "r") as f:
+                reader = csv.DictReader(f, fieldnames=self.output_columns)
+                for line in reader:
+                    skip_tuples.add(tuple(line[col] for col in self.tuple_columns))
         if len(skip_tuples) > 0:
             logging.warning(
                 f"Skipping {len(skip_tuples)} games already evaluated! "
@@ -130,6 +130,9 @@ class BaseAnswerEvaluator(BaseEvaluator):
         raise NotImplementedError
 
     def _dump_response(self, answer_dict: dict[str, str], file: Optional[str] = None):
+        self._print_response(answer_dict)
+        if not self.config.write_output:
+            return
         output_file = file if file else self.output_file
         if not os.path.isfile(output_file):
             logging.debug(f"Creating new file {output_file}")
@@ -138,10 +141,10 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 writer.writeheader()
         with open(output_file, "a") as f:
             writer = csv.DictWriter(f, fieldnames=self.output_columns)
-        self._print_response(answer_dict)
+            writer.writerow(answer_dict)
 
     def _print_response(self, answer_dict: dict[str, str]):
-        qid = answer_dict["qid"]
+        qid = answer_dict["query_id"]
         agent = answer_dict["agent"]
         raw_answer = answer_dict["raw_answer"]
         answer = answer_dict["answer"]
@@ -207,7 +210,6 @@ class AnswerEvaluatorFactory:
             valid_keys = [field.name for field in dataclasses.fields(type_config)]
             valid_args = {k: v for k, v in kwargs.items() if k in valid_keys}
             config = type_config(**valid_args)
-            config = type_config(**kwargs)
         return cls.registry[evaluator_name.lower()].from_config(
             config, llm_provider_instance
         )

@@ -75,7 +75,7 @@ def load_documents_from_csv(
             continue
         if qid not in documents:
             documents[qid] = {}
-        documents[qid][did] = Document(queries[qid], did, text)
+        documents[qid][did] = Document(did=did, text=text, query=queries[qid])
         documents_read += 1
     logging.info(f"Loaded {documents_read} documents")
     return documents
@@ -112,7 +112,7 @@ def load_documents_from_run_file(
             continue
         text = line[document_text_col].strip()
         for qid in query_per_doc[did]:
-            documents[qid][did] = Document(queries[qid], did, text)
+            documents[qid][did] = Document(did=did, text=text, query=queries[qid])
             documents_read += 1
     logging.info(f"Loaded {documents_read} documents")
 

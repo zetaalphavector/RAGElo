@@ -16,6 +16,7 @@ arguments = {
     "evaluations_file",
     "retrieval_evaluator_name",
     "answer_evaluator_name",
+    "output_file",
 }
 
 

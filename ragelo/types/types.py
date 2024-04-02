@@ -34,9 +34,9 @@ class Query:
 
 @dataclass
 class Document:
-    query: Optional[Query]
     did: str
     text: str
+    query: Optional[Query] = None
 
 
 @dataclass
