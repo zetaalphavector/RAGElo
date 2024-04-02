@@ -51,7 +51,7 @@ class FewShotEvaluator(BaseRetrievalEvaluator):
             }
             formatters = {
                 self.config.reasoning_placeholder: few_shot.reasoning,
-                self.config.relevance_placeholder: few_shot.relevance,
+                self.config.relevance_placeholder: str(few_shot.relevance),
             }
             answer_text = self.assistant_prompt.format(**formatters)
             answer = {"role": "assistant", "content": answer_text}

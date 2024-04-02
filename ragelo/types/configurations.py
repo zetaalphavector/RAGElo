@@ -259,7 +259,7 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
 @dataclass
 class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
     prompt: str = field(
-        default="query: {query} answer: {answer}",
+        default="retrieved documents: {documents} query: {query} answer: {answer}",
         metadata={
             "help": "The prompt to be used to evaluate the documents. It should contain a {query} and a {document} placeholder"
         },
@@ -271,6 +271,18 @@ class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
     answer_placeholder: str = field(
         default="answer",
         metadata={"help": "The placeholder for the answer in the prompt"},
+    )
+    documents_placeholder: str = field(
+        default="documents",
+        metadata={"help": "The placeholder for the documents in the prompt"},
+    )
+    output_file: str = field(
+        default="custom_prompt_answers_evaluations.csv",
+        metadata={"help": "Path to the output file"},
+    )
+    scoring_fields: list[str] = field(
+        default_factory=lambda: ["quality", "trustworthiness", "originality"],
+        metadata={"help": "The fields to extract from the answer"},
     )
 
 

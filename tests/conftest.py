@@ -10,6 +10,7 @@ from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.llm_providers.openai_client import OpenAIConfiguration
 from ragelo.types.configurations import (
     BaseEvaluatorConfig,
+    CustomPromptAnswerEvaluatorConfig,
     CustomPromptEvaluatorConfig,
     DomainExpertEvaluatorConfig,
     FewShotEvaluatorConfig,
@@ -112,6 +113,33 @@ def pairwise_answer_eval_config():
 
 
 @pytest.fixture
+def custom_answer_eval_config():
+    return CustomPromptAnswerEvaluatorConfig(
+        output_file="tests/data/output_answers.csv",
+        prompt="""
+You are an useful assistant for evaluating the quality of the answers generated \
+by RAG Agents. Given the following retrieved documents and a user query, evaluate \
+the quality of the answers based on their quality, trustworthiness and originality. \
+The last line of your answer must be a json object with the keys "quality", \
+"trustworthiness" and originality, each of them with a single number between 0 and \
+2, where 2 is the highest score on that aspect.
+DOCUMENTS RETRIEVED:
+{docs_placeholder}
+
+User Query: {query_placeholder}
+
+Agent answer: {answer_placeholder}
+""".strip(),
+        query_placeholder="query_placeholder",
+        answer_placeholder="answer_placeholder",
+        reasoning_path="tests/data/reasonings.csv",
+        documents_placeholder="docs_placeholder",
+        force=True,
+        verbose=True,
+    )
+
+
+@pytest.fixture
 def expert_retrieval_eval_config():
     return DomainExpertEvaluatorConfig(
         documents_path="tests/data/documents.csv",
@@ -200,7 +228,7 @@ def llm_provider_mock(llm_provider_config):
 
 
 @pytest.fixture
-def llm_provider_answer_mock(llm_provider_config):
+def llm_provider_pairwise_answer_mock(llm_provider_config):
     provider = MockLLMProvider(llm_provider_config)
     provider.inner_call = Mock(
         side_effect=[
@@ -209,6 +237,16 @@ def llm_provider_answer_mock(llm_provider_config):
             "A tie. Therefore, [[C]]",
             "I don't know. [[C]]",
         ]
+    )
+    return provider
+
+
+@pytest.fixture
+def llm_provider_answer_mock(llm_provider_config):
+    provider = MockLLMProvider(llm_provider_config)
+    provider.inner_call = Mock(
+        side_effect=lambda prompt: f"Answer for {prompt}\n"
+        '{"quality": 2, "trustworthiness": 1, "originality": 1}',
     )
     return provider
 

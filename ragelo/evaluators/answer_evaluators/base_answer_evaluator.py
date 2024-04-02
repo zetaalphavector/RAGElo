@@ -5,7 +5,8 @@ import dataclasses
 import logging
 import os
 from abc import abstractmethod
-from typing import Any, Callable, Optional, Sequence, Type, get_type_hints
+from collections import defaultdict
+from typing import Callable, Optional, Sequence, Type, get_type_hints
 
 from tenacity import RetryError
 from tqdm import tqdm
@@ -32,6 +33,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
         self.llm_provider = llm_provider
         if config.output_file is not None:
             self.output_file = config.output_file
+        self.reasonings = self._load_reasonings(self.config.reasoning_path)
 
     @classmethod
     def from_config(
@@ -39,7 +41,6 @@ class BaseAnswerEvaluator(BaseEvaluator):
     ):
         return cls(config, llm_provider)
 
-    @abstractmethod
     def run(self, answers: dict[str, list[AgentAnswer]]) -> list[dict[str, str]]:
         use_progress_bar = self.config.verbose
         unparsed_answers = 0
@@ -82,22 +83,31 @@ class BaseAnswerEvaluator(BaseEvaluator):
         try:
             raw_answer = self.llm_provider(message)
         except RetryError as e:
-            logger.warning(f"Failed to get answer for {answer.qid} {answer.agent}")
+            logger.warning(
+                f"Failed to get answer for {answer.query.qid} {answer.agent}"
+            )
             raise e
         try:
-            answer = self._process_answer(raw_answer)
+            processed_answer = self._process_answer(raw_answer)
 
         except ValueError as e:
             logger.error(
-                f"Failed to parse answer for {answer.qid} {answer.agent}"
+                f"Failed to parse answer for {answer.query.qid} {answer.agent}"
                 f"Full answer: {raw_answer}"
             )
             raise e
+        if isinstance(processed_answer, dict):
+            return {
+                "query_id": answer.query.qid,
+                "agent": answer.agent,
+                "raw_answer": raw_answer,
+                **processed_answer,
+            }
         return {
-            "query_id": answer.qid,
+            "query_id": answer.query.qid,
             "agent": answer.agent,
             "raw_answer": raw_answer,
-            "answer": answer.answer,
+            "answer": processed_answer,
         }
 
     def _get_skip_tuples(self) -> set[Sequence[str]]:
@@ -125,7 +135,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
         raise NotImplementedError
 
     @abstractmethod
-    def _process_answer(self, answer: str) -> Any:
+    def _process_answer(self, answer: str) -> str | dict[str, str]:
         """Processes the LLM evaluator output into some serializable format"""
         raise NotImplementedError
 
@@ -147,7 +157,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
         qid = answer_dict["query_id"]
         agent = answer_dict["agent"]
         raw_answer = answer_dict["raw_answer"]
-        answer = answer_dict["answer"]
+        answer_keys = set(answer_dict.keys()) - {"query_id", "agent", "raw_answer"}
         if self.config.rich_print:
             try:
                 import rich
@@ -159,9 +169,10 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 rich.print(
                     f"[bold green]Raw Answer:[/bold green] [not bold green]{raw_answer}[/not bold green]"
                 )
-                rich.print(
-                    f"[bold green]Answer:[/bold green] [not bold green]{answer}[/not bold green]"
-                )
+                for k in answer_keys:
+                    rich.print(
+                        f"[bold green]{k}:[/bold green] [not bold green]{answer_dict['k']}[/not bold green]"
+                    )
                 rich.print("")
             except ImportError:
                 logging.warning("Rich not installed. Using plain print")
@@ -169,12 +180,33 @@ class BaseAnswerEvaluator(BaseEvaluator):
         else:
             tqdm.write(f"{qid} ({agent})")
             tqdm.write(f"Raw Answer: {raw_answer}")
-            tqdm.write(f"Answer: {answer}")
+            for k in answer_keys:
+                tqdm.write(f"{k}: {answer_dict[k]}")
             tqdm.write("")
 
     @classmethod
     def get_config_class(cls) -> Type[BaseAnswerEvaluatorConfig]:
         return get_type_hints(cls)["config"]
+
+    def _load_reasonings(
+        self,
+        reasoning_path: str,
+        query_id_col: str = "query_id",
+        document_id_col: str = "did",
+        answer_col: str = "answer",
+    ) -> dict[str, dict[str, str]]:
+        reasoning: dict[str, dict[str, str]] = defaultdict(lambda: dict())
+        reasoning_read = 0
+        for line in csv.DictReader(open(reasoning_path)):
+            reasoning_read += 1
+            reasoning[line[query_id_col]][line[document_id_col]] = line[answer_col]
+        logging.info(f"Loaded {reasoning_read} reasonings")
+        return dict(reasoning)
+
+    def _prepare_reasonings(self, qid: str) -> str:
+        return "\n".join(
+            [" ".join([f"[{idx}]", r]) for (idx, r) in self.reasonings[qid].items()]
+        )
 
 
 class AnswerEvaluatorFactory:

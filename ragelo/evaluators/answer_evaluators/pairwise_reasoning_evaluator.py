@@ -1,4 +1,3 @@
-import csv
 import logging
 import random
 import re
@@ -78,7 +77,6 @@ and "[[C]]" for a tie.
         self.k = self.config.k
         self.bidirectional = self.config.bidirectional
         self.pattern = re.compile(r"\[\[([^]]+)]].*$(?:(?!\[\[).)*", re.DOTALL)
-        self.reasonings = self.__load_reasonings(self.config.reasoning_path)
 
     def run(self, answers: dict[str, list[AgentAnswer]]) -> list[dict[str, str]]:
         use_progress_bar = self.config.verbose
@@ -122,9 +120,7 @@ and "[[C]]" for a tie.
         qid = answer[0].query.qid
         answer_agent_a = answer[0].text
         answer_agent_b = answer[1].text
-        reasoning = "\n".join(
-            [" ".join([f"[{idx}]", r]) for (idx, r) in self.reasonings[qid].items()]
-        )
+        reasoning = self._prepare_reasonings(qid)
         prompt = self.prompt.format(
             query=answer[0].query.query,
             documents=reasoning,
@@ -293,18 +289,3 @@ and "[[C]]" for a tie.
         if answer not in ["A", "B", "C"]:
             raise ValueError(f"Unknown answer: {answer}")
         return answer
-
-    def __load_reasonings(
-        self,
-        reasoning_path: str,
-        query_id_col: str = "query_id",
-        document_id_col: str = "did",
-        answer_col: str = "answer",
-    ) -> dict[str, dict[str, str]]:
-        reasoning: dict[str, dict[str, str]] = defaultdict(lambda: dict())
-        reasoning_read = 0
-        for line in csv.DictReader(open(reasoning_path)):
-            reasoning_read += 1
-            reasoning[line[query_id_col]][line[document_id_col]] = line[answer_col]
-        logging.info(f"Loaded {reasoning_read} reasonings")
-        return dict(reasoning)

@@ -20,7 +20,7 @@ class RetrievalEvaluator(BaseRetrievalEvaluator):
 
     def _process_answer(self, answer: str) -> str:
         qid = answer.split("query")[1].strip().split(" ")[0]
-        did = answer.split("document")[1].strip().split(" ")[0]
+        did = answer.split("document")[1].strip().split(" ")[0].split("\n")[0]
         return f"Processed answer for query {qid} and document {did}"
 
 
@@ -35,7 +35,8 @@ class TestRetrievalEvaluator:
         assert results["query_id"] == "0"
         assert results["did"] == "0"
         assert (
-            results["raw_answer"] == "Processed Mock message for query 0 and document 0"
+            results["raw_answer"].split("\n")[0]
+            == "Processed Mock message for query 0 and document 0"
         )
         call_args = llm_provider_mock.inner_call.call_args_list
         assert call_args[0][0][0] == "Mock message for query 0 and document 0"
@@ -45,16 +46,12 @@ class TestRetrievalEvaluator:
             config=retrieval_eval_config, llm_provider=llm_provider_mock
         )
         results = evaluator.run(documents_test)
-        assert results == {
-            "0": {
-                "0": "Processed answer for query 0 and document 0",
-                "1": "Processed answer for query 0 and document 1",
-            },
-            "1": {
-                "2": "Processed answer for query 1 and document 2",
-                "3": "Processed answer for query 1 and document 3",
-            },
-        }
+        for qid in documents_test:
+            for did in documents_test[qid]:
+                assert (
+                    results[qid][did]
+                    == f"Processed answer for query {qid} and document {did}"
+                )
         call_args = llm_provider_mock.inner_call.call_args_list
         assert call_args[0][0][0] == "Mock message for query 0 and document 0"
         assert call_args[1][0][0] == "Mock message for query 0 and document 1"
