@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
+from typing import Optional
 
 
 class RetrievalEvaluatorTypes(str, Enum):
@@ -33,7 +34,7 @@ class Query:
 
 @dataclass
 class Document:
-    query: Query
+    query: Optional[Query]
     did: str
     text: str
 

@@ -3,7 +3,7 @@ from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
     BaseAnswerEvaluator,
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
-from ragelo.types import AnswerEvaluatorTypes
+from ragelo.types import AgentAnswer, AnswerEvaluatorTypes
 from ragelo.types.configurations import CustomPromptAnswerEvaluatorConfig
 
 
@@ -20,7 +20,7 @@ class CustomPromptEvaluator(BaseAnswerEvaluator):
         super().__init__(config, llm_provider)
         self.__prompt = config.prompt
 
-    def _build_message(self, answer) -> str:
+    def _build_message(self, answer: AgentAnswer) -> str:
         formatters = {
             self.config.query_placeholder: answer.query.query,
             self.config.answer_placeholder: answer.text,

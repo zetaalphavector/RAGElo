@@ -23,6 +23,8 @@ class FewShotEvaluator(BaseRetrievalEvaluator):
         self.few_shots = config.few_shots
 
     def _build_message(self, document: Document) -> list[dict[str, str]]:
+        if document.query is None:
+            raise ValueError(f"Document {document.did} does not have a query.")
         system_prompt_msg = {"role": "system", "content": self.sys_prompt}
         messages = [system_prompt_msg] + self.__build_few_shot_samples()
         user_message = self.prompt.format(

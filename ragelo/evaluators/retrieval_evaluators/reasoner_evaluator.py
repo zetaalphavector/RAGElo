@@ -32,6 +32,8 @@ user question.
     {document}"""  # noqa: E501
 
     def _build_message(self, document: Document) -> str:
+        if document.query is None:
+            raise ValueError(f"Document {document.did} does not have a query.")
         return self.prompt.format(query=document.query.query, document=document.text)
 
     def _process_answer(self, answer: str) -> str:

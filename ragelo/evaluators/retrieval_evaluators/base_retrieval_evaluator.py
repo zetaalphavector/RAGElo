@@ -15,7 +15,7 @@ from tqdm.auto import tqdm
 from ragelo.evaluators.base_evaluator import BaseEvaluator
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
 from ragelo.logger import logger
-from ragelo.types import Document, RetrievalEvaluatorTypes
+from ragelo.types import Document, Query, RetrievalEvaluatorTypes
 from ragelo.types.configurations import BaseEvaluatorConfig
 
 
@@ -71,8 +71,18 @@ class BaseRetrievalEvaluator(BaseEvaluator):
                 answers[qid][document.did] = answer_dict["answer"]
         return answers
 
-    def evaluate_single_sample(self, document: Document) -> dict[str, Any]:
+    def evaluate_single_sample(
+        self, document: Document, query: Optional[Query] = None
+    ) -> dict[str, Any]:
         """Evaluates a single query-document pair. Returns the raw answer and the processed answer."""
+        if document.query is None:
+            if query is None:
+                raise ValueError(
+                    "No query provided for evaluating the relevance of a document!"
+                )
+            elif query is not None:
+                document.query = query
+
         message = self._build_message(document)
         try:
             raw_answer = self.llm_provider(message)

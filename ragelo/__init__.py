@@ -9,6 +9,7 @@ from ragelo.evaluators.retrieval_evaluators import (
     get_retrieval_evaluator,
 )
 from ragelo.llm_providers.base_llm_provider import get_llm_provider
+from ragelo.types.types import AgentAnswer, Document, Query
 
 __version__ = "0.1.0"
 __app_name__ = "ragelo"

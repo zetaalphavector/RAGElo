@@ -10,6 +10,8 @@ from ragelo.types import Document
 
 class RetrievalEvaluator(BaseRetrievalEvaluator):
     def _build_message(self, document: Document) -> str:
+        if document.query is None:
+            raise ValueError(f"Document {document.did} does not have a query.")
         qid = document.query.qid
         did = document.did
         return f"Mock message for query {qid} and document {did}"

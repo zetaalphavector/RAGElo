@@ -1,7 +1,7 @@
 """Evaluator with a domain expert persona"""
 
 import logging
-from typing import Any
+from typing import Any, Optional
 
 from tenacity import RetryError
 
@@ -10,7 +10,7 @@ from ragelo.evaluators.retrieval_evaluators import (
     RetrievalEvaluatorFactory,
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
-from ragelo.types import Document, RetrievalEvaluatorTypes
+from ragelo.types import Document, Query, RetrievalEvaluatorTypes
 from ragelo.types.configurations import DomainExpertEvaluatorConfig
 
 
@@ -127,6 +127,8 @@ Please only answer with a single number.
         )
 
     def __build_reason_message(self, document: Document) -> str:
+        if document.query is None:
+            raise ValueError(f"Document {document.did} does not have a query.")
         reason_prompt = self.reason_prompt.format(
             query=document.query.query,
             doc_content=document.text,
@@ -135,8 +137,18 @@ Please only answer with a single number.
         )
         return reason_prompt
 
-    def evaluate_single_sample(self, document: Document) -> dict[str, Any]:
+    def evaluate_single_sample(
+        self, document: Document, query: Optional[Query] = None
+    ) -> dict[str, Any]:
         """Processes a single pair of qid, did in a two-shot manner"""
+        if document.query is None:
+            if query is None:
+                raise ValueError(
+                    "No query provided for evaluating the relevance of a document!"
+                )
+            elif query is not None:
+                document.query = query
+
         query = document.query
         qid = query.qid
         did = document.did

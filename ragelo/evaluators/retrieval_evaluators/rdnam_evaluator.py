@@ -5,6 +5,7 @@ https://arxiv.org/abs/2309.10621
 
 import json
 import logging
+from typing import Optional
 
 import numpy as np
 from tenacity import RetryError
@@ -14,7 +15,7 @@ from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     RetrievalEvaluatorFactory,
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
-from ragelo.types import Document, RetrievalEvaluatorTypes
+from ragelo.types import Document, Query, RetrievalEvaluatorTypes
 from ragelo.types.configurations import RDNAMEvaluatorConfig
 
 
@@ -98,8 +99,17 @@ Each rater used their own independent judgement."""
             self.prompt += "\n{{"
         self.multiple = self.config.multiple
 
-    def evaluate_single_sample(self, document: Document) -> dict[str, str | int]:
+    def evaluate_single_sample(
+        self, document: Document, query: Optional[Query] = None
+    ) -> dict[str, str | int]:
         """Evaluates a single query-document pair. Returns the raw answer and the processed answer."""
+        if document.query is None:
+            if query is None:
+                raise ValueError(
+                    "No query provided for evaluating the relevance of a document!"
+                )
+            elif query is not None:
+                document.query = query
 
         message = self._build_message(document)
         try:
@@ -124,6 +134,8 @@ Each rater used their own independent judgement."""
         }
 
     def _build_message(self, document: Document) -> str:
+        if document.query is None:
+            raise ValueError(f"Document {document.did} does not have a query.")
         qid = document.query.qid
         if self.__use_narratives and qid not in self.__narratives:
             logging.warning(f"No narrative found for {qid}. Will not use it")

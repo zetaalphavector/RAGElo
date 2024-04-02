@@ -21,6 +21,8 @@ class CustomPromptEvaluator(BaseRetrievalEvaluator):
         self.__prompt = config.prompt
 
     def _build_message(self, document: Document) -> str:
+        if document.query is None:
+            raise ValueError(f"Document {document.did} does not have a query.")
         formatters = {
             self.config.query_placeholder: document.query.query,
             self.config.document_placeholder: document.text,
