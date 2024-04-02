@@ -1,6 +1,7 @@
 from ragelo import get_retrieval_evaluator
 from ragelo.evaluators.retrieval_evaluators import (
     BaseRetrievalEvaluator,
+    CustomPromptEvaluator,
     DomainExpertEvaluator,
     RDNAMEvaluator,
     ReasonerEvaluator,
@@ -128,6 +129,32 @@ class TestReasonerEvaluator:
         )
         assert formatted_prompt in results["raw_answer"]
         assert results["raw_answer"] == results["answer"]
+        call_args = llm_provider_mock.inner_call.call_args_list
+        assert call_args[0][0][0] == formatted_prompt
+
+
+class TestCustomPromptEvaluator:
+    def test_process_single_answer(
+        self, llm_provider_mock, custom_prompt_retrieval_eval_config, documents_test
+    ):
+        evaluator = CustomPromptEvaluator.from_config(
+            config=custom_prompt_retrieval_eval_config, llm_provider=llm_provider_mock
+        )
+        formatter = {
+            custom_prompt_retrieval_eval_config.query_placeholder: documents_test["0"][
+                "0"
+            ].query.query,
+            custom_prompt_retrieval_eval_config.document_placeholder: documents_test[
+                "0"
+            ]["0"].text,
+        }
+        formatted_prompt = custom_prompt_retrieval_eval_config.prompt.format(
+            **formatter
+        )
+        results = evaluator.evaluate_single_sample(documents_test["0"]["0"])
+        assert results["query_id"] == "0"
+        assert results["did"] == "0"
+
         call_args = llm_provider_mock.inner_call.call_args_list
         assert call_args[0][0][0] == formatted_prompt
 

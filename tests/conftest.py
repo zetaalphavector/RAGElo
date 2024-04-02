@@ -10,7 +10,9 @@ from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.llm_providers.openai_client import OpenAIConfiguration
 from ragelo.types.configurations import (
     BaseEvaluatorConfig,
+    CustomPromptEvaluatorConfig,
     DomainExpertEvaluatorConfig,
+    FewShotEvaluatorConfig,
     LLMProviderConfig,
     PairwiseEvaluatorConfig,
     RDNAMEvaluatorConfig,
@@ -20,6 +22,21 @@ from ragelo.utils import (
     load_documents_from_csv,
     load_queries_from_csv,
 )
+
+
+class MockLLMProvider(BaseLLMProvider):
+    def __init__(self, config):
+        self.config = config
+
+    @classmethod
+    def from_configuration(cls, config: LLMProviderConfig):
+        return cls(config)
+
+    def inner_call(self, prompt) -> str:
+        return f"Processed {prompt}. "
+
+    def __call__(self, prompt) -> str:
+        return self.inner_call(prompt)
 
 
 @pytest.fixture
@@ -123,25 +140,26 @@ def rdnam_config():
     )
 
 
-class MockLLMProvider(BaseLLMProvider):
-    def __init__(self, config):
-        self.config = config
-
-    @classmethod
-    def from_configuration(cls, config: LLMProviderConfig):
-        return cls(config)
-
-    def inner_call(self, prompt) -> str:
-        return f"Processed {prompt}"
-
-    def __call__(self, prompt) -> str:
-        return self.inner_call(prompt)
+@pytest.fixture
+def custom_prompt_retrieval_eval_config():
+    return CustomPromptEvaluatorConfig(
+        documents_path="tests/data/documents.csv",
+        query_path="tests/data/queries.csv",
+        output_file="tests/data/output.csv",
+        force=True,
+        verbose=True,
+        prompt="query: {query_placeholder} doc: {document_placeholder}",
+        query_placeholder="query_placeholder",
+        document_placeholder="document_placeholder",
+    )
 
 
 @pytest.fixture
 def llm_provider_mock(llm_provider_config):
     provider = MockLLMProvider(llm_provider_config)
-    provider.inner_call = Mock(side_effect=lambda prompt: f"Processed {prompt}")
+    provider.inner_call = Mock(
+        side_effect=lambda prompt: f'Processed {prompt}\n{{"relevance": 0}}'
+    )
     return provider
 
 
