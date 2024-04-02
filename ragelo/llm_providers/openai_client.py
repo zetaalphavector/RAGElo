@@ -11,6 +11,7 @@ class OpenAIProvider(BaseLLMProvider):
     """A Wrapper over the OpenAI client."""
 
     config: OpenAIConfiguration
+    api_key_env_var: str = "OPENAI_API_KEY"
 
     def __init__(
         self,

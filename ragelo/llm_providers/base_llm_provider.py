@@ -11,6 +11,7 @@ from ragelo.types import LLMProviderConfig, LLMProviderTypes
 
 class BaseLLMProvider(ABC):
     config: LLMProviderConfig
+    api_key_env_var: str = "API_KEY"
 
     def __init__(self, config: LLMProviderConfig):
         self.config = config
@@ -82,6 +83,13 @@ class LLMProviderFactory:
             class_ = cls.registry[name]
             type_config = class_.get_config_class()
             valid_keys = [field.name for field in dataclasses.fields(type_config)]
+            if "api_key" not in kwargs:
+                api_key = os.environ.get(class_.api_key_env_var)
+                if not api_key:
+                    raise ValueError(
+                        f"API key not found in environment variable {class_.api_key_env_var}"
+                    )
+                kwargs["api_key"] = api_key
             valid_args = {k: v for k, v in kwargs.items() if k in valid_keys}
             config = type_config(**valid_args)
         return cls.registry[name].from_config(config)
@@ -94,5 +102,4 @@ def get_llm_provider(
     **kwargs,
 ) -> BaseLLMProvider:
     """Creates a new LLM provider"""
-    print(kwargs)
     return LLMProviderFactory.create(name, config, credentials_file, **kwargs)

@@ -209,7 +209,10 @@ class RetrievalEvaluatorFactory:
         else:
             llm_provider_instance = llm_provider
         if evaluator_name not in cls.registry:
-            raise ValueError(f"Unknown retrieval evaluator {evaluator_name}")
+            raise ValueError(
+                f"Unknown retrieval evaluator {evaluator_name}\n"
+                f"Valid options are {list(cls.registry.keys())}"
+            )
         if config is None:
             class_ = cls.registry[evaluator_name]
             type_config = class_.get_config_class()
