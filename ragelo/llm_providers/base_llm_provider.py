@@ -9,6 +9,19 @@ from typing import Optional, Type, get_type_hints
 from ragelo.types import LLMProviderConfig, LLMProviderTypes
 
 
+def set_credentials_from_file(credentials_file: str, split_char: str = "="):
+    """Read credentials from a file and add them to the environment"""
+    logging.info(f"Loading credentials from {credentials_file}")
+    if not os.path.isfile(credentials_file):
+        raise FileNotFoundError(f"Credentials file {credentials_file} not found")
+    with open(credentials_file) as f:
+        for line in f:
+            key, value = line.strip().split(split_char, 1)
+            logging.debug(f"Setting {key} from file")
+            os.environ[key] = value
+            os.environ[key] = value
+
+
 class BaseLLMProvider(ABC):
     config: LLMProviderConfig
     api_key_env_var: str = "API_KEY"
@@ -32,23 +45,6 @@ class BaseLLMProvider(ABC):
     @classmethod
     def get_config_class(cls) -> Type[LLMProviderConfig]:
         return get_type_hints(cls)["config"]
-
-    @staticmethod
-    def get_api_instance(config: LLMProviderConfig):
-        raise NotImplementedError
-
-
-def set_credentials_from_file(credentials_file: str):
-    """Read credentials from a file and add them to the environment"""
-    logging.info(f"Loading credentials from {credentials_file}")
-    if not os.path.isfile(credentials_file):
-        raise FileNotFoundError(f"Credentials file {credentials_file} not found")
-    with open(credentials_file) as f:
-        for line in f:
-            key, value = line.strip().split("=")
-            logging.debug(f"Setting {key} from file")
-            os.environ[key] = value
-            os.environ[key] = value
 
 
 class LLMProviderFactory:

@@ -18,7 +18,7 @@ class OpenAIProvider(BaseLLMProvider):
         config: OpenAIConfiguration,
     ):
         super().__init__(config)
-        self.__openai_client = self.get_openai_client(config)
+        self.__openai_client = self.__get_openai_client(config)
 
     @retry(wait=wait_random_exponential(min=1, max=120), stop=stop_after_attempt(1))
     def __call__(
@@ -51,7 +51,7 @@ class OpenAIProvider(BaseLLMProvider):
         return answers.choices[0].message.content
 
     @staticmethod
-    def get_openai_client(openai_config: OpenAIConfiguration) -> OpenAI:
+    def __get_openai_client(openai_config: OpenAIConfiguration) -> OpenAI:
         if openai_config.api_type == "azure":
             if openai_config.api_base is None:
                 raise ValueError("OpenAI base url not found in configuration")
