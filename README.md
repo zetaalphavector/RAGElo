@@ -29,7 +29,7 @@ pip install ragelo[cli]
 ```
 ## 🚀 Library Quickstart
 
-To use RAGElo as a library, all you need to do is import RagELO, initialize an `Evaluator` and call either `evaluate_single_sample()` for evaluating a retrieved document or an LLM answer, or `run()` to run a batch_evaluation. For example, using the `RDNAM` retrieval evaluator from the [Thomas et al. (2023)](https://arxiv.org/abs/2309.10621) paper on using GPT-4 for annotating retrieval results:
+To use RAGElo as a library, all you need to do is import RAGElo, initialize an `Evaluator` and call either `evaluate_single_sample()` for evaluating a retrieved document or an LLM answer, or `run()` to run a batch_evaluation. For example, using the `RDNAM` retrieval evaluator from the [Thomas et al. (2023)](https://arxiv.org/abs/2309.10621) paper on using GPT-4 for annotating retrieval results:
 
 ```python
 from ragelo import Document, Query, get_retrieval_evaluator
@@ -144,7 +144,8 @@ python -m build
 
 ### ✅ TODO
 - [ ] Add CI/CD for publishing
-- [x] Add option to few-shot examples (Undocumented)
+- [ ] Add full documentation of all implemented Evaluators
+- [x] Add option to few-shot examples (Undocumented, yet)
 - [x] Testing!
 - [x] Publish on PyPi
 - [x] Add more document evaluators (Microsoft)
