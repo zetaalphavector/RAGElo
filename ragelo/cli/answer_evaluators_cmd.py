@@ -1,30 +1,32 @@
-import os
-
 import typer
 
+from ragelo import get_answer_evaluator, get_llm_provider
 from ragelo.cli.args import get_params_from_function
-from ragelo.evaluators.answer_evaluators import AnswerEvaluatorFactory
-from ragelo.llm_providers import LLMProviderFactory
-from ragelo.types.configurations import AnswerEvaluatorConfig
+from ragelo.cli.utils import get_path
+from ragelo.types import AnswerEvaluatorTypes
+from ragelo.types.configurations import PairwiseEvaluatorConfig
+from ragelo.utils import load_answers_from_csv
 
-typer.main.get_params_from_function = get_params_from_function
+typer.main.get_params_from_function = get_params_from_function  # type: ignore
 app = typer.Typer()
 
 
 @app.command()
 def pairwise_reasoning(
-    config: AnswerEvaluatorConfig = AnswerEvaluatorConfig(), **kwargs
+    config: PairwiseEvaluatorConfig = PairwiseEvaluatorConfig(), **kwargs
 ):
     """A evaluator that evaluates RAG-based answers pairwise, with document reasoning"""
-    if kwargs["output_file"] is None:
-        kwargs["output_file"] = os.path.join(
-            kwargs.get("data_dir", ""), "answers_eval.jsonl"
-        )
-    config = AnswerEvaluatorConfig(**kwargs)
-    llm_provider = LLMProviderFactory.create_from_credentials_file(
-        config.llm_provider, config.credentials_file, config.model_name
+    config = PairwiseEvaluatorConfig(**kwargs)
+    config.query_path = get_path(config.data_path, config.query_path)
+    config.answers_path = get_path(config.data_path, config.answers_path)
+    config.output_file = get_path(config.data_path, config.output_file)
+    config.reasoning_path = get_path(config.data_path, config.reasoning_path)
+
+    llm_provider = get_llm_provider(config.llm_provider, **kwargs)
+    evaluator = get_answer_evaluator(
+        AnswerEvaluatorTypes.PAIRWISE_REASONING,
+        config=config,
+        llm_provider=llm_provider,
     )
-    evaluator = AnswerEvaluatorFactory.create(
-        "pairwise_reasoning", config, llm_provider
-    )
-    evaluator.run()
+    answers = load_answers_from_csv(config.answers_path, queries=config.query_path)
+    evaluator.run(answers)

@@ -3,4 +3,5 @@ from ragelo.evaluators.retrieval_evaluators import (
     DomainExpertEvaluator,
     RDNAMEvaluator,
     ReasonerEvaluator,
+    RetrievalEvaluatorFactory,
 )

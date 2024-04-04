@@ -1,6 +1,4 @@
 import random
-from collections import defaultdict
-from typing import Dict, List, Tuple
 
 from ragelo.agent_rankers.base_agent_ranker import AgentRanker, AgentRankerFactory
 from ragelo.logger import logger
@@ -9,23 +7,22 @@ from ragelo.types import EloAgentRankerConfig
 
 @AgentRankerFactory.register("elo")
 class EloRanker(AgentRanker):
+    name: str = "Elo Agent Ranker"
+    config: EloAgentRankerConfig
+
     def __init__(
         self,
         config: EloAgentRankerConfig,
-        evaluations: List[Tuple[str, str, str]],
+        evaluations: list[tuple[str, str, str]],
     ):
-        self.config = config
-        self.evaluations = evaluations
-        self.ranking: defaultdict = defaultdict(list)
+        super().__init__(config, evaluations)
         self.score_map = {"A": 1, "B": 0, "C": 0.5}
 
-        self.agents: Dict[str, float] = {}
-        self.games: List[Tuple[str, str, float]] = []
+        self.agents: dict[str, int] = {}
+        self.games: list[tuple[str, str, float]] = []
         self.computed = False
         self.initial_score = self.config.initial_score
         self.k = self.config.k
-        self.name = "Elo Agent Ranker"
-        self.output_file = self.config.output_file
 
     def run(self):
         """Compute score for each agent"""
@@ -41,8 +38,8 @@ class EloRanker(AgentRanker):
             raise ValueError("Ranking not computed yet, Run evaluate() first")
         return self.agents
 
-    def __get_elo_scores(self) -> Tuple[List[Tuple[str, str, float]], Dict[str, int]]:
-        games: List[Tuple[str, str, float]] = []
+    def __get_elo_scores(self) -> tuple[list[tuple[str, str, float]], dict[str, int]]:
+        games: list[tuple[str, str, float]] = []
         agents = {}
         for agent_a, agent_b, score in self.evaluations:
             score_val = self.score_map[score]
@@ -72,5 +69,5 @@ class EloRanker(AgentRanker):
     def __expected_score(self, rating1, rating2):
         return 1 / (1 + 10 ** ((rating2 - rating1) / 400))
 
-    def __update_rating(self, rating, expected_score, actual_score):
-        return rating + self.k * (actual_score - expected_score)
+    def __update_rating(self, rating, expected_score, actual_score) -> int:
+        return int(rating + self.k * (actual_score - expected_score))

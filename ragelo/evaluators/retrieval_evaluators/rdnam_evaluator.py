@@ -5,26 +5,32 @@ https://arxiv.org/abs/2309.10621
 
 import json
 import logging
-from typing import Dict
+from typing import Optional
 
 import numpy as np
+from tenacity import RetryError
 
 from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     BaseRetrievalEvaluator,
     RetrievalEvaluatorFactory,
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
-from ragelo.types import Document, Query
+from ragelo.types import Document, Query, RetrievalEvaluatorTypes
 from ragelo.types.configurations import RDNAMEvaluatorConfig
 
 
-@RetrievalEvaluatorFactory.register("RDNAM")
+@RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.RDNAM)
 class RDNAMEvaluator(BaseRetrievalEvaluator):
-    prompt = """{role}Given a query and a document, you must provide a score on an integer scale of 0 to 2 with the following meanings:
+    prompt = """
+{role}Given a query and a document, you must provide a score on an integer scale \
+of 0 to 2 with the following meanings:
 2 = highly relevant, very helpful for this query
 1 = relevant, may be partly helpful but might contain other irrelevant content
 0 = not relevant, should never be shown for this query
-Assume that you are writing a report on the subject of the topic. If you would use any of the information contained in the document in such a report, mark it 1. If the document is primarily about the topic, or contains vital information about the topic, mark it 2. Otherwise, mark it 0.
+Assume that you are writing a report on the subject of the topic. If you would \
+use any of the information contained in the document in such a report, mark it 1. \
+If the document is primarily about the topic, or contains vital information about \
+the topic, mark it 2. Otherwise, mark it 0.
 
 # Query
 A person has typed {query} into a search engine.
@@ -40,69 +46,47 @@ Consider the following document.
 Split this problem into steps:
 Consider the underlying intent of the search.
 {aspects}
-Consider the aspects above and relative importance of each, and decide on a final score (O).
+Consider the aspects above and relative importance of each, and decide on a final \
+score (O).
 {multiple}
 Produce a JSON array of scores without providing any reasoning. Example: {example}
 
 # Results
-"""  # noqa: E501
+""".strip()
 
     NARRATIVE_DESCRIPTION_PROMPT = "They were looking for: {description} {narrative}"
-    ASPECTS_NARRATIVE = """Measure how well the content matches a likely intent of the query (M).
-    Measure how trustworthy the web page is (T)."""  # noqa: E501
+    ASPECTS_NARRATIVE = """Measure how well the content matches a likely intent \
+of the query (M).
+Measure how trustworthy the web page is (T).""".strip()
     ASPECTS_EXAMPLE = """[{{"M": 2, "T": 1, "O": 1}}, {{"M": 1..."""
     DEFAULT_EXAMPLE = """[{{"O": 1}}, {{"O": 2}}, {{"O": 0..."""
-    MULTIPLE_PROMPT = """We asked five search engine raters to evaluate the relevance of the web page for the query.
-Each rater used their own independent judgement."""  # noqa: E501
+    MULTIPLE_PROMPT = """We asked five search engine raters to evaluate \
+the relevance of the web page for the query.
+Each rater used their own independent judgement."""
+    config: RDNAMEvaluatorConfig
+    output_columns = ["query_id", "did", "raw_answer", "answer"]
+    scoring_key = "answer"
+    output_file = "rdnam_evaluations.csv"
 
     def __init__(
         self,
         config: RDNAMEvaluatorConfig,
-        queries: Dict[str, Query],
-        documents: Dict[str, Dict[str, Document]],
         llm_provider: BaseLLMProvider,
     ):
-        """Initializes an evaluator based on RDNAM framework.
-        Args:
-            role: A String defining the type of user the LLM should mimic
-                (e.g.: "You are a search quality rater evaluating
-                the relevance of web pages")
-            description: Will a description of the task be provided to the LLM?
-            narrative: Will a narrative of the task be provided to the LLM?
-            aspects: Should the prompt include aspects to get tot he final score?
-                If true, will prompt the LLM to compute scores for M (intent match)
-                and T (trustworthy) for the document before computing the final score.
-            multiple: Should the prompt ask the LLM to mimic multiple annotators?
-        """
-        if not queries:
-            raise ValueError(
-                "You are trying to use a Retrieval Evaluator without providing queries"
-            )
-        if not documents:
-            raise ValueError(
-                "You are trying to use a Retrieval Evaluator without providing documents"
-            )
-        self.queries = queries
-        self.documents = documents
-        if not config.output_file:
-            self.output_file = "retrieval_evaluator.log"
-        else:
-            self.output_file = config.output_file
-
-        self.llm_provider = llm_provider
-        self.config = config
+        """Initializes an evaluator based on RDNAM framework."""
+        super().__init__(config, llm_provider)
 
         self.__role = self.config.role if self.config.role else ""
         self.__use_narratives = False
         self.__use_description = False
 
         if self.config.narrative_file:
-            self.__narratives: Dict[str, str] = self._load_from_csv(
+            self.__narratives: dict[str, str] = self._load_from_csv(
                 self.config.narrative_file
             )
             self.__use_narratives = True
         if self.config.description_file:
-            self.descriptions: Dict[str, str] = self._load_from_csv(
+            self.descriptions: dict[str, str] = self._load_from_csv(
                 self.config.description_file
             )
             self.__use_description = True
@@ -115,11 +99,44 @@ Each rater used their own independent judgement."""  # noqa: E501
             self.prompt += "\n{{"
         self.multiple = self.config.multiple
 
-    def _build_message(
-        self,
-        qid: str,
-        did: str,
-    ) -> str:
+    def evaluate_single_sample(
+        self, document: Document, query: Optional[Query] = None
+    ) -> dict[str, str | int]:
+        """Evaluates a single query-document pair. Returns the raw answer and the processed answer."""
+        if document.query is None:
+            if query is None:
+                raise ValueError(
+                    "No query provided for evaluating the relevance of a document!"
+                )
+            elif query is not None:
+                document.query = query
+
+        message = self._build_message(document)
+        try:
+            raw_answer = self.llm_provider(message)
+        except RetryError as e:
+            logging.warning(
+                f"Failed to FETCH answers for {document.query.qid} {document.did}"
+            )
+            raise e
+        try:
+            answer = self._process_answer(raw_answer)
+        except ValueError as e:
+            logging.warning(
+                f"Failed to PARSE answer for {document.query.qid} {document.did}"
+            )
+            raise e
+        return {
+            "query_id": document.query.qid,
+            "did": document.did,
+            "raw_answer": raw_answer,
+            "answer": answer,
+        }
+
+    def _build_message(self, document: Document) -> str:
+        if document.query is None:
+            raise ValueError(f"Document {document.did} does not have a query.")
+        qid = document.query.qid
         if self.__use_narratives and qid not in self.__narratives:
             logging.warning(f"No narrative found for {qid}. Will not use it")
         if self.__use_description and qid not in self.descriptions:
@@ -127,19 +144,17 @@ Each rater used their own independent judgement."""  # noqa: E501
 
         narrative = (
             self.__narratives[qid]
-            if qid in self.__narratives and self.__use_narratives
+            if self.__use_narratives and qid in self.__narratives
             else ""
         )
         description = (
             self.descriptions[qid]
-            if qid in self.descriptions and self.__use_description
+            if self.__use_description and qid in self.descriptions
             else ""
         )
         narrative_description_str = self.NARRATIVE_DESCRIPTION_PROMPT.format(
             narrative=narrative, description=description
         )
-        query = self.queries[qid]
-        document = self.documents[qid][did]
 
         example = (
             self.ASPECTS_EXAMPLE if self.__aspects_prompt else self.DEFAULT_EXAMPLE
@@ -147,7 +162,7 @@ Each rater used their own independent judgement."""  # noqa: E501
 
         formatted_prompt = self.prompt.format(
             role=self.__role,
-            query=query,
+            query=document.query.query,
             doc_content=document,
             narrative_description=narrative_description_str,
             aspects=self.__aspects_prompt,

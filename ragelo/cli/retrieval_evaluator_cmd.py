@@ -1,15 +1,17 @@
 import typer
 
+from ragelo import get_llm_provider, get_retrieval_evaluator
 from ragelo.cli.args import get_params_from_function
-from ragelo.evaluators.retrieval_evaluators import RetrievalEvaluatorFactory
-from ragelo.llm_providers import LLMProviderFactory
+from ragelo.cli.utils import get_path
 from ragelo.types.configurations import (
     BaseEvaluatorConfig,
     DomainExpertEvaluatorConfig,
     RDNAMEvaluatorConfig,
 )
+from ragelo.types.types import RetrievalEvaluatorTypes
+from ragelo.utils import load_documents_from_csv
 
-typer.main.get_params_from_function = get_params_from_function
+typer.main.get_params_from_function = get_params_from_function  # type: ignore
 
 
 app = typer.Typer()
@@ -29,14 +31,21 @@ def domain_expert(
     ragelo retrieval_evaluator domain_expert queries.csv documents.csv "Chemical Engineering" --company "ChemCorp Inc."
 
     """
-    if kwargs["output_file"] is None:
-        kwargs["output_file"] = "domain_expert_evaluations.csv"
+
     config = DomainExpertEvaluatorConfig(**kwargs)
-    llm_provider = LLMProviderFactory.create_from_credentials_file(
-        config.llm_provider, config.credentials_file, config.model_name
+    config.query_path = get_path(config.data_path, config.query_path)
+    config.documents_path = get_path(config.data_path, config.documents_path)
+    config.output_file = get_path(config.data_path, config.output_file)
+
+    llm_provider = get_llm_provider(config.llm_provider, **kwargs)
+    evaluator = get_retrieval_evaluator(
+        RetrievalEvaluatorTypes.DOMAIN_EXPERT, config=config, llm_provider=llm_provider
     )
-    evaluator = RetrievalEvaluatorFactory.create("domain_expert", config, llm_provider)
-    evaluator.run()
+    documents = load_documents_from_csv(
+        config.documents_path, queries=config.query_path
+    )
+
+    evaluator.run(documents)
 
 
 @app.command()
@@ -44,26 +53,40 @@ def reasoner(config: BaseEvaluatorConfig = BaseEvaluatorConfig(), **kwargs):
     """
     A document Evaluator that only outputs the reasoning for why a document is relevant.
     """
-    if kwargs["output_file"] is None:
-        kwargs["output_file"] = "reasonings.csv"
-    llm_provider = LLMProviderFactory.create_from_credentials_file(
-        config.llm_provider, config.credentials_file, config.model_name
+    config = BaseEvaluatorConfig(**kwargs)
+    config.query_path = get_path(config.data_path, config.query_path)
+    config.documents_path = get_path(config.data_path, config.documents_path)
+    if not config.output_file:
+        config.output_file = get_path(config.data_path, "reasonings.csv")
+    else:
+        config.output_file = get_path(config.data_path, config.output_file)
+
+    llm_provider = get_llm_provider(config.llm_provider, **kwargs)
+    evaluator = get_retrieval_evaluator(
+        RetrievalEvaluatorTypes.REASONER, config=config, llm_provider=llm_provider
     )
-    evaluator = RetrievalEvaluatorFactory.create("reasoner", config, llm_provider)
-    evaluator.run()
+    documents = load_documents_from_csv(
+        config.documents_path, queries=config.query_path
+    )
+
+    evaluator.run(documents)
 
 
 @app.command()
 def rdnam(config: RDNAMEvaluatorConfig = RDNAMEvaluatorConfig(), **kwargs):
     """Evaluator based on the paper by Thomas, Spielman, Craswell and Mitra, Large language models can accurately predict searcher preferences."""
-    if kwargs["output_file"] is None:
-        kwargs["output_file"] = "rdnam_evaluations.csv"
     config = RDNAMEvaluatorConfig(**kwargs)
-    llm_provider = LLMProviderFactory.create_from_credentials_file(
-        config.llm_provider, config.credentials_file, config.model_name
+    config.query_path = get_path(config.data_path, config.query_path)
+    config.documents_path = get_path(config.data_path, config.documents_path)
+    config.output_file = get_path(config.data_path, config.output_file)
+    llm_provider = get_llm_provider(config.llm_provider, **kwargs)
+    evaluator = get_retrieval_evaluator(
+        RetrievalEvaluatorTypes.RDNAM, config=config, llm_provider=llm_provider
     )
-    evaluator = RetrievalEvaluatorFactory.create("rdnam", config, llm_provider)
-    evaluator.run()
+    documents = load_documents_from_csv(
+        config.documents_path, queries=config.query_path
+    )
+    evaluator.run(documents)
 
 
 if __name__ == "__main__":

@@ -1,11 +1,7 @@
-import csv
-import json
 import logging
-import os
 import random
 import re
 from collections import defaultdict, deque
-from typing import Dict, List, Set, Tuple
 
 from tenacity import RetryError
 from tqdm.auto import tqdm
@@ -15,19 +11,44 @@ from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
     BaseAnswerEvaluator,
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
-from ragelo.types import Query
-from ragelo.types.configurations import AnswerEvaluatorConfig
+from ragelo.types import AgentAnswer, AnswerEvaluatorTypes
+from ragelo.types.configurations import PairwiseEvaluatorConfig
 
 
-@AnswerEvaluatorFactory.register("pairwise_reasoning")
+@AnswerEvaluatorFactory.register(AnswerEvaluatorTypes.PAIRWISE_REASONING)
 class PairwiseWithReasoningEvaluator(BaseAnswerEvaluator):
     """A evaluator that evaluates RAG-based answers pairwise, with document reasoning"""
 
-    prompt = """Please act as an impartial judge and evaluate the quality of the responses provided by two AI assistants tasked to answer the question displayed below, based on a set of documents retrieved by a search engine.
-You should choose the assistant that best answers the user question based on a set of reference documents that may or not be relevant.
-Answers cite documents using square brackets.  For each reference document, you will be provided with a reasoning explaining why the document is or is not relevant.
-Your evaluation should consider factors such as the correctness, helpfulness, completeness, accuracy, depth, and level of detail of their responses. Details are only useful if they answer the user question. If an answers contains non-relevant details, it should not be preferred over one that only use relevant information.
-Begin your evaluation by explaining why each answer correctly answers the user question. Then, you should compare the two responses and provide a short explanation on their differences. Avoid any position biases and ensure that the order in which the responses were presented does not influence your decision. Do not allow the length of the responses to influence your evaluation. Be as objective as possible. After providing your explanation, output your final verdict by strictly following this format: "[[A]]" if assistant A is better, "[[B]]" if assistant B is better, and "[[C]]" for a tie.
+    output_columns: list[str] = [
+        "query_id",
+        "agent_a",
+        "agent_b",
+        "raw_answer",
+        "answer",
+    ]
+    tuple_columns: list[str] = ["query_id", "agent_a", "agent_b"]
+    config: PairwiseEvaluatorConfig
+    prompt = """
+Please act as an impartial judge and evaluate the quality of the responses provided \
+by two AI assistants tasked to answer the question displayed below, based on a set \
+of documents retrieved by a search engine.
+You should choose the assistant that best answers the user question based on a set \
+of reference documents that may or not be relevant.
+Answers cite documents using square brackets. For each reference document, you will \
+be provided with a reasoning explaining why the document is or is not relevant.
+Your evaluation should consider factors such as the correctness, helpfulness, \
+completeness, accuracy, depth, and level of detail of their responses.\
+Details are only useful if they answer the user question. If an answer \
+contains non-relevant details, it should not be preferred over one that only \
+use relevant information.
+Begin your evaluation by explaining why each answer correctly answers the user \
+question. Then, you should compare the two responses and provide a short explanation \
+on their differences. Avoid any position biases and ensure that the order in which \
+the responses were presented does not influence your decision. Do not allow the \
+length of the responses to influence your evaluation. Be as objective as possible.
+After providing your explanation, output your final verdict by strictly following \
+this format: "[[A]]" if assistant A is better, "[[B]]" if assistant B is better, \
+and "[[C]]" for a tie.
 
 [User Question]
 {query}
@@ -41,119 +62,113 @@ Begin your evaluation by explaining why each answer correctly answers the user q
 
 [The Start of Assistant B's Answer]
 {answer_b}
-[The End of Assistant B's Answer]"""  # noqa: E501
+[The End of Assistant B's Answer]
+""".strip()
+    output_file: str = "pairwise_answers_evaluations.csv"
 
     def __init__(
         self,
-        config: AnswerEvaluatorConfig,
-        queries: Dict[str, Query],
-        answers: Dict[str, Dict[str, str]],
-        agents: Set[str],
+        config: PairwiseEvaluatorConfig,
         llm_provider: BaseLLMProvider,
     ):
-        super().__init__(config, queries, answers, agents, llm_provider)
-        if not self.config.output_file:
-            self.output_file = "pairwise_reasoning_evaluator.csv"
-        else:
-            self.output_file = self.config.output_file
-        if not self.config.reasoning_file:
+        super().__init__(config, llm_provider)
+        if not self.config.reasoning_path:
             raise ValueError("Reasoning file is required for PairwiseWithReasoning")
         self.k = self.config.k
         self.bidirectional = self.config.bidirectional
         self.pattern = re.compile(r"\[\[([^]]+)]].*$(?:(?!\[\[).)*", re.DOTALL)
-        self.reasoning = self._load_reasoning(self.config.reasoning_file)
-        self.evaluations: List[Dict[str, str]] = []
 
-    # def evaluate_single_answer(self, qid: str)
-
-    def run(self) -> List[Dict[str, str]]:
+    def run(self, answers: dict[str, list[AgentAnswer]]) -> list[dict[str, str]]:
         use_progress_bar = self.config.verbose
         unparsed_answers = 0
-        skip_tuples = set()
-        prompts = self.__create_all_prompts(use_progress_bar)
-        if os.path.exists(self.output_file) and not self.config.force:
-            for line in open(self.output_file):
-                data = json.loads(line)
-                qid = data["query_id"]
-                agent_a = data["agent_a"]
-                agent_b = data["agent_b"]
-                skip_tuples.add((qid, agent_a, agent_b))
-            logging.info(f"Skipping {len(skip_tuples)} games...")
-        if self.config.force and os.path.exists(self.output_file):
-            # remove the file
-            logging.info("Removing previous output file")
-            os.remove(self.output_file)
-        if len(prompts) - len(skip_tuples) > 0:
-            logging.info(f"Running {len(prompts) - len(skip_tuples)} games...")
-        for p in tqdm(
-            prompts,
+        skip_tuples = self._get_skip_tuples()
+        evaluations: list[dict[str, str]] = []
+        tuples = self.__prepare_all_tuples(answers, use_progress_bar)
+        if len(tuples) - len(skip_tuples) > 0:
+            logging.info(f"Running {len(tuples) - len(skip_tuples)} games...")
+        for answer_a, answer_b in tqdm(
+            tuples,
             desc="Evaluating games",
             disable=not self.config.verbose,
+            leave=False,
+            position=0,
             ncols=100,
         ):
-            qid = p["query_id"]
-            agent_a = p["agent_a"]
-            agent_b = p["agent_b"]
-            prompt_str = p["prompt"]
+            qid = answer_a.query.qid
+            agent_a = answer_a.agent
+            agent_b = answer_b.agent
             if (qid, agent_a, agent_b) in skip_tuples:
+                logging.debug(f"Skipping {qid} {agent_a} {agent_b}")
                 continue
-            logging.debug(f"Running query id {qid} agent {agent_a} vs {agent_b}")
             try:
-                llm_answer = self.llm_provider(prompt_str)
+                answer_dict = self.evaluate_single_sample((answer_a, answer_b))
             except RetryError:
-                logging.warning(
-                    f"Failed fetching answer for {qid}, {agent_a}, {agent_b}"
-                )
                 continue
-            logging.debug(llm_answer)
-            try:
-                relevant = self.__extract_relevant(llm_answer)
             except ValueError:
                 unparsed_answers += 1
-                logging.warning(
-                    f"Failed extracting answer for {qid}, {agent_a}, {agent_b}."
-                    "Probably not enough tokens in the answer."
-                    f"Full answer:\n{llm_answer}",
-                )
                 continue
-            self.__print_response(qid, agent_a, agent_b, llm_answer, relevant)
-            self.__dump_response(
-                qid, agent_a, agent_b, prompt_str, llm_answer, relevant
-            )
+            self._dump_response(answer_dict)
+            evaluations.append(answer_dict)
+
         if self.config.verbose:
             print("✅ Done!")
             print(f"Unparsed answers: {unparsed_answers}")
-            print(f"Total evaluations: {len(prompts) - unparsed_answers}")
-        return self.evaluations
+            print(f"Total evaluations: {len(evaluations)}")
+        return evaluations
 
-    def __dump_response(
-        self,
-        qid: str,
-        agent_a: str,
-        agent_b: str,
-        prompt_str: str,
-        llm_answer: str,
-        relevant: str,
-    ):
-        with open(self.output_file, "a") as f:
-            d = {
-                "query_id": qid,
-                "agent_a": agent_a,
-                "agent_b": agent_b,
-                "prompt": prompt_str,
-                "answer": llm_answer,
-                "relevant": relevant,
-            }
-            json.dump(d, f)
-            f.write("\n")
-            self.evaluations.append(d)
+    def _build_message(self, answer: tuple[AgentAnswer, AgentAnswer]) -> str:
+        qid = answer[0].query.qid
+        answer_agent_a = answer[0].text
+        answer_agent_b = answer[1].text
+        reasoning = self._prepare_reasonings(qid)
+        prompt = self.prompt.format(
+            query=answer[0].query.query,
+            documents=reasoning,
+            answer_a=answer_agent_a,
+            answer_b=answer_agent_b,
+        )
+        return prompt
 
-    def __print_response(
-        self, qid: str, agent_a: str, agent_b: str, answer: str, relevant: str
-    ):
-        """Prints the response to the console"""
+    def evaluate_single_sample(
+        self, answer: tuple[AgentAnswer, AgentAnswer]
+    ) -> dict[str, str]:
+        prompt = self._build_message(answer)
+        qid = answer[0].query.qid
+        agent_a_id = answer[0].agent
+        agent_b_id = answer[1].agent
+
+        try:
+            raw_answer = self.llm_provider(prompt)
+        except RetryError as e:
+            logging.warning(
+                f"Failed to FETCH answers for {qid} {agent_a_id}, {agent_b_id}"
+            )
+            raise e
+        try:
+            processed_answer = self._process_answer(raw_answer)
+        except ValueError as e:
+            logging.warning(
+                f"Failed extracting answer for {qid}, {agent_a_id}, {agent_b_id}."
+                "Probably not enough tokens in the answer."
+                f"Full answer:\n{raw_answer}",
+            )
+            raise e
+        return {
+            "query_id": qid,
+            "agent_a": agent_a_id,
+            "agent_b": agent_b_id,
+            "raw_answer": raw_answer,
+            "answer": processed_answer,
+        }
+
+    def _print_response(self, answer_dict: dict[str, str]):
         if not self.config.verbose:
             return
+        qid = answer_dict["query_id"]
+        agent_a = answer_dict["agent_a"]
+        agent_b = answer_dict["agent_b"]
+        raw_answer = answer_dict["raw_answer"]
+        relevant = answer_dict["answer"]
         if self.config.rich_print:
             try:
                 import rich
@@ -165,39 +180,44 @@ Begin your evaluation by explaining why each answer correctly answers the user q
                 )
                 rich.print("[bold white] Evaluator answer: [/bold white]")
                 if relevant == "A":
-                    parser_ans = answer.replace("[[A]]", "[bold blue]A[/bold blue]")
+                    parser_ans = raw_answer.replace("[[A]]", "[bold blue]A[/bold blue]")
                 elif relevant == "B":
-                    parser_ans = answer.replace("[[B]]", "[bold red]B[/bold red]")
+                    parser_ans = raw_answer.replace("[[B]]", "[bold red]B[/bold red]")
                 else:
-                    parser_ans = answer.replace("[[C]]", "[bold purple]C[/bold purple]")
-                    rich.print(parser_ans)
+                    parser_ans = raw_answer.replace(
+                        "[[C]]", "[bold purple]C[/bold purple]"
+                    )
+                rich.print(parser_ans)
             except ImportError:
                 logging.warning("Rich not installed. Using plain print")
                 self.config.rich_print = False
-        if not self.config.rich_print:
+        else:
             tqdm.write(f"{qid}: {agent_a} vs {agent_b}")
-            tqdm.write(f"Evaluator full answer: {answer}")
+            tqdm.write(f"Evaluator full answer: {raw_answer}")
+            tqdm.write(f"Relevant answer: {relevant}")
 
-    def __generate_random_games(self) -> List[Tuple[str, str]]:
+    def __generate_random_games(
+        self, answers: dict[str, list[AgentAnswer]]
+    ) -> list[tuple[str, str]]:
         """Creates all prompts necessary for running the evaluator"""
-        total_agents = len(self.agents)
-        _agents = list(self.agents)
+        all_agents = list({x.agent for ans in answers.values() for x in ans})
+        total_agents = len(all_agents)
         if self.k == -1:
             logging.info("Creating all possible games...")
             pairs = []
             for i in range(total_agents):
                 for j in range(i + 1, total_agents):
-                    pairs.append((_agents[i], _agents[j]))
+                    pairs.append((all_agents[i], all_agents[j]))
             random.shuffle(pairs)
             return pairs
         rounds_per_agent = self.k // total_agents
         leftover_rounds = self.k % total_agents
 
-        extra_samples_1 = random.sample(_agents, k=leftover_rounds)
-        extra_samples_2 = random.sample(_agents, k=leftover_rounds)
+        extra_samples_1 = random.sample(all_agents, k=leftover_rounds)
+        extra_samples_2 = random.sample(all_agents, k=leftover_rounds)
 
-        first_agents = _agents * rounds_per_agent + extra_samples_1
-        second_agents = _agents * rounds_per_agent + extra_samples_2
+        first_agents = all_agents * rounds_per_agent + extra_samples_1
+        second_agents = all_agents * rounds_per_agent + extra_samples_2
 
         # Shuffle both lists
         random.shuffle(first_agents)
@@ -222,59 +242,45 @@ Begin your evaluation by explaining why each answer correctly answers the user q
                         pairs.append((agent_b, agent_a))
                         used_pairs.add((agent_b, agent_a))
                         logging.debug(f"Created game {agent_b} vs {agent_a}")
+                    else:
+                        used_pairs.add((agent_b, agent_a))
                     second_agents_q.append(agent_b)
                     break
                 second_agents_q.append(agent_b)
         logging.info(f"Created {len(pairs)} games")
         return pairs
 
-    def __create_all_prompts(
-        self, use_progress_bar: bool = True
-    ) -> List[Dict[str, str]]:
-        prompts = []
-        random_pairs = self.__generate_random_games()
+    def __prepare_all_tuples(
+        self,
+        answers: dict[str, list[AgentAnswer]],
+        use_progress_bar: bool = True,
+    ) -> list[tuple[AgentAnswer, AgentAnswer]]:
+        all_tuples = []
+        random_pairs = self.__generate_random_games(answers)
+
+        answers_per_agent: dict[str, dict[str, AgentAnswer]] = defaultdict(dict)
+        queries_per_agent: defaultdict[str, set] = defaultdict(set)
+        for qid, answers_list in answers.items():
+            for answer in answers_list:
+                answers_per_agent[answer.agent][qid] = answer
+                queries_per_agent[answer.agent].add(qid)
+
         for qid in tqdm(
-            self.answers,
+            answers,
             desc="Creating prompts",
             disable=not use_progress_bar,
             ncols=100,
+            leave=False,
         ):
-            query = self.queries[qid].query
             for a, b in random_pairs:
-                if a not in self.answers[qid] or b not in self.answers[qid]:
+                if qid not in queries_per_agent[a] or qid not in queries_per_agent[b]:
                     continue
-                reasoning = "\n".join(
-                    list(
-                        [
-                            " ".join([f"[{a}]", b])
-                            for (a, b) in self.reasoning[qid].items()
-                        ]
-                    )
+                all_tuples.append(
+                    (answers_per_agent[a][qid], answers_per_agent[b][qid])
                 )
-                ans_a = self.answers[qid][a].strip()
-                ans_b = self.answers[qid][b].strip()
-                prompt = self.prompt.format(
-                    query=query, documents=reasoning, answer_a=ans_a, answer_b=ans_b
-                )
-                prompts.append(
-                    {"query_id": qid, "agent_a": a, "agent_b": b, "prompt": prompt}
-                )
-        return prompts
+        return all_tuples
 
-    def _check_validity(self):
-        total_agents = len(self.agents)
-        if total_agents < 2:
-            raise ValueError(f"Need at least 2 agents, found {total_agents}")
-        logging.info(f"Loaded {total_agents} agents")
-        if (total_agents * (total_agents - 1)) < self.k:
-            possible_games = total_agents * (total_agents - 1)
-            logging.warning(
-                f"Requested {self.k} games but only {possible_games} are possible"
-            )
-            logging.warning(f"Will create {possible_games} games per query instead")
-            self.k = possible_games
-
-    def __extract_relevant(self, answer: str) -> str:
+    def _process_answer(self, answer: str) -> str:
         """Extracts the relevant part of an answer."""
         match_ans = self.pattern.search(answer)
         if not match_ans:
@@ -283,14 +289,3 @@ Begin your evaluation by explaining why each answer correctly answers the user q
         if answer not in ["A", "B", "C"]:
             raise ValueError(f"Unknown answer: {answer}")
         return answer
-
-    def _load_reasoning(self, reasoning_path: str) -> Dict[str, Dict[str, str]]:
-        reasoning: Dict[str, Dict[str, str]] = defaultdict(lambda: dict())
-        reasoning_read = 0
-        for line in csv.DictReader(open(reasoning_path)):
-            if line["query_id"] not in self.queries:
-                continue
-            reasoning_read += 1
-            reasoning[line["query_id"]][line["did"]] = line["answer"]
-        logging.info(f"Loaded {reasoning_read} reasonings")
-        return dict(reasoning)

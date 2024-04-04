@@ -1,29 +1,29 @@
-import os
-from typing import Dict, List, Optional
-
 from openai import AzureOpenAI, OpenAI
 from tenacity import retry, stop_after_attempt, wait_random_exponential
 
-from ragelo.llm_providers.base_llm_provider import (
-    BaseLLMProvider,
-    LLMProviderFactory,
-    set_credentials_from_file,
-)
-from ragelo.types import OpenAIConfiguration
+from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, LLMProviderFactory
+from ragelo.types import LLMProviderTypes
+from ragelo.types.configurations import OpenAIConfiguration
 
 
-@LLMProviderFactory.register("openai")
+@LLMProviderFactory.register(LLMProviderTypes.OPENAI)
 class OpenAIProvider(BaseLLMProvider):
     """A Wrapper over the OpenAI client."""
 
-    def __init__(self, openai_client: OpenAI | AzureOpenAI, model: str):
-        self.__model = model
-        self.__openai_client = openai_client
+    config: OpenAIConfiguration
+    api_key_env_var: str = "OPENAI_API_KEY"
+
+    def __init__(
+        self,
+        config: OpenAIConfiguration,
+    ):
+        super().__init__(config)
+        self.__openai_client = self.__get_openai_client(config)
 
     @retry(wait=wait_random_exponential(min=1, max=120), stop=stop_after_attempt(1))
     def __call__(
         self,
-        prompt: str | List[Dict[str, str]],
+        prompt: str | list[dict[str, str]],
         temperature: float = 0.1,
         max_tokens: int = 512,
     ) -> str:
@@ -37,7 +37,7 @@ class OpenAIProvider(BaseLLMProvider):
         if isinstance(prompt, str):
             prompt = [{"role": "system", "content": prompt}]
         answers = self.__openai_client.chat.completions.create(
-            model=self.__model,
+            model=self.config.model_name,
             messages=prompt,  # type: ignore
             temperature=temperature,
             max_tokens=max_tokens,
@@ -50,47 +50,24 @@ class OpenAIProvider(BaseLLMProvider):
             raise ValueError("OpenAI did not return any completions.")
         return answers.choices[0].message.content
 
-    @classmethod
-    def from_config(cls, openai_config: OpenAIConfiguration):  # type: ignore[override]
-        """Inits the OpenAI wrapper from a configuration object."""
-        openai_client = cls.get_openai_client(openai_config)
-        return cls(openai_client, model=openai_config.model_name)
-
-    @classmethod
-    def from_credentials_file(
-        cls, credential_file: Optional[str], model_name: str
-    ) -> "OpenAIProvider":
-        """Get the OpenAI configuration."""
-        if credential_file and os.path.isfile(credential_file):
-            set_credentials_from_file(credential_file)
-        config = OpenAIConfiguration(
-            api_key=os.getenv("OPENAI_API_KEY", "fake key"),
-            openai_org=os.getenv("OPENAI_ORG"),
-            openai_api_type=os.getenv("OPENAI_API_TYPE"),
-            openai_api_base=os.getenv("OPENAI_API_BASE"),
-            openai_api_version=os.getenv("OPENAI_API_VERSION"),
-            model_name=model_name,
-        )
-        return cls.from_config(config)
-
     @staticmethod
-    def get_openai_client(openai_config: OpenAIConfiguration) -> OpenAI:
-        if openai_config.openai_api_type == "azure":
-            if openai_config.openai_api_base is None:
+    def __get_openai_client(openai_config: OpenAIConfiguration) -> OpenAI:
+        if openai_config.api_type == "azure":
+            if openai_config.api_base is None:
                 raise ValueError("OpenAI base url not found in configuration")
             return AzureOpenAI(
-                azure_endpoint=openai_config.openai_api_base,
+                azure_endpoint=openai_config.api_base,
                 api_key=openai_config.api_key,
-                api_version=openai_config.openai_api_version,
+                api_version=openai_config.api_version,
             )
-        elif (
-            openai_config.openai_api_type == "open_ai"
-            or openai_config.openai_api_type is None
-        ):
+        elif openai_config.api_type == "open_ai" or openai_config.api_type is None:
             return OpenAI(
-                base_url=openai_config.openai_api_base,
+                base_url=openai_config.api_base,
                 api_key=openai_config.api_key,
-                organization=openai_config.openai_org,
+                organization=openai_config.org,
             )
         else:
-            raise Exception(f"Unknown OpenAI api type: {openai_config.openai_api_type}")
+            raise Exception(f"Unknown OpenAI api type: {openai_config.api_type}")
+
+    def set_openai_client(self, openai_client: OpenAI):
+        self.__openai_client = openai_client
