@@ -123,36 +123,27 @@ Please only answer with a single number.
             ),
         )
         self.extra_guidelines = (
-            self.config.extra_guidelines if self.config.extra_guidelines else ""
+            self.config.extra_guidelines if self.config.extra_guidelines else []
         )
 
-    def __build_reason_message(self, document: Document) -> str:
-        if document.query is None:
-            raise ValueError(f"Document {document.did} does not have a query.")
+    def __build_reason_message(self, query: Query, document: Document) -> str:
+        guidelines = "\n".join(
+            [f"- {guideline}" for guideline in self.extra_guidelines]
+        )
         reason_prompt = self.reason_prompt.format(
-            query=document.query.query,
+            query=query.query,
             doc_content=document.text,
             domain_short=self.domain_short if self.domain_short else "",
-            extra_guidelines=self.extra_guidelines if self.extra_guidelines else "",
+            extra_guidelines=guidelines,
         )
         return reason_prompt
 
-    def evaluate_single_sample(
-        self, document: Document, query: Optional[Query] = None
-    ) -> dict[str, Any]:
+    def evaluate(self, query: Query, document: Document) -> tuple[str, Any]:
         """Processes a single pair of qid, did in a two-shot manner"""
-        if document.query is None:
-            if query is None:
-                raise ValueError(
-                    "No query provided for evaluating the relevance of a document!"
-                )
-            elif query is not None:
-                document.query = query
 
-        query = document.query
         qid = query.qid
         did = document.did
-        reason_message = self.__build_reason_message(document)
+        reason_message = self.__build_reason_message(query, document)
         messages_reasoning = [
             {"role": "system", "content": self.sys_prompt},
             {"role": "user", "content": reason_message},
@@ -178,12 +169,7 @@ Please only answer with a single number.
         except ValueError as e:
             logging.warning(f"Failed to parse evaluation for document {qid} {did}")
             raise e
-        return {
-            "query_id": qid,
-            "did": did,
-            "reasoning": reasoning_answer,
-            "score": score_answer,
-        }
+        return reasoning_answer, score_answer
 
     def _process_answer(self, answer: str) -> str:
         return answer

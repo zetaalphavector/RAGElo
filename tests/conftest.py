@@ -152,7 +152,7 @@ def expert_retrieval_eval_config():
         domain_long="Computer Science",
         domain_short="computer scientists",
         company="Zeta Alpha",
-        extra_guidelines="-Super precise answers only!",
+        extra_guidelines=["Super precise answers only!"],
     )
 
 

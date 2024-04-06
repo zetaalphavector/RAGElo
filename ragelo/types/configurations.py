@@ -97,12 +97,11 @@ class DomainExpertEvaluatorConfig(BaseEvaluatorConfig):
             "(e.g.: ChemCorp, CS Inc.)"
         },
     )
-    extra_guidelines: Optional[str] = field(
+    extra_guidelines: Optional[list[str]] = field(
         default=None,
         metadata={
-            "help": "Extra guidelines to be used when reasoning about the "
-            "relevancy of the document. The string should be in bullet "
-            "point format and will be split at new lines."
+            "help": "A list of extra guidelines to be used when reasoning about the "
+            "relevancy of the document."
         },
     )
     output_file: str = field(

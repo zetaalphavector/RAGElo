@@ -202,9 +202,9 @@ class TestDomainExpertEvaluator:
             config=expert_retrieval_eval_config,
             llm_provider=llm_provider_mock_mock,
         )
-        results = evaluator.evaluate(qs_with_docs["0"]["0"])
-        assert results["query_id"] == "0"
-        assert results["did"] == "0"
+        query = qs_with_docs[0]
+        doc = query.retrieved_docs[0]
+        reasoning_answer, score_answer = evaluator.evaluate(query, doc)
 
         assert llm_provider_mock_mock.call_count == 2
         call_args = llm_provider_mock_mock.call_args_list
@@ -219,7 +219,7 @@ class TestDomainExpertEvaluator:
         assert prompts_score[1]["role"] == prompts_score[3]["role"] == "user"
         assert prompts_reasoning[0]["content"].startswith("You are a domain expert in")
         assert prompts_score[1]["content"].endswith(
-            expert_retrieval_eval_config.extra_guidelines
+            expert_retrieval_eval_config.extra_guidelines[0]
         )
         assert prompts_score[3]["content"].startswith("Given the previous reasoning")
 
