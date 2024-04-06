@@ -21,8 +21,8 @@ from ragelo.types.configurations import (
 )
 from ragelo.utils import (
     load_answers_from_csv,
-    load_documents_from_csv,
     load_queries_from_csv,
+    load_retrieved_docs_from_csv,
 )
 
 
@@ -35,7 +35,7 @@ class MockLLMProvider(BaseLLMProvider):
         return cls(config)
 
     def inner_call(self, prompt) -> str:
-        return f"Processed {prompt}. "
+        return f"Received prompt: {prompt}. "
 
     def __call__(self, prompt) -> str:
         return self.inner_call(prompt)
@@ -47,8 +47,10 @@ def queries_test():
 
 
 @pytest.fixture
-def documents_test(queries_test):
-    return load_documents_from_csv("tests/data/documents.csv", queries=queries_test)
+def qs_with_docs(queries_test):
+    return load_retrieved_docs_from_csv(
+        "tests/data/documents.csv", queries=queries_test
+    )
 
 
 @pytest.fixture
@@ -221,8 +223,14 @@ def few_shot_retrieval_eval_config():
 @pytest.fixture
 def llm_provider_mock(llm_provider_config):
     provider = MockLLMProvider(llm_provider_config)
+    return provider
+
+
+@pytest.fixture
+def llm_provider_json_mock(llm_provider_config):
+    provider = MockLLMProvider(llm_provider_config)
     provider.inner_call = Mock(
-        side_effect=lambda prompt: f'Processed {prompt}\n{{"relevance": 0}}'
+        side_effect=lambda _: f"LLM JSON response" f'\n{{"relevance": 0}}'
     )
     return provider
 
