@@ -29,16 +29,19 @@ from ragelo.utils import (
 class MockLLMProvider(BaseLLMProvider):
     def __init__(self, config):
         self.config = config
+        self.call_mocker = Mock(
+            side_effect=lambda prompt: f"Received prompt: {prompt}. "
+        )
 
     @classmethod
     def from_configuration(cls, config: LLMProviderConfig):
         return cls(config)
 
-    def inner_call(self, prompt) -> str:
-        return f"Received prompt: {prompt}. "
+    # def inner_call(self, prompt) -> str:
+    #     return f"Received prompt: {prompt}. "
 
     def __call__(self, prompt) -> str:
-        return self.inner_call(prompt)
+        return self.call_mocker(prompt)
 
 
 @pytest.fixture
@@ -222,14 +225,13 @@ def few_shot_retrieval_eval_config():
 
 @pytest.fixture
 def llm_provider_mock(llm_provider_config):
-    provider = MockLLMProvider(llm_provider_config)
-    return provider
+    return MockLLMProvider(llm_provider_config)
 
 
 @pytest.fixture
 def llm_provider_json_mock(llm_provider_config):
     provider = MockLLMProvider(llm_provider_config)
-    provider.inner_call = Mock(
+    provider.call_mocker = Mock(
         side_effect=lambda _: f"LLM JSON response" f'\n{{"relevance": 0}}'
     )
     return provider
@@ -238,7 +240,7 @@ def llm_provider_json_mock(llm_provider_config):
 @pytest.fixture
 def llm_provider_pairwise_answer_mock(llm_provider_config):
     provider = MockLLMProvider(llm_provider_config)
-    provider.inner_call = Mock(
+    provider.call_mocker = Mock(
         side_effect=[
             "Agent [[A]] is better",
             "Agent [[B]] is better",

@@ -35,7 +35,7 @@ class TestRetrievalEvaluator:
         assert answer == 0
 
         expected_prompt = f"Query: {query.query}\nDocument: {doc.text}"
-        call_args = llm_provider_json_mock.inner_call.call_args_list
+        call_args = llm_provider_json_mock.call_mocker.call_args_list
         assert call_args[0][0][0] == expected_prompt
 
     def test_batch_eval(
@@ -54,7 +54,7 @@ class TestRetrievalEvaluator:
         assert results[0].did == "0"
         assert results[2].did == "2"
 
-        call_args = llm_provider_json_mock.inner_call.call_args_list
+        call_args = llm_provider_json_mock.call_mocker.call_args_list
         expected_prompts = []
         for query in qs_with_docs:
             for doc in query.retrieved_docs:
@@ -123,7 +123,7 @@ class TestRDNAMEvaluator:
         assert results["answer"] == 1
         assert results["query_id"] == "0"
         assert results["did"] == "0"
-        call_args = llm_provider_mock_rdnam.inner_call.call_args_list
+        call_args = llm_provider_mock_rdnam.call_mocker.call_args_list
         assert call_args[0][0][0].startswith(
             "You are a search quality rater evaluating"
         )
@@ -131,22 +131,23 @@ class TestRDNAMEvaluator:
 
 class TestReasonerEvaluator:
     def test_process_single_answer(
-        self, llm_provider_mock, retrieval_eval_config, qs_with_docs
+        self,
+        llm_provider_mock,
+        retrieval_eval_config,
+        qs_with_docs,
     ):
         evaluator = ReasonerEvaluator.from_config(
-            config=retrieval_eval_config, llm_provider=llm_provider_mock
+            config=retrieval_eval_config,
+            llm_provider=llm_provider_mock,
         )
-        results = evaluator.evaluate(qs_with_docs["0"]["0"])
-        assert results["query_id"] == "0"
-        assert results["did"] == "0"
+        query = qs_with_docs[0]
+        doc = query.retrieved_docs[0]
+        raw_answer, answer = evaluator.evaluate(query, doc)
+        formatted_prompt = evaluator.prompt.format(query=query.query, document=doc.text)
+        call_args = llm_provider_mock.call_mocker.call_args_list
 
-        formatted_prompt = evaluator.prompt.format(
-            query=qs_with_docs["0"]["0"].query.query,
-            document=qs_with_docs["0"]["0"].text,
-        )
-        assert formatted_prompt in results["raw_answer"]
-        assert results["raw_answer"] == results["answer"]
-        call_args = llm_provider_mock.inner_call.call_args_list
+        assert raw_answer == answer
+        assert formatted_prompt in raw_answer
         assert call_args[0][0][0] == formatted_prompt
 
 
@@ -175,7 +176,7 @@ class TestCustomPromptEvaluator:
         assert results["query_id"] == "0"
         assert results["did"] == "0"
 
-        call_args = llm_provider_mock.inner_call.call_args_list
+        call_args = llm_provider_mock.call_mocker.call_args_list
         assert call_args[0][0][0] == formatted_prompt
 
 
@@ -236,7 +237,7 @@ class TestFewShotEvaluator:
         results = evaluator.evaluate(qs_with_docs["0"]["0"])
         assert results["query_id"] == "0"
         assert results["did"] == "0"
-        call_args = llm_provider_mock.inner_call.call_args_list
+        call_args = llm_provider_mock.call_mocker.call_args_list
         call_messages = call_args[0][0][0]
         assert len(call_messages) == 6
         assert call_messages[0]["role"] == "system"

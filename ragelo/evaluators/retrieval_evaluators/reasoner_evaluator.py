@@ -2,7 +2,7 @@ from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     BaseRetrievalEvaluator,
     RetrievalEvaluatorFactory,
 )
-from ragelo.types import Document, RetrievalEvaluatorTypes
+from ragelo.types import Document, Query, RetrievalEvaluatorTypes
 
 
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.REASONER)
@@ -31,10 +31,8 @@ user question.
     [document content]
     {document}"""  # noqa: E501
 
-    def _build_message(self, document: Document) -> str:
-        if document.query is None:
-            raise ValueError(f"Document {document.did} does not have a query.")
-        return self.prompt.format(query=document.query.query, document=document.text)
+    def _build_message(self, query: Query, document: Document) -> str:
+        return self.prompt.format(query=query.query, document=document.text)
 
     def _process_answer(self, answer: str) -> str:
         return answer
