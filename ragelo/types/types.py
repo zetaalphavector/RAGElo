@@ -1,6 +1,6 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 
 
 class RetrievalEvaluatorTypes(str, Enum):
@@ -27,20 +27,31 @@ class AnswerEvaluatorTypes(str, Enum):
 
 
 @dataclass
-class Query:
-    qid: str
-    query: str
-
-
-@dataclass
 class Document:
     did: str
     text: str
-    query: Optional[Query] = None
+    metadata: Optional[dict[str, Any]] = None
 
 
 @dataclass
 class AgentAnswer:
-    query: Query
     agent: str
     text: str
+    metadata: Optional[dict[str, Any]] = None
+
+
+@dataclass
+class Query:
+    qid: str
+    query: str
+    metadata: Optional[dict[str, Any]] = None
+    retrieved_docs: list[Document] = field(default_factory=list)
+    answers: list[AgentAnswer] = field(default_factory=list)
+
+
+@dataclass
+class EvaluatorAnswer:
+    qid: str
+    did: str
+    raw_answer: str
+    answer: Any
