@@ -154,29 +154,29 @@ class TestReasonerEvaluator:
 class TestCustomPromptEvaluator:
     def test_process_single_answer(
         self,
-        llm_provider_mock,
+        llm_provider_json_mock,
         custom_prompt_retrieval_eval_config,
         qs_with_docs,
     ):
+        query = qs_with_docs[0]
+        doc = query.retrieved_docs[0]
+
         evaluator = CustomPromptEvaluator.from_config(
-            config=custom_prompt_retrieval_eval_config, llm_provider=llm_provider_mock
+            config=custom_prompt_retrieval_eval_config,
+            llm_provider=llm_provider_json_mock,
         )
         formatter = {
-            custom_prompt_retrieval_eval_config.query_placeholder: qs_with_docs["0"][
-                "0"
-            ].query.query,
-            custom_prompt_retrieval_eval_config.document_placeholder: qs_with_docs["0"][
-                "0"
-            ].text,
+            custom_prompt_retrieval_eval_config.query_placeholder: query.query,
+            custom_prompt_retrieval_eval_config.document_placeholder: doc.text,
         }
         formatted_prompt = custom_prompt_retrieval_eval_config.prompt.format(
             **formatter
         )
-        results = evaluator.evaluate(qs_with_docs["0"]["0"])
-        assert results["query_id"] == "0"
-        assert results["did"] == "0"
 
-        call_args = llm_provider_mock.call_mocker.call_args_list
+        _, answer = evaluator.evaluate(query, doc)
+        call_args = llm_provider_json_mock.call_mocker.call_args_list
+
+        assert answer == 0
         assert call_args[0][0][0] == formatted_prompt
 
 

@@ -3,7 +3,7 @@ from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     RetrievalEvaluatorFactory,
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
-from ragelo.types import Document, RetrievalEvaluatorTypes
+from ragelo.types import Document, Query, RetrievalEvaluatorTypes
 from ragelo.types.configurations import CustomPromptEvaluatorConfig
 
 
@@ -20,11 +20,9 @@ class CustomPromptEvaluator(BaseRetrievalEvaluator):
         super().__init__(config, llm_provider)
         self.__prompt = config.prompt
 
-    def _build_message(self, document: Document) -> str:
-        if document.query is None:
-            raise ValueError(f"Document {document.did} does not have a query.")
+    def _build_message(self, query: Query, document: Document) -> str:
         formatters = {
-            self.config.query_placeholder: document.query.query,
+            self.config.query_placeholder: query.query,
             self.config.document_placeholder: document.text,
         }
 

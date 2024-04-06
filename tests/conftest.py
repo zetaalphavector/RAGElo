@@ -37,9 +37,6 @@ class MockLLMProvider(BaseLLMProvider):
     def from_configuration(cls, config: LLMProviderConfig):
         return cls(config)
 
-    # def inner_call(self, prompt) -> str:
-    #     return f"Received prompt: {prompt}. "
-
     def __call__(self, prompt) -> str:
         return self.call_mocker(prompt)
 
@@ -254,7 +251,7 @@ def llm_provider_pairwise_answer_mock(llm_provider_config):
 @pytest.fixture
 def llm_provider_answer_mock(llm_provider_config):
     provider = MockLLMProvider(llm_provider_config)
-    provider.inner_call = Mock(
+    provider.call_mocker = Mock(
         side_effect=lambda prompt: f"Answer for {prompt}\n"
         '{"quality": 2, "trustworthiness": 1, "originality": 1}',
     )
@@ -269,7 +266,7 @@ def llm_provider_mock_mock(mocker):
 @pytest.fixture
 def llm_provider_domain_expert_mock(llm_provider_config):
     provider = MockLLMProvider(llm_provider_config)
-    provider.inner_call = Mock(
+    provider.call_mocker = Mock(
         side_effect=["Reasoning answer", "2", "Reasoning_answer 2", "0"]
     )
     return provider
@@ -279,5 +276,5 @@ def llm_provider_domain_expert_mock(llm_provider_config):
 def llm_provider_mock_rdnam(llm_provider_config):
     mocked_scores = [{"M": 2, "T": 1, "O": 1}, {"M": 1, "T": 1, "O": 2}]
     provider = MockLLMProvider(llm_provider_config)
-    provider.inner_call = Mock(side_effect=lambda _: json.dumps(mocked_scores)[2:])
+    provider.call_mocker = Mock(side_effect=lambda _: json.dumps(mocked_scores)[2:])
     return provider
