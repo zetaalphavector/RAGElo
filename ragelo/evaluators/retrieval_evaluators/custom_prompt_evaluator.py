@@ -3,6 +3,7 @@ from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     RetrievalEvaluatorFactory,
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
+from ragelo.logger import logger
 from ragelo.types import Document, Query, RetrievalEvaluatorTypes
 from ragelo.types.configurations import CustomPromptEvaluatorConfig
 
@@ -22,9 +23,19 @@ class CustomPromptEvaluator(BaseRetrievalEvaluator):
         self.__prompt = config.prompt
 
     def _build_message(self, query: Query, document: Document) -> str:
+        query_metadata = self._get_valid_fields_from_metadata(
+            self.__prompt, query.metadata, skip_fields=[self.config.query_placeholder]
+        )
+        document_metadata = self._get_valid_fields_from_metadata(
+            self.__prompt,
+            document.metadata,
+            skip_fields=[self.config.document_placeholder],
+        )
         formatters = {
             self.config.query_placeholder: query.query,
             self.config.document_placeholder: document.text,
+            **query_metadata,
+            **document_metadata,
         }
 
         return self.__prompt.format(**formatters)

@@ -3,7 +3,7 @@ from ragelo.evaluators.retrieval_evaluators import (
     RetrievalEvaluatorFactory,
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
-from ragelo.types import Document, RetrievalEvaluatorTypes
+from ragelo.types import Document, Query, RetrievalEvaluatorTypes
 from ragelo.types.configurations import FewShotEvaluatorConfig
 
 
@@ -24,13 +24,11 @@ class FewShotEvaluator(BaseRetrievalEvaluator):
         self.assistant_prompt = config.few_shot_assistant_answer
         self.few_shots = config.few_shots
 
-    def _build_message(self, document: Document) -> list[dict[str, str]]:
-        if document.query is None:
-            raise ValueError(f"Document {document.did} does not have a query.")
+    def _build_message(self, query: Query, document: Document) -> list[dict[str, str]]:
         system_prompt_msg = {"role": "system", "content": self.sys_prompt}
         messages = [system_prompt_msg] + self.__build_few_shot_samples()
         formatters = {
-            self.config.query_placeholder: document.query.query,
+            self.config.query_placeholder: query.query,
             self.config.document_placeholder: document.text,
         }
         user_message = self.prompt.format(**formatters)

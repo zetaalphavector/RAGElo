@@ -179,6 +179,28 @@ class TestCustomPromptEvaluator:
         assert answer == 0
         assert call_args[0][0][0] == formatted_prompt
 
+    def test_process_with_custom_fields(
+        self, llm_provider_json_mock, custom_prompt_retrieval_eval_config
+    ):
+        custom_prompt_retrieval_eval_config.prompt = "query: {query} doc: {document} q_metadata: {q_metadata} d_metadata: {d_metadata}"
+        custom_prompt_retrieval_eval_config.query_placeholder = "query"
+        custom_prompt_retrieval_eval_config.document_placeholder = "document"
+        evaluator = get_retrieval_evaluator(
+            "custom_prompt",
+            llm_provider_json_mock,
+            config=custom_prompt_retrieval_eval_config,
+        )
+        evaluator.evaluate(
+            query="this is a query",
+            document="this is a document",
+            query_metadata={"q_metadata": "q_1"},
+            doc_metadata={"d_metadata": "d_1"},
+        )
+        assert (
+            llm_provider_json_mock.call_mocker.call_args_list[0][0][0]
+            == "query: this is a query doc: this is a document q_metadata: q_1 d_metadata: d_1"
+        )
+
 
 class TestDomainExpertEvaluator:
     def test_sys_prompt(self, llm_provider_mock, expert_retrieval_eval_config):
@@ -227,17 +249,21 @@ class TestDomainExpertEvaluator:
 class TestFewShotEvaluator:
     def test_process_single_answer(
         self,
-        llm_provider_mock,
+        llm_provider_json_mock,
         few_shot_retrieval_eval_config,
         qs_with_docs,
     ):
         evaluator = FewShotEvaluator.from_config(
-            config=few_shot_retrieval_eval_config, llm_provider=llm_provider_mock
+            config=few_shot_retrieval_eval_config,
+            llm_provider=llm_provider_json_mock,
         )
-        results = evaluator.evaluate(qs_with_docs["0"]["0"])
-        assert results["query_id"] == "0"
-        assert results["did"] == "0"
-        call_args = llm_provider_mock.call_mocker.call_args_list
+        query = qs_with_docs[0]
+        doc = query.retrieved_docs[0]
+
+        raw_answer, answer = evaluator.evaluate(query, doc)
+        assert raw_answer == 'LLM JSON response\n{"relevance": 0}'
+        assert answer == 0
+        call_args = llm_provider_json_mock.call_mocker.call_args_list
         call_messages = call_args[0][0][0]
         assert len(call_messages) == 6
         assert call_messages[0]["role"] == "system"

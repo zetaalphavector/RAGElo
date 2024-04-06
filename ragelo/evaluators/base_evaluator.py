@@ -1,5 +1,7 @@
 import json
+import string
 from abc import ABC, abstractmethod
+from typing import Optional
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.types.configurations import BaseEvaluatorConfig
@@ -60,3 +62,23 @@ class BaseEvaluator(ABC):
             )
         # Assumes the valid JSON object is the last one
         return values
+
+    @staticmethod
+    def _get_fields_from_string(s: str) -> list[str]:
+        """Parse a formatted string and return all the fields in it"""
+        field_names = [v[1] for v in string.Formatter().parse(s) if v[1] is not None]
+        return field_names
+
+    @staticmethod
+    def _get_valid_fields_from_metadata(
+        prompt: str, metadata: Optional[dict[str, str]], skip_fields: list[str] = []
+    ) -> dict[str, str]:
+        """Get the fields from the prompt that are in the metadata"""
+        expected_fields = BaseEvaluator._get_fields_from_string(prompt)
+        valid_fields = {}
+        if metadata is None:
+            return valid_fields
+        for field in expected_fields:
+            if field in metadata and field not in skip_fields:
+                valid_fields[field] = metadata[field]
+        return valid_fields

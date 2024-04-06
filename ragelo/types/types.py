@@ -30,21 +30,21 @@ class AnswerEvaluatorTypes(str, Enum):
 class Document:
     did: str
     text: str
-    metadata: dict[str, Any] = field(default_factory=dict)
+    metadata: Optional[dict[str, Any]] = None
 
 
 @dataclass
 class AgentAnswer:
     agent: str
     text: str
-    metadata: dict[str, Any] = field(default_factory=dict)
+    metadata: Optional[dict[str, Any]] = None
 
 
 @dataclass
 class Query:
     qid: str
     query: str
-    metadata: dict[str, Any] = field(default_factory=dict)
+    metadata: Optional[dict[str, Any]] = None
     retrieved_docs: list[Document] = field(default_factory=list)
     answers: list[AgentAnswer] = field(default_factory=list)
 
