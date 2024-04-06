@@ -6,6 +6,7 @@ from ragelo.types import LLMProviderTypes
 from ragelo.types.configurations import OpenAIConfiguration
 
 
+# TODO: Change client to use json_mode
 @LLMProviderFactory.register(LLMProviderTypes.OPENAI)
 class OpenAIProvider(BaseLLMProvider):
     """A Wrapper over the OpenAI client."""
