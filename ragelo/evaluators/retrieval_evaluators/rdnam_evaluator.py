@@ -77,19 +77,6 @@ Each rater used their own independent judgement."""
         super().__init__(config, llm_provider)
 
         self.__role = self.config.role if self.config.role else ""
-        self.__use_narratives = False
-        self.__use_description = False
-
-        if self.config.narrative_file:
-            self.__narratives: dict[str, str] = self._load_from_csv(
-                self.config.narrative_file
-            )
-            self.__use_narratives = True
-        if self.config.description_file:
-            self.descriptions: dict[str, str] = self._load_from_csv(
-                self.config.description_file
-            )
-            self.__use_description = True
 
         self.__aspects_prompt = self.ASPECTS_NARRATIVE if self.config.aspects else ""
         self.multiple_prompt = self.MULTIPLE_PROMPT if self.config.multiple else ""
@@ -99,59 +86,29 @@ Each rater used their own independent judgement."""
             self.prompt += "\n{{"
         self.multiple = self.config.multiple
 
-    def evaluate_single_sample(
-        self, document: Document, query: Optional[Query] = None
-    ) -> dict[str, str | int]:
+    def evaluate(self, query: Query, document: Document) -> tuple[str, int]:
         """Evaluates a single query-document pair. Returns the raw answer and the processed answer."""
-        if document.query is None:
-            if query is None:
-                raise ValueError(
-                    "No query provided for evaluating the relevance of a document!"
-                )
-            elif query is not None:
-                document.query = query
 
-        message = self._build_message(document)
+        message = self._build_message(query, document)
         try:
             raw_answer = self.llm_provider(message)
         except RetryError as e:
-            logging.warning(
-                f"Failed to FETCH answers for {document.query.qid} {document.did}"
-            )
+            logging.warning(f"Failed to FETCH answers for {query.qid} {document.did}")
             raise e
         try:
             answer = self._process_answer(raw_answer)
         except ValueError as e:
-            logging.warning(
-                f"Failed to PARSE answer for {document.query.qid} {document.did}"
-            )
+            logging.warning(f"Failed to PARSE answer for {query.qid} {document.did}")
             raise e
-        return {
-            "query_id": document.query.qid,
-            "did": document.did,
-            "raw_answer": raw_answer,
-            "answer": answer,
-        }
+        return raw_answer, answer
 
-    def _build_message(self, document: Document) -> str:
-        if document.query is None:
-            raise ValueError(f"Document {document.did} does not have a query.")
-        qid = document.query.qid
-        if self.__use_narratives and qid not in self.__narratives:
-            logging.warning(f"No narrative found for {qid}. Will not use it")
-        if self.__use_description and qid not in self.descriptions:
-            logging.warning(f"No description found for {qid}. Will not use it")
+    def _build_message(self, query: Query, document: Document) -> str:
 
-        narrative = (
-            self.__narratives[qid]
-            if self.__use_narratives and qid in self.__narratives
-            else ""
-        )
         description = (
-            self.descriptions[qid]
-            if self.__use_description and qid in self.descriptions
-            else ""
+            query.metadata["description"] if "description" in query.metadata else ""
         )
+        narrative = query.metadata["narrative"] if "narrative" in query.metadata else ""
+
         narrative_description_str = self.NARRATIVE_DESCRIPTION_PROMPT.format(
             narrative=narrative, description=description
         )
@@ -162,7 +119,7 @@ Each rater used their own independent judgement."""
 
         formatted_prompt = self.prompt.format(
             role=self.__role,
-            query=document.query.query,
+            query=query.query,
             doc_content=document,
             narrative_description=narrative_description_str,
             aspects=self.__aspects_prompt,

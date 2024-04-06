@@ -54,6 +54,12 @@ def qs_with_docs(queries_test):
 
 
 @pytest.fixture
+def rdnam_queries():
+    queries = load_queries_from_csv("tests/data/rdnam_queries.csv")
+    return load_retrieved_docs_from_csv("tests/data/documents.csv", queries=queries)
+
+
+@pytest.fixture
 def answers_test(queries_test):
     return load_answers_from_csv("tests/data/answers.csv", queries=queries_test)
 
@@ -160,14 +166,11 @@ def expert_retrieval_eval_config():
 def rdnam_config():
     return RDNAMEvaluatorConfig(
         documents_path="tests/data/documents.csv",
-        query_path="tests/data/queries.csv",
-        output_file="tests/data/output.csv",
-        force=True,
+        query_path="tests/data/rdnam_queries.csv",
+        output_file="tests/data/rdnam_output.csv",
         role="You are a search quality rater evaluating the relevance of web pages. ",
-        aspects=True,
+        force=True,
         multiple=True,
-        narrative_file="tests/data/rdnam_narratives.csv",
-        description_file="tests/data/rdnam_descriptions.csv",
     )
 
 

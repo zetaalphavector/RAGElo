@@ -11,6 +11,7 @@ from ragelo.types.configurations import CustomPromptEvaluatorConfig
 class CustomPromptEvaluator(BaseRetrievalEvaluator):
     config: CustomPromptEvaluatorConfig
     scoring_key: str = "relevance"
+    output_file: str = "custom_prompt_evaluations.csv"
 
     def __init__(
         self,

@@ -211,15 +211,6 @@ class RDNAMEvaluatorConfig(BaseEvaluatorConfig):
             "help": "Should the prompt ask the LLM to mimic multiple annotators?"
         },
     )
-    narrative_file: Optional[str] = field(
-        default=None,
-        metadata={"help": "Path to the file containing narratives for each query"},
-    )
-
-    description_file: Optional[str] = field(
-        default=None,
-        metadata={"help": "Path to the file containing descriptions for each query"},
-    )
     output_file: str = field(
         default="rdnam_evaluations.csv",
         metadata={"help": "Path to the output file"},

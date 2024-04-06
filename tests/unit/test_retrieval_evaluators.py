@@ -106,23 +106,23 @@ class TestRetrievalEvaluator:
         custom_evaluator = get_retrieval_evaluator(
             "custom_prompt",
             llm_provider_mock,
-            output_file="tests/data/output.csv",
         )
         assert isinstance(custom_evaluator, BaseRetrievalEvaluator)
 
 
 class TestRDNAMEvaluator:
     def test_process_single_answer(
-        self, llm_provider_mock_rdnam, rdnam_config, qs_with_docs
+        self, llm_provider_mock_rdnam, rdnam_config, rdnam_queries
     ):
         evaluator = RDNAMEvaluator.from_config(
             config=rdnam_config, llm_provider=llm_provider_mock_rdnam
         )
-        results = evaluator.evaluate(qs_with_docs["0"]["0"])
-        assert isinstance(results, dict)
-        assert results["answer"] == 1
-        assert results["query_id"] == "0"
-        assert results["did"] == "0"
+        query = rdnam_queries[0]
+        doc = query.retrieved_docs[0]
+        raw_answer, answer = evaluator.evaluate(query, doc)
+        assert raw_answer == '"M": 2, "T": 1, "O": 1}, {"M": 1, "T": 1, "O": 2}]'
+        assert answer == 1
+
         call_args = llm_provider_mock_rdnam.call_mocker.call_args_list
         assert call_args[0][0][0].startswith(
             "You are a search quality rater evaluating"
