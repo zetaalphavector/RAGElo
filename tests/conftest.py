@@ -168,9 +168,9 @@ def rdnam_config():
         documents_path="tests/data/documents.csv",
         query_path="tests/data/rdnam_queries.csv",
         output_file="tests/data/rdnam_output.csv",
-        role="You are a search quality rater evaluating the relevance of web pages. ",
+        annotator_role="You are a search quality rater evaluating the relevance of web pages. ",
         force=True,
-        multiple=True,
+        use_multiple_annotators=True,
     )
 
 

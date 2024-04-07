@@ -70,7 +70,7 @@ class BaseEvaluator(ABC):
         return field_names
 
     @staticmethod
-    def _get_valid_fields_from_metadata(
+    def _get_usable_fields_from_metadata(
         prompt: str, metadata: Optional[dict[str, str]], skip_fields: list[str] = []
     ) -> dict[str, str]:
         """Get the fields from the prompt that are in the metadata"""

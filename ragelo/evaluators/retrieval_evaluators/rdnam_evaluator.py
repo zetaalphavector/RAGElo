@@ -54,7 +54,7 @@ Produce a JSON array of scores without providing any reasoning. Example: {exampl
 # Results
 """.strip()
 
-    NARRATIVE_DESCRIPTION_PROMPT = "They were looking for: {description} {narrative}"
+    NARRATIVE_DESCRIPTION_PROMPT = "They were looking for: {description}\n{narrative}"
     ASPECTS_NARRATIVE = """Measure how well the content matches a likely intent \
 of the query (M).
 Measure how trustworthy the web page is (T).""".strip()
@@ -76,15 +76,19 @@ Each rater used their own independent judgement."""
         """Initializes an evaluator based on RDNAM framework."""
         super().__init__(config, llm_provider)
 
-        self.__role = self.config.role if self.config.role else ""
+        self.__role = self.config.annotator_role if self.config.annotator_role else ""
 
-        self.__aspects_prompt = self.ASPECTS_NARRATIVE if self.config.aspects else ""
-        self.multiple_prompt = self.MULTIPLE_PROMPT if self.config.multiple else ""
-        if self.config.multiple:
+        self.__aspects_prompt = (
+            self.ASPECTS_NARRATIVE if self.config.use_aspects else ""
+        )
+        self.__multiple_prompt = (
+            self.MULTIPLE_PROMPT if self.config.use_multiple_annotators else ""
+        )
+        if self.config.use_multiple_annotators:
             self.prompt += "\n[{{"
         else:
             self.prompt += "\n{{"
-        self.multiple = self.config.multiple
+        self.multiple = self.config.use_multiple_annotators
 
     def evaluate(self, query: Query, document: Document) -> tuple[str, int]:
         """Evaluates a single query-document pair. Returns the raw answer and the processed answer."""
@@ -103,15 +107,14 @@ Each rater used their own independent judgement."""
         return raw_answer, answer
 
     def _build_message(self, query: Query, document: Document) -> str:
-
-        description = (
-            query.metadata["description"] if "description" in query.metadata else ""
-        )
-        narrative = query.metadata["narrative"] if "narrative" in query.metadata else ""
-
-        narrative_description_str = self.NARRATIVE_DESCRIPTION_PROMPT.format(
-            narrative=narrative, description=description
-        )
+        narrative_description_str = ""
+        if query.metadata:
+            description = query.metadata.get("description", "")
+            narrative = query.metadata.get("narrative", "")
+            if narrative or description:
+                narrative_description_str = self.NARRATIVE_DESCRIPTION_PROMPT.format(
+                    narrative=narrative, description=description
+                )
 
         example = (
             self.ASPECTS_EXAMPLE if self.__aspects_prompt else self.DEFAULT_EXAMPLE
@@ -123,7 +126,7 @@ Each rater used their own independent judgement."""
             doc_content=document,
             narrative_description=narrative_description_str,
             aspects=self.__aspects_prompt,
-            multiple=self.multiple_prompt,
+            multiple=self.__multiple_prompt,
             example=example,
         )
         return formatted_prompt

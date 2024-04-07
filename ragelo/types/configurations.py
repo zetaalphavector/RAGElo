@@ -188,7 +188,7 @@ class FewShotEvaluatorConfig(BaseEvaluatorConfig):
 
 @dataclass(kw_only=True)
 class RDNAMEvaluatorConfig(BaseEvaluatorConfig):
-    role: Optional[str] = field(
+    annotator_role: Optional[str] = field(
         default=None,
         metadata={
             "help": "A String defining the type of user the LLM should mimic. "
@@ -197,7 +197,7 @@ class RDNAMEvaluatorConfig(BaseEvaluatorConfig):
         },
     )
     # Configurations for the RDNAM evaluator
-    aspects: bool = field(
+    use_aspects: bool = field(
         default=False,
         metadata={
             "help": "Should the prompt include aspects to get tot he final score? "
@@ -205,7 +205,7 @@ class RDNAMEvaluatorConfig(BaseEvaluatorConfig):
             "and T (trustworthy) for the document before computing the final score."
         },
     )
-    multiple: bool = field(
+    use_multiple_annotators: bool = field(
         default=False,
         metadata={
             "help": "Should the prompt ask the LLM to mimic multiple annotators?"
