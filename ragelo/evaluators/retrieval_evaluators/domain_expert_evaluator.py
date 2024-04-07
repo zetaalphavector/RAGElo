@@ -173,8 +173,3 @@ Please only answer with a single number.
 
     def _process_answer(self, answer: str) -> str:
         return answer
-
-    def _build_message(
-        self, query: Query, document: Document
-    ) -> str | list[dict[str, str]]:
-        return self.sys_prompt

@@ -137,7 +137,6 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             raise e
         return raw_answer, answer
 
-    @abstractmethod
     def _build_message(
         self, query: Query, document: Document
     ) -> str | list[dict[str, str]]:
