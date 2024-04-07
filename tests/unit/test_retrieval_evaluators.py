@@ -7,7 +7,7 @@ from ragelo.evaluators.retrieval_evaluators import (
     RDNAMEvaluator,
     ReasonerEvaluator,
 )
-from ragelo.types import Document, EvaluatorAnswer, Query
+from ragelo.types import Document, Query, RetrievalEvaluatorResult
 
 
 class RetrievalEvaluator(BaseRetrievalEvaluator):

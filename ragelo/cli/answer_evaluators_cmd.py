@@ -29,4 +29,4 @@ def pairwise_reasoning(
         llm_provider=llm_provider,
     )
     answers = load_answers_from_csv(config.answers_path, queries=config.query_path)
-    evaluator.run(answers)
+    evaluator.batch_evaluate(answers)

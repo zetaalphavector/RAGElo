@@ -50,8 +50,16 @@ class Query:
 
 
 @dataclass
-class EvaluatorAnswer:
+class RetrievalEvaluatorResult:
     qid: str
     did: str
+    raw_answer: str
+    answer: Any
+
+
+@dataclass
+class AnswerEvaluatorResult:
+    qid: str
+    agent: str
     raw_answer: str
     answer: Any

@@ -78,10 +78,12 @@ and "[[C]]" for a tie.
         self.bidirectional = self.config.bidirectional
         self.pattern = re.compile(r"\[\[([^]]+)]].*$(?:(?!\[\[).)*", re.DOTALL)
 
-    def run(self, answers: dict[str, list[AgentAnswer]]) -> list[dict[str, str]]:
+    def batch_evaluate(
+        self, answers: dict[str, list[AgentAnswer]]
+    ) -> list[dict[str, str]]:
         use_progress_bar = self.config.verbose
         unparsed_answers = 0
-        skip_tuples = self._get_skip_tuples()
+        skip_tuples = self.__get_skip_tuples()
         evaluations: list[dict[str, str]] = []
         tuples = self.__prepare_all_tuples(answers, use_progress_bar)
         if len(tuples) - len(skip_tuples) > 0:
@@ -101,7 +103,7 @@ and "[[C]]" for a tie.
                 logging.debug(f"Skipping {qid} {agent_a} {agent_b}")
                 continue
             try:
-                answer_dict = self.evaluate_single_sample((answer_a, answer_b))
+                answer_dict = self.evaluate((answer_a, answer_b))
             except RetryError:
                 continue
             except ValueError:
@@ -129,9 +131,7 @@ and "[[C]]" for a tie.
         )
         return prompt
 
-    def evaluate_single_sample(
-        self, answer: tuple[AgentAnswer, AgentAnswer]
-    ) -> dict[str, str]:
+    def evaluate(self, answer: tuple[AgentAnswer, AgentAnswer]) -> dict[str, str]:
         prompt = self._build_message(answer)
         qid = answer[0].query.qid
         agent_a_id = answer[0].agent

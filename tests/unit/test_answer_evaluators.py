@@ -16,7 +16,7 @@ class TestPairwiseWithReasoningEvaluator:
             config=pairwise_answer_eval_config,
             llm_provider=llm_provider_pairwise_answer_mock,
         )
-        answers = evaluator.run(answers_test)
+        answers = evaluator.batch_evaluate(answers_test)
         assert len(answers) == 2
         assert answers[0]["answer"] == "A" and "[[A]]" in answers[0]["raw_answer"]
         assert answers[1]["answer"] == "B" and "[[B]]" in answers[1]["raw_answer"]
@@ -47,7 +47,7 @@ class TestCustomPromptEvaluator:
             config=custom_answer_eval_config,
             llm_provider=llm_provider_answer_mock,
         )
-        answers = evaluator.run(answers_test)
+        answers = evaluator.batch_evaluate(answers_test)
         assert len(answers) == 4
         assert answers[0]["agent"] == answers[2]["agent"] == "agent1"
         assert answers[1]["agent"] == answers[3]["agent"] == "agent2"

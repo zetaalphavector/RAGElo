@@ -14,7 +14,12 @@ from tqdm.auto import tqdm
 from ragelo.evaluators.base_evaluator import BaseEvaluator
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
 from ragelo.logger import logger
-from ragelo.types import Document, EvaluatorAnswer, Query, RetrievalEvaluatorTypes
+from ragelo.types import (
+    Document,
+    Query,
+    RetrievalEvaluatorResult,
+    RetrievalEvaluatorTypes,
+)
 from ragelo.types.configurations import BaseEvaluatorConfig
 
 
@@ -23,6 +28,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
     output_columns: list[str] = ["qid", "did", "raw_answer", "answer"]
     scoring_key: str = "answer"
     output_file: str = "retrieval_evaluations.csv"
+    tuple_columns: list[str] = ["qid", "did"]
 
     def __init__(
         self,
@@ -34,11 +40,14 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         if config.output_file is not None:
             self.output_file = config.output_file
 
-    def batch_evaluate(self, queries: list[Query]) -> list[EvaluatorAnswer]:
+    def batch_evaluate(self, queries: list[Query]) -> list[RetrievalEvaluatorResult]:
         """Evaluate all the documents for a list of queries"""
         use_progress_bar = self.config.verbose
-        skip_docs = self.__get_skip_docs()
-        answers: list[EvaluatorAnswer] = []
+        skip_docs = self._get_skip_tuples(
+            self.output_file, self.tuple_columns, self.config.force
+        )
+        answers: list[RetrievalEvaluatorResult] = []
+        failed_evaluations = 0
         for query in tqdm(
             queries,
             desc="Evaluating retrieved documents",
@@ -50,6 +59,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             for document in tqdm(
                 query.retrieved_docs,
                 desc=query.qid,
+                disable=not use_progress_bar,
                 ncols=100,
                 leave=False,
                 position=1,
@@ -59,21 +69,26 @@ class BaseRetrievalEvaluator(BaseEvaluator):
                 if (qid, did) in skip_docs:
                     logger.debug(f"Skipping {qid} {did}")
                     continue
-
                 try:
                     raw_answer, answer = self.evaluate(query, document)
                 except (RetryError, ValueError):
+                    failed_evaluations += 1
                     continue
 
                 answers.append(
-                    EvaluatorAnswer(
+                    RetrievalEvaluatorResult(
                         qid=qid,
                         did=did,
                         raw_answer=raw_answer,
                         answer=answer,
                     )
                 )
-            self._dump_response(answers[-1])
+            self._dump_response(answers[-1], self.output_columns, self.output_file)
+
+        if self.config.verbose:
+            print("✅ Done!")
+            print(f"Unparsed answers: {failed_evaluations}")
+            print(f"Total evaluations: {len(answers)}")
         return answers
 
     def evaluate(
@@ -85,9 +100,25 @@ class BaseRetrievalEvaluator(BaseEvaluator):
     ) -> tuple[str, Any]:
         """Evaluates a single query-document pair. Returns the raw answer and the processed answer."""
         if isinstance(query, str):
-            query = Query(qid="<no_qid>", query=query, metadata=query_metadata)
+            query = Query(qid="<no_qid>", query=query)
         if isinstance(document, str):
-            document = Document(did="<no_did>", text=document, metadata=doc_metadata)
+            document = Document(did="<no_did>", text=document)
+        if query_metadata:
+            if query.metadata is not None:
+                logger.warning(
+                    f"Query metadata for query id {query.qid} is being overwritten!\n"
+                    f"Old metadata: {query.metadata}\n"
+                    f"New metadata: {query_metadata}\n"
+                )
+            query.metadata = query_metadata
+        if doc_metadata:
+            if document.metadata is not None:
+                logger.warning(
+                    f"Document metadata for document id {document.did} is being overwritten!\n"
+                    f"Old metadata: {document.metadata}\n"
+                    f"New metadata: {doc_metadata}\n"
+                )
+            document.metadata = doc_metadata
 
         message = self._build_message(query, document)
         try:
@@ -106,6 +137,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             raise e
         return raw_answer, answer
 
+    @abstractmethod
     def _build_message(
         self, query: Query, document: Document
     ) -> str | list[dict[str, str]]:
@@ -116,77 +148,6 @@ class BaseRetrievalEvaluator(BaseEvaluator):
     def _process_answer(self, answer: str) -> Any:
         """Processes the LLM evaluator output into some serializable format"""
         raise NotImplementedError
-
-    def __get_skip_docs(self) -> set[tuple[str, str]]:
-        """Skips documents that have already been annotated"""
-        skip_docs = set()
-        if self.config.force and os.path.isfile(self.output_file):
-            logger.warning(f"Removing existing {self.output_file}!")
-            os.remove(self.output_file)
-
-        if os.path.isfile(self.output_file):
-            line: dict[str, str]
-            for line in csv.DictReader(
-                open(self.output_file), fieldnames=self.output_columns
-            ):
-                skip_docs.add((line["qid"], line["did"]))
-
-        if len(skip_docs) > 0:
-            logger.warning(
-                f"Skipping {len(skip_docs)} documents already annotated! "
-                "If you want to re-annotate them, please use the --force flag"
-            )
-        return skip_docs
-
-    def _print_response(self, answer_dict: EvaluatorAnswer):
-        if not self.config.verbose:
-            return
-        if self.config.rich_print:
-            try:
-                import rich
-
-                rich.print(f"[bold blue]🔎 Query ID[/bold blue]: {answer_dict.qid}")
-                rich.print(f"[bold blue]📜 Document ID[/bold blue]: {answer_dict.did}")
-                rich.print(
-                    f"[bold blue]Raw Answer[/bold blue]: {answer_dict.raw_answer}"
-                )
-                rich.print(
-                    f"[bold blue]Parsed Answer[/bold blue]: {answer_dict.answer}"
-                )
-                rich.print("")
-
-            except ImportError:
-                logger.warning("Rich not installed. Using plain print")
-                self.config.rich_print = False
-
-        else:
-            tqdm.write(f"Query ID: {answer_dict.qid}")
-            tqdm.write(f"Document ID: {answer_dict.did}")
-            tqdm.write(f"Raw Answer: {answer_dict.raw_answer}")
-            tqdm.write(f"Parsed Answer: {answer_dict.answer}")
-            tqdm.write("")
-
-    def _dump_response(self, eval_answer: EvaluatorAnswer, file: Optional[str] = None):
-        self._print_response(eval_answer)
-        if not self.config.write_output:
-            return
-        output_file = file if file else self.output_file
-        if not os.path.isfile(output_file):
-            logger.debug(f"Creating new file {output_file}")
-            with open(output_file, "w") as f:
-                writer = csv.DictWriter(f, fieldnames=self.output_columns)
-                writer.writeheader()
-        with open(output_file, "a") as f:
-            writer = csv.DictWriter(f, fieldnames=self.output_columns)
-            writer.writerow(dataclasses.asdict(eval_answer))
-
-    @staticmethod
-    def _load_from_csv(file_path: str) -> dict[str, str]:
-        """extra content from a CSV file"""
-        contents = {}
-        for line in csv.reader(open(file_path, "r")):
-            contents[line[0]] = line[1]
-        return contents
 
     @classmethod
     def from_config(cls, config: BaseEvaluatorConfig, llm_provider: BaseLLMProvider):
