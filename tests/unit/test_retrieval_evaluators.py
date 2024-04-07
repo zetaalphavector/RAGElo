@@ -226,7 +226,7 @@ class TestDomainExpertEvaluator:
         )
         query = qs_with_docs[0]
         doc = query.retrieved_docs[0]
-        reasoning_answer, score_answer = evaluator.evaluate(query, doc)
+        _, _ = evaluator.evaluate(query, doc)
 
         assert llm_provider_mock_mock.call_count == 2
         call_args = llm_provider_mock_mock.call_args_list
