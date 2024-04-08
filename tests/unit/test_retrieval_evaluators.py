@@ -7,7 +7,7 @@ from ragelo.evaluators.retrieval_evaluators import (
     RDNAMEvaluator,
     ReasonerEvaluator,
 )
-from ragelo.types import Document, Query, RetrievalEvaluatorResult
+from ragelo.types import Document, Query
 
 
 class RetrievalEvaluator(BaseRetrievalEvaluator):
@@ -22,11 +22,11 @@ class TestRetrievalEvaluator:
     def test_evaluate_single_answer(
         self,
         llm_provider_json_mock,
-        retrieval_eval_config,
+        base_eval_config,
         qs_with_docs,
     ):
         evaluator = RetrievalEvaluator.from_config(
-            config=retrieval_eval_config, llm_provider=llm_provider_json_mock
+            config=base_eval_config, llm_provider=llm_provider_json_mock
         )
         query = qs_with_docs[0]
         doc = query.retrieved_docs[0]
@@ -41,11 +41,11 @@ class TestRetrievalEvaluator:
     def test_batch_eval(
         self,
         llm_provider_json_mock,
-        retrieval_eval_config,
+        base_eval_config,
         qs_with_docs,
     ):
         evaluator = RetrievalEvaluator.from_config(
-            config=retrieval_eval_config, llm_provider=llm_provider_json_mock
+            config=base_eval_config, llm_provider=llm_provider_json_mock
         )
         results = evaluator.batch_evaluate(qs_with_docs)
         assert len(results) == 4
@@ -62,9 +62,9 @@ class TestRetrievalEvaluator:
         for i, call in enumerate(call_args):
             assert call[0][0] == expected_prompts[i]
 
-    def test_evaluate_with_text(self, llm_provider_json_mock, retrieval_eval_config):
+    def test_evaluate_with_text(self, llm_provider_json_mock, base_eval_config):
         evaluator = RetrievalEvaluator.from_config(
-            config=retrieval_eval_config, llm_provider=llm_provider_json_mock
+            config=base_eval_config, llm_provider=llm_provider_json_mock
         )
         raw_answer, processed_answer = evaluator.evaluate(
             document="This is a query", query="This is a document"
@@ -75,13 +75,13 @@ class TestRetrievalEvaluator:
     def test_rich_printing(
         self,
         llm_provider_json_mock,
-        retrieval_eval_config,
+        base_eval_config,
         qs_with_docs,
         capsys,
     ):
-        retrieval_eval_config.rich_print = True
+        base_eval_config.rich_print = True
         evaluator = RetrievalEvaluator.from_config(
-            config=retrieval_eval_config,
+            config=base_eval_config,
             llm_provider=llm_provider_json_mock,
         )
         _ = evaluator.batch_evaluate(qs_with_docs)
@@ -133,11 +133,11 @@ class TestReasonerEvaluator:
     def test_process_single_answer(
         self,
         llm_provider_mock,
-        retrieval_eval_config,
+        base_eval_config,
         qs_with_docs,
     ):
         evaluator = ReasonerEvaluator.from_config(
-            config=retrieval_eval_config,
+            config=base_eval_config,
             llm_provider=llm_provider_mock,
         )
         query = qs_with_docs[0]

@@ -121,6 +121,11 @@ class BaseEvaluator(ABC):
         response: AnswerEvaluatorResult | RetrievalEvaluatorResult,
         rich_print: bool = False,
     ):
+        if isinstance(response.answer, dict):
+            # Print the answer in a more readable format
+            answer = json.dumps(response.answer, indent=4)
+        else:
+            answer = response.answer
         if rich_print:
             try:
                 import rich
@@ -131,7 +136,7 @@ class BaseEvaluator(ABC):
                 else:
                     rich.print(f"[bold blue]🕵️ Agent[/bold blue]: {response.agent}")
                 rich.print(f"[bold blue]Raw Answer[/bold blue]: {response.raw_answer}")
-                rich.print(f"[bold blue]Parsed Answer[/bold blue]: {response.answer}")
+                rich.print(f"[bold blue]Parsed Answer[/bold blue]: {answer}")
                 rich.print("")
                 return
             except ImportError:
@@ -142,8 +147,64 @@ class BaseEvaluator(ABC):
         else:
             tqdm.write(f"Agent: {response.agent}")
         tqdm.write(f"Raw Answer: {response.raw_answer}")
-        tqdm.write(f"Parsed Answer: {response.answer}")
+        tqdm.write(f"Parsed Answer: {answer}")
         tqdm.write("")
+
+    @staticmethod
+    def __dump_response_csv(
+        answer_dict: dict[str, str], output_columns: list[str], output_file: str
+    ):
+        if not any(k in output_columns for k in answer_dict.keys()):
+            raise ValueError(
+                "No parsed answer fields are in the output columns. \n"
+                f"Expected output columns: {output_columns}. \n"
+                f"Answer fields: {answer_dict.keys()}"
+            )
+
+        if not os.path.isfile(output_file):
+            logger.debug(f"Creating new file {output_file}")
+            with open(output_file, "w") as f:
+                writer = csv.DictWriter(f, fieldnames=output_columns)
+                writer.writeheader()
+        with open(output_file, "a") as f:
+            writer = csv.DictWriter(f, fieldnames=output_columns)
+            writer.writerow(answer_dict)
+
+    @staticmethod
+    def __dump_response_jsonl(answer_dict: dict[str, str], output_file: str):
+        with open(output_file, "a") as f:
+            f.write(json.dumps(answer_dict) + "\n")
+
+    @staticmethod
+    def __dump_response_json(answer_dict: dict[str, str], output_file: str):
+        """The file is a json-formatted list of dictionaries. Each dictionary is a response.
+        If the file already exists, erase the final closing square bracket and add a comma before adding the new response.
+        """
+        if not os.path.isfile(output_file):
+            logger.debug(f"Creating new file {output_file}")
+            with open(output_file, "w") as f:
+                f.write("[")
+        with open(output_file, "r+") as f:
+            f.seek(0, os.SEEK_END)
+            if f.tell() > 1:
+                f.seek(f.tell() - 1)
+                f.truncate()
+                f.write(",")
+            f.write(json.dumps(answer_dict) + "]")
+
+    @staticmethod
+    def __dump_raw_response(
+        answer_dict: dict[str, str], output_file: str, output_columns: list[str]
+    ):
+        """If no format is indicated, the raw response is dumped in a csv file"""
+        if not os.path.isfile(output_file):
+            logger.debug(f"Creating new file {output_file}")
+            with open(output_file, "w") as f:
+                writer = csv.DictWriter(f, fieldnames=output_columns)
+                writer.writeheader()
+        with open(output_file, "a") as f:
+            writer = csv.DictWriter(f, fieldnames=output_columns)
+            writer.writerow(answer_dict)
 
     def _dump_response(
         self,
@@ -155,12 +216,30 @@ class BaseEvaluator(ABC):
             self._print_response(response, self.config.rich_print)
         if not self.config.write_output:
             return
+        answer_dict = dataclasses.asdict(response)
+        if isinstance(answer_dict["answer"], dict):
+            # flatten the dict into the main dict
+            for k, v in answer_dict["answer"].items():
+                answer_dict[k] = v
+            del answer_dict["answer"]
+
+            # assert at least one of the new keys is in the output columns
+            if set(answer_dict.keys()) != set(output_columns):
+                logger.warning(
+                    "Parsed answer fields do not match the output columns.\n"
+                    f"Expected output columns: {output_columns}. \n"
+                    f"Answer fields: {answer_dict.keys()}"
+                )
+
         output_file = file if file else self.output_file
-        if not os.path.isfile(output_file):
-            logger.debug(f"Creating new file {output_file}")
-            with open(output_file, "w") as f:
-                writer = csv.DictWriter(f, fieldnames=output_columns)
-                writer.writeheader()
-        with open(output_file, "a") as f:
-            writer = csv.DictWriter(f, fieldnames=output_columns)
-            writer.writerow(dataclasses.asdict(response))
+        if output_file.endswith(".csv"):
+            self.__dump_response_csv(answer_dict, output_columns, output_file)
+        elif output_file.endswith(".jsonl"):
+            self.__dump_response_jsonl(answer_dict, output_file)
+        elif output_file.endswith(".json"):
+            self.__dump_response_json(answer_dict, output_file)
+        else:
+            logger.info(
+                "Output file format not recognized. Dumping raw response in csv format."
+            )
+            self.__dump_raw_response(answer_dict, output_file, output_columns)

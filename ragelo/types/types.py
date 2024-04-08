@@ -54,7 +54,7 @@ class RetrievalEvaluatorResult:
     qid: str
     did: str
     raw_answer: str
-    answer: Any
+    answer: str | int | dict[str, Any]
 
 
 @dataclass
@@ -62,4 +62,4 @@ class AnswerEvaluatorResult:
     qid: str
     agent: str
     raw_answer: str
-    answer: Any
+    answer: str | int | dict[str, Any]

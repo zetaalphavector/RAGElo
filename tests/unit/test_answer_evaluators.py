@@ -1,3 +1,5 @@
+from typing import cast
+
 from ragelo import get_answer_evaluator
 from ragelo.evaluators.answer_evaluators import (
     CustomPromptEvaluator,
@@ -48,14 +50,18 @@ class TestCustomPromptEvaluator:
             llm_provider=llm_provider_answer_mock,
         )
         answers = evaluator.batch_evaluate(answers_test)
+        flat_answers = [(q, a) for q in answers_test for a in q.answers]
+        assert all([isinstance(a.answer, dict) for a in answers])
         assert len(answers) == 4
-        assert answers[0]["agent"] == answers[2]["agent"] == "agent1"
-        assert answers[1]["agent"] == answers[3]["agent"] == "agent2"
-        assert answers[0]["quality"] == 2
-        assert answers[0]["trustworthiness"] == 1
-        assert answers[1]["originality"] == 1
+        assert answers[0].agent == answers[2].agent == "agent1"
+        assert answers[1].agent == answers[3].agent == "agent2"
 
-        llm_call_args = llm_provider_answer_mock.inner_call.call_args_list
+        parsed_answer = cast(dict[str, int], answers[0].answer)
+        assert parsed_answer["quality"] == 2
+        assert parsed_answer["trustworthiness"] == 1
+        assert parsed_answer["originality"] == 1
+
+        llm_call_args = llm_provider_answer_mock.call_mocker.call_args_list
         assert (
             len(
                 llm_call_args[0][0][0]
@@ -66,11 +72,17 @@ class TestCustomPromptEvaluator:
             )
             == 2
         )
-        for args, qid, did in zip(llm_call_args, ["0", "0", "1", "1"], [0, 1, 0, 1]):
-            query = args[0][0].split("User Query: ")[1].split("\n")[0].strip()
-            answer = args[0][0].split("Agent answer: ")[1].split("\n")[-1].strip()
-            assert query == answers_test[qid][did].query.query
-            assert answer == answers_test[qid][did].text
+
+        flat_answers = [(q, a) for q in answers_test for a in q.answers]
+        for (q, a), args in zip(flat_answers, llm_call_args):
+            submitted_query = args[0][0].split("User Query: ")[1].split("\n")[0].strip()
+            submitted_answer = (
+                args[0][0].split("Agent answer: ")[1].split("\n")[-1].strip()
+            )
+            expected_query = q.query
+            expected_answer = a.text
+            assert submitted_query == expected_query
+            assert submitted_answer == expected_answer
 
 
 def test_get_by_name(llm_provider_pairwise_answer_mock, pairwise_answer_eval_config):
