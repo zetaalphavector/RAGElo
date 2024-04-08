@@ -18,6 +18,7 @@ class BaseEvaluator(ABC):
     config: BaseEvaluatorConfig
     output_file: str
     tuple_columns: list[str]
+    scoring_key: str
 
     @abstractmethod
     def __init__(
@@ -217,6 +218,7 @@ class BaseEvaluator(ABC):
         output_columns: list[str],
         file: Optional[str] = None,
     ):
+        print(self.config.verbose)
         if self.config.verbose:
             self._print_response(response, self.config.rich_print)
         if not self.config.write_output:

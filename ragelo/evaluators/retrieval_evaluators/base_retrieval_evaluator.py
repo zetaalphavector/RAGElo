@@ -20,13 +20,13 @@ from ragelo.types import (
     RetrievalEvaluatorResult,
     RetrievalEvaluatorTypes,
 )
-from ragelo.types.configurations import BaseEvaluatorConfig
+from ragelo.types.configurations import AnswerFormat, BaseEvaluatorConfig
 
 
 class BaseRetrievalEvaluator(BaseEvaluator):
     config: BaseEvaluatorConfig
     output_columns: list[str] = ["qid", "did", "raw_answer", "answer"]
-    scoring_key: str = "answer"
+    scoring_key: str | list[str] = "answer"
     output_file: str = "retrieval_evaluations.csv"
     tuple_columns: list[str] = ["qid", "did"]
 
@@ -81,7 +81,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
                         answer=answer,
                     )
                 )
-            self._dump_response(answers[-1], self.output_columns, self.output_file)
+                self._dump_response(answers[-1], self.output_columns, self.output_file)
 
         if self.config.verbose:
             print("✅ Done!")
@@ -101,22 +101,8 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             query = Query(qid="<no_qid>", query=query)
         if isinstance(document, str):
             document = Document(did="<no_did>", text=document)
-        if query_metadata:
-            if query.metadata is not None:
-                logger.warning(
-                    f"Query metadata for query id {query.qid} is being overwritten!\n"
-                    f"Old metadata: {query.metadata}\n"
-                    f"New metadata: {query_metadata}\n"
-                )
-            query.metadata = query_metadata
-        if doc_metadata:
-            if document.metadata is not None:
-                logger.warning(
-                    f"Document metadata for document id {document.did} is being overwritten!\n"
-                    f"Old metadata: {document.metadata}\n"
-                    f"New metadata: {doc_metadata}\n"
-                )
-            document.metadata = doc_metadata
+        query.add_metadata(query_metadata)
+        document.add_metadata(doc_metadata)
 
         message = self._build_message(query, document)
         try:
@@ -141,10 +127,14 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         """Builds the prompt to send to the LLM."""
         raise NotImplementedError
 
-    @abstractmethod
     def _process_answer(self, answer: str) -> Any:
         """Processes the LLM evaluator output into some serializable format"""
-        raise NotImplementedError
+        if self.config.answer_format == AnswerFormat.JSON:
+            assert isinstance(self.scoring_key, str)
+            return self.json_answer_parser(answer, self.scoring_key)
+        if self.config.answer_format == AnswerFormat.MULTI_FIELD_JSON:
+            assert isinstance(self.scoring_key, list)
+            return self.json_answer_parser_multifields(answer, self.scoring_key)
 
     @classmethod
     def from_config(cls, config: BaseEvaluatorConfig, llm_provider: BaseLLMProvider):

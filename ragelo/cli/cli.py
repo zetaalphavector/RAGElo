@@ -33,6 +33,7 @@ def run_all(config: AllConfig = AllConfig(), **kwargs):
         raise ValueError("The answer evaluator must be a pairwise_reasoning")
     if config.answer_ranker_name != "elo":
         raise ValueError("The answer ranker must be an elo")
+    config.verbose = True
 
     llm_provider = get_llm_provider(config.llm_provider, **kwargs)
 

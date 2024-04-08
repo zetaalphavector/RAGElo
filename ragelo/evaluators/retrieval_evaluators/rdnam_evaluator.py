@@ -5,7 +5,7 @@ https://arxiv.org/abs/2309.10621
 
 import json
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 import numpy as np
 from tenacity import RetryError
@@ -89,22 +89,6 @@ Each rater used their own independent judgement."""
         else:
             self.prompt += "\n{{"
         self.multiple = self.config.use_multiple_annotators
-
-    def evaluate(self, query: Query, document: Document) -> tuple[str, int]:
-        """Evaluates a single query-document pair. Returns the raw answer and the processed answer."""
-
-        message = self._build_message(query, document)
-        try:
-            raw_answer = self.llm_provider(message)
-        except RetryError as e:
-            logging.warning(f"Failed to FETCH answers for {query.qid} {document.did}")
-            raise e
-        try:
-            answer = self._process_answer(raw_answer)
-        except ValueError as e:
-            logging.warning(f"Failed to PARSE answer for {query.qid} {document.did}")
-            raise e
-        return raw_answer, answer
 
     def _build_message(self, query: Query, document: Document) -> str:
         narrative_description_str = ""

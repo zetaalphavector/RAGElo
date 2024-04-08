@@ -1,5 +1,15 @@
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import List, Optional
+
+
+@dataclass
+class AnswerFormat(str, Enum):
+    """Enum that contains the names of the available answer formats"""
+
+    JSON = "json"
+    TEXT = "text"
+    MULTI_FIELD_JSON = "multi_field_json"
 
 
 @dataclass
@@ -59,10 +69,6 @@ class BaseConfig:
 
 @dataclass(kw_only=True)
 class BaseEvaluatorConfig(BaseConfig):
-    output_file: Optional[str] = field(
-        default=None,
-        metadata={"help": "Path to the output file"},
-    )
     query_path: str = field(
         default="queries.csv",
         metadata={"help": "Path to the queries file"},
@@ -70,9 +76,17 @@ class BaseEvaluatorConfig(BaseConfig):
     documents_path: str = field(
         default="documents.csv", metadata={"help": "Path to the documents file"}
     )
+    output_file: Optional[str] = field(
+        default=None,
+        metadata={"help": "Path to the output file"},
+    )
     query_placeholder: str = field(
         default="query",
         metadata={"help": "The placeholder for the query in the prompt"},
+    )
+    answer_format: AnswerFormat = field(
+        default_factory=lambda: AnswerFormat.JSON,
+        metadata={"help": "The format of the answer returned by the LLM"},
     )
 
 
@@ -129,6 +143,10 @@ class CustomPromptEvaluatorConfig(BaseEvaluatorConfig):
     output_file: str = field(
         default="custom_prompt_evaluations.csv",
         metadata={"help": "Path to the output file"},
+    )
+    scoring_fields: list[str] = field(
+        default_factory=lambda: ["quality", "trustworthiness", "originality"],
+        metadata={"help": "The fields to extract from the answer"},
     )
 
 
@@ -267,6 +285,10 @@ class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
     scoring_fields: list[str] = field(
         default_factory=lambda: ["quality", "trustworthiness", "originality"],
         metadata={"help": "The fields to extract from the answer"},
+    )
+    answer_format: AnswerFormat = field(
+        default_factory=lambda: AnswerFormat.MULTI_FIELD_JSON,
+        metadata={"help": "The format of the answer returned by the LLM"},
     )
 
 

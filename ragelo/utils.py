@@ -27,18 +27,19 @@ def load_queries_from_csv(
     read_queries = set()
     if not os.path.isfile(queries_path):
         raise FileNotFoundError(f"Queries file {queries_path} not found")
-
-    for line in csv.DictReader(open(queries_path)):
-        qid = line[query_id_col].strip()
-        query_text = line[query_text_col].strip()
-        extra_metadata = {
-            k: v for k, v in line.items() if k not in [query_id_col, query_text_col]
-        }
-        if qid in read_queries:
-            logging.warning(f"Query {qid} already read. Skipping")
-            continue
-        queries.append(Query(qid, query_text, metadata=extra_metadata or None))
-        read_queries.add(qid)
+    with open(queries_path) as f:
+        reader = csv.DictReader(f)
+        for line in reader:
+            qid = line[query_id_col].strip()
+            query_text = line[query_text_col].strip()
+            extra_metadata = {
+                k: v for k, v in line.items() if k not in [query_id_col, query_text_col]
+            }
+            if qid in read_queries:
+                logging.warning(f"Query {qid} already read. Skipping")
+                continue
+            queries.append(Query(qid, query_text, metadata=extra_metadata or None))
+            read_queries.add(qid)
     logging.info(f"Loaded {len(queries)} queries")
 
     return queries
@@ -151,7 +152,7 @@ def load_answers_from_csv(
     Returns:
         list[Query]: A list of queries with the answers.
     """
-    answers: dict[str, list[AgentAnswer]] = defaultdict(list)
+
     if not os.path.isfile(answers_path):
         raise FileNotFoundError(f"Answers file {answers_path} not found")
     if isinstance(queries, str):

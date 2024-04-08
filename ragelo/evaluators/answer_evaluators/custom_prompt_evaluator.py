@@ -19,8 +19,8 @@ class CustomPromptEvaluator(BaseAnswerEvaluator):
     ):
         super().__init__(config, llm_provider)
         self.prompt = config.prompt
-        self.__scoring_fields = config.scoring_fields
-        self.output_columns.extend(self.__scoring_fields)
+        self.scoring_keys = config.scoring_fields
+        self.output_columns.extend(self.scoring_keys)
 
     def _build_message(self, query: Query, answer: AgentAnswer) -> str:
         reasonings = self._prepare_reasonings(query.qid)
@@ -43,4 +43,4 @@ class CustomPromptEvaluator(BaseAnswerEvaluator):
         return self.prompt.format(**formatters)
 
     def _process_answer(self, answer: str) -> dict[str, str]:
-        return self.json_answer_parser_multifields(answer, self.__scoring_fields)
+        return self.json_answer_parser_multifields(answer, self.scoring_keys)

@@ -37,6 +37,8 @@ def domain_expert(
     config.documents_path = get_path(config.data_path, config.documents_path)
     config.output_file = get_path(config.data_path, config.output_file)
 
+    config.verbose = True
+
     llm_provider = get_llm_provider(config.llm_provider, **kwargs)
     evaluator = get_retrieval_evaluator(
         RetrievalEvaluatorTypes.DOMAIN_EXPERT, config=config, llm_provider=llm_provider
@@ -61,6 +63,7 @@ def reasoner(config: BaseEvaluatorConfig = BaseEvaluatorConfig(), **kwargs):
     else:
         config.output_file = get_path(config.data_path, config.output_file)
 
+    config.verbose = True
     llm_provider = get_llm_provider(config.llm_provider, **kwargs)
     evaluator = get_retrieval_evaluator(
         RetrievalEvaluatorTypes.REASONER, config=config, llm_provider=llm_provider
@@ -79,6 +82,7 @@ def rdnam(config: RDNAMEvaluatorConfig = RDNAMEvaluatorConfig(), **kwargs):
     config.query_path = get_path(config.data_path, config.query_path)
     config.documents_path = get_path(config.data_path, config.documents_path)
     config.output_file = get_path(config.data_path, config.output_file)
+    config.verbose = True
     llm_provider = get_llm_provider(config.llm_provider, **kwargs)
     evaluator = get_retrieval_evaluator(
         RetrievalEvaluatorTypes.RDNAM, config=config, llm_provider=llm_provider

@@ -90,22 +90,8 @@ class BaseAnswerEvaluator(BaseEvaluator):
             query = Query(qid="<no_qid>", query=query)
         if isinstance(answer, str):
             answer = AgentAnswer(agent="<no_agent>", text=answer)
-        if query_metadata:
-            if query.metadata is not None:
-                logger.warning(
-                    f"Query metadata for query id {query.qid} is being overwritten!\n"
-                    f"Old metadata: {query.metadata}\n"
-                    f"New metadata: {query_metadata}\n"
-                )
-            query.metadata = query_metadata
-        if answer_metadata:
-            if answer.metadata is not None:
-                logger.warning(
-                    f"Answer metadata for query id {query.qid} and agent {answer.agent} is being overwritten!\n"
-                    f"Old metadata: {answer.metadata}\n"
-                    f"New metadata: {answer_metadata}\n"
-                )
-            answer.metadata = answer_metadata
+        query.add_metadata(query_metadata)
+        answer.add_metadata(answer_metadata)
 
         message = self._build_message(query, answer)
         try:

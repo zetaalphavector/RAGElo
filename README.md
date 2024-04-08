@@ -29,22 +29,67 @@ pip install ragelo[cli]
 ```
 ## 🚀 Library Quickstart
 
-To use RAGElo as a library, all you need to do is import RAGElo, initialize an `Evaluator` and call either `evaluate_single_sample()` for evaluating a retrieved document or an LLM answer, or `run()` to run a batch_evaluation. For example, using the `RDNAM` retrieval evaluator from the [Thomas et al. (2023)](https://arxiv.org/abs/2309.10621) paper on using GPT-4 for annotating retrieval results:
+To use RAGElo as a library, all you need to do is import RAGElo, initialize an `Evaluator` and call either `evaluate()` for evaluating a retrieved document or an LLM answer, or `batch_evaluate()` to evaluate multiple responses at once. For example, using the `RDNAM` retrieval evaluator from the [Thomas et al. (2023)](https://arxiv.org/abs/2309.10621) paper on using GPT-4 for annotating retrieval results:
 
 ```python
-from ragelo import Document, Query, get_retrieval_evaluator
+from ragelo import get_retrieval_evaluator
 
 evaluator = get_retrieval_evaluator("RDNAM", llm_provider="openai")
-
-doc = Document(did='doc_1', text='Lyon is the second largest city in France.')
-query = Query(qid="q_1", query="What is the capital of France?")
-
-evaluator.evaluate_single_sample(document=doc, query=query)
-# Output: {'qid': 'q_1', 'did': 'doc_1', 'raw_answer': '"O": 0\n}', 'answer': 0}
+raw_answer, processed_answer = evaluator.evaluate(query="What is the capital of France?", document='Lyon is the second largest city in France.')
+print(processed_answer)
+# Output: 0
+print(raw_answer)
+# Output: '"O": 0\n}'
 ```
 
+For a more complete example, we can evaluate with a custom prompt, and inject metadata into our evaluation prompt:
 
+```python
+from ragelo import get_retrieval_evaluator
 
+prompt = """You are a helpful assistant for evaluating the relevance of a retrieved document to a user query.
+You should pay extra attention to how **recent** a document is. A document older than 5 years is considered outdated.
+
+The answer should be evaluated according tot its recency, truthfulness, and relevance to the user query.
+
+User query: {q}
+
+Retrieved document: {d}
+
+The document has a date of {document_date}.
+Today is {today_date}.
+
+WRITE YOUR ANSWER ON A SINGLE LINE AS A JSON OBJECT WITH THE FOLLOWING KEYS:
+- "relevance": 0 if the document is irrelevant, 1 if it is relevant.
+- "recency": 0 if the document is outdated, 1 if it is recent.
+- "truthfulness": 0 if the document is false, 1 if it is true.
+- "reasoning": A short explanation of why you think the document is relevant or irrelevant.
+"""
+
+evaluator = get_retrieval_evaluator(
+    "custom_prompt",
+    llm_provider="openai",
+    prompt=prompt,
+    query_placeholder="q",
+    document_placeholder="d",
+    scoring_fields=["relevance", "recency", "truthfulness", "reasoning"],
+    answer_format="multi_field_json",
+)
+
+raw_answer, answer = evaluator.evaluate(
+    query="What is the capital of Brazil?",
+    document="Rio de Janeiro is the capital of Brazil.",
+    query_metadata={"today_date": "08-04-2024"},
+    doc_metadata={"document_date": "04-03-1950"},
+)
+
+answer
+{'relevance': 0,
+ 'recency': 0,
+ 'truthfulness': 0,
+ 'reasoning': 'The document is outdated and incorrect. Rio de Janeiro was the capital of Brazil until 1960 when it was changed to Brasília.'}
+```
+Note that, in this example, we passed to the `evaluate` method two dictionaries with metadata for the query and the document. This metadata is injected into the prompt by matching their keys into the placeholders in the prompt.
 
 ## 🚀 CLI Quickstart 
 After installing RAGElo as a CLI app, you can run it with the following command:
@@ -56,11 +101,11 @@ ragelo run-all queries.csv documents.csv answers.csv --verbose
  agent2        : 973.3
 ```
 
-We need three files for running an end-to-end evaluation: `queries.csv`, `documents.csv`, and `answers.csv`:
+When running as a CLI, RAGElo expects the input files as CSV files. Specifically, it needs a csv file with the user queries, one with the documents retrieved by the retrieval system and one of the answers each agent produced. Here are some examples of the expected format:
 
 `queries.csv`: 
 ```csv
-query_id,query
+qid,query
 0, What is the capital of Brazil?
 1, What is the capital of France?
 
@@ -68,7 +113,7 @@ query_id,query
 
 `documents.csv`:
 ```csv
-query_id,doc_id,document_text
+qid,did,document_text
 0,0, Brasília is the capital of Brazil.
 0,1, Rio de Janeiro used to be the capital of Brazil.
 1,2, Paris is the capital of France.
@@ -77,34 +122,24 @@ query_id,doc_id,document_text
 
 `answers.csv`:
 ```csv
-query_id,agent,answer
+qid,agent,answer
 0, agent1,"Brasília is the capital of Brazil, according to [0]."
 0, agent2,"According to [1], Rio de Janeiro used to be the capital of Brazil, until the 60s."
 1, agent1,"Paris is the capital of France, according to [2]."
 1, agent2,"According to [3], Lyon is the second largest city in France. Meanwhile, Paris is its capital [2]."
 ```
 
-The OpenAI API key should be set as an environment variable (`OPENAI_API_KEY`). Alternatively, you can set a credentials file and pass it as an option to `ragelo`:
-
-`credentials.txt`:
-```
-OPENAI_API_KEY=<your_key_here>
-```
-
-```bash
-ragelo run-all queries.csv documents.csv answers.csv --credentials-file credentials.txt
-```
 
 ## 🧩 Components
 While **RAGElo** can be used as either an an end-to-end tool or by calling individual CLI components.
 
 ### 📜 `retrieval-evaluator`
-The `retrieval-evaluator` tool annotates retrieved documents based on their relevance to the user query. This is done regardless of the answers provided by any Agent. Similar to the library usage example above, we can call use the `RDNAM` Retrieval Evaluator by calling:
+The `retrieval-evaluator` tool annotates retrieved documents based on their relevance to the user query. This is done regardless of the answers provided by any Agent. As an example, for calling the `Reasoner` retrieval evaluator (reasoner only outputs the reasoning why a document is relevant or not) we can use:
 
 ```bash
-ragelo retrieval-evaluator rdnam queries.csv documents.csv reasonings.csv
+ragelo retrieval-evaluator reasoner queries.csv documents.csv output.csv
 ```
-The `reasonings.csv` output file is a csv file with query_id, document_id and answer columns: [tests/data/reasonings.csv](https://github.com/zetaalphavector/RAGElo/blob/master/tests/data/reasonings.csv).
+The output file changes according to the evaluator used. In general it will have one row per document evaluator, with the query_id, document_id, the raw LLM answer and the parsed answer. An example of the output for the reasoner is found here: [tests/data/reasonings.csv](https://github.com/zetaalphavector/RAGElo/blob/master/tests/data/reasonings.csv).
 
 ### 💬 `answers-annotator`
 

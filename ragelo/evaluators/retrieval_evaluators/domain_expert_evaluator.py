@@ -138,8 +138,20 @@ Please only answer with a single number.
         )
         return reason_prompt
 
-    def evaluate(self, query: Query, document: Document) -> tuple[str, Any]:
+    def evaluate(
+        self,
+        query: Query | str,
+        document: Document | str,
+        query_metadata: Optional[dict[str, Any]] = None,
+        doc_metadata: Optional[dict[str, Any]] = None,
+    ) -> tuple[str, Any]:
         """Processes a single pair of qid, did in a two-shot manner"""
+        if isinstance(query, str):
+            query = Query(qid="<no_qid>", query=query)
+        if isinstance(document, str):
+            document = Document(did="<no_did>", text=document)
+        query.add_metadata(query_metadata)
+        document.add_metadata(doc_metadata)
 
         qid = query.qid
         did = document.did

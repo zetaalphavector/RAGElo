@@ -1,3 +1,6 @@
+import json
+from unittest.mock import Mock
+
 from ragelo import get_retrieval_evaluator
 from ragelo.evaluators.retrieval_evaluators import (
     BaseRetrievalEvaluator,
@@ -274,3 +277,65 @@ class TestFewShotEvaluator:
             == "user"
         )
         assert call_messages[2]["role"] == call_messages[4]["role"] == "assistant"
+
+
+class TestReadmeExamples:
+    def test_rdnam_example(self, llm_provider_mock_rdnam):
+        llm_provider_mock_rdnam.call_mocker = Mock(side_effect=lambda _: '"O": 0\n}')
+        evaluator = get_retrieval_evaluator(
+            "RDNAM", llm_provider=llm_provider_mock_rdnam
+        )
+        raw_answer, processed_answer = evaluator.evaluate(
+            query="What is the capital of France?",
+            document="Lyon is the second largest city in France.",
+        )
+        assert raw_answer == '"O": 0\n}'
+        assert processed_answer == 0
+
+    def test_custom_prompt_evaluator_example(self, llm_provider_mock):
+        prompt = """You are a helpful assistant for evaluating the relevance of a retrieved document to a user query.
+You should pay extra attention to how **recent** a document is. A document older than 5 years is considered outdated.
+
+The answer should be evaluated according tot its recency, truthfulness, and relevance to the user query.
+
+User query: {q}
+
+Retrieved document: {d}
+
+The document has a date of {document_date}.
+Today is {today_date}.
+
+WRITE YOUR ANSWER ON A SINGLE LINE AS A JSON OBJECT WITH THE FOLLOWING KEYS:
+- "relevance": 0 if the document is irrelevant, 1 if it is relevant.
+- "recency": 0 if the document is outdated, 1 if it is recent.
+- "truthfulness": 0 if the document is false, 1 if it is true.
+- "reasoning": A short explanation of why you think the document is relevant or irrelevant.
+"""
+        answer_dict = {
+            "relevance": 0,
+            "recency": 0,
+            "truthfulness": 0,
+            "reasoning": "The document is outdated and incorrect. Rio de Janeiro was the capital of Brazil until 1960 when it was changed to Brasília.",
+        }
+        mocked_llm_answer = json.dumps(answer_dict)
+        llm_provider_mock.call_mocker = Mock(side_effect=lambda _: mocked_llm_answer)
+        evaluator = get_retrieval_evaluator(
+            "custom_prompt",
+            llm_provider=llm_provider_mock,
+            prompt=prompt,
+            query_placeholder="q",
+            document_placeholder="d",
+            scoring_fields=["relevance", "recency", "truthfulness", "reasoning"],
+            answer_format="multi_field_json",
+        )
+
+        raw_answer, answer = evaluator.evaluate(
+            query="What is the capital of Brazil?",
+            document="Rio de Janeiro is the capital of Brazil.",
+            query_metadata={"today_date": "08-04-2024"},
+            doc_metadata={"document_date": "04-03-1950"},
+        )
+        call_args = llm_provider_mock.call_mocker.call_args_list
+        assert raw_answer == mocked_llm_answer
+        assert answer == answer_dict
+        assert len(call_args) == 1
