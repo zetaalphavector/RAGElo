@@ -18,19 +18,17 @@ class CustomPromptEvaluator(BaseAnswerEvaluator):
         llm_provider: BaseLLMProvider,
     ):
         super().__init__(config, llm_provider)
-        self.__prompt = config.prompt
+        self.prompt = config.prompt
         self.__scoring_fields = config.scoring_fields
         self.output_columns.extend(self.__scoring_fields)
 
-    def _build_message(
-        self, query: Query, answer: AgentAnswer
-    ) -> str | list[dict[str, str]]:
+    def _build_message(self, query: Query, answer: AgentAnswer) -> str:
         reasonings = self._prepare_reasonings(query.qid)
         query_metadata = self._get_usable_fields_from_metadata(
-            self.__prompt, query.metadata, skip_fields=[self.config.query_placeholder]
+            self.prompt, query.metadata, skip_fields=[self.config.query_placeholder]
         )
         answer_metadata = self._get_usable_fields_from_metadata(
-            self.__prompt,
+            self.prompt,
             answer.metadata,
             skip_fields=[self.config.answer_placeholder],
         )
@@ -42,7 +40,7 @@ class CustomPromptEvaluator(BaseAnswerEvaluator):
             **answer_metadata,
         }
 
-        return self.__prompt.format(**formatters)
+        return self.prompt.format(**formatters)
 
     def _process_answer(self, answer: str) -> dict[str, str]:
         return self.json_answer_parser_multifields(answer, self.__scoring_fields)

@@ -242,7 +242,9 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     )
     k: int = field(
         default=100,
-        metadata={"help": "Maximum number of pairwise comparisons to generate"},
+        metadata={
+            "help": "Maximum number of pairwise comparisons per query to generate"
+        },
     )
     output_file: str = field(
         default="pairwise_answers_evaluations.csv",

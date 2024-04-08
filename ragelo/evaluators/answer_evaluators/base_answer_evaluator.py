@@ -128,7 +128,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
 
     @abstractmethod
     def _build_message(
-        self, query: Query, answer: AgentAnswer
+        self, query: Query, answer: AgentAnswer | tuple[AgentAnswer, AgentAnswer]
     ) -> str | list[dict[str, str]]:
         """Builds the message to send to the LLM evaluator"""
         raise NotImplementedError

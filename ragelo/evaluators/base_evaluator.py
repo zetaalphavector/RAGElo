@@ -129,8 +129,14 @@ class BaseEvaluator(ABC):
                 rich.print(f"[bold blue]🔎 Query ID[/bold blue]: {response.qid}")
                 if isinstance(response, RetrievalEvaluatorResult):
                     rich.print(f"[bold blue]📜 Document ID[/bold blue]: {response.did}")
+                elif response.agent_a and response.agent_b:
+                    rich.print(
+                        f"[bold blue] {response.agent_a:<18} [/bold blue] 🆚  "
+                        f"[bold red] {response.agent_b}[/bold red]"
+                    )
                 else:
                     rich.print(f"[bold blue]🕵️ Agent[/bold blue]: {response.agent}")
+
                 rich.print(f"[bold blue]Raw Answer[/bold blue]: {response.raw_answer}")
                 rich.print(f"[bold blue]Parsed Answer[/bold blue]: {answer}")
                 rich.print("")
@@ -140,6 +146,8 @@ class BaseEvaluator(ABC):
         tqdm.write(f"Query ID: {response.qid}")
         if isinstance(response, RetrievalEvaluatorResult):
             tqdm.write(f"Document ID: {response.did}")
+        elif response.agent_a and response.agent_b:
+            tqdm.write(f"{response.agent_a} vs {response.agent_b}")
         else:
             tqdm.write(f"Agent: {response.agent}")
         tqdm.write(f"Raw Answer: {response.raw_answer}")
@@ -151,6 +159,7 @@ class BaseEvaluator(ABC):
         answer_dict: dict[str, str], output_columns: list[str], output_file: str
     ):
         if not any(k in output_columns for k in answer_dict.keys()):
+
             raise ValueError(
                 "No parsed answer fields are in the output columns. \n"
                 f"Expected output columns: {output_columns}. \n"
@@ -219,14 +228,11 @@ class BaseEvaluator(ABC):
                 answer_dict[k] = v
             del answer_dict["answer"]
 
+        null_keys = {k for k in answer_dict.keys() if answer_dict[k] is None}
+        unused_keys = (set(answer_dict.keys()) - set(output_columns)) & set(null_keys)
+        for k in unused_keys:
+            del answer_dict[k]
             # assert at least one of the new keys is in the output columns
-            if set(answer_dict.keys()) != set(output_columns):
-                logger.warning(
-                    "Parsed answer fields do not match the output columns.\n"
-                    f"Expected output columns: {output_columns}. \n"
-                    f"Answer fields: {answer_dict.keys()}"
-                )
-
         output_file = file if file else self.output_file
         if output_file.endswith(".csv"):
             self.__dump_response_csv(answer_dict, output_columns, output_file)
