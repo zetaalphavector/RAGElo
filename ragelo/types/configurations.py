@@ -70,6 +70,10 @@ class BaseEvaluatorConfig(BaseConfig):
     documents_path: str = field(
         default="documents.csv", metadata={"help": "Path to the documents file"}
     )
+    query_placeholder: str = field(
+        default="query",
+        metadata={"help": "The placeholder for the query in the prompt"},
+    )
 
 
 @dataclass(kw_only=True)
@@ -118,10 +122,6 @@ class CustomPromptEvaluatorConfig(BaseEvaluatorConfig):
             "help": "The prompt to be used to evaluate the documents. It should contain a {query} and a {document} placeholder"
         },
     )
-    query_placeholder: str = field(
-        default="query",
-        metadata={"help": "The placeholder for the query in the prompt"},
-    )
     document_placeholder: str = field(
         default="document",
         metadata={"help": "The placeholder for the document in the prompt"},
@@ -167,10 +167,6 @@ class FewShotEvaluatorConfig(BaseEvaluatorConfig):
     output_file: str = field(
         default="few_shot_evaluations.csv",
         metadata={"help": "Path to the output file"},
-    )
-    query_placeholder: str = field(
-        default="query",
-        metadata={"help": "The placeholder for the query in the prompt"},
     )
     document_placeholder: str = field(
         default="document",
@@ -226,6 +222,14 @@ class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
         default="reasonings.csv",
         metadata={"help": "CSV file with the reasoning for each retrieved document"},
     )
+    answer_placeholder: str = field(
+        default="answer",
+        metadata={"help": "The placeholder for the answer in the prompt"},
+    )
+    documents_placeholder: str = field(
+        default="documents",
+        metadata={"help": "The placeholder for the documents in the prompt"},
+    )
 
 
 @dataclass
@@ -253,18 +257,6 @@ class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
         metadata={
             "help": "The prompt to be used to evaluate the documents. It should contain a {query} and a {document} placeholder"
         },
-    )
-    query_placeholder: str = field(
-        default="query",
-        metadata={"help": "The placeholder for the query in the prompt"},
-    )
-    answer_placeholder: str = field(
-        default="answer",
-        metadata={"help": "The placeholder for the answer in the prompt"},
-    )
-    documents_placeholder: str = field(
-        default="documents",
-        metadata={"help": "The placeholder for the documents in the prompt"},
     )
     output_file: str = field(
         default="custom_prompt_answers_evaluations.csv",

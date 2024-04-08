@@ -1,4 +1,5 @@
 import json
+from dataclasses import asdict
 from unittest.mock import Mock
 
 import pytest
@@ -99,31 +100,31 @@ def openai_client_mock(mocker, chat_completion_mock):
 
 
 @pytest.fixture
-def retrieval_eval_config():
+def base_eval_config():
     return BaseEvaluatorConfig(
         documents_path="tests/data/documents.csv",
         query_path="tests/data/queries.csv",
         output_file="tests/data/output.csv",
         force=True,
         verbose=True,
+        write_output=False,
     )
 
 
 @pytest.fixture
-def pairwise_answer_eval_config():
-    return PairwiseEvaluatorConfig(
-        output_file="tests/data/output_answers.csv",
+def pairwise_answer_eval_config(base_eval_config):
+    config = PairwiseEvaluatorConfig(
         reasoning_path="tests/data/reasonings.csv",
         bidirectional=False,
-        force=True,
-        verbose=True,
+        **asdict(base_eval_config),
     )
+    return config
 
 
 @pytest.fixture
-def custom_answer_eval_config():
-    return CustomPromptAnswerEvaluatorConfig(
-        output_file="tests/data/output_answers.csv",
+def custom_answer_eval_config(base_eval_config):
+    config = CustomPromptAnswerEvaluatorConfig(
+        reasoning_path="tests/data/reasonings.csv",
         prompt="""
 You are an useful assistant for evaluating the quality of the answers generated \
 by RAG Agents. Given the following retrieved documents and a user query, evaluate \
@@ -132,64 +133,49 @@ The last line of your answer must be a json object with the keys "quality", \
 "trustworthiness" and originality, each of them with a single number between 0 and \
 2, where 2 is the highest score on that aspect.
 DOCUMENTS RETRIEVED:
-{docs_placeholder}
+{documents}
 
-User Query: {query_placeholder}
+User Query: {query}
 
-Agent answer: {answer_placeholder}
+Agent answer: {answer}
 """.strip(),
-        query_placeholder="query_placeholder",
-        answer_placeholder="answer_placeholder",
-        reasoning_path="tests/data/reasonings.csv",
-        documents_placeholder="docs_placeholder",
-        force=True,
-        verbose=True,
+        **asdict(base_eval_config),
     )
+    return config
 
 
 @pytest.fixture
-def expert_retrieval_eval_config():
+def expert_retrieval_eval_config(base_eval_config):
     return DomainExpertEvaluatorConfig(
-        documents_path="tests/data/documents.csv",
-        query_path="tests/data/queries.csv",
-        output_file="tests/data/output.csv",
-        force=True,
-        verbose=True,
         domain_long="Computer Science",
         domain_short="computer scientists",
         company="Zeta Alpha",
         extra_guidelines=["Super precise answers only!"],
+        **asdict(base_eval_config),
     )
 
 
 @pytest.fixture
-def rdnam_config():
+def rdnam_config(base_eval_config):
+    base_config = asdict(base_eval_config)
+    base_config["query_path"] = "tests/data/rdnam_queries.csv"
     return RDNAMEvaluatorConfig(
-        documents_path="tests/data/documents.csv",
-        query_path="tests/data/rdnam_queries.csv",
-        output_file="tests/data/rdnam_output.csv",
         annotator_role="You are a search quality rater evaluating the relevance of web pages. ",
-        force=True,
         use_multiple_annotators=True,
+        **base_config,
     )
 
 
 @pytest.fixture
-def custom_prompt_retrieval_eval_config():
+def custom_prompt_retrieval_eval_config(base_eval_config):
     return CustomPromptEvaluatorConfig(
-        documents_path="tests/data/documents.csv",
-        query_path="tests/data/queries.csv",
-        output_file="tests/data/output.csv",
-        force=True,
-        verbose=True,
-        prompt="query: {query_placeholder} doc: {document_placeholder}",
-        query_placeholder="query_placeholder",
-        document_placeholder="document_placeholder",
+        prompt="query: {query} doc: {document}",
+        **asdict(base_eval_config),
     )
 
 
 @pytest.fixture
-def few_shot_retrieval_eval_config():
+def few_shot_retrieval_eval_config(base_eval_config):
     few_shot_samples = [
         FewShotExample(
             passage="Few shot example 1",
@@ -205,21 +191,13 @@ def few_shot_retrieval_eval_config():
         ),
     ]
     return FewShotEvaluatorConfig(
-        documents_path="tests/data/documents.csv",
-        query_path="tests/data/queries.csv",
-        output_file="tests/data/output.csv",
-        force=True,
-        verbose=True,
         system_prompt="System prompt",
-        few_shot_user_prompt="query: {query_placeholder} doc: {document_placeholder}",
-        few_shot_assistant_answer=(
-            '{reasoning_placeholder} {{"relevance": {relevance_placeholder}}}'
-        ),
-        query_placeholder="query_placeholder",
-        document_placeholder="document_placeholder",
-        reasoning_placeholder="reasoning_placeholder",
-        relevance_placeholder="relevance_placeholder",
+        few_shot_user_prompt="query: {query} doc: {document}",
+        few_shot_assistant_answer=('{reasoning} {{"relevance": {relevance}}}'),
+        reasoning_placeholder="reasoning",
+        relevance_placeholder="relevance",
         few_shots=few_shot_samples,
+        **asdict(base_eval_config),
     )
 
 

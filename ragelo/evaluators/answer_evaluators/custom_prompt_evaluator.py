@@ -3,7 +3,7 @@ from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
     BaseAnswerEvaluator,
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
-from ragelo.types import AgentAnswer, AnswerEvaluatorTypes
+from ragelo.types import AgentAnswer, AnswerEvaluatorTypes, Query
 from ragelo.types.configurations import CustomPromptAnswerEvaluatorConfig
 
 
@@ -11,7 +11,6 @@ from ragelo.types.configurations import CustomPromptAnswerEvaluatorConfig
 class CustomPromptEvaluator(BaseAnswerEvaluator):
     config: CustomPromptAnswerEvaluatorConfig
     output_file: str = "custom_prompt_evaluations.csv"
-    output_columns = ["query_id", "agent", "raw_answer"]
 
     def __init__(
         self,
@@ -23,12 +22,24 @@ class CustomPromptEvaluator(BaseAnswerEvaluator):
         self.__scoring_fields = config.scoring_fields
         self.output_columns.extend(self.__scoring_fields)
 
-    def _build_message(self, answer: AgentAnswer) -> str:
-        reasonings = self._prepare_reasonings(answer.query.qid)
+    def _build_message(
+        self, query: Query, answer: AgentAnswer
+    ) -> str | list[dict[str, str]]:
+        reasonings = self._prepare_reasonings(query.qid)
+        query_metadata = self._get_usable_fields_from_metadata(
+            self.__prompt, query.metadata, skip_fields=[self.config.query_placeholder]
+        )
+        answer_metadata = self._get_usable_fields_from_metadata(
+            self.__prompt,
+            answer.metadata,
+            skip_fields=[self.config.answer_placeholder],
+        )
         formatters = {
-            self.config.query_placeholder: answer.query.query,
+            self.config.query_placeholder: query.query,
             self.config.answer_placeholder: answer.text,
             self.config.documents_placeholder: reasonings,
+            **query_metadata,
+            **answer_metadata,
         }
 
         return self.__prompt.format(**formatters)

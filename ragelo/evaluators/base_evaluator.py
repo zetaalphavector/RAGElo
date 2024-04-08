@@ -54,24 +54,24 @@ class BaseEvaluator(ABC):
         """Parses a Json answer from the LLM and returns the values from multiple fields"""
 
         # Finds all valid JSON objects in the answer that contain the key
-        values = {}
+        parsed_answer = {}
         for line in answer.strip().split("\n"):
             try:
                 json_object = json.loads(line)
                 for k in keys:
                     if k in json_object:
-                        values[k] = json_object[k]
+                        parsed_answer[k] = json_object[k]
             except json.JSONDecodeError:
                 pass
 
-        if len(values) != len(keys):
+        if len(parsed_answer) != len(keys):
             raise ValueError(
                 "Answer does not contain all necessary keys\n"
-                f"Expected {keys}, found {values.keys()}.\n"
+                f"Expected {keys}, found {parsed_answer.keys()}.\n"
                 f"Full Answer:\n{answer}"
             )
         # Assumes the valid JSON object is the last one
-        return values
+        return parsed_answer
 
     @staticmethod
     def _get_fields_from_string(s: str) -> list[str]:

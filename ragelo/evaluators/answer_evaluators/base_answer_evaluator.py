@@ -19,9 +19,9 @@ from ragelo.types.configurations import BaseAnswerEvaluatorConfig
 
 class BaseAnswerEvaluator(BaseEvaluator):
     config: BaseAnswerEvaluatorConfig
-    output_columns = ["query_id", "agent", "raw_answer", "answer"]
+    output_columns = ["qid", "agent", "raw_answer", "answer"]
     output_file: str = "answers_evaluations.csv"
-    tuple_columns: list[str] = ["query_id", "agent"]
+    tuple_columns: list[str] = ["qid", "agent"]
 
     def __init__(
         self,
