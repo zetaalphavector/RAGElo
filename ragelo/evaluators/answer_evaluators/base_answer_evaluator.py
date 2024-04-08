@@ -37,9 +37,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
     def batch_evaluate(self, queries: list[Query]) -> list[AnswerEvaluatorResult]:
         use_progress_bar = self.config.verbose
         failed_evaluations = 0
-        skip_tuples = self._get_skip_tuples(
-            self.output_file, self.tuple_columns, self.config.force
-        )
+        skip_tuples = self._get_skip_tuples()
         evaluations: list[AnswerEvaluatorResult] = []
         for query in tqdm(
             queries,

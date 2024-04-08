@@ -17,6 +17,7 @@ from ragelo.types.configurations import BaseEvaluatorConfig
 class BaseEvaluator(ABC):
     config: BaseEvaluatorConfig
     output_file: str
+    tuple_columns: list[str]
 
     @abstractmethod
     def __init__(
@@ -93,25 +94,20 @@ class BaseEvaluator(ABC):
                 valid_fields[field] = metadata[field]
         return valid_fields
 
-    @staticmethod
-    def _get_skip_tuples(
-        output_file: str,
-        tuple_columns: list[str],
-        force: bool = False,
-    ) -> set[Sequence[str]]:
+    def _get_skip_tuples(self) -> set[Sequence[str]]:
         skip_tuples: set[Sequence[str]] = set()
-        if force and os.path.exists(output_file):
-            logger.warning(f"Removing existing {output_file}!")
-            os.remove(output_file)
-        if not os.path.isfile(output_file):
+        if self.config.force and os.path.exists(self.output_file):
+            logger.warning(f"Removing existing {self.output_file}!")
+            os.remove(self.output_file)
+        if not os.path.isfile(self.output_file):
             return skip_tuples
-        with open(output_file, "r") as f:
+        with open(self.output_file, "r") as f:
             reader = csv.DictReader(f)
             for line in reader:
-                skip_tuples.add(tuple(line[col] for col in tuple_columns))
+                skip_tuples.add(tuple(line[col] for col in self.tuple_columns))
         if len(skip_tuples) > 0:
             logger.info(
-                f"Skipping {len(skip_tuples)} rows in {output_file} "
+                f"Skipping {len(skip_tuples)} rows in {self.output_file} "
                 "If you want to re-evaluate them, please use the --force flag"
             )
         return skip_tuples

@@ -19,6 +19,7 @@ from ragelo.types.configurations import PairwiseEvaluatorConfig
 class PairwiseWithReasoningEvaluator(BaseAnswerEvaluator):
     """A evaluator that evaluates RAG-based answers pairwise, with document reasoning"""
 
+    config: PairwiseEvaluatorConfig
     output_columns: list[str] = [
         "query_id",
         "agent_a",
@@ -27,7 +28,6 @@ class PairwiseWithReasoningEvaluator(BaseAnswerEvaluator):
         "answer",
     ]
     tuple_columns: list[str] = ["query_id", "agent_a", "agent_b"]
-    config: PairwiseEvaluatorConfig
     prompt = """
 Please act as an impartial judge and evaluate the quality of the responses provided \
 by two AI assistants tasked to answer the question displayed below, based on a set \
@@ -83,7 +83,7 @@ and "[[C]]" for a tie.
     ) -> list[dict[str, str]]:
         use_progress_bar = self.config.verbose
         unparsed_answers = 0
-        skip_tuples = self.__get_skip_tuples()
+        skip_tuples = self._get_skip_tuples()
         evaluations: list[dict[str, str]] = []
         tuples = self.__prepare_all_tuples(answers, use_progress_bar)
         if len(tuples) - len(skip_tuples) > 0:

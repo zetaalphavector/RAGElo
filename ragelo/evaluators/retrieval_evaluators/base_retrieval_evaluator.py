@@ -43,9 +43,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
     def batch_evaluate(self, queries: list[Query]) -> list[RetrievalEvaluatorResult]:
         """Evaluate all the documents for a list of queries"""
         use_progress_bar = self.config.verbose
-        skip_docs = self._get_skip_tuples(
-            self.output_file, self.tuple_columns, self.config.force
-        )
+        skip_docs = self._get_skip_tuples()
         answers: list[RetrievalEvaluatorResult] = []
         failed_evaluations = 0
         for query in tqdm(
