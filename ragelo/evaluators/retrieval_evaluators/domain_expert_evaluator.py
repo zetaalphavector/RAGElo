@@ -83,7 +83,7 @@ Please only answer with a single number.
     COMPANY_PROMPT_2 = " of {company}"
     DOMAIN_SHORT = " but it also serves some of your external users like {domain_short}"
     config: DomainExpertEvaluatorConfig
-    output_columns: list[str] = ["query_id", "did", "reasoning", "score"]
+    output_columns: list[str] = ["qid", "did", "reasoning", "score"]
     scoring_key: str = "score"
     output_file: str = "domain_expert_evaluations.csv"
 

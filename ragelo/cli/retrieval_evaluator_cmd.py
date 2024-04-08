@@ -9,7 +9,7 @@ from ragelo.types.configurations import (
     RDNAMEvaluatorConfig,
 )
 from ragelo.types.types import RetrievalEvaluatorTypes
-from ragelo.utils import load_documents_from_csv
+from ragelo.utils import load_retrieved_docs_from_csv
 
 typer.main.get_params_from_function = get_params_from_function  # type: ignore
 
@@ -41,11 +41,11 @@ def domain_expert(
     evaluator = get_retrieval_evaluator(
         RetrievalEvaluatorTypes.DOMAIN_EXPERT, config=config, llm_provider=llm_provider
     )
-    documents = load_documents_from_csv(
+    documents = load_retrieved_docs_from_csv(
         config.documents_path, queries=config.query_path
     )
 
-    evaluator.run(documents)
+    evaluator.batch_evaluate(documents)
 
 
 @app.command()
@@ -65,11 +65,11 @@ def reasoner(config: BaseEvaluatorConfig = BaseEvaluatorConfig(), **kwargs):
     evaluator = get_retrieval_evaluator(
         RetrievalEvaluatorTypes.REASONER, config=config, llm_provider=llm_provider
     )
-    documents = load_documents_from_csv(
+    documents = load_retrieved_docs_from_csv(
         config.documents_path, queries=config.query_path
     )
 
-    evaluator.run(documents)
+    evaluator.batch_evaluate(documents)
 
 
 @app.command()
@@ -83,10 +83,10 @@ def rdnam(config: RDNAMEvaluatorConfig = RDNAMEvaluatorConfig(), **kwargs):
     evaluator = get_retrieval_evaluator(
         RetrievalEvaluatorTypes.RDNAM, config=config, llm_provider=llm_provider
     )
-    documents = load_documents_from_csv(
+    documents = load_retrieved_docs_from_csv(
         config.documents_path, queries=config.query_path
     )
-    evaluator.run(documents)
+    evaluator.batch_evaluate(documents)
 
 
 if __name__ == "__main__":

@@ -141,7 +141,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
     def _load_reasonings(
         self,
         reasoning_path: str,
-        query_id_col: str = "query_id",
+        query_id_col: str = "qid",
         document_id_col: str = "did",
         answer_col: str = "answer",
     ) -> dict[str, dict[str, str]]:

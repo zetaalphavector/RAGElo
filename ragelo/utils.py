@@ -9,7 +9,7 @@ from ragelo.types import AgentAnswer, Document, Query
 
 
 def load_queries_from_csv(
-    queries_path: str, query_id_col: str = "query_id", query_text_col: str = "query"
+    queries_path: str, query_id_col: str = "qid", query_text_col: str = "query"
 ) -> list[Query]:
     """Loads the queries from a CSV file and returns a dictionary with the queries.
         The CSV file should have a header with the columns 'query_id' and 'query'.
@@ -47,7 +47,7 @@ def load_queries_from_csv(
 def load_retrieved_docs_from_csv(
     documents_path: str,
     queries: list[Query] | str,
-    query_id_col: str = "query_id",
+    query_id_col: str = "qid",
     document_id_col: str = "doc_id",
     document_text_col: str = "document_text",
 ) -> list[Query]:
@@ -136,7 +136,7 @@ def load_retrieved_docs_from_run_file(
 def load_answers_from_csv(
     answers_path: str,
     queries: list[Query] | str,
-    query_id_col: str = "query_id",
+    query_id_col: str = "qid",
     agent_col: str = "agent",
     answer_col: str = "answer",
 ) -> list[Query]:

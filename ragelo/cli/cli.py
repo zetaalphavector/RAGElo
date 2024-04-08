@@ -10,7 +10,7 @@ from ragelo.cli.args import get_params_from_function
 from ragelo.cli.retrieval_evaluator_cmd import app as retrieval_evaluator_app
 from ragelo.cli.utils import get_path
 from ragelo.types import AllConfig, EloAgentRankerConfig
-from ragelo.utils import load_answers_from_csv, load_documents_from_csv
+from ragelo.utils import load_answers_from_csv, load_retrieved_docs_from_csv
 
 typer.main.get_params_from_function = get_params_from_function  # type: ignore
 
@@ -56,13 +56,13 @@ def run_all(config: AllConfig = AllConfig(), **kwargs):
         output_file=config.reasoning_path,
         **args_clean,
     )
-    documents = load_documents_from_csv(
+    documents = load_retrieved_docs_from_csv(
         documents_path=config.documents_path, queries=config.query_path
     )
     answers = load_answers_from_csv(
         answers_path=config.answers_path, queries=config.query_path
     )
-    retrieval_evaluator.run(documents)
+    retrieval_evaluator.batch_evaluate(documents)
 
     answers_evaluator = get_answer_evaluator(
         "pairwise_reasoning",
@@ -71,7 +71,7 @@ def run_all(config: AllConfig = AllConfig(), **kwargs):
         **args_clean,
     )
 
-    answers_evaluator.run(answers)
+    answers_evaluator.batch_evaluate(answers)
 
     ranker_config = EloAgentRankerConfig(
         force=config.force,

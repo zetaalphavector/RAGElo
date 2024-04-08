@@ -21,7 +21,7 @@ class PairwiseWithReasoningEvaluator(BaseAnswerEvaluator):
 
     config: PairwiseEvaluatorConfig
     output_columns: list[str] = ["qid", "agent_a", "agent_b", "raw_answer", "answer"]
-    tuple_columns: list[str] = ["query_id", "agent_a", "agent_b"]
+    tuple_columns: list[str] = ["qid", "agent_a", "agent_b"]
     output_file: str = "pairwise_answers_evaluations.csv"
     prompt = """
 Please act as an impartial judge and evaluate the quality of the responses provided \

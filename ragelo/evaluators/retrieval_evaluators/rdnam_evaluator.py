@@ -64,7 +64,7 @@ Measure how trustworthy the web page is (T).""".strip()
 the relevance of the web page for the query.
 Each rater used their own independent judgement."""
     config: RDNAMEvaluatorConfig
-    output_columns = ["query_id", "did", "raw_answer", "answer"]
+    output_columns = ["qid", "did", "raw_answer", "answer"]
     scoring_key = "answer"
     output_file = "rdnam_evaluations.csv"
 
