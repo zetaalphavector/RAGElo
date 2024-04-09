@@ -10,7 +10,6 @@ from ragelo.types.configurations import FewShotEvaluatorConfig
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.FEW_SHOT)
 class FewShotEvaluator(BaseRetrievalEvaluator):
     config: FewShotEvaluatorConfig
-    scoring_key: str = "relevance"
 
     def __init__(
         self,
@@ -56,6 +55,3 @@ class FewShotEvaluator(BaseRetrievalEvaluator):
             few_shot_messages.append(user_message)
             few_shot_messages.append(answer)
         return few_shot_messages
-
-    def _process_answer(self, answer: str) -> str:
-        return self.json_answer_parser(answer, self.scoring_key)

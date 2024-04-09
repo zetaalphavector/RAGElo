@@ -99,7 +99,7 @@ and "[[C]]" for a tie.
                     logger.debug(f"Skipping {query.qid} {agent_a} {agent_b}")
                     continue
                 try:
-                    raw_answer, parsed_answer = self.evaluate(
+                    raw_answer, parsed_answer = self.evaluate_pairwise(
                         query=query, answer_a=answer_a, answer_b=answer_b
                     )
 
@@ -124,9 +124,10 @@ and "[[C]]" for a tie.
             print(f"Total evaluations: {len(evaluations)}")
         return evaluations
 
-    def _build_message(
-        self, query: Query, answer: tuple[AgentAnswer, AgentAnswer]
+    def _build_message_pairwise(
+        self, query: Query, answer: AgentAnswer | tuple[AgentAnswer, AgentAnswer]
     ) -> str:
+        assert isinstance(answer, tuple)
         reasonings = self._prepare_reasonings(query.qid)
         query_metadata = self._get_usable_fields_from_metadata(
             self.prompt, query.metadata, skip_fields=[self.config.query_placeholder]
@@ -152,7 +153,7 @@ and "[[C]]" for a tie.
         }
         return self.prompt.format(**formatters)
 
-    def evaluate(
+    def evaluate_pairwise(
         self,
         query: Query | str,
         answer_a: AgentAnswer | str,
@@ -171,7 +172,7 @@ and "[[C]]" for a tie.
         answer_a.add_metadata(answer_a_metadata)
         answer_b.add_metadata(answer_b_metadata)
 
-        prompt = self._build_message(query, (answer_a, answer_b))
+        prompt = self._build_message_pairwise(query, (answer_a, answer_b))
         qid = query.qid
         agent_a_id = answer_a.agent
         agent_b_id = answer_b.agent
@@ -216,31 +217,6 @@ and "[[C]]" for a tie.
         for agent_a, agent_b in random_pairs:
             all_tuples.append((answers[agent_a], answers[agent_b]))
         return all_tuples
-        # random_pairs = self.__generate_random_games(queries)
-
-        # answers_per_agent: dict[str, dict[str, AgentAnswer]] = defaultdict(dict)
-        # queries_per_agent: defaultdict[str, set] = defaultdict(set)
-        # for query in queries:
-        #     for agent_answer in query.answers:
-        #         answers_per_agent[agent_answer.agent][query.qid] = agent_answer
-        #         queries_per_agent[agent_answer.agent].add(query.qid)
-
-        # for query in tqdm(
-        #     queries,
-        #     desc="Creating prompts",
-        #     disable=not use_progress_bar,
-        #     ncols=100,
-        #     leave=False,
-        #     position=0,
-        # ):
-        #     qid = query.qid
-        #     for a, b in random_pairs:
-        #         if qid not in queries_per_agent[a] or qid not in queries_per_agent[b]:
-        #             continue
-        #         all_tuples.append(
-        #             (answers_per_agent[a][qid], answers_per_agent[b][qid])
-        #         )
-        # return all_tuples
 
     def _process_answer(self, answer: str) -> str:
         """Extracts the relevant part of an answer."""
@@ -251,3 +227,8 @@ and "[[C]]" for a tie.
         if answer not in ["A", "B", "C"]:
             raise ValueError(f"Unknown answer: {answer}")
         return answer
+
+    def _build_message(
+        self, query: Query, answer: AgentAnswer
+    ) -> str | list[dict[str, str]]:
+        raise NotImplementedError

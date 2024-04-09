@@ -84,7 +84,6 @@ Please only answer with a single number.
     DOMAIN_SHORT = " but it also serves some of your external users like {domain_short}"
     config: DomainExpertEvaluatorConfig
     output_columns: list[str] = ["qid", "did", "reasoning", "score"]
-    scoring_key: str = "score"
     output_file: str = "domain_expert_evaluations.csv"
 
     def __init__(
@@ -182,6 +181,3 @@ Please only answer with a single number.
             logging.warning(f"Failed to parse evaluation for document {qid} {did}")
             raise e
         return reasoning_answer, score_answer
-
-    def _process_answer(self, answer: str) -> str:
-        return answer

@@ -4,21 +4,21 @@ import json
 import os
 import string
 from abc import ABC, abstractmethod
-from typing import Optional, Sequence
+from typing import Any, Optional, Sequence
 
 from tqdm.auto import tqdm
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.logger import logger
 from ragelo.types import AnswerEvaluatorResult, RetrievalEvaluatorResult
-from ragelo.types.configurations import BaseEvaluatorConfig
+from ragelo.types.configurations import AnswerFormat, BaseEvaluatorConfig
 
 
 class BaseEvaluator(ABC):
     config: BaseEvaluatorConfig
     output_file: str
     tuple_columns: list[str]
-    scoring_key: str
+    scoring_key: str | list[str]
 
     @abstractmethod
     def __init__(
@@ -87,7 +87,7 @@ class BaseEvaluator(ABC):
     ) -> dict[str, str]:
         """Get the fields from the prompt that are in the metadata"""
         expected_fields = BaseEvaluator._get_fields_from_string(prompt)
-        valid_fields = {}
+        valid_fields: dict[str, str] = {}
         if metadata is None:
             return valid_fields
         for field in expected_fields:
@@ -118,6 +118,7 @@ class BaseEvaluator(ABC):
         response: AnswerEvaluatorResult | RetrievalEvaluatorResult,
         rich_print: bool = False,
     ):
+        answer: str | dict[str, str] | int
         if isinstance(response.answer, dict):
             # Print the answer in a more readable format
             answer = json.dumps(response.answer, indent=4)
@@ -160,7 +161,6 @@ class BaseEvaluator(ABC):
         answer_dict: dict[str, str], output_columns: list[str], output_file: str
     ):
         if not any(k in output_columns for k in answer_dict.keys()):
-
             raise ValueError(
                 "No parsed answer fields are in the output columns. \n"
                 f"Expected output columns: {output_columns}. \n"
@@ -247,3 +247,14 @@ class BaseEvaluator(ABC):
                 "Output file format not recognized. Dumping raw response in csv format."
             )
             self.__dump_raw_response(answer_dict, output_file, output_columns)
+
+    def _process_answer(self, answer: str) -> Any:
+        """Processes the LLM evaluator output into some serializable format"""
+        if self.config.answer_format == AnswerFormat.JSON:
+            assert isinstance(self.config.scoring_key, str)
+            return self.json_answer_parser(answer, self.config.scoring_key)
+        if self.config.answer_format == AnswerFormat.MULTI_FIELD_JSON:
+            assert isinstance(self.config.scoring_key, list)
+            return self.json_answer_parser_multifields(answer, self.config.scoring_key)
+        if self.config.answer_format == AnswerFormat.TEXT:
+            return answer

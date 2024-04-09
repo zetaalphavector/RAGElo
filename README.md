@@ -72,7 +72,7 @@ evaluator = get_retrieval_evaluator(
     prompt=prompt,
     query_placeholder="q",
     document_placeholder="d",
-    scoring_fields=["relevance", "recency", "truthfulness", "reasoning"],
+    scoring_key=["relevance", "recency", "truthfulness", "reasoning"],
     answer_format="multi_field_json",
 )
 

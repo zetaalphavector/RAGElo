@@ -123,6 +123,9 @@ def pairwise_answer_eval_config(base_eval_config):
 
 @pytest.fixture
 def custom_answer_eval_config(base_eval_config):
+    base_config = asdict(base_eval_config)
+    del base_config["answer_format"]
+    del base_config["scoring_key"]
     config = CustomPromptAnswerEvaluatorConfig(
         reasoning_path="tests/data/reasonings.csv",
         prompt="""
@@ -139,19 +142,23 @@ User Query: {query}
 
 Agent answer: {answer}
 """.strip(),
-        **asdict(base_eval_config),
+        answer_format="multi_field_json",
+        **base_config,
     )
     return config
 
 
 @pytest.fixture
 def expert_retrieval_eval_config(base_eval_config):
+    base_eval_config = asdict(base_eval_config)
+    del base_eval_config["scoring_key"]
+    del base_eval_config["answer_format"]
     return DomainExpertEvaluatorConfig(
         domain_long="Computer Science",
         domain_short="computer scientists",
         company="Zeta Alpha",
         extra_guidelines=["Super precise answers only!"],
-        **asdict(base_eval_config),
+        **base_eval_config,
     )
 
 
@@ -168,10 +175,14 @@ def rdnam_config(base_eval_config):
 
 @pytest.fixture
 def custom_prompt_retrieval_eval_config(base_eval_config):
-    return CustomPromptEvaluatorConfig(
+    base_eval_config = asdict(base_eval_config)
+    del base_eval_config["scoring_key"]
+    config = CustomPromptEvaluatorConfig(
         prompt="query: {query} doc: {document}",
-        **asdict(base_eval_config),
+        scoring_key="relevance",
+        **base_eval_config,
     )
+    return config
 
 
 @pytest.fixture
@@ -210,7 +221,7 @@ def llm_provider_mock(llm_provider_config):
 def llm_provider_json_mock(llm_provider_config):
     provider = MockLLMProvider(llm_provider_config)
     provider.call_mocker = Mock(
-        side_effect=lambda _: f"LLM JSON response" f'\n{{"relevance": 0}}'
+        side_effect=lambda _: 'LLM JSON response\n{"relevance": 0}'
     )
     return provider
 

@@ -2,7 +2,12 @@ from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     BaseRetrievalEvaluator,
     RetrievalEvaluatorFactory,
 )
-from ragelo.types import Document, Query, RetrievalEvaluatorTypes
+from ragelo.types import (
+    Document,
+    Query,
+    ReasonerEvaluatorConfig,
+    RetrievalEvaluatorTypes,
+)
 
 
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.REASONER)
@@ -13,6 +18,7 @@ class ReasonerEvaluator(BaseRetrievalEvaluator):
     """
 
     output_file: str = "reasonings.csv"
+    config: ReasonerEvaluatorConfig
     prompt = """
 You are an expert document annotator, evaluating if a document contains relevant \
 information to answer a question submitted by a user. \

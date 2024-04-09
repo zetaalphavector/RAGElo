@@ -2,10 +2,7 @@
 It receives a set of queries used to retrieve a document and their respective retrieved documents,
 and returns a score or a label for each document."""
 
-import csv
 import dataclasses
-import os
-from abc import abstractmethod
 from typing import Any, Callable, Optional, Type, get_type_hints
 
 from tenacity import RetryError
@@ -20,13 +17,12 @@ from ragelo.types import (
     RetrievalEvaluatorResult,
     RetrievalEvaluatorTypes,
 )
-from ragelo.types.configurations import AnswerFormat, BaseEvaluatorConfig
+from ragelo.types.configurations import BaseEvaluatorConfig
 
 
 class BaseRetrievalEvaluator(BaseEvaluator):
     config: BaseEvaluatorConfig
     output_columns: list[str] = ["qid", "did", "raw_answer", "answer"]
-    scoring_key: str | list[str] = "answer"
     output_file: str = "retrieval_evaluations.csv"
     tuple_columns: list[str] = ["qid", "did"]
 
@@ -39,6 +35,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         self.llm_provider = llm_provider
         if config.output_file is not None:
             self.output_file = config.output_file
+        self.output_columns.extend(self.config.scoring_key)
 
     def batch_evaluate(self, queries: list[Query]) -> list[RetrievalEvaluatorResult]:
         """Evaluate all the documents for a list of queries"""
@@ -126,15 +123,6 @@ class BaseRetrievalEvaluator(BaseEvaluator):
     ) -> str | list[dict[str, str]]:
         """Builds the prompt to send to the LLM."""
         raise NotImplementedError
-
-    def _process_answer(self, answer: str) -> Any:
-        """Processes the LLM evaluator output into some serializable format"""
-        if self.config.answer_format == AnswerFormat.JSON:
-            assert isinstance(self.scoring_key, str)
-            return self.json_answer_parser(answer, self.scoring_key)
-        if self.config.answer_format == AnswerFormat.MULTI_FIELD_JSON:
-            assert isinstance(self.scoring_key, list)
-            return self.json_answer_parser_multifields(answer, self.scoring_key)
 
     @classmethod
     def from_config(cls, config: BaseEvaluatorConfig, llm_provider: BaseLLMProvider):

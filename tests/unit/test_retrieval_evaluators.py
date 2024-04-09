@@ -17,9 +17,6 @@ class RetrievalEvaluator(BaseRetrievalEvaluator):
     def _build_message(self, query: Query, document: Document) -> str:
         return f"Query: {query.query}\nDocument: {document.text}"
 
-    def _process_answer(self, answer: str) -> str:
-        return self.json_answer_parser(answer, key="relevance")
-
 
 class TestRetrievalEvaluator:
     def test_evaluate_single_answer(
@@ -47,6 +44,7 @@ class TestRetrievalEvaluator:
         base_eval_config,
         qs_with_docs,
     ):
+        base_eval_config.answer_format = "json"
         evaluator = RetrievalEvaluator.from_config(
             config=base_eval_config, llm_provider=llm_provider_json_mock
         )
@@ -325,7 +323,7 @@ WRITE YOUR ANSWER ON A SINGLE LINE AS A JSON OBJECT WITH THE FOLLOWING KEYS:
             prompt=prompt,
             query_placeholder="q",
             document_placeholder="d",
-            scoring_fields=["relevance", "recency", "truthfulness", "reasoning"],
+            scoring_key=["relevance", "recency", "truthfulness", "reasoning"],
             answer_format="multi_field_json",
         )
 

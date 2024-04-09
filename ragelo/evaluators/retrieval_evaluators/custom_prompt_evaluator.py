@@ -3,7 +3,6 @@ from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     RetrievalEvaluatorFactory,
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
-from ragelo.logger import logger
 from ragelo.types import Document, Query, RetrievalEvaluatorTypes
 from ragelo.types.configurations import CustomPromptEvaluatorConfig
 
@@ -11,7 +10,6 @@ from ragelo.types.configurations import CustomPromptEvaluatorConfig
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.CUSTOM_PROMPT)
 class CustomPromptEvaluator(BaseRetrievalEvaluator):
     config: CustomPromptEvaluatorConfig
-    scoring_key: str | list[str] = "relevance"
     output_file: str = "custom_prompt_evaluations.csv"
 
     def __init__(
@@ -21,7 +19,6 @@ class CustomPromptEvaluator(BaseRetrievalEvaluator):
     ):
         super().__init__(config, llm_provider)
         self.prompt = config.prompt
-        self.scoring_key = config.scoring_fields
 
     def _build_message(self, query: Query, document: Document) -> str:
         query_metadata = self._get_usable_fields_from_metadata(

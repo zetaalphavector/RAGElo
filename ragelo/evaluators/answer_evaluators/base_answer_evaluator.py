@@ -1,8 +1,8 @@
 """Base model for dealing with answer evaluators"""
 
 import csv
-import os
 import dataclasses
+import os
 from abc import abstractmethod
 from collections import defaultdict
 from typing import Any, Callable, Optional, Type, get_type_hints
@@ -13,7 +13,7 @@ from tqdm import tqdm
 from ragelo.evaluators.base_evaluator import BaseEvaluator
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
 from ragelo.logger import logger
-from ragelo.types import AgentAnswer, AnswerEvaluatorResult, Query, AnswerEvaluatorTypes
+from ragelo.types import AgentAnswer, AnswerEvaluatorResult, AnswerEvaluatorTypes, Query
 from ragelo.types.configurations import BaseAnswerEvaluatorConfig
 
 
@@ -114,14 +114,9 @@ class BaseAnswerEvaluator(BaseEvaluator):
 
     @abstractmethod
     def _build_message(
-        self, query: Query, answer: AgentAnswer | tuple[AgentAnswer, AgentAnswer]
+        self, query: Query, answer: AgentAnswer
     ) -> str | list[dict[str, str]]:
         """Builds the message to send to the LLM evaluator"""
-        raise NotImplementedError
-
-    @abstractmethod
-    def _process_answer(self, answer: str) -> Any:
-        """Processes the LLM evaluator output into some serializable format"""
         raise NotImplementedError
 
     def _load_reasonings(

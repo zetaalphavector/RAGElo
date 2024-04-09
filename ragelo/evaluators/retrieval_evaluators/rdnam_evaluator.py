@@ -4,11 +4,8 @@ https://arxiv.org/abs/2309.10621
 """
 
 import json
-import logging
-from typing import Any, Optional
 
 import numpy as np
-from tenacity import RetryError
 
 from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     BaseRetrievalEvaluator,

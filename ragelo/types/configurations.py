@@ -1,10 +1,10 @@
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import List, Optional
 
 
 @dataclass
-class AnswerFormat(str, Enum):
+class AnswerFormat(StrEnum):
     """Enum that contains the names of the available answer formats"""
 
     JSON = "json"
@@ -65,6 +65,10 @@ class BaseConfig:
         default=True,
         metadata={"help": "Wether or not to write the output to a file"},
     )
+    scoring_key: list[str] | str = field(
+        default_factory=lambda: "relevance",
+        metadata={"help": "The fields to extract from the answer"},
+    )
 
 
 @dataclass(kw_only=True)
@@ -84,8 +88,16 @@ class BaseEvaluatorConfig(BaseConfig):
         default="query",
         metadata={"help": "The placeholder for the query in the prompt"},
     )
-    answer_format: AnswerFormat = field(
-        default_factory=lambda: AnswerFormat.JSON,
+    answer_format: AnswerFormat | str = field(
+        default_factory=lambda: "json",
+        metadata={"help": "The format of the answer returned by the LLM"},
+    )
+
+
+@dataclass(kw_only=True)
+class ReasonerEvaluatorConfig(BaseEvaluatorConfig):
+    answer_format: AnswerFormat | str = field(
+        default_factory=lambda: "text",
         metadata={"help": "The format of the answer returned by the LLM"},
     )
 
@@ -126,6 +138,14 @@ class DomainExpertEvaluatorConfig(BaseEvaluatorConfig):
         default="domain_expert_evaluations.csv",
         metadata={"help": "Path to the output file"},
     )
+    answer_format: AnswerFormat | str = field(
+        default_factory=lambda: "text",
+        metadata={"help": "The format of the answer returned by the LLM"},
+    )
+    scoring_key: list[str] | str = field(
+        default_factory=lambda: "score",
+        metadata={"help": "The fields to extract from the answer"},
+    )
 
 
 @dataclass(kw_only=True)
@@ -144,9 +164,13 @@ class CustomPromptEvaluatorConfig(BaseEvaluatorConfig):
         default="custom_prompt_evaluations.csv",
         metadata={"help": "Path to the output file"},
     )
-    scoring_fields: list[str] = field(
+    scoring_key: list[str] | str = field(
         default_factory=lambda: ["quality", "trustworthiness", "originality"],
         metadata={"help": "The fields to extract from the answer"},
+    )
+    answer_format: AnswerFormat | str = field(
+        default_factory=lambda: "multi_field_json",
+        metadata={"help": "The format of the answer returned by the LLM"},
     )
 
 
@@ -270,7 +294,7 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     )
 
 
-@dataclass
+@dataclass(kw_only=True)
 class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
     prompt: str = field(
         default="retrieved documents: {documents} query: {query} answer: {answer}",
@@ -282,12 +306,12 @@ class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
         default="custom_prompt_answers_evaluations.csv",
         metadata={"help": "Path to the output file"},
     )
-    scoring_fields: list[str] = field(
+    scoring_key: list[str] | str = field(
         default_factory=lambda: ["quality", "trustworthiness", "originality"],
         metadata={"help": "The fields to extract from the answer"},
     )
-    answer_format: AnswerFormat = field(
-        default_factory=lambda: AnswerFormat.MULTI_FIELD_JSON,
+    answer_format: AnswerFormat | str = field(
+        default_factory=lambda: "multi_field_json",
         metadata={"help": "The format of the answer returned by the LLM"},
     )
 
