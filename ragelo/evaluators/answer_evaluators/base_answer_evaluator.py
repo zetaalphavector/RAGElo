@@ -1,7 +1,6 @@
 """Base model for dealing with answer evaluators"""
 
 import csv
-import dataclasses
 import os
 from abc import abstractmethod
 from collections import defaultdict
@@ -32,47 +31,52 @@ class BaseAnswerEvaluator(BaseEvaluator):
         self.llm_provider = llm_provider
         if config.output_file is not None:
             self.output_file = config.output_file
-        self.reasonings = self._load_reasonings(self.config.reasoning_path)
 
     def batch_evaluate(self, queries: list[Query]) -> list[AnswerEvaluatorResult]:
         use_progress_bar = self.config.verbose
         failed_evaluations = 0
-        skip_tuples = self._get_skip_tuples()
-        evaluations: list[AnswerEvaluatorResult] = []
-        for query in tqdm(
-            queries,
+        evaluations = [AnswerEvaluatorResult(**x) for x in self._get_existing_output()]
+        skip_tuples = {(x.qid, x.agent) for x in evaluations}
+        tuples_to_eval = []
+        all_tuples = 0
+        for query in queries:
+            for agent_answer in query.answers:
+                qid = query.qid
+                agent = agent_answer.agent
+                all_tuples += 1
+                if (qid, agent) in skip_tuples:
+                    logger.debug(f"Skipping {qid} {agent}")
+                    continue
+                tuples_to_eval.append((query, agent_answer))
+        if len(tuples_to_eval) == 0:
+            logger.info("All answers have been evaluated")
+            if self.config.verbose:
+                print(
+                    f"All {all_tuples} answers are already evaluated.\n"
+                    "If you want to re-evaluate them, use the force flag"
+                )
+            return evaluations
+        for query, agent_answer in tqdm(
+            tuples_to_eval,
             desc="Annotating Answers",
             disable=not use_progress_bar,
             ncols=100,
             leave=False,
             position=0,
         ):
-            for agent_answer in tqdm(
-                query.answers,
-                desc=query.qid,
-                disable=not use_progress_bar,
-                ncols=100,
-                leave=False,
-                position=1,
-            ):
-                qid = query.qid
-                agent = agent_answer.agent
-                if (qid, agent) in skip_tuples:
-                    logger.debug(f"Skipping {qid} {agent}")
-                    continue
-                try:
-                    raw_answer, answer = self.evaluate(query, agent_answer)
-                except (RetryError, ValueError):
-                    failed_evaluations += 1
-                    continue
-                evaluations.append(
-                    AnswerEvaluatorResult(
-                        qid=qid, agent=agent, raw_answer=raw_answer, answer=answer
-                    )
+            qid = query.qid
+            agent = agent_answer.agent
+            try:
+                raw_answer, answer = self.evaluate(query, agent_answer)
+            except (RetryError, ValueError):
+                failed_evaluations += 1
+                continue
+            evaluations.append(
+                AnswerEvaluatorResult(
+                    qid=qid, agent=agent, raw_answer=raw_answer, answer=answer
                 )
-                self._dump_response(
-                    evaluations[-1], self.output_columns, self.output_file
-                )
+            )
+            self._dump_response(evaluations[-1], self.output_columns, self.output_file)
         if self.config.verbose:
             print("✅ Done!")
             print(f"Unparsed answers: {failed_evaluations}")
@@ -119,28 +123,6 @@ class BaseAnswerEvaluator(BaseEvaluator):
         """Builds the message to send to the LLM evaluator"""
         raise NotImplementedError
 
-    def _load_reasonings(
-        self,
-        reasoning_path: str,
-        query_id_col: str = "qid",
-        document_id_col: str = "did",
-        answer_col: str = "answer",
-    ) -> dict[str, dict[str, str]]:
-        reasoning: dict[str, dict[str, str]] = defaultdict(lambda: dict())
-        reasoning_read = 0
-        if not os.path.exists(reasoning_path):
-            raise FileNotFoundError(f"Reasoning file {reasoning_path} not found")
-        for line in csv.DictReader(open(reasoning_path)):
-            reasoning_read += 1
-            reasoning[line[query_id_col]][line[document_id_col]] = line[answer_col]
-        logger.info(f"Loaded {reasoning_read} reasonings")
-        return dict(reasoning)
-
-    def _prepare_reasonings(self, qid: str) -> str:
-        return "\n".join(
-            [" ".join([f"[{idx}]", r]) for (idx, r) in self.reasonings[qid].items()]
-        )
-
     @classmethod
     def from_config(
         cls, config: BaseAnswerEvaluatorConfig, llm_provider: BaseLLMProvider
@@ -150,6 +132,12 @@ class BaseAnswerEvaluator(BaseEvaluator):
     @classmethod
     def get_config_class(cls) -> Type[BaseAnswerEvaluatorConfig]:
         return get_type_hints(cls)["config"]
+
+    @staticmethod
+    def _construct_list_of_answers(
+        answers: list[dict[str, str]]
+    ) -> list[AnswerEvaluatorResult]:
+        return [AnswerEvaluatorResult(**x) for x in answers]
 
 
 class AnswerEvaluatorFactory:
@@ -182,7 +170,7 @@ class AnswerEvaluatorFactory:
         if config is None:
             class_ = cls.registry[evaluator_name]
             type_config = class_.get_config_class()
-            valid_keys = [field.name for field in dataclasses.fields(type_config)]
+            valid_keys = [field for field in type_config.__fields__]
             valid_args = {k: v for k, v in kwargs.items() if k in valid_keys}
             config = type_config(**valid_args)
         return cls.registry[evaluator_name.lower()].from_config(

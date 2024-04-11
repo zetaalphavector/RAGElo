@@ -69,6 +69,3 @@ class OpenAIProvider(BaseLLMProvider):
             )
         else:
             raise Exception(f"Unknown OpenAI api type: {openai_config.api_type}")
-
-    def set_openai_client(self, openai_client: OpenAI):
-        self.__openai_client = openai_client

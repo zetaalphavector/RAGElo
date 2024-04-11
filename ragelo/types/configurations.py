@@ -1,9 +1,9 @@
-from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import List, Optional
 
+from pydantic import BaseModel, Field
 
-@dataclass
+
 class AnswerFormat(StrEnum):
     """Enum that contains the names of the available answer formats"""
 
@@ -12,12 +12,10 @@ class AnswerFormat(StrEnum):
     MULTI_FIELD_JSON = "multi_field_json"
 
 
-@dataclass
-class LLMProviderConfig:
+class LLMProviderConfig(BaseModel):
     api_key: str
 
 
-@dataclass
 class OpenAIConfiguration(LLMProviderConfig):
     org: Optional[str] = None
     api_type: Optional[str] = None
@@ -26,156 +24,129 @@ class OpenAIConfiguration(LLMProviderConfig):
     model_name: str = "gpt-3.5-turbo"
 
 
-@dataclass
-class BaseConfig:
-    force: bool = field(
+class BaseConfig(BaseModel):
+    force: bool = Field(
         default=False,
-        metadata={
-            "help": "Force the execution of the commands and overwrite any existing files"
-        },
+        description="Force the execution of the commands and overwrite any existing files",
     )
-    rich_print: bool = field(
-        default=False, metadata={"help": "Use rich to print colorful outputs"}
+    rich_print: bool = Field(
+        default=False, description="Use rich to print colorful outputs"
     )
-    verbose: bool = field(
+    verbose: bool = Field(
         default=False,
-        metadata={
-            "help": "Wether or not to be verbose and print all intermediate steps"
-        },
+        description="Whether or not to be verbose and print all intermediate steps",
     )
-    credentials_file: Optional[str] = field(
+    credentials_file: Optional[str] = Field(
         default=None,
-        metadata={
-            "help": "Path to a txt file with the credentials for the different LLM providers"
-        },
+        description="Path to a txt file with the credentials for the different LLM providers",
     )
-    model_name: str = field(
-        default="gpt-4",
-        metadata={"help": "Name of the model to use for the LLM provider"},
+    model_name: str = Field(
+        default="gpt-4", description="Name of the model to use for the LLM provider"
     )
-    data_path: str = field(
-        default="data/", metadata={"help": "Path to the data folder"}
-    )
+    data_path: str = Field(default="data/", description="Path to the data folder")
 
-    llm_provider: str = field(
-        default="openai",
-        metadata={"help": "The name of the LLM provider"},
+    llm_provider: str = Field(
+        default="openai", description="The name of the LLM provider"
     )
-    write_output: bool = field(
-        default=True,
-        metadata={"help": "Wether or not to write the output to a file"},
+    write_output: bool = Field(
+        default=True, description="Whether or not to write the output to a file"
     )
-    scoring_key: list[str] | str = field(
-        default_factory=lambda: "relevance",
-        metadata={"help": "The fields to extract from the answer"},
+    scoring_key: Optional[list[str]] = Field(
+        default="relevance",
+        description="The fields to extract from the answer",
     )
 
 
-@dataclass(kw_only=True)
 class BaseEvaluatorConfig(BaseConfig):
-    query_path: str = field(
-        default="queries.csv",
-        metadata={"help": "Path to the queries file"},
+    query_path: str = Field(
+        default="queries.csv", description="Path to the queries file"
     )
-    documents_path: str = field(
-        default="documents.csv", metadata={"help": "Path to the documents file"}
+    documents_path: str = Field(
+        default="documents.csv", description="Path to the documents file"
     )
-    output_file: Optional[str] = field(
-        default=None,
-        metadata={"help": "Path to the output file"},
+    output_file: Optional[str] = Field(
+        default=None, description="Path to the output file"
     )
-    query_placeholder: str = field(
+    query_placeholder: str = Field(
         default="query",
-        metadata={"help": "The placeholder for the query in the prompt"},
+        description="The placeholder for the query in the prompt",
     )
-    answer_format: AnswerFormat | str = field(
-        default_factory=lambda: "json",
-        metadata={"help": "The format of the answer returned by the LLM"},
+    answer_format: str = Field(
+        default=AnswerFormat.JSON,
+        description="The format of the answer returned by the LLM",
     )
 
 
-@dataclass(kw_only=True)
 class ReasonerEvaluatorConfig(BaseEvaluatorConfig):
-    answer_format: AnswerFormat | str = field(
-        default_factory=lambda: "text",
-        metadata={"help": "The format of the answer returned by the LLM"},
+    answer_format: str = Field(
+        default=AnswerFormat.TEXT,
+        description="The format of the answer returned by the LLM",
+    )
+    scoring_key: Optional[list[str]] = Field(
+        default=None,
+        description="The fields to extract from the answer",
     )
 
 
-@dataclass(kw_only=True)
 class DomainExpertEvaluatorConfig(BaseEvaluatorConfig):
-    domain_long: str = field(
+    domain_long: str = Field(
         default="",
-        metadata={
-            "help": "The name of corpus domain. "
-            "(e.g., Chemical Engineering, Computer Science, etc.)"
-        },
+        description="The name of corpus domain. (e.g., Chemical Engineering)",
     )
-    domain_short: Optional[str] = field(
+    domain_short: Optional[str] = Field(
         default=None,
-        metadata={
-            "help": "A short or alternative name of the domain. "
-            "(e.g., Chemistry, CS, etc.)"
-        },
+        description="A short or alternative name of the domain. "
+        "(e.g., Chemistry, CS, etc.)",
     )
-
-    company: Optional[str] = field(
+    company: Optional[str] = Field(
         default=None,
-        metadata={
-            "help": "Name of the company or organization that the user that "
-            "submitted the query works for. that the domain belongs to. "
-            "(e.g.: ChemCorp, CS Inc.)"
-        },
+        description="Name of the company or organization that the user that "
+        "submitted the query works for. that the domain belongs to. "
+        "(e.g.: ChemCorp, CS Inc.)",
     )
-    extra_guidelines: Optional[list[str]] = field(
+    extra_guidelines: Optional[List[str]] = Field(
         default=None,
-        metadata={
-            "help": "A list of extra guidelines to be used when reasoning about the "
-            "relevancy of the document."
-        },
+        description="A list of extra guidelines to be used when reasoning about the "
+        "relevancy of the document.",
     )
-    output_file: str = field(
+    output_file: str = Field(
         default="domain_expert_evaluations.csv",
-        metadata={"help": "Path to the output file"},
+        description="Path to the output file",
     )
-    answer_format: AnswerFormat | str = field(
-        default_factory=lambda: "text",
-        metadata={"help": "The format of the answer returned by the LLM"},
+    answer_format: str = Field(
+        default="text",
+        description="The format of the answer returned by the LLM",
     )
-    scoring_key: list[str] | str = field(
-        default_factory=lambda: "score",
-        metadata={"help": "The fields to extract from the answer"},
+    scoring_key: Optional[list[str]] = Field(
+        default="score",
+        description="The fields to extract from the answer",
     )
 
 
-@dataclass(kw_only=True)
 class CustomPromptEvaluatorConfig(BaseEvaluatorConfig):
-    prompt: str = field(
+    prompt: str = Field(
         default="query: {query} document: {document}",
-        metadata={
-            "help": "The prompt to be used to evaluate the documents. It should contain a {query} and a {document} placeholder"
-        },
+        description="The prompt to be used to evaluate the documents. It should contain a {query} and a {document} placeholder",
     )
-    document_placeholder: str = field(
+    document_placeholder: str = Field(
         default="document",
-        metadata={"help": "The placeholder for the document in the prompt"},
+        description="The placeholder for the document in the prompt",
     )
-    output_file: str = field(
+    output_file: str = Field(
         default="custom_prompt_evaluations.csv",
-        metadata={"help": "Path to the output file"},
+        description="Path to the output file",
     )
-    scoring_key: list[str] | str = field(
-        default_factory=lambda: ["quality", "trustworthiness", "originality"],
-        metadata={"help": "The fields to extract from the answer"},
+    scoring_key: Optional[list[str]] = Field(
+        default=["quality", "trustworthiness", "originality"],
+        description="The fields to extract from the answer",
     )
-    answer_format: AnswerFormat | str = field(
-        default_factory=lambda: "multi_field_json",
-        metadata={"help": "The format of the answer returned by the LLM"},
+    answer_format: str = Field(
+        default=AnswerFormat.MULTI_FIELD_JSON,
+        description="The format of the answer returned by the LLM",
     )
 
 
-@dataclass
-class FewShotExample:
+class FewShotExample(BaseModel):
     """A few-shot example."""
 
     passage: str
@@ -184,209 +155,168 @@ class FewShotExample:
     reasoning: str
 
 
-@dataclass(kw_only=True)
 class FewShotEvaluatorConfig(BaseEvaluatorConfig):
-    system_prompt: str = field(
+    system_prompt: str = Field(
         default="You are a helpful assistant.",
-        metadata={"help": "The system prompt to be used to evaluate the documents."},
+        description="The system prompt to be used to evaluate the documents.",
     )
-    few_shots: List[FewShotExample] = field(
-        metadata={"help": "A list of few-shot examples to be used in the prompt"}
+    few_shots: List[FewShotExample] = Field(
+        default=[], description="A list of few-shot examples to be used in the prompt"
     )
-    few_shot_user_prompt: str = field(
+    few_shot_user_prompt: str = Field(
         default="Query: {query}\n\nPassage:{passage}",
-        metadata={
-            "help": "The individual prompt to be used to evaluate the documents. It should contain a {query} and a {passage} placeholder"
-        },
+        description="The individual prompt to be used to evaluate the documents. It should contain a {query} and a {passage} placeholder",
     )
-    few_shot_assistant_answer: str = field(
+    few_shot_assistant_answer: str = Field(
         default='{reasoning}\n\n{{"relevance": {relevance}}}',
-        metadata={
-            "help": "The expected answer format from the LLM for each evaluated document "
-            "It should contain a {reasoning} and a {relevance} placeholder"
-        },
+        description="The expected answer format from the LLM for each evaluated document "
+        "It should contain a {reasoning} and a {relevance} placeholder",
     )
-    output_file: str = field(
+    output_file: str = Field(
         default="few_shot_evaluations.csv",
-        metadata={"help": "Path to the output file"},
+        description="Path to the output file",
     )
-    document_placeholder: str = field(
+    document_placeholder: str = Field(
         default="document",
-        metadata={"help": "The placeholder for the document in the prompt"},
+        description="The placeholder for the document in the prompt",
     )
-    reasoning_placeholder: str = field(
+    reasoning_placeholder: str = Field(
         default="reasoning",
-        metadata={"help": "The placeholder for the reasoning in the prompt"},
+        description="The placeholder for the reasoning in the prompt",
     )
-    relevance_placeholder: str = field(
+    relevance_placeholder: str = Field(
         default="relevance",
-        metadata={"help": "The placeholder for the relevance in the prompt"},
+        description="The placeholder for the relevance in the prompt",
     )
 
 
-@dataclass(kw_only=True)
 class RDNAMEvaluatorConfig(BaseEvaluatorConfig):
-    annotator_role: Optional[str] = field(
+    annotator_role: Optional[str] = Field(
         default=None,
-        metadata={
-            "help": "A String defining the type of user the LLM should mimic. "
-            "(e.g.: 'You are a search quality rater evaluating the relevance "
-            "of web pages')"
-        },
+        description="A String defining the type of user the LLM should mimic. "
+        "(e.g.: 'You are a search quality rater evaluating the relevance "
+        "of web pages')",
     )
-    # Configurations for the RDNAM evaluator
-    use_aspects: bool = field(
+    use_aspects: bool = Field(
         default=False,
-        metadata={
-            "help": "Should the prompt include aspects to get tot he final score? "
-            "If true, will prompt the LLM to compute scores for M (intent match) "
-            "and T (trustworthy) for the document before computing the final score."
-        },
+        description="Should the prompt include aspects to get to the final score? "
+        "If true, will prompt the LLM to compute scores for M (intent match) "
+        "and T (trustworthy) for the document before computing the final score.",
     )
-    use_multiple_annotators: bool = field(
+    use_multiple_annotators: bool = Field(
         default=False,
-        metadata={
-            "help": "Should the prompt ask the LLM to mimic multiple annotators?"
-        },
+        description="Should the prompt ask the LLM to mimic multiple annotators?",
     )
-    output_file: str = field(
-        default="rdnam_evaluations.csv",
-        metadata={"help": "Path to the output file"},
+    output_file: str = Field(
+        default="rdnam_evaluations.csv", description="Path to the output file"
     )
 
 
-@dataclass
 class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
-    answers_path: str = field(
-        default="answers.csv", metadata={"help": "Path to the answers file"}
+    answers_path: str = Field(
+        default="answers.csv", description="Path to the answers file"
     )
-    reasoning_path: str = field(
-        default="reasonings.csv",
-        metadata={"help": "CSV file with the reasoning for each retrieved document"},
+    answer_placeholder: str = Field(
+        default="answer", description="The placeholder for the answer in the prompt"
     )
-    answer_placeholder: str = field(
-        default="answer",
-        metadata={"help": "The placeholder for the answer in the prompt"},
-    )
-    documents_placeholder: str = field(
+    documents_placeholder: str = Field(
         default="documents",
-        metadata={"help": "The placeholder for the documents in the prompt"},
+        description="The placeholder for the documents in the prompt",
     )
 
 
-@dataclass
 class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     """Configuration for the pairwise evaluator."""
 
-    bidirectional: bool = field(
-        default=False,
-        metadata={"help": "Wether or not to run each game in both directions"},
-    )
-    k: int = field(
-        default=100,
-        metadata={
-            "help": "Maximum number of pairwise comparisons per query to generate"
-        },
-    )
-    output_file: str = field(
-        default="pairwise_answers_evaluations.csv",
-        metadata={"help": "Path to the output file"},
-    )
-
-
-@dataclass(kw_only=True)
-class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
-    prompt: str = field(
-        default="retrieved documents: {documents} query: {query} answer: {answer}",
-        metadata={
-            "help": "The prompt to be used to evaluate the documents. It should contain a {query} and a {document} placeholder"
-        },
-    )
-    output_file: str = field(
-        default="custom_prompt_answers_evaluations.csv",
-        metadata={"help": "Path to the output file"},
-    )
-    scoring_key: list[str] | str = field(
-        default_factory=lambda: ["quality", "trustworthiness", "originality"],
-        metadata={"help": "The fields to extract from the answer"},
-    )
-    answer_format: AnswerFormat | str = field(
-        default_factory=lambda: "multi_field_json",
-        metadata={"help": "The format of the answer returned by the LLM"},
-    )
-
-
-@dataclass(kw_only=True)
-class AgentRankerConfig(BaseConfig):
-    evaluations_file: str = field(
-        default="data/evaluations.csv",
-        metadata={"help": "Path with the pairwise evaluations of answers"},
-    )
-    output_file: Optional[str] = field(
-        default=None,
-        metadata={"help": "Path to the output file"},
-    )
-
-
-@dataclass(kw_only=True)
-class EloAgentRankerConfig(AgentRankerConfig):
-    k: int = field(
-        default=32,
-        metadata={"help": "The K factor for the Elo ranking algorithm"},
-    )
-    initial_score: int = field(
-        default=1000,
-        metadata={"help": "The initial score for each agent"},
-    )
-    output_file: str = field(
-        default="elo_ranking.csv",
-        metadata={"help": "Path to the output file"},
-    )
-
-
-@dataclass
-class AllConfig(BaseEvaluatorConfig):
-    reasoning_path: str = field(
+    reasoning_path: str = Field(
         default="reasonings.csv",
-        metadata={"help": "CSV file with the reasoning for each retrieved document"},
+        description="CSV file with the reasoning for each retrieved document",
     )
-    answers_path: str = field(
-        default="answers.csv", metadata={"help": "Path to the answers file"}
+    reasonings: Optional[dict[str, str]] = Field(
+        default=None, description="A dictionary with the reasoning for each document"
     )
-    evaluations_file: str = field(
-        default="answers_evaluations.csv",
-        metadata={"help": "Path to write the pairwise evaluations of answers"},
+    bidirectional: bool = Field(
+        default=False, description="Whether or not to run each game in both directions"
     )
-    output_file: str = field(
-        default="agents_ranking.csv",
-        metadata={"help": "Path to the output file with the ranking of agents"},
-    )
-    retrieval_evaluator_name: str = field(
-        default="reasoner",
-        metadata={"help": "The name of the retrieval evaluator to use"},
-    )
-    answer_evaluator_name: str = field(
-        default="pairwise_reasoning",
-        metadata={"help": "The name of the answer evaluator to use"},
-    )
-    answer_ranker_name: str = field(
-        default="elo",
-        metadata={"help": "The name of the answer ranker to use"},
+    k: int = Field(default=100, description="Number of games to generate")
+    output_file: str = Field(
+        default="pairwise_answers_evaluations.csv",
+        description="Path to the output file",
     )
 
-    k: int = field(
-        default=100,
-        metadata={"help": "Number of games to generate"},
+
+class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
+    prompt: str = Field(
+        default="retrieved documents: {documents} query: {query} answer: {answer}",
+        description="The prompt to be used to evaluate the documents. It should contain a {query} and a {document} placeholder",
     )
-    initial_score: int = field(
-        default=1000,
-        metadata={"help": "The initial score for each agent"},
+    output_file: str = Field(
+        default="custom_prompt_answers_evaluations.csv",
+        description="Path to the output file",
     )
-    elo_k: int = field(
-        default=32,
-        metadata={"help": "The K factor for the Elo ranking algorithm"},
+    scoring_key: Optional[list[str]] = Field(
+        default=["quality", "trustworthiness", "originality"],
+        description="The fields to extract from the answer",
     )
-    bidirectional: bool = field(
-        default=False,
-        metadata={"help": "Wether or not to run each game in both directions"},
+    answer_format: str = Field(
+        default=AnswerFormat.MULTI_FIELD_JSON,
+        description="The format of the answer returned by the LLM",
+    )
+
+
+class AgentRankerConfig(BaseConfig):
+    evaluations_file: str = Field(
+        default="data/evaluations.csv",
+        description="Path with the pairwise evaluations of answers",
+    )
+    output_file: Optional[str] = Field(
+        default=None, description="Path to the output file"
+    )
+
+
+class EloAgentRankerConfig(AgentRankerConfig):
+    k: int = Field(default=32, description="The K factor for the Elo ranking algorithm")
+    initial_score: int = Field(
+        default=1000, description="The initial score for each agent"
+    )
+    output_file: str = Field(
+        default="elo_ranking.csv", description="Path to the output file"
+    )
+
+
+class AllConfig(BaseEvaluatorConfig):
+    reasoning_path: str = Field(
+        default="reasonings.csv",
+        description="CSV file with the reasoning for each retrieved document",
+    )
+    answers_path: str = Field(
+        default="answers.csv", description="Path to the answers file"
+    )
+    evaluations_file: str = Field(
+        default="answers_evaluations.csv",
+        description="Path to write the pairwise evaluations of answers",
+    )
+    output_file: str = Field(
+        default="agents_ranking.csv", description="Path to the output file"
+    )
+    retrieval_evaluator_name: str = Field(
+        default="reasoner",
+        description="The name of the retrieval evaluator to use",
+    )
+    answer_evaluator_name: str = Field(
+        default="pairwise_reasoning",
+        description="The name of the answer evaluator to use",
+    )
+    answer_ranker_name: str = Field(
+        default="elo", description="The name of the answer ranker to use"
+    )
+    k: int = Field(default=100, description="Number of games to generate")
+    initial_score: int = Field(
+        default=1000, description="The initial score for each agent"
+    )
+    elo_k: int = Field(
+        default=32, description="The K factor for the Elo ranking algorithm"
+    )
+    bidirectional: bool = Field(
+        default=False, description="Wether or not to run each game in both directions"
     )

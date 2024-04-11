@@ -1,5 +1,6 @@
 import random
 import re
+from collections import defaultdict
 from typing import Any, Optional
 
 from tenacity import RetryError
@@ -71,10 +72,14 @@ and "[[C]]" for a tie.
         self.k = self.config.k
         self.bidirectional = self.config.bidirectional
         self.pattern = re.compile(r"\[\[([^]]+)]].*$(?:(?!\[\[).)*", re.DOTALL)
+        if self.config.reasonings is None:
+            self.reasonings = self._load_reasonings(self.config.reasoning_path)
+        else:
+            self.reasonings = self.config.reasonings
 
     def batch_evaluate(self, queries: list[Query]) -> list[AnswerEvaluatorResult]:
         failed_evaluations = 0
-        skip_tuples = self._get_skip_tuples()
+        skip_tuples = self._get_existing_output()
         evaluations: list[AnswerEvaluatorResult] = []
         for query in tqdm(
             queries,
@@ -232,3 +237,27 @@ and "[[C]]" for a tie.
         self, query: Query, answer: AgentAnswer
     ) -> str | list[dict[str, str]]:
         raise NotImplementedError
+
+    def _load_reasonings(
+        self,
+        reasoning_path: str,
+        query_id_col: str = "qid",
+        document_id_col: str = "did",
+        answer_col: str = "answer",
+    ) -> dict[str, dict[str, str]]:
+        reasoning: dict[str, dict[str, str]] = defaultdict(lambda: dict())
+        reasoning_read = 0
+        if not os.path.exists(reasoning_path):
+            raise FileNotFoundError(f"Reasoning file {reasoning_path} not found")
+
+        logger.info(f"Loading reasonings from {reasoning_path}")
+        for line in csv.DictReader(open(reasoning_path)):
+            reasoning_read += 1
+            reasoning[line[query_id_col]][line[document_id_col]] = line[answer_col]
+        logger.info(f"Loaded {reasoning_read} reasonings")
+        return dict(reasoning)
+
+    def _prepare_reasonings(self, qid: str) -> str:
+        return "\n".join(
+            [" ".join([f"[{idx}]", r]) for (idx, r) in self.reasonings[qid].items()]
+        )

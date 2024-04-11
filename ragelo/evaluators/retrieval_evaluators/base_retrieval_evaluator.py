@@ -2,7 +2,7 @@
 It receives a set of queries used to retrieve a document and their respective retrieved documents,
 and returns a score or a label for each document."""
 
-import dataclasses
+# import dataclasses
 from typing import Any, Callable, Optional, Type, get_type_hints
 
 from tenacity import RetryError
@@ -22,7 +22,7 @@ from ragelo.types.configurations import BaseEvaluatorConfig
 
 class BaseRetrievalEvaluator(BaseEvaluator):
     config: BaseEvaluatorConfig
-    output_columns: list[str] = ["qid", "did", "raw_answer", "answer"]
+    output_columns: list[str] = ["qid", "did", "raw_answer"]
     output_file: str = "retrieval_evaluations.csv"
     tuple_columns: list[str] = ["qid", "did"]
 
@@ -35,50 +35,60 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         self.llm_provider = llm_provider
         if config.output_file is not None:
             self.output_file = config.output_file
-        self.output_columns.extend(self.config.scoring_key)
+        if config.scoring_key and config.scoring_key not in self.output_columns:
+            print(f"Adding scoring key {config.scoring_key} to output columns")
+            self.output_columns.extend(self.config.scoring_key)
 
     def batch_evaluate(self, queries: list[Query]) -> list[RetrievalEvaluatorResult]:
         """Evaluate all the documents for a list of queries"""
         use_progress_bar = self.config.verbose
-        skip_docs = self._get_skip_tuples()
-        answers: list[RetrievalEvaluatorResult] = []
+        answers = [RetrievalEvaluatorResult(**x) for x in self._get_existing_output()]
+        skip_docs = {(x.qid, x.did) for x in answers}
         failed_evaluations = 0
-        for query in tqdm(
-            queries,
-            desc="Evaluating retrieved documents",
-            disable=not use_progress_bar,
-            ncols=100,
-            leave=False,
-            position=0,
-        ):
-            for document in tqdm(
-                query.retrieved_docs,
-                desc=query.qid,
-                disable=not use_progress_bar,
-                ncols=100,
-                leave=False,
-                position=1,
-            ):
+        tuples_to_eval = []
+        all_tuples = 0
+        for query in queries:
+            for document in query.retrieved_docs:
                 qid = query.qid
                 did = document.did
+                all_tuples += 1
                 if (qid, did) in skip_docs:
                     logger.debug(f"Skipping {qid} {did}")
                     continue
-                try:
-                    raw_answer, answer = self.evaluate(query, document)
-                except (RetryError, ValueError):
-                    failed_evaluations += 1
-                    continue
-
-                answers.append(
-                    RetrievalEvaluatorResult(
-                        qid=qid,
-                        did=did,
-                        raw_answer=raw_answer,
-                        answer=answer,
-                    )
+                tuples_to_eval.append((query, document))
+        if len(tuples_to_eval) == 0:
+            logger.info("All documents have been evaluated")
+            if self.config.verbose:
+                print(
+                    f"All {all_tuples} documents are already evaluated.\n"
+                    "If you want to re-evaluate documents, use the --force flag."
                 )
-                self._dump_response(answers[-1], self.output_columns, self.output_file)
+            return answers
+        for query, document in tqdm(
+            tuples_to_eval,
+            desc="Evaluating retrieved documents",
+            disable=not use_progress_bar,
+            ncols=100,
+            # leave=False,
+            position=0,
+        ):
+            qid = query.qid
+            did = document.did
+            try:
+                raw_answer, answer = self.evaluate(query, document)
+            except (RetryError, ValueError):
+                failed_evaluations += 1
+                continue
+
+            answers.append(
+                RetrievalEvaluatorResult(
+                    qid=qid,
+                    did=did,
+                    raw_answer=raw_answer,
+                    answer=answer,
+                )
+            )
+            self._dump_response(answers[-1], self.output_columns, self.output_file)
 
         if self.config.verbose:
             print("✅ Done!")
@@ -132,6 +142,12 @@ class BaseRetrievalEvaluator(BaseEvaluator):
     def get_config_class(cls) -> Type[BaseEvaluatorConfig]:
         return get_type_hints(cls)["config"]
 
+    @staticmethod
+    def _construct_list_of_answers(
+        answers: list[dict[str, str]]
+    ) -> list[RetrievalEvaluatorResult]:
+        return [RetrievalEvaluatorResult(**x) for x in answers]
+
 
 class RetrievalEvaluatorFactory:
     registry: dict[RetrievalEvaluatorTypes | str, Type[BaseRetrievalEvaluator]] = {}
@@ -168,7 +184,7 @@ class RetrievalEvaluatorFactory:
         if config is None:
             class_ = cls.registry[evaluator_name]
             type_config = class_.get_config_class()
-            valid_keys = [field.name for field in dataclasses.fields(type_config)]
+            valid_keys = [field for field in type_config.__fields__]
             valid_args = {k: v for k, v in kwargs.items() if k in valid_keys}
             config = type_config(**valid_args)
         return cls.registry[evaluator_name].from_config(config, llm_provider_instance)

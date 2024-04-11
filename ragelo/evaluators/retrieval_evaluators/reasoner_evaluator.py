@@ -17,6 +17,7 @@ class ReasonerEvaluator(BaseRetrievalEvaluator):
     is relevant.
     """
 
+    output_columns: list[str] = ["qid", "did", "raw_answer", "answer"]
     output_file: str = "reasonings.csv"
     config: ReasonerEvaluatorConfig
     prompt = """

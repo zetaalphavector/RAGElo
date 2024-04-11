@@ -1,10 +1,9 @@
 import csv
-import dataclasses
 import json
 import os
 import string
 from abc import ABC, abstractmethod
-from typing import Any, Optional, Sequence
+from typing import Any, Optional
 
 from tqdm.auto import tqdm
 
@@ -18,6 +17,7 @@ class BaseEvaluator(ABC):
     config: BaseEvaluatorConfig
     output_file: str
     tuple_columns: list[str]
+    output_columns: list[str]
     scoring_key: str | list[str]
 
     @abstractmethod
@@ -95,23 +95,41 @@ class BaseEvaluator(ABC):
                 valid_fields[field] = metadata[field]
         return valid_fields
 
-    def _get_skip_tuples(self) -> set[Sequence[str]]:
-        skip_tuples: set[Sequence[str]] = set()
+    @staticmethod
+    def __get_existing_output_from_json(output_file: str) -> list[dict[str, str]]:
+        return json.load(open(output_file, "r"))
+
+    @staticmethod
+    def __get_existing_output_from_jsonl(output_file: str) -> list[dict[str, str]]:
+        with open(output_file, "r") as f:
+            return [json.loads(line) for line in f]
+
+    @staticmethod
+    def __get_existing_output_from_csv(output_file: str) -> list[dict[str, str]]:
+        existing_lines: list[dict[str, str]] = []
+        with open(output_file, "r") as f:
+            reader = csv.DictReader(f)
+            for line in reader:
+                existing_lines.append(line)
+        return existing_lines
+
+    @abstractmethod
+    def _construct_list_of_answers(answers: list[dict[str, str]]) -> list[Any]:
+        raise NotImplementedError
+
+    def _get_existing_output(self) -> list[dict[str, str]]:
+        existing_lines: list[dict[str, str]] = []
         if self.config.force and os.path.exists(self.output_file):
             logger.warning(f"Removing existing {self.output_file}!")
             os.remove(self.output_file)
         if not os.path.isfile(self.output_file):
-            return skip_tuples
-        with open(self.output_file, "r") as f:
-            reader = csv.DictReader(f)
-            for line in reader:
-                skip_tuples.add(tuple(line[col] for col in self.tuple_columns))
-        if len(skip_tuples) > 0:
-            logger.info(
-                f"Skipping {len(skip_tuples)} rows in {self.output_file} "
-                "If you want to re-evaluate them, please use the --force flag"
-            )
-        return skip_tuples
+            return existing_lines
+        if self.output_file.endswith(".json"):
+            return self.__get_existing_output_from_json(self.output_file)
+        if self.output_file.endswith(".jsonl"):
+            return self.__get_existing_output_from_jsonl(self.output_file)
+        else:
+            return self.__get_existing_output_from_csv(self.output_file)
 
     @staticmethod
     def _print_response(
@@ -198,32 +216,17 @@ class BaseEvaluator(ABC):
                 f.write(",")
             f.write(json.dumps(answer_dict) + "]")
 
-    @staticmethod
-    def __dump_raw_response(
-        answer_dict: dict[str, str], output_file: str, output_columns: list[str]
-    ):
-        """If no format is indicated, the raw response is dumped in a csv file"""
-        if not os.path.isfile(output_file):
-            logger.debug(f"Creating new file {output_file}")
-            with open(output_file, "w") as f:
-                writer = csv.DictWriter(f, fieldnames=output_columns)
-                writer.writeheader()
-        with open(output_file, "a") as f:
-            writer = csv.DictWriter(f, fieldnames=output_columns)
-            writer.writerow(answer_dict)
-
     def _dump_response(
         self,
         response: AnswerEvaluatorResult | RetrievalEvaluatorResult,
         output_columns: list[str],
         file: Optional[str] = None,
     ):
-        print(self.config.verbose)
         if self.config.verbose:
             self._print_response(response, self.config.rich_print)
         if not self.config.write_output:
             return
-        answer_dict = dataclasses.asdict(response)
+        answer_dict = response.dict()
         if isinstance(answer_dict["answer"], dict):
             # flatten the dict into the main dict
             for k, v in answer_dict["answer"].items():
@@ -246,7 +249,7 @@ class BaseEvaluator(ABC):
             logger.info(
                 "Output file format not recognized. Dumping raw response in csv format."
             )
-            self.__dump_raw_response(answer_dict, output_file, output_columns)
+            self.__dump_response_csv(answer_dict, output_columns, output_file)
 
     def _process_answer(self, answer: str) -> Any:
         """Processes the LLM evaluator output into some serializable format"""

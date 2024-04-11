@@ -1,6 +1,7 @@
-from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Optional
+
+from pydantic import BaseModel
 
 from ragelo.logger import logger
 
@@ -28,8 +29,7 @@ class AnswerEvaluatorTypes(str, Enum):
     CUSTOM_PROMPT = "custom_prompt"
 
 
-@dataclass
-class Document:
+class Document(BaseModel):
     did: str
     text: str
     metadata: Optional[dict[str, Any]] = None
@@ -50,8 +50,7 @@ class Document:
             self.metadata[k] = metadata[k]
 
 
-@dataclass
-class AgentAnswer:
+class AgentAnswer(BaseModel):
     agent: str
     text: str
     metadata: Optional[dict[str, Any]] = None
@@ -72,13 +71,12 @@ class AgentAnswer:
             self.metadata[k] = metadata[k]
 
 
-@dataclass
-class Query:
+class Query(BaseModel):
     qid: str
     query: str
     metadata: Optional[dict[str, Any]] = None
-    retrieved_docs: list[Document] = field(default_factory=list)
-    answers: list[AgentAnswer] = field(default_factory=list)
+    retrieved_docs: list[Document] = []
+    answers: list[AgentAnswer] = []
 
     def add_metadata(self, metadata: Optional[dict[str, Any]]):
         if not metadata:
@@ -95,19 +93,18 @@ class Query:
             self.metadata[k] = metadata[k]
 
 
-@dataclass
-class RetrievalEvaluatorResult:
+class RetrievalEvaluatorResult(BaseModel):
     qid: str
     did: str
     raw_answer: str
     answer: str | int | dict[str, Any]
 
 
-@dataclass
-class AnswerEvaluatorResult:
+class AnswerEvaluatorResult(BaseModel):
     qid: str
     raw_answer: str
     answer: str | int | dict[str, Any]
     agent: Optional[str] = None
     agent_a: Optional[str] = None
+    agent_b: Optional[str] = None
     agent_b: Optional[str] = None
