@@ -14,6 +14,7 @@ from ragelo.types import (
     AgentAnswer,
     AnswerEvaluatorResult,
     AnswerEvaluatorTypes,
+    AnswerFormat,
     Document,
     Query,
 )
@@ -24,7 +25,6 @@ class BaseAnswerEvaluator(BaseEvaluator):
     config: BaseAnswerEvaluatorConfig
     output_columns = ["qid", "agent", "raw_answer", "answer"]
     output_file: str = "answers_evaluations.csv"
-    tuple_columns: list[str] = ["qid", "agent"]
 
     def __init__(
         self,
@@ -35,6 +35,12 @@ class BaseAnswerEvaluator(BaseEvaluator):
         self.llm_provider = llm_provider
         if config.output_file is not None:
             self.output_file = config.output_file
+        if config.answer_format == AnswerFormat.MULTI_FIELD_JSON:
+            if isinstance(config.scoring_key, str):
+                scoring_keys = [config.scoring_key]
+            else:
+                scoring_keys = config.scoring_key
+            self.output_columns = ["qid", "agent", "raw_answer"] + scoring_keys
 
     def batch_evaluate(self, queries: list[Query]) -> list[AnswerEvaluatorResult]:
         use_progress_bar = self.config.verbose

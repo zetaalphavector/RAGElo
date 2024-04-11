@@ -24,7 +24,6 @@ class BaseRetrievalEvaluator(BaseEvaluator):
     config: BaseEvaluatorConfig
     output_columns: list[str] = ["qid", "did", "raw_answer"]
     output_file: str = "retrieval_evaluations.csv"
-    tuple_columns: list[str] = ["qid", "did"]
 
     def __init__(
         self,

@@ -22,7 +22,6 @@ from ragelo.types.configurations import AnswerFormat, BaseEvaluatorConfig
 class BaseEvaluator(ABC):
     config: BaseEvaluatorConfig
     output_file: str
-    tuple_columns: list[str]
     output_columns: list[str]
     scoring_key: str | list[str]
 
