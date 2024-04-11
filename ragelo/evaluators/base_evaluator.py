@@ -9,7 +9,13 @@ from tqdm.auto import tqdm
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.logger import logger
-from ragelo.types import AnswerEvaluatorResult, RetrievalEvaluatorResult
+from ragelo.types import (
+    AgentAnswer,
+    AnswerEvaluatorResult,
+    Document,
+    Query,
+    RetrievalEvaluatorResult,
+)
 from ragelo.types.configurations import AnswerFormat, BaseEvaluatorConfig
 
 
@@ -261,3 +267,54 @@ class BaseEvaluator(ABC):
             return self.json_answer_parser_multifields(answer, self.config.scoring_key)
         if self.config.answer_format == AnswerFormat.TEXT:
             return answer
+
+    @staticmethod
+    def _assemble_query(
+        query: Query | str, query_metadata: Optional[dict[str, Any]] = None
+    ) -> Query:
+        if isinstance(query, str):
+            query = Query(qid="<no_qid>", query=query)
+        query.add_metadata(query_metadata)
+        return query
+
+    @staticmethod
+    def _assemble_document(
+        document: Document | str, doc_metadata: Optional[dict[str, Any]] = None
+    ) -> Document:
+        if isinstance(document, str):
+            if doc_metadata:
+                valid_id_fields = ["did", "doc_id", "document_id", "id", "_id"]
+                valid_id_fields = [f for f in valid_id_fields if f in doc_metadata]
+                if valid_id_fields:
+                    did = doc_metadata[valid_id_fields[0]]
+                else:
+                    did = "<no_did>"
+            document = Document(did=did, text=document)
+        document.add_metadata(doc_metadata)
+        return document
+
+    def _assemble_documents(
+        self,
+        documents: list[Document | str],
+        doc_metadata: Optional[list[dict[str, Any]]] = None,
+    ) -> list[Document]:
+        if doc_metadata:
+            assert len(documents) == len(doc_metadata)
+        assembled_docs = []
+        for idx, (doc, metadata) in enumerate(
+            zip(documents, doc_metadata or [None] * len(documents))
+        ):
+            if isinstance(doc, str) and not metadata:
+                metadata = {"did": f"doc_{idx}>"}
+            created_doc = self._assemble_document(doc, metadata)
+            assembled_docs.append(created_doc)
+        return assembled_docs
+
+    @staticmethod
+    def _assemble_answer(
+        answer: AgentAnswer | str, answer_metadata: Optional[dict[str, Any]] = None
+    ) -> AgentAnswer:
+        if isinstance(answer, str):
+            answer = AgentAnswer(agent="<no_agent>", text=answer)
+        answer.add_metadata(answer_metadata)
+        return answer

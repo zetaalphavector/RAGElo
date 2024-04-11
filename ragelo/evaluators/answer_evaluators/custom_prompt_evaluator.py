@@ -21,7 +21,7 @@ class CustomPromptEvaluator(BaseAnswerEvaluator):
         self.prompt = config.prompt
 
     def _build_message(self, query: Query, answer: AgentAnswer) -> str:
-        reasonings = self._prepare_reasonings(query.qid)
+        documents = self._prepare_documents(query)
         query_metadata = self._get_usable_fields_from_metadata(
             self.prompt, query.metadata, skip_fields=[self.config.query_placeholder]
         )
@@ -33,7 +33,7 @@ class CustomPromptEvaluator(BaseAnswerEvaluator):
         formatters = {
             self.config.query_placeholder: query.query,
             self.config.answer_placeholder: answer.text,
-            self.config.documents_placeholder: reasonings,
+            self.config.documents_placeholder: documents,
             **query_metadata,
             **answer_metadata,
         }

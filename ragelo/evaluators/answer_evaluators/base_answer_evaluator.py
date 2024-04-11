@@ -1,7 +1,5 @@
 """Base model for dealing with answer evaluators"""
 
-import csv
-import os
 from abc import abstractmethod
 from collections import defaultdict
 from typing import Any, Callable, Optional, Type, get_type_hints
@@ -12,7 +10,13 @@ from tqdm import tqdm
 from ragelo.evaluators.base_evaluator import BaseEvaluator
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
 from ragelo.logger import logger
-from ragelo.types import AgentAnswer, AnswerEvaluatorResult, AnswerEvaluatorTypes, Query
+from ragelo.types import (
+    AgentAnswer,
+    AnswerEvaluatorResult,
+    AnswerEvaluatorTypes,
+    Document,
+    Query,
+)
 from ragelo.types.configurations import BaseAnswerEvaluatorConfig
 
 
@@ -87,15 +91,20 @@ class BaseAnswerEvaluator(BaseEvaluator):
         self,
         query: Query | str,
         answer: AgentAnswer | str,
+        retrieved_documents: Optional[list[str] | list[Document]] = None,
+        document_metadata: Optional[list[dict[str, Any]]] = None,
         query_metadata: Optional[dict[str, Any]] = None,
         answer_metadata: Optional[dict[str, Any]] = None,
     ) -> tuple[str, Any]:
-        if isinstance(query, str):
-            query = Query(qid="<no_qid>", query=query)
-        if isinstance(answer, str):
-            answer = AgentAnswer(agent="<no_agent>", text=answer)
-        query.add_metadata(query_metadata)
-        answer.add_metadata(answer_metadata)
+        query = self._assemble_query(query, query_metadata)
+        answer = self._assemble_answer(answer, answer_metadata)
+        if isinstance(retrieved_documents, str):
+            retrieved_documents = [retrieved_documents]
+        if retrieved_documents:
+            retrieved_documents = self._assemble_documents(
+                retrieved_documents, document_metadata
+            )
+            query.retrieved_docs = retrieved_documents
 
         message = self._build_message(query, answer)
         try:
@@ -138,6 +147,13 @@ class BaseAnswerEvaluator(BaseEvaluator):
         answers: list[dict[str, str]]
     ) -> list[AnswerEvaluatorResult]:
         return [AnswerEvaluatorResult(**x) for x in answers]
+
+    @staticmethod
+    def _prepare_documents(query: Query) -> str:
+        documents = [(d.did, d.text) for d in query.retrieved_docs]
+        if len(documents) == 0:
+            return "NO DOCUMENTS WERE RETRIEVED"
+        return "\n".join([f"[{did}] {doc}\n" for did, doc in documents])
 
 
 class AnswerEvaluatorFactory:

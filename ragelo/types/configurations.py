@@ -228,13 +228,6 @@ class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
 class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     """Configuration for the pairwise evaluator."""
 
-    reasoning_path: str = Field(
-        default="reasonings.csv",
-        description="CSV file with the reasoning for each retrieved document",
-    )
-    reasonings: Optional[dict[str, str]] = Field(
-        default=None, description="A dictionary with the reasoning for each document"
-    )
     bidirectional: bool = Field(
         default=False, description="Whether or not to run each game in both directions"
     )

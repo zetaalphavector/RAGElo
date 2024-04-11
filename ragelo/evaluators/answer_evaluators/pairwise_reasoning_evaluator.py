@@ -1,3 +1,5 @@
+import csv
+import os
 import random
 import re
 from collections import defaultdict
@@ -12,7 +14,13 @@ from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.logger import logger
-from ragelo.types import AgentAnswer, AnswerEvaluatorResult, AnswerEvaluatorTypes, Query
+from ragelo.types import (
+    AgentAnswer,
+    AnswerEvaluatorResult,
+    AnswerEvaluatorTypes,
+    Document,
+    Query,
+)
 from ragelo.types.configurations import PairwiseEvaluatorConfig
 
 
@@ -67,15 +75,9 @@ and "[[C]]" for a tie.
         llm_provider: BaseLLMProvider,
     ):
         super().__init__(config, llm_provider)
-        if not self.config.reasoning_path:
-            raise ValueError("Reasoning file is required for PairwiseWithReasoning")
         self.k = self.config.k
         self.bidirectional = self.config.bidirectional
         self.pattern = re.compile(r"\[\[([^]]+)]].*$(?:(?!\[\[).)*", re.DOTALL)
-        if self.config.reasonings is None:
-            self.reasonings = self._load_reasonings(self.config.reasoning_path)
-        else:
-            self.reasonings = self.config.reasonings
 
     def batch_evaluate(self, queries: list[Query]) -> list[AnswerEvaluatorResult]:
         failed_evaluations = 0
@@ -129,35 +131,6 @@ and "[[C]]" for a tie.
             print(f"Total evaluations: {len(evaluations)}")
         return evaluations
 
-    def _build_message_pairwise(
-        self, query: Query, answer: AgentAnswer | tuple[AgentAnswer, AgentAnswer]
-    ) -> str:
-        assert isinstance(answer, tuple)
-        reasonings = self._prepare_reasonings(query.qid)
-        query_metadata = self._get_usable_fields_from_metadata(
-            self.prompt, query.metadata, skip_fields=[self.config.query_placeholder]
-        )
-        answer_a_metadata = self._get_usable_fields_from_metadata(
-            self.prompt,
-            answer[0].metadata,
-            skip_fields=[self.config.answer_placeholder],
-        )
-        answer_b_metadata = self._get_usable_fields_from_metadata(
-            self.prompt,
-            answer[1].metadata,
-            skip_fields=[self.config.answer_placeholder],
-        )
-        formatters = {
-            self.config.query_placeholder: query.query,
-            self.config.documents_placeholder: reasonings,
-            "answer_a": answer[0].text,
-            "answer_b": answer[1].text,
-            **query_metadata,
-            **answer_a_metadata,
-            **answer_b_metadata,
-        }
-        return self.prompt.format(**formatters)
-
     def evaluate_pairwise(
         self,
         query: Query | str,
@@ -166,16 +139,18 @@ and "[[C]]" for a tie.
         query_metadata: Optional[dict[str, Any]] = None,
         answer_a_metadata: Optional[dict[str, Any]] = None,
         answer_b_metadata: Optional[dict[str, Any]] = None,
+        retrieved_documents: Optional[list[str] | list[Document]] = None,
+        document_metadata: Optional[list[dict[str, Any]]] = None,
     ) -> tuple[str, str]:
-        if isinstance(query, str):
-            query = Query(qid="<no_qid>", query=query)
-        if isinstance(answer_a, str):
-            answer_a = AgentAnswer(agent="agent_a", text=answer_a)
-        if isinstance(answer_b, str):
-            answer_b = AgentAnswer(agent="agent_b", text=answer_b)
-        query.add_metadata(query_metadata)
-        answer_a.add_metadata(answer_a_metadata)
-        answer_b.add_metadata(answer_b_metadata)
+        query = self._assemble_query(query, query_metadata)
+        answer_a = self._assemble_answer(answer_a, answer_a_metadata)
+        answer_b = self._assemble_answer(answer_b, answer_b_metadata)
+        if isinstance(retrieved_documents, str):
+            retrieved_documents = [retrieved_documents]
+        retrieved_documents = self._assemble_documents(
+            retrieved_documents, document_metadata
+        )
+        query.retrieved_docs = retrieved_documents
 
         prompt = self._build_message_pairwise(query, (answer_a, answer_b))
         qid = query.qid
@@ -199,6 +174,35 @@ and "[[C]]" for a tie.
             )
             raise e
         return raw_answer, processed_answer
+
+    def _build_message_pairwise(
+        self, query: Query, answer: AgentAnswer | tuple[AgentAnswer, AgentAnswer]
+    ) -> str:
+        assert isinstance(answer, tuple)
+        reasonings = self._prepare_documents(query)
+        query_metadata = self._get_usable_fields_from_metadata(
+            self.prompt, query.metadata, skip_fields=[self.config.query_placeholder]
+        )
+        answer_a_metadata = self._get_usable_fields_from_metadata(
+            self.prompt,
+            answer[0].metadata,
+            skip_fields=[self.config.answer_placeholder],
+        )
+        answer_b_metadata = self._get_usable_fields_from_metadata(
+            self.prompt,
+            answer[1].metadata,
+            skip_fields=[self.config.answer_placeholder],
+        )
+        formatters = {
+            self.config.query_placeholder: query.query,
+            self.config.documents_placeholder: reasonings,
+            "answer_a": answer[0].text,
+            "answer_b": answer[1].text,
+            **query_metadata,
+            **answer_a_metadata,
+            **answer_b_metadata,
+        }
+        return self.prompt.format(**formatters)
 
     def __generate_games_per_query(self, query: Query) -> list[tuple[str, str]]:
         """Generates up to self.k random pairs of agents for the given query"""
@@ -256,8 +260,3 @@ and "[[C]]" for a tie.
             reasoning[line[query_id_col]][line[document_id_col]] = line[answer_col]
         logger.info(f"Loaded {reasoning_read} reasonings")
         return dict(reasoning)
-
-    def _prepare_reasonings(self, qid: str) -> str:
-        return "\n".join(
-            [" ".join([f"[{idx}]", r]) for (idx, r) in self.reasonings[qid].items()]
-        )
