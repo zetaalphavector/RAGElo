@@ -61,6 +61,10 @@ class BaseEvaluatorConfig(BaseConfig):
         default=AnswerFormat.JSON,
         description="The format of the answer returned by the LLM",
     )
+    n_processes: int = Field(
+        default=1,
+        description="The number of parallel LLM calls to use for the evaluation",
+    )
 
 
 class AllConfig(BaseEvaluatorConfig):

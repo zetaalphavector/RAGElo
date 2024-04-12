@@ -5,6 +5,8 @@ import os
 from abc import ABC, abstractmethod
 from typing import Optional, Type, get_type_hints
 
+from aiohttp import ClientSession
+
 from ragelo.types import LLMProviderConfig, LLMProviderTypes
 
 
@@ -30,6 +32,15 @@ class BaseLLMProvider(ABC):
 
     @abstractmethod
     def __call__(self, prompt: str | list[dict[str, str]]) -> str:
+        """Submits a single query-document pair to the LLM and returns the answer."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def call_async(
+        self,
+        prompt: str | list[dict[str, str]],
+        session: ClientSession,
+    ) -> str:
         """Submits a single query-document pair to the LLM and returns the answer."""
         raise NotImplementedError
 

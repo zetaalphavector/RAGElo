@@ -5,6 +5,8 @@ from pydantic import BaseModel
 
 class LLMProviderConfig(BaseModel):
     api_key: str
+    max_retries: int = 3
+    sleep_time: int = 2
 
 
 class OpenAIConfiguration(LLMProviderConfig):
