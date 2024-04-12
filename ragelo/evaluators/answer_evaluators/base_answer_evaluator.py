@@ -111,10 +111,10 @@ class BaseAnswerEvaluator(BaseEvaluator):
         if isinstance(retrieved_documents, str):
             retrieved_documents = [retrieved_documents]
         if retrieved_documents:
-            retrieved_documents = self._assemble_documents(
+            retrieved_and_assembled_docs = self._assemble_documents(
                 retrieved_documents, document_metadata
             )
-            query.retrieved_docs = retrieved_documents
+            query.retrieved_docs = retrieved_and_assembled_docs
 
         message = self._build_message(query, answer)
         try:

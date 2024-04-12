@@ -1,9 +1,10 @@
 import csv
+import enum
 import json
 import os
 import string
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from tqdm.auto import tqdm
 
@@ -291,16 +292,19 @@ class BaseEvaluator(ABC):
         documents: list[str] | list[Document],
         doc_metadata: Optional[list[dict[str, Any]]] = None,
     ) -> list[Document]:
+        assembled_docs: list[Document] = []
+        for idx, doc in enumerate(documents):
+            if isinstance(doc, str):
+                doc = Document(did=f"doc_{idx}", text=doc)
+            assembled_docs.append(cast(Document, doc))
         if doc_metadata:
-            assert len(documents) == len(doc_metadata)
-        assembled_docs = []
-        for idx, (doc, metadata) in enumerate(
-            zip(documents, doc_metadata or [None] * len(documents))
-        ):
-            if isinstance(doc, str) and not metadata:
-                metadata = {"did": f"doc_{idx}>"}
-            created_doc = self._assemble_document(doc, metadata)
-            assembled_docs.append(created_doc)
+            if len(documents) != len(doc_metadata):
+                raise ValueError(
+                    "The number of documents and document metadata do not match"
+                )
+            assembled_docs = [
+                d.add_metadata(m) for d, m in zip(assembled_docs, doc_metadata)
+            ]
         return assembled_docs
 
     @staticmethod

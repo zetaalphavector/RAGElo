@@ -4,14 +4,14 @@ from ragelo import get_llm_provider, get_retrieval_evaluator
 from ragelo.cli.args import get_params_from_function
 from ragelo.cli.utils import get_path
 from ragelo.types.configurations import (
-    BaseEvaluatorConfig,
     DomainExpertEvaluatorConfig,
     RDNAMEvaluatorConfig,
+    ReasonerEvaluatorConfig,
 )
 from ragelo.types.types import RetrievalEvaluatorTypes
 from ragelo.utils import load_retrieved_docs_from_csv
 
-typer.main.get_params_from_function = get_params_from_function  # type: ignore
+typer.main.get_params_from_function = get_params_from_function
 
 
 app = typer.Typer()
@@ -51,11 +51,11 @@ def domain_expert(
 
 
 @app.command()
-def reasoner(config: BaseEvaluatorConfig = BaseEvaluatorConfig(), **kwargs):
+def reasoner(config: ReasonerEvaluatorConfig = ReasonerEvaluatorConfig(), **kwargs):
     """
     A document Evaluator that only outputs the reasoning for why a document is relevant.
     """
-    config = BaseEvaluatorConfig(**kwargs)
+    config = ReasonerEvaluatorConfig(**kwargs)
     config.query_path = get_path(config.data_path, config.query_path)
     config.documents_path = get_path(config.data_path, config.documents_path)
     if not config.output_file:

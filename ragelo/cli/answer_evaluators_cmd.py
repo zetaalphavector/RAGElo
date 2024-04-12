@@ -7,7 +7,7 @@ from ragelo.types import AnswerEvaluatorTypes
 from ragelo.types.configurations import PairwiseEvaluatorConfig
 from ragelo.utils import load_answers_from_csv
 
-typer.main.get_params_from_function = get_params_from_function  # type: ignore
+typer.main.get_params_from_function = get_params_from_function
 app = typer.Typer()
 
 

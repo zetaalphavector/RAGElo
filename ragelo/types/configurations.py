@@ -24,6 +24,15 @@ class OpenAIConfiguration(LLMProviderConfig):
     model: str = "gpt-4-turbo"
 
 
+class FewShotExample(BaseModel):
+    """A few-shot example."""
+
+    passage: str
+    query: str
+    relevance: int
+    reasoning: str
+
+
 class BaseConfig(BaseModel):
     force: bool = Field(
         default=False,
@@ -52,10 +61,6 @@ class BaseConfig(BaseModel):
     write_output: bool = Field(
         default=True, description="Whether or not to write the output to a file"
     )
-    scoring_key: str = Field(
-        default="relevance",
-        description="The fields to extract from the answer",
-    )
 
 
 class BaseEvaluatorConfig(BaseConfig):
@@ -71,6 +76,14 @@ class BaseEvaluatorConfig(BaseConfig):
     query_placeholder: str = Field(
         default="query",
         description="The placeholder for the query in the prompt",
+    )
+    scoring_key: str = Field(
+        default="relevance",
+        description="When using answer_format=json, the key to extract from the answer",
+    )
+    scoring_keys: list[str] = Field(
+        default=["relevance"],
+        description="When using answer_format=multi_field_json, the keys to extract from the answer",
     )
     answer_format: str = Field(
         default=AnswerFormat.JSON,
@@ -116,7 +129,7 @@ class DomainExpertEvaluatorConfig(BaseEvaluatorConfig):
     )
     scoring_key: str = Field(
         default="score",
-        description="The fields to extract from the answer",
+        description="The field to use when parsing the llm answer",
     )
 
 
@@ -133,23 +146,14 @@ class CustomPromptEvaluatorConfig(BaseEvaluatorConfig):
         default="custom_prompt_evaluations.csv",
         description="Path to the output file",
     )
-    scoring_key: list[str] | str = Field(
+    scoring_keys: list[str] = Field(
         default=["quality", "trustworthiness", "originality"],
-        description="The fields to extract from the answer",
+        description="The fields to use when parsing the llm answer",
     )
     answer_format: str = Field(
         default=AnswerFormat.MULTI_FIELD_JSON,
         description="The format of the answer returned by the LLM",
     )
-
-
-class FewShotExample(BaseModel):
-    """A few-shot example."""
-
-    passage: str
-    query: str
-    relevance: int
-    reasoning: str
 
 
 class FewShotEvaluatorConfig(BaseEvaluatorConfig):
@@ -220,8 +224,8 @@ class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
         default="documents",
         description="The placeholder for the documents in the prompt",
     )
-    documents_path: Optional[str] = Field(
-        default=None,
+    documents_path: str = Field(
+        default="documents.csv",
         description="Path with the outputs from the reasoner Retrieval Evaluator",
     )
 
@@ -237,8 +241,8 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
         default="pairwise_answers_evaluations.csv",
         description="Path to the output file",
     )
-    documents_path: Optional[str] = Field(
-        default=None,
+    documents_path: str = Field(
+        default="reasonings.csv",
         description="Path with the outputs from the reasoner Retrieval Evaluator",
     )
 
@@ -252,7 +256,7 @@ class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
         default="custom_prompt_answers_evaluations.csv",
         description="Path to the output file",
     )
-    scoring_key: list[str] = Field(
+    scoring_keys: list[str] = Field(
         default=["quality", "trustworthiness", "originality"],
         description="The fields to extract from the answer",
     )

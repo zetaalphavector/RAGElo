@@ -35,21 +35,24 @@ def get_params_from_function(func: Callable[..., Any]) -> dict[str, ParamMeta]:
         if inspect.isclass(annotation) and issubclass(annotation, pydantic.BaseModel):
             fields = annotation.model_fields
             for k, v in fields.items():
-                # k, v) in enumerate(dct.items()):
-                _type = v.type_
+                _type = v.annotation
                 if not isinstance(v, ParameterInfo):
                     # get the description from Pydantic model
-                    description = v.field_info.description
-
+                    description = v.description
                     if k in arguments:
-                        v = ArgumentInfo(default=v.default, help=description)
+                        argument = ArgumentInfo(default=v.default, help=description)
+                        params[k] = ParamMeta(
+                            name=k, default=argument, annotation=_type
+                        )
                     else:
-                        v = OptionInfo(
+                        option = OptionInfo(
                             default=v.default,
                             help=description,
                         )
+                        params[k] = ParamMeta(name=k, default=option, annotation=_type)
+                else:
+                    params[k] = ParamMeta(name=k, default=v, annotation=_type)
 
-                params[k] = ParamMeta(name=k, default=v, annotation=_type)
         else:
             params[param.name] = ParamMeta(
                 name=param.name, default=param.default, annotation=annotation

@@ -12,7 +12,7 @@ from ragelo.types import AgentRankerConfig
 class AgentRanker:
     config: AgentRankerConfig
     evaluations: list[tuple[str, str, str]]
-    ranking: defaultdict
+    ranking: defaultdict[str, list[str]]
     output_file: str = "agents_ranking.csv"
     name: str = "Agent Ranker"
 

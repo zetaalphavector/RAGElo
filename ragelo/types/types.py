@@ -107,4 +107,3 @@ class AnswerEvaluatorResult(BaseModel):
     agent: Optional[str] = None
     agent_a: Optional[str] = None
     agent_b: Optional[str] = None
-    agent_b: Optional[str] = None

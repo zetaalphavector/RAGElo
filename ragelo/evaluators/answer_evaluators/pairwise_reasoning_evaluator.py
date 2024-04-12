@@ -160,10 +160,11 @@ and "[[C]]" for a tie.
         answer_b = self._assemble_answer(answer_b, answer_b_metadata)
         if isinstance(retrieved_documents, str):
             retrieved_documents = [retrieved_documents]
-        retrieved_documents = self._assemble_documents(
-            retrieved_documents, document_metadata
-        )
-        query.retrieved_docs = retrieved_documents
+        if retrieved_documents:
+            retrieved_and_assembled_docs = self._assemble_documents(
+                retrieved_documents, document_metadata
+            )
+            query.retrieved_docs = retrieved_and_assembled_docs
 
         prompt = self._build_message_pairwise(query, (answer_a, answer_b))
         qid = query.qid

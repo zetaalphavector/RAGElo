@@ -12,7 +12,7 @@ from ragelo.cli.utils import get_path
 from ragelo.types import AllConfig, EloAgentRankerConfig
 from ragelo.utils import load_answers_from_csv, load_retrieved_docs_from_csv
 
-typer.main.get_params_from_function = get_params_from_function  # type: ignore
+typer.main.get_params_from_function = get_params_from_function
 
 app = typer.Typer()
 
@@ -49,7 +49,9 @@ def run_all(config: AllConfig = AllConfig(), **kwargs):
     config.reasoning_path = get_path(config.data_path, config.reasoning_path)
     config.evaluations_file = get_path(config.data_path, config.evaluations_file)
 
-    args_clean = {k: v for k, v in asdict(config).items() if k not in args_to_remove}
+    args_clean = {
+        k: v for k, v in config.model_dump().items() if k not in args_to_remove
+    }
 
     retrieval_evaluator = get_retrieval_evaluator(
         "reasoner",
