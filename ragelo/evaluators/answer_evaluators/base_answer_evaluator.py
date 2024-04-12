@@ -1,7 +1,6 @@
 """Base model for dealing with answer evaluators"""
 
 from abc import abstractmethod
-from collections import defaultdict
 from typing import Any, Callable, Optional, Type, get_type_hints
 
 from tenacity import RetryError
@@ -19,6 +18,7 @@ from ragelo.types import (
     Query,
 )
 from ragelo.types.configurations import BaseAnswerEvaluatorConfig
+from ragelo.utils import load_retrieved_docs_from_csv
 
 
 class BaseAnswerEvaluator(BaseEvaluator):
@@ -49,6 +49,9 @@ class BaseAnswerEvaluator(BaseEvaluator):
         skip_tuples = {(x.qid, x.agent) for x in evaluations}
         tuples_to_eval = []
         all_tuples = 0
+        queries = self._add_retrieved_documents_to_queries(
+            queries, self.config.documents_path
+        )
         for query in queries:
             for agent_answer in query.answers:
                 qid = query.qid
@@ -66,6 +69,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
                     "If you want to re-evaluate them, use the force flag"
                 )
             return evaluations
+
         for query, agent_answer in tqdm(
             tuples_to_eval,
             desc="Annotating Answers",
@@ -159,7 +163,28 @@ class BaseAnswerEvaluator(BaseEvaluator):
         documents = [(d.did, d.text) for d in query.retrieved_docs]
         if len(documents) == 0:
             return "NO DOCUMENTS WERE RETRIEVED"
-        return "\n".join([f"[{did}] {doc}\n" for did, doc in documents])
+        return "\n".join([f"[{did}] {doc.strip()}" for did, doc in documents])
+
+    def _add_retrieved_documents_to_queries(
+        self,
+        queries: list[Query],
+        documents_path: Optional[str],
+        text_column: str = "document_text",
+        overwrite: bool = False,
+    ):
+        if all([len(q.retrieved_docs) > 0 for q in queries]) and not overwrite:
+            logger.info("All queries already have retrieved documents")
+            return queries
+        if documents_path is None:
+            logger.warning(
+                "No path with retrieved documents provided."
+                "Evaluator performance may be affected."
+            )
+            return queries
+        queries_with_docs = load_retrieved_docs_from_csv(
+            documents_path, queries, document_text_col=text_column
+        )
+        return queries_with_docs
 
 
 class AnswerEvaluatorFactory:

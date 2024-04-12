@@ -21,7 +21,7 @@ class OpenAIConfiguration(LLMProviderConfig):
     api_type: Optional[str] = None
     api_base: Optional[str] = None
     api_version: Optional[str] = None
-    model_name: str = "gpt-3.5-turbo"
+    model: str = "gpt-4-turbo"
 
 
 class BaseConfig(BaseModel):
@@ -40,8 +40,9 @@ class BaseConfig(BaseModel):
         default=None,
         description="Path to a txt file with the credentials for the different LLM providers",
     )
-    model_name: str = Field(
-        default="gpt-4", description="Name of the model to use for the LLM provider"
+    model: str = Field(
+        default="gpt-4-turbo",
+        description="Name of the model to use for the LLM provider",
     )
     data_path: str = Field(default="data/", description="Path to the data folder")
 
@@ -51,7 +52,7 @@ class BaseConfig(BaseModel):
     write_output: bool = Field(
         default=True, description="Whether or not to write the output to a file"
     )
-    scoring_key: Optional[list[str]] = Field(
+    scoring_key: str = Field(
         default="relevance",
         description="The fields to extract from the answer",
     )
@@ -81,10 +82,6 @@ class ReasonerEvaluatorConfig(BaseEvaluatorConfig):
     answer_format: str = Field(
         default=AnswerFormat.TEXT,
         description="The format of the answer returned by the LLM",
-    )
-    scoring_key: Optional[list[str]] = Field(
-        default=None,
-        description="The fields to extract from the answer",
     )
 
 
@@ -117,7 +114,7 @@ class DomainExpertEvaluatorConfig(BaseEvaluatorConfig):
         default="text",
         description="The format of the answer returned by the LLM",
     )
-    scoring_key: Optional[list[str]] = Field(
+    scoring_key: str = Field(
         default="score",
         description="The fields to extract from the answer",
     )
@@ -136,7 +133,7 @@ class CustomPromptEvaluatorConfig(BaseEvaluatorConfig):
         default="custom_prompt_evaluations.csv",
         description="Path to the output file",
     )
-    scoring_key: Optional[list[str]] = Field(
+    scoring_key: list[str] | str = Field(
         default=["quality", "trustworthiness", "originality"],
         description="The fields to extract from the answer",
     )
@@ -223,6 +220,10 @@ class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
         default="documents",
         description="The placeholder for the documents in the prompt",
     )
+    documents_path: Optional[str] = Field(
+        default=None,
+        description="Path with the outputs from the reasoner Retrieval Evaluator",
+    )
 
 
 class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
@@ -236,6 +237,10 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
         default="pairwise_answers_evaluations.csv",
         description="Path to the output file",
     )
+    documents_path: Optional[str] = Field(
+        default=None,
+        description="Path with the outputs from the reasoner Retrieval Evaluator",
+    )
 
 
 class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
@@ -247,7 +252,7 @@ class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
         default="custom_prompt_answers_evaluations.csv",
         description="Path to the output file",
     )
-    scoring_key: Optional[list[str]] = Field(
+    scoring_key: list[str] = Field(
         default=["quality", "trustworthiness", "originality"],
         description="The fields to extract from the answer",
     )

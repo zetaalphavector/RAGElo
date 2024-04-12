@@ -38,7 +38,9 @@ def load_queries_from_csv(
             if qid in read_queries:
                 logging.warning(f"Query {qid} already read. Skipping")
                 continue
-            queries.append(Query(qid, query_text, metadata=extra_metadata or None))
+            queries.append(
+                Query(qid=qid, query=query_text, metadata=extra_metadata or None)
+            )
             read_queries.add(qid)
     logging.info(f"Loaded {len(queries)} queries")
 
@@ -49,7 +51,7 @@ def load_retrieved_docs_from_csv(
     documents_path: str,
     queries: list[Query] | str,
     query_id_col: str = "qid",
-    document_id_col: str = "doc_id",
+    document_id_col: str = "did",
     document_text_col: str = "document_text",
 ) -> list[Query]:
     """Loads a list of retrieved documents for each query.
@@ -61,7 +63,7 @@ def load_retrieved_docs_from_csv(
             loaded. Defaults to None.
         query_id_col (str): Name of the column with the query id. Defaults to 'query_id'.
         document_id_col (str): Name of the column with the document id.
-            Defaults to 'doc_id'.
+            Defaults to 'did'.
         document_text_col (str): Name of the column with the document text.
             Defaults to 'document_text'.
 

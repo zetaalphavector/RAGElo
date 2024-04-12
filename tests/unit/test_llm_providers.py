@@ -3,6 +3,7 @@ from openai.types.chat.chat_completion import (
     ChatCompletionMessage,
     Choice,
 )
+from pytest import MonkeyPatch
 
 from ragelo import get_llm_provider
 from ragelo.llm_providers.openai_client import OpenAIProvider
@@ -10,7 +11,11 @@ from ragelo.llm_providers.openai_client import OpenAIProvider
 
 class TestOpenAIProvider:
     def test_response(
-        self, chat_completion_mock, openai_client_mock, openai_client_config
+        self,
+        chat_completion_mock,
+        openai_client_mock,
+        openai_client_config,
+        monkeypatch,
     ):
         chat_completion_mock.create.return_value = ChatCompletion(
             id="fake id",
@@ -29,7 +34,9 @@ class TestOpenAIProvider:
             object="chat.completion",
         )
         openai_client = OpenAIProvider(config=openai_client_config)
-        openai_client.set_openai_client(openai_client_mock)
+        monkeypatch.setattr(
+            openai_client, "_OpenAIProvider__openai_client", openai_client_mock
+        )
 
         prompt = "hello world"
         prompts = [

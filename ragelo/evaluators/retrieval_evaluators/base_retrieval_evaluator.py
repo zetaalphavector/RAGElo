@@ -12,6 +12,7 @@ from ragelo.evaluators.base_evaluator import BaseEvaluator
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
 from ragelo.logger import logger
 from ragelo.types import (
+    AnswerFormat,
     Document,
     Query,
     RetrievalEvaluatorResult,
@@ -22,7 +23,7 @@ from ragelo.types.configurations import BaseEvaluatorConfig
 
 class BaseRetrievalEvaluator(BaseEvaluator):
     config: BaseEvaluatorConfig
-    output_columns: list[str] = ["qid", "did", "raw_answer"]
+    output_columns: list[str] = ["qid", "did", "raw_answer", "answer"]
     output_file: str = "retrieval_evaluations.csv"
 
     def __init__(
@@ -34,6 +35,14 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         self.llm_provider = llm_provider
         if config.output_file is not None:
             self.output_file = config.output_file
+
+        if config.answer_format == AnswerFormat.MULTI_FIELD_JSON:
+            if isinstance(config.scoring_key, str):
+                scoring_keys = [config.scoring_key]
+            else:
+                scoring_keys = config.scoring_key
+            self.output_columns = ["qid", "agent", "raw_answer"] + scoring_keys
+
         if config.scoring_key and config.scoring_key not in self.output_columns:
             print(f"Adding scoring key {config.scoring_key} to output columns")
             self.output_columns.extend(self.config.scoring_key)

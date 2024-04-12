@@ -1,5 +1,4 @@
 import json
-from dataclasses import asdict
 from unittest.mock import Mock
 
 import pytest
@@ -73,7 +72,7 @@ def openai_client_config():
         api_type="open_ai",
         api_base=None,
         api_version=None,
-        model_name="fake model",
+        model="fake model",
     )
 
 
@@ -114,20 +113,19 @@ def base_eval_config():
 @pytest.fixture
 def pairwise_answer_eval_config(base_eval_config):
     config = PairwiseEvaluatorConfig(
-        reasoning_path="tests/data/reasonings.csv",
+        documents_path="tests/data/reasonings.csv",
         bidirectional=False,
-        **asdict(base_eval_config),
+        **base_eval_config.dict(),
     )
     return config
 
 
 @pytest.fixture
 def custom_answer_eval_config(base_eval_config):
-    base_config = asdict(base_eval_config)
+    base_config = base_eval_config.dict()
     del base_config["answer_format"]
     del base_config["scoring_key"]
     config = CustomPromptAnswerEvaluatorConfig(
-        reasoning_path="tests/data/reasonings.csv",
         prompt="""
 You are an useful assistant for evaluating the quality of the answers generated \
 by RAG Agents. Given the following retrieved documents and a user query, evaluate \
@@ -150,7 +148,7 @@ Agent answer: {answer}
 
 @pytest.fixture
 def expert_retrieval_eval_config(base_eval_config):
-    base_eval_config = asdict(base_eval_config)
+    base_eval_config = base_eval_config.dict()
     del base_eval_config["scoring_key"]
     del base_eval_config["answer_format"]
     return DomainExpertEvaluatorConfig(
@@ -164,7 +162,7 @@ def expert_retrieval_eval_config(base_eval_config):
 
 @pytest.fixture
 def rdnam_config(base_eval_config):
-    base_config = asdict(base_eval_config)
+    base_config = base_eval_config.dict()
     base_config["query_path"] = "tests/data/rdnam_queries.csv"
     return RDNAMEvaluatorConfig(
         annotator_role="You are a search quality rater evaluating the relevance of web pages. ",
@@ -175,7 +173,7 @@ def rdnam_config(base_eval_config):
 
 @pytest.fixture
 def custom_prompt_retrieval_eval_config(base_eval_config):
-    base_eval_config = asdict(base_eval_config)
+    base_eval_config = base_eval_config.dict()
     del base_eval_config["scoring_key"]
     config = CustomPromptEvaluatorConfig(
         prompt="query: {query} doc: {document}",
@@ -208,7 +206,7 @@ def few_shot_retrieval_eval_config(base_eval_config):
         reasoning_placeholder="reasoning",
         relevance_placeholder="relevance",
         few_shots=few_shot_samples,
-        **asdict(base_eval_config),
+        **base_eval_config.dict(),
     )
 
 

@@ -20,7 +20,7 @@ def pairwise_reasoning(
     config.query_path = get_path(config.data_path, config.query_path)
     config.answers_path = get_path(config.data_path, config.answers_path)
     config.output_file = get_path(config.data_path, config.output_file)
-    config.reasoning_path = get_path(config.data_path, config.reasoning_path)
+    config.documents_path = get_path(config.data_path, config.documents_path)
 
     llm_provider = get_llm_provider(config.llm_provider, **kwargs)
     evaluator = get_answer_evaluator(

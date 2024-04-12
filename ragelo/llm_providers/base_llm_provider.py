@@ -1,6 +1,5 @@
 """A LLM provider is a class that can be called with a string and returns with another string as an answer from an LLM model."""
 
-import dataclasses
 import logging
 import os
 from abc import ABC, abstractmethod

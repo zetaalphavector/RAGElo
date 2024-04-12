@@ -38,7 +38,7 @@ class OpenAIProvider(BaseLLMProvider):
         if isinstance(prompt, str):
             prompt = [{"role": "system", "content": prompt}]
         answers = self.__openai_client.chat.completions.create(
-            model=self.config.model_name,
+            model=self.config.model,
             messages=prompt,  # type: ignore
             temperature=temperature,
             max_tokens=max_tokens,

@@ -118,10 +118,6 @@ class BaseEvaluator(ABC):
                 existing_lines.append(line)
         return existing_lines
 
-    @abstractmethod
-    def _construct_list_of_answers(answers: list[dict[str, str]]) -> list[Any]:
-        raise NotImplementedError
-
     def _get_existing_output(self) -> list[dict[str, str]]:
         existing_lines: list[dict[str, str]] = []
         if self.config.force and os.path.exists(self.output_file):
@@ -259,7 +255,6 @@ class BaseEvaluator(ABC):
     def _process_answer(self, answer: str) -> Any:
         """Processes the LLM evaluator output into some serializable format"""
         if self.config.answer_format == AnswerFormat.JSON:
-            assert isinstance(self.config.scoring_key, str)
             return self.json_answer_parser(answer, self.config.scoring_key)
         if self.config.answer_format == AnswerFormat.MULTI_FIELD_JSON:
             assert isinstance(self.config.scoring_key, list)
@@ -281,20 +276,19 @@ class BaseEvaluator(ABC):
         document: Document | str, doc_metadata: Optional[dict[str, Any]] = None
     ) -> Document:
         if isinstance(document, str):
+            did = "<no_did>"
             if doc_metadata:
                 valid_id_fields = ["did", "doc_id", "document_id", "id", "_id"]
                 valid_id_fields = [f for f in valid_id_fields if f in doc_metadata]
                 if valid_id_fields:
                     did = doc_metadata[valid_id_fields[0]]
-                else:
-                    did = "<no_did>"
             document = Document(did=did, text=document)
         document.add_metadata(doc_metadata)
         return document
 
     def _assemble_documents(
         self,
-        documents: list[Document | str],
+        documents: list[str] | list[Document],
         doc_metadata: Optional[list[dict[str, Any]]] = None,
     ) -> list[Document]:
         if doc_metadata:

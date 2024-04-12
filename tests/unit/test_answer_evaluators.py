@@ -75,8 +75,6 @@ class TestCustomPromptEvaluator:
             )
             == 2
         )
-
-        flat_answers = [(q, a) for q in answers_test for a in q.answers]
         for (q, a), args in zip(flat_answers, llm_call_args):
             submitted_query = args[0][0].split("User Query: ")[1].split("\n")[0].strip()
             submitted_answer = (
@@ -92,6 +90,5 @@ def test_get_by_name(llm_provider_pairwise_answer_mock, pairwise_answer_eval_con
     evaluator = get_answer_evaluator(
         "pairwise_reasoning",
         llm_provider_pairwise_answer_mock,
-        reasoning_path=pairwise_answer_eval_config.reasoning_path,
     )
     assert isinstance(evaluator, PairwiseWithReasoningEvaluator)
