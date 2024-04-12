@@ -1,4 +1,5 @@
 import asyncio
+from typing import Awaitable
 
 from aiohttp import ClientError, ClientSession
 from openai import AzureOpenAI, OpenAI
@@ -29,8 +30,6 @@ class OpenAIProvider(BaseLLMProvider):
     def __call__(
         self,
         prompt: str | list[dict[str, str]],
-        temperature: float = 0.1,
-        max_tokens: int = 512,
     ) -> str:
         """Calls the OpenAI API.
 
@@ -44,8 +43,8 @@ class OpenAIProvider(BaseLLMProvider):
         answers = self.__openai_client.chat.completions.create(
             model=self.config.model,
             messages=prompt,  # type: ignore
-            temperature=temperature,
-            max_tokens=max_tokens,
+            temperature=self.config.temperature,
+            max_tokens=self.config.max_tokens,
         )
         if (
             not answers.choices
@@ -59,8 +58,6 @@ class OpenAIProvider(BaseLLMProvider):
         self,
         prompt: str | list[dict[str, str]],
         session: ClientSession,
-        temperature: float = 0.1,
-        max_tokens: int = 512,
     ) -> str:
         """Calls the OpenAI API asynchronously.
 
@@ -75,21 +72,16 @@ class OpenAIProvider(BaseLLMProvider):
         payload = {
             "model": self.config.model,
             "messages": prompt,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
+            "temperature": self.config.temperature,
+            "max_tokens": self.config.max_tokens,
         }
         url = f"{self.__openai_client.base_url}/chat/completions"
-        if self.config.api_type == "azure":
-            headers = {
-                "Authorization": f"Bearer {self.__openai_client.api_key}",
-                "Content-Type": "application/json",
-            }
-        else:
-            headers = {
-                "Authorization": f"Bearer {self.__openai_client.api_key}",
-                "OpenAI-Organization": self.__openai_client.organization,
-                "Content-Type": "application/json",
-            }
+        headers = {
+            "Authorization": f"Bearer {self.__openai_client.api_key}",
+            "Content-Type": "application/json",
+        }
+        if self.__openai_client.organization:
+            headers["OpenAI-Organization"] = self.__openai_client.organization
         while retries < self.config.max_retries:
             try:
                 async with session.post(url, json=payload, headers=headers) as response:

@@ -7,6 +7,8 @@ class LLMProviderConfig(BaseModel):
     api_key: str
     max_retries: int = 3
     sleep_time: int = 2
+    temperature: float = 0.1
+    max_tokens: int = 512
 
 
 class OpenAIConfiguration(LLMProviderConfig):

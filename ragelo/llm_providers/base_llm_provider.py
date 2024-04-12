@@ -36,7 +36,7 @@ class BaseLLMProvider(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def call_async(
+    async def call_async(
         self,
         prompt: str | list[dict[str, str]],
         session: ClientSession,

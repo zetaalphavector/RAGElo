@@ -7,7 +7,7 @@ import asyncio
 # import dataclasses
 from typing import Any, Callable, Optional, Type, get_type_hints
 
-from aiohttp import ClientError, ClientSession
+from aiohttp import ClientSession
 from tenacity import RetryError
 from tqdm.auto import tqdm
 
@@ -78,20 +78,18 @@ class BaseRetrievalEvaluator(BaseEvaluator):
     async def __fetch_chunk(
         self, chunk: list[tuple[Query, Document]]
     ) -> list[RetrievalEvaluatorResult]:
+        qids = []
+        dids = []
         async with ClientSession() as session:
             tasks = []
             for query, document in chunk:
                 message = self._build_message(query, document)
-                tasks.append(
-                    (
-                        query.qid,
-                        document.did,
-                        self.llm_provider.call_async(message, session),
-                    )
-                )
+                qids.append(query.qid)
+                dids.append(document.did)
+                tasks.append(self.llm_provider.call_async(message, session))
             raw_answers = await asyncio.gather(*tasks)
             parsed_answers = []
-            for qid, did, raw_answer in raw_answers:
+            for qid, did, raw_answer in zip(qids, dids, raw_answers):
                 try:
                     answer = self._process_answer(raw_answer)
                 except ValueError:
@@ -124,7 +122,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         # Each chunk will be processed using asyncio to fetch
         # the answers in parallel
         chunks = [
-            tuples_to_eval[i : i + self.config.n_processes]
+            tuples_to_eval[i : i + self.config.n_processes]  # noqa
             for i in range(0, len(tuples_to_eval), self.config.n_processes)
         ]
         pbar = tqdm(
