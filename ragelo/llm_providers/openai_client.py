@@ -1,5 +1,4 @@
 import asyncio
-from typing import Awaitable
 
 from aiohttp import ClientError, ClientSession
 from openai import AzureOpenAI, OpenAI
