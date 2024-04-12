@@ -1,4 +1,4 @@
-from enum import Enum
+from enum import StrEnum
 from typing import Any, Optional
 
 from pydantic import BaseModel
@@ -6,7 +6,15 @@ from pydantic import BaseModel
 from ragelo.logger import logger
 
 
-class RetrievalEvaluatorTypes(str, Enum):
+class AnswerFormat(StrEnum):
+    """Enum that contains the names of the available answer formats"""
+
+    JSON = "json"
+    TEXT = "text"
+    MULTI_FIELD_JSON = "multi_field_json"
+
+
+class RetrievalEvaluatorTypes(StrEnum):
     """Enum that contains the names of the available retrieval evaluators"""
 
     CUSTOM_PROMPT = "custom_prompt"
@@ -16,17 +24,26 @@ class RetrievalEvaluatorTypes(str, Enum):
     REASONER = "reasoner"
 
 
-class LLMProviderTypes(str, Enum):
+class LLMProviderTypes(StrEnum):
     """Enum that contains the names of the available LLM providers"""
 
     OPENAI = "openai"
 
 
-class AnswerEvaluatorTypes(str, Enum):
+class AnswerEvaluatorTypes(StrEnum):
     """Enum that contains the names of the available answer evaluators"""
 
     PAIRWISE_REASONING = "pairwise_reasoning"
     CUSTOM_PROMPT = "custom_prompt"
+
+
+class FewShotExample(BaseModel):
+    """A few-shot example."""
+
+    passage: str
+    query: str
+    relevance: int
+    reasoning: str
 
 
 class Document(BaseModel):

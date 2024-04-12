@@ -18,17 +18,17 @@ from ragelo.types import (
     RetrievalEvaluatorResult,
     RetrievalEvaluatorTypes,
 )
-from ragelo.types.configurations import BaseEvaluatorConfig
+from ragelo.types.configurations import BaseRetrievalEvaluatorConfig
 
 
 class BaseRetrievalEvaluator(BaseEvaluator):
-    config: BaseEvaluatorConfig
+    config: BaseRetrievalEvaluatorConfig
     output_columns: list[str] = ["qid", "did", "raw_answer", "answer"]
     output_file: str = "retrieval_evaluations.csv"
 
     def __init__(
         self,
-        config: BaseEvaluatorConfig,
+        config: BaseRetrievalEvaluatorConfig,
         llm_provider: BaseLLMProvider,
     ):
         self.config = config
@@ -143,11 +143,13 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         raise NotImplementedError
 
     @classmethod
-    def from_config(cls, config: BaseEvaluatorConfig, llm_provider: BaseLLMProvider):
+    def from_config(
+        cls, config: BaseRetrievalEvaluatorConfig, llm_provider: BaseLLMProvider
+    ):
         return cls(config, llm_provider)
 
     @classmethod
-    def get_config_class(cls) -> Type[BaseEvaluatorConfig]:
+    def get_config_class(cls) -> Type[BaseRetrievalEvaluatorConfig]:
         return get_type_hints(cls)["config"]
 
     @staticmethod
@@ -177,7 +179,7 @@ class RetrievalEvaluatorFactory:
         cls,
         evaluator_name: RetrievalEvaluatorTypes | str,
         llm_provider: BaseLLMProvider | str,
-        config: Optional[BaseEvaluatorConfig] = None,
+        config: Optional[BaseRetrievalEvaluatorConfig] = None,
         **kwargs,
     ) -> BaseRetrievalEvaluator:
         if isinstance(llm_provider, str):
@@ -201,7 +203,7 @@ class RetrievalEvaluatorFactory:
 def get_retrieval_evaluator(
     evaluator_name: RetrievalEvaluatorTypes | str,
     llm_provider: BaseLLMProvider | str,
-    config: Optional[BaseEvaluatorConfig] = None,
+    config: Optional[BaseRetrievalEvaluatorConfig] = None,
     **kwargs,
 ) -> BaseRetrievalEvaluator:
     return RetrievalEvaluatorFactory.create(
