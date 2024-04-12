@@ -112,10 +112,12 @@ def base_eval_config():
 
 @pytest.fixture
 def pairwise_answer_eval_config(base_eval_config):
+    base_config = base_eval_config.dict()
+    del base_config["documents_path"]
     config = PairwiseEvaluatorConfig(
         documents_path="tests/data/reasonings.csv",
         bidirectional=False,
-        **base_eval_config.dict(),
+        **base_config,
     )
     return config
 
