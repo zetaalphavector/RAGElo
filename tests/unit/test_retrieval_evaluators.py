@@ -323,7 +323,7 @@ WRITE YOUR ANSWER ON A SINGLE LINE AS A JSON OBJECT WITH THE FOLLOWING KEYS:
             prompt=prompt,
             query_placeholder="q",
             document_placeholder="d",
-            scoring_key=["relevance", "recency", "truthfulness", "reasoning"],
+            scoring_keys=["relevance", "recency", "truthfulness", "reasoning"],
             answer_format="multi_field_json",
         )
 

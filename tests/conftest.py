@@ -125,8 +125,8 @@ def pairwise_answer_eval_config(base_eval_config):
 @pytest.fixture
 def custom_answer_eval_config(base_eval_config):
     base_config = base_eval_config.model_dump()
-    del base_config["answer_format"]
-    del base_config["scoring_key"]
+    base_config["answer_format"] = "multi_field_json"
+    base_config["scoring_keys"] = ["quality", "trustworthiness", "originality"]
     config = CustomPromptAnswerEvaluatorConfig(
         prompt="""
 You are an useful assistant for evaluating the quality of the answers generated \
@@ -142,7 +142,6 @@ User Query: {query}
 
 Agent answer: {answer}
 """.strip(),
-        answer_format="multi_field_json",
         **base_config,
     )
     return config

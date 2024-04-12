@@ -1,5 +1,4 @@
 import csv
-import enum
 import json
 import os
 import string
@@ -72,13 +71,13 @@ class BaseEvaluator(ABC):
             except json.JSONDecodeError:
                 pass
 
-        if len(parsed_answer) != len(keys):
+        valid_keys = set(parsed_answer.keys()).intersection(keys)
+        if len(valid_keys) != len(keys):
             raise ValueError(
                 "Answer does not contain all necessary keys\n"
-                f"Expected {keys}, found {parsed_answer.keys()}.\n"
+                f"Expected {keys}, found {valid_keys}.\n"
                 f"Full Answer:\n{answer}"
             )
-        # Assumes the valid JSON object is the last one
         return parsed_answer
 
     @staticmethod
@@ -258,8 +257,7 @@ class BaseEvaluator(ABC):
         if self.config.answer_format == AnswerFormat.JSON:
             return self.json_answer_parser(answer, self.config.scoring_key)
         if self.config.answer_format == AnswerFormat.MULTI_FIELD_JSON:
-            assert isinstance(self.config.scoring_key, list)
-            return self.json_answer_parser_multifields(answer, self.config.scoring_key)
+            return self.json_answer_parser_multifields(answer, self.config.scoring_keys)
         if self.config.answer_format == AnswerFormat.TEXT:
             return answer
 
@@ -302,9 +300,8 @@ class BaseEvaluator(ABC):
                 raise ValueError(
                     "The number of documents and document metadata do not match"
                 )
-            assembled_docs = [
-                d.add_metadata(m) for d, m in zip(assembled_docs, doc_metadata)
-            ]
+            for d, m in zip(assembled_docs, doc_metadata):
+                d.add_metadata(m)
         return assembled_docs
 
     @staticmethod

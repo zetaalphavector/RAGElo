@@ -67,20 +67,20 @@ WRITE YOUR ANSWER ON A SINGLE LINE AS A JSON OBJECT WITH THE FOLLOWING KEYS:
 """
 
 evaluator = get_retrieval_evaluator(
-    "custom_prompt",
-    llm_provider="openai",
-    prompt=prompt,
-    query_placeholder="q",
-    document_placeholder="d",
-    scoring_key=["relevance", "recency", "truthfulness", "reasoning"],
-    answer_format="multi_field_json",
+    "custom_prompt", # name of the retrieval evaluator
+    llm_provider="openai", # Which LLM provider to use
+    prompt=prompt, # your custom prompt
+    query_placeholder="q", # the placeholder for the query in the prompt
+    document_placeholder="d", # the placeholder for the document in the prompt
+    answer_format="multi_field_json", # The format of the answer. In this case, a JSON object with multiple fields
+    scoring_keys=["relevance", "recency", "truthfulness", "reasoning"], # Which keys to extract from the answer
 )
 
 raw_answer, answer = evaluator.evaluate(
-    query="What is the capital of Brazil?",
-    document="Rio de Janeiro is the capital of Brazil.",
-    query_metadata={"today_date": "08-04-2024"},
-    doc_metadata={"document_date": "04-03-1950"},
+    query="What is the capital of Brazil?", # The user query
+    document="Rio de Janeiro is the capital of Brazil.", # The retrieved document
+    query_metadata={"today_date": "08-04-2024"}, # Some metadata for the query
+    doc_metadata={"document_date": "04-03-1950"}, # Some metadata for the document
 )
 
 answer
