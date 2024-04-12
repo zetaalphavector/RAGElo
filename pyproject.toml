@@ -58,7 +58,14 @@ plugins = ["pydantic.mypy"]
 python_version = "3.11"
 show_column_numbers = true
 namespace_packages = true
+follow_imports = "silent"
+warn_redundant_casts = true
+warn_unused_ignores = true
+disallow_any_generics = true
+check_untyped_defs = true
+no_implicit_reexport = true
 exclude = ["build/", "dist/", "venv/"]
+
 
 [tool.flake8]
 ignore = ['E501', "W503"]
