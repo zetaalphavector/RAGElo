@@ -227,7 +227,7 @@ class BaseEvaluator(ABC):
             self._print_response(response, self.config.rich_print)
         if not self.config.write_output:
             return
-        answer_dict = response.dict()
+        answer_dict = response.model_dump()
         if isinstance(answer_dict["answer"], dict):
             # flatten the dict into the main dict
             for k, v in answer_dict["answer"].items():

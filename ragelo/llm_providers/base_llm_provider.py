@@ -77,7 +77,7 @@ class LLMProviderFactory:
         if config is None:
             class_ = cls.registry[name]
             type_config = class_.get_config_class()
-            valid_keys = [field for field in type_config.__fields__]
+            valid_keys = [field for field in type_config.model_fields]
             if "api_key" not in kwargs:
                 api_key = os.environ.get(class_.api_key_env_var)
                 if not api_key:

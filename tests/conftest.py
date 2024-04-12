@@ -112,7 +112,7 @@ def base_eval_config():
 
 @pytest.fixture
 def pairwise_answer_eval_config(base_eval_config):
-    base_config = base_eval_config.dict()
+    base_config = base_eval_config.model_dump()
     del base_config["documents_path"]
     config = PairwiseEvaluatorConfig(
         documents_path="tests/data/reasonings.csv",
@@ -124,7 +124,7 @@ def pairwise_answer_eval_config(base_eval_config):
 
 @pytest.fixture
 def custom_answer_eval_config(base_eval_config):
-    base_config = base_eval_config.dict()
+    base_config = base_eval_config.model_dump()
     del base_config["answer_format"]
     del base_config["scoring_key"]
     config = CustomPromptAnswerEvaluatorConfig(
@@ -150,7 +150,7 @@ Agent answer: {answer}
 
 @pytest.fixture
 def expert_retrieval_eval_config(base_eval_config):
-    base_eval_config = base_eval_config.dict()
+    base_eval_config = base_eval_config.model_dump()
     del base_eval_config["scoring_key"]
     del base_eval_config["answer_format"]
     return DomainExpertEvaluatorConfig(
@@ -164,7 +164,7 @@ def expert_retrieval_eval_config(base_eval_config):
 
 @pytest.fixture
 def rdnam_config(base_eval_config):
-    base_config = base_eval_config.dict()
+    base_config = base_eval_config.model_dump()
     base_config["query_path"] = "tests/data/rdnam_queries.csv"
     return RDNAMEvaluatorConfig(
         annotator_role="You are a search quality rater evaluating the relevance of web pages. ",
@@ -175,7 +175,7 @@ def rdnam_config(base_eval_config):
 
 @pytest.fixture
 def custom_prompt_retrieval_eval_config(base_eval_config):
-    base_eval_config = base_eval_config.dict()
+    base_eval_config = base_eval_config.model_dump()
     del base_eval_config["scoring_key"]
     config = CustomPromptEvaluatorConfig(
         prompt="query: {query} doc: {document}",
@@ -208,7 +208,7 @@ def few_shot_retrieval_eval_config(base_eval_config):
         reasoning_placeholder="reasoning",
         relevance_placeholder="relevance",
         few_shots=few_shot_samples,
-        **base_eval_config.dict(),
+        **base_eval_config.model_dump(),
     )
 
 

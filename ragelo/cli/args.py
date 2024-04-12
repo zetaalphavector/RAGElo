@@ -33,7 +33,7 @@ def get_params_from_function(func: Callable[..., Any]) -> dict[str, ParamMeta]:
         if param.name in type_hints:
             annotation = type_hints[param.name]
         if inspect.isclass(annotation) and issubclass(annotation, pydantic.BaseModel):
-            fields = annotation.__fields__
+            fields = annotation.model_fields
             for k, v in fields.items():
                 # k, v) in enumerate(dct.items()):
                 _type = v.type_
