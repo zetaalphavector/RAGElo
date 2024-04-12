@@ -1,9 +1,5 @@
-from openai.types.chat.chat_completion import (
-    ChatCompletion,
-    ChatCompletionMessage,
-    Choice,
-)
-from pytest import MonkeyPatch
+from openai.types.chat.chat_completion import ChatCompletion, Choice
+from openai.types.chat.chat_completion_message import ChatCompletionMessage
 
 from ragelo import get_llm_provider
 from ragelo.llm_providers.openai_client import OpenAIProvider
