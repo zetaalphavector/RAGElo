@@ -194,7 +194,7 @@ class RetrievalEvaluatorFactory:
         if config is None:
             class_ = cls.registry[evaluator_name]
             type_config = class_.get_config_class()
-            valid_keys = [field for field in type_config.model_fields]
+            valid_keys = [field for field in type_config.get_model_fields()]
             valid_args = {k: v for k, v in kwargs.items() if k in valid_keys}
             config = type_config(**valid_args)
         return cls.registry[evaluator_name].from_config(config, llm_provider_instance)

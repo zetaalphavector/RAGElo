@@ -1,9 +1,8 @@
 from typing import List, Optional
 
-from pydantic import Field
-
-from ragelo.types.configurations.base_configs import BaseEvaluatorConfig
-from ragelo.types.types import AnswerFormat, FewShotExample
+from ragelo.pydantic_v1 import Field
+from ragelo.types.configurations.base_configs import AnswerFormat, BaseEvaluatorConfig
+from ragelo.types.types import FewShotExample
 
 
 class BaseRetrievalEvaluatorConfig(BaseEvaluatorConfig):

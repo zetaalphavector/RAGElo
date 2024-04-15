@@ -5,7 +5,7 @@ import logging
 import os
 from collections import defaultdict
 
-from ragelo.types import AgentAnswer, Document, Query
+from ragelo.types.types import AgentAnswer, Document, Query
 
 
 def load_queries_from_csv(
