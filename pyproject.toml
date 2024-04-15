@@ -24,7 +24,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: System :: Benchmark",
 ]
-dependencies = ["openai>=1.10", "tenacity", "typer", "numpy", "pydantic>=2.7"]
+dependencies = ["openai>=1.10", "tenacity", "typer", "numpy", "pydantic>=1.9"]
 
 [project.optional-dependencies]
 cli = ["typer[all]"]
@@ -38,6 +38,7 @@ dev = [
     "mypy==1.9.0",
     "Flake8-pyproject==1.2.3",
     "types-tqdm==4.66.0",
+    "pydantic==2.7.0",
 ]
 
 [project.scripts]
