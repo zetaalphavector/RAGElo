@@ -37,14 +37,14 @@ def get_params_from_function(func: Callable[..., Any]) -> dict[str, ParamMeta]:
         if inspect.isclass(annotation) and issubclass(annotation, BaseConfig):
             fields = annotation.get_model_fields()
             for k, v in fields.items():
+                if _PYDANTIC_MAJOR_VERSION == 2:
+                    description = v.description  # type: ignore
+                    _type = v.annotation
+                else:
+                    description = v.field_info.description  # type: ignore
+                    _type = v.type_
                 if not isinstance(v, ParameterInfo):
                     # get the description from Pydantic model
-                    if _PYDANTIC_MAJOR_VERSION == 2:
-                        description = v.description  # type: ignore
-                        _type = v.annotation
-                    else:
-                        description = v.field_info.description  # type: ignore
-                        _type = v.type_
                     if k in arguments:
                         argument = ArgumentInfo(default=v.default, help=description)
                         params[k] = ParamMeta(
