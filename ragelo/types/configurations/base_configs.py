@@ -1,8 +1,11 @@
+from importlib import metadata
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
-from ragelo.types.types import AnswerFormat
+from ragelo.types.types import AnswerFormat, BaseModel
+
+_PYDANTIC_MAJOR_VERSION: int = int(metadata.version("pydantic").split(".")[0])
 
 
 class BaseConfig(BaseModel):

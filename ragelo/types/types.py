@@ -1,9 +1,27 @@
 from enum import StrEnum
+from importlib import metadata
 from typing import Any, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel as PydanticBaseModel
 
 from ragelo.logger import logger
+
+_PYDANTIC_MAJOR_VERSION: int = int(metadata.version("pydantic").split(".")[0])
+
+
+class BaseModel(PydanticBaseModel):
+    @classmethod
+    def get_model_fields(cls):
+        if _PYDANTIC_MAJOR_VERSION == 1:
+            return cls.__fields__  # type: ignore
+        else:
+            return cls.model_fields  # type: ignore
+
+    def model_dump(self):
+        if _PYDANTIC_MAJOR_VERSION == 1:
+            return self.dict()  # type: ignore
+        else:
+            return super().model_dump()  # type: ignore
 
 
 class AnswerFormat(StrEnum):
