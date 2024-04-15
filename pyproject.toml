@@ -61,7 +61,6 @@ show_column_numbers = true
 namespace_packages = true
 follow_imports = "silent"
 warn_redundant_casts = true
-
 check_untyped_defs = true
 implicit_reexport = true
 exclude = ["build/", "dist/", "venv/"]
