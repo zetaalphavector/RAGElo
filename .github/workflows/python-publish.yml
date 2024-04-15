@@ -21,10 +21,10 @@ jobs:
     environment:
       # Production pypi
       # name: pypi
-      # url: https://pypi.org/p/<package-name>
+      # url: https://pypi.org/p/ragelo
       # Testing pypi
       name: testpypi
-      url: https://test.pypi.org/p/<package-name>
+      url: https://test.pypi.org/p/ragelo
     permissions:
       id-token: write  # IMPORTANT: mandatory for trusted publishing
     steps:
