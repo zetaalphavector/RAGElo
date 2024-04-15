@@ -9,8 +9,8 @@ from ragelo.types import AgentAnswer, Document, Query
 
 
 def load_queries_from_csv(
-    queries_path: str, query_id_col: str = "query_id", query_text_col: str = "query"
-) -> dict[str, Query]:
+    queries_path: str, query_id_col: str = "qid", query_text_col: str = "query"
+) -> list[Query]:
     """Loads the queries from a CSV file and returns a dictionary with the queries.
         The CSV file should have a header with the columns 'query_id' and 'query'.
         The key is the query id and the value is the query object.
@@ -20,30 +20,41 @@ def load_queries_from_csv(
         query_id_col (str): Name of the column with the query id. Defaults to 'query_id'.
         query_text_col (str): Name of the column with the query text. Defaults to 'query'.
     Returns:
-        dict[str, Query]: Dictionary with the queries.
+        list[Query]: List of queries.
 
     """
-    queries = {}
+    queries = []
+    read_queries = set()
     if not os.path.isfile(queries_path):
         raise FileNotFoundError(f"Queries file {queries_path} not found")
-
-    for line in csv.DictReader(open(queries_path)):
-        qid = line[query_id_col].strip()
-        query_text = line[query_text_col].strip()
-        queries[qid] = Query(qid, query_text)
+    with open(queries_path) as f:
+        reader = csv.DictReader(f)
+        for line in reader:
+            qid = line[query_id_col].strip()
+            query_text = line[query_text_col].strip()
+            extra_metadata = {
+                k: v for k, v in line.items() if k not in [query_id_col, query_text_col]
+            }
+            if qid in read_queries:
+                logging.warning(f"Query {qid} already read. Skipping")
+                continue
+            queries.append(
+                Query(qid=qid, query=query_text, metadata=extra_metadata or None)
+            )
+            read_queries.add(qid)
     logging.info(f"Loaded {len(queries)} queries")
 
     return queries
 
 
-def load_documents_from_csv(
+def load_retrieved_docs_from_csv(
     documents_path: str,
-    queries: dict[str, Query] | str,
-    query_id_col: str = "query_id",
-    document_id_col: str = "doc_id",
+    queries: list[Query] | str,
+    query_id_col: str = "qid",
+    document_id_col: str = "did",
     document_text_col: str = "document_text",
-) -> dict[str, dict[str, Document]]:
-    """Loads documents from a CSV and returns a dictionary with their content.
+) -> list[Query]:
+    """Loads a list of retrieved documents for each query.
 
     Args:
         documents_path (str): Path to the CSV file with the documents.
@@ -52,44 +63,49 @@ def load_documents_from_csv(
             loaded. Defaults to None.
         query_id_col (str): Name of the column with the query id. Defaults to 'query_id'.
         document_id_col (str): Name of the column with the document id.
-            Defaults to 'doc_id'.
+            Defaults to 'did'.
         document_text_col (str): Name of the column with the document text.
             Defaults to 'document_text'.
 
     Returns:
-        dict[str, dict[str, Document]]: Dictionary mapping a qid to its documents.
+        list[Query]: A list of queries with the retrieved documents.
 
     """
-    documents: dict[str, dict[str, Document]] = {}
     documents_read = 0
     if not os.path.isfile(documents_path):
         raise FileNotFoundError(f"Documents file {documents_path} not found")
     if isinstance(queries, str):
         queries = load_queries_from_csv(queries)
+    queries_dict = {q.qid: q for q in queries}
 
     for line in csv.DictReader(open(documents_path)):
         qid = line[query_id_col].strip()
         did = line[document_id_col].strip()
         text = line[document_text_col].strip()
-        if qid not in queries:
+        extra_metadata = {
+            k: v
+            for k, v in line.items()
+            if k not in [query_id_col, document_id_col, document_text_col]
+        }
+        if qid not in queries_dict:
+            logging.info(f"Query {qid} not in the provided queries. Skipping")
             continue
-        if qid not in documents:
-            documents[qid] = {}
-        documents[qid][did] = Document(did=did, text=text, query=queries[qid])
+        doc = Document(did=did, text=text, metadata=extra_metadata or None)
+        queries_dict[qid].retrieved_docs.append(doc)
         documents_read += 1
     logging.info(f"Loaded {documents_read} documents")
-    return documents
+    return list(queries_dict.values())
 
 
-def load_documents_from_run_file(
+def load_retrieved_docs_from_run_file(
     run_file_path: str,
     documents_path: str,
-    queries: dict[str, Query] | str,
+    queries: list[Query] | str,
     document_id_col: str = "document_id",
     document_text_col: str = "document_text",
-) -> dict[str, dict[str, Document]]:
+) -> list[Query]:
     """Loads documents based on a TREC-formatted run file and a CSV with the documents."""
-    documents: dict[str, dict[str, Document]] = defaultdict(dict)
+
     documents_read = 0
     if not os.path.isfile(run_file_path):
         raise FileNotFoundError(f"Run file {run_file_path} not found")
@@ -99,10 +115,12 @@ def load_documents_from_run_file(
     query_per_doc = defaultdict(set)
     if isinstance(queries, str):
         queries = load_queries_from_csv(queries)
+    queries_dict = {q.qid: q for q in queries}
 
     for _line in open(run_file_path, "r"):
         qid, _, did, _, _, _ = _line.strip().split()
-        if qid not in queries:
+        if qid not in queries_dict:
+            logging.info(f"Query {qid} not in the provided queries. Skipping")
             continue
         query_per_doc[did].add(qid)
 
@@ -112,20 +130,19 @@ def load_documents_from_run_file(
             continue
         text = line[document_text_col].strip()
         for qid in query_per_doc[did]:
-            documents[qid][did] = Document(did=did, text=text, query=queries[qid])
+            queries_dict[qid].retrieved_docs.append(Document(did=did, text=text))
             documents_read += 1
     logging.info(f"Loaded {documents_read} documents")
-
-    return documents
+    return list(queries_dict.values())
 
 
 def load_answers_from_csv(
     answers_path: str,
-    queries: dict[str, Query] | str,
-    query_id_col: str = "query_id",
+    queries: list[Query] | str,
+    query_id_col: str = "qid",
     agent_col: str = "agent",
     answer_col: str = "answer",
-) -> dict[str, list[AgentAnswer]]:
+) -> list[Query]:
     # ) -> dict[str, dict[str, str]]:
     """Loads all answers and agents from an answers CSV file.
     Args:
@@ -135,20 +152,27 @@ def load_answers_from_csv(
         agent_col (str): Name of the column with the agent. Defaults to 'agent'.
         answer_col (str): Name of the column with the answer. Defaults to 'answer'.
     Returns:
-        dict[str, list[AgentAnswer]]: Dictionary with the answers for each query.
+        list[Query]: A list of queries with the answers.
     """
-    answers: dict[str, list[AgentAnswer]] = defaultdict(list)
+
     if not os.path.isfile(answers_path):
         raise FileNotFoundError(f"Answers file {answers_path} not found")
     if isinstance(queries, str):
         queries = load_queries_from_csv(queries)
+    queries_dict = {q.qid: q for q in queries}
+
     for line in csv.DictReader(open(answers_path)):
         qid = line[query_id_col]
-        if qid not in queries:
+        if qid not in queries_dict:
             raise ValueError(f"Unknown query id {qid}")
-        query = queries[qid]
         agent = line[agent_col].strip()
         answer = line[answer_col].strip()
-        answers[qid].append(AgentAnswer(query, agent, answer))
+        extra_metadata = {
+            k: v
+            for k, v in line.items()
+            if k not in [query_id_col, agent_col, answer_col]
+        }
+        answer = AgentAnswer(agent=agent, text=answer, metadata=extra_metadata or None)
+        queries_dict[qid].answers.append(answer)
 
-    return dict(answers)
+    return list(queries_dict.values())

@@ -1,12 +1,7 @@
 """Base model for dealing with answer evaluators"""
 
-import csv
-import dataclasses
-import logging
-import os
 from abc import abstractmethod
-from collections import defaultdict
-from typing import Callable, Optional, Sequence, Type, get_type_hints
+from typing import Any, Callable, Optional, Type, get_type_hints
 
 from tenacity import RetryError
 from tqdm import tqdm
@@ -14,15 +9,22 @@ from tqdm import tqdm
 from ragelo.evaluators.base_evaluator import BaseEvaluator
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
 from ragelo.logger import logger
-from ragelo.types import AgentAnswer, AnswerEvaluatorTypes
+from ragelo.types import (
+    AgentAnswer,
+    AnswerEvaluatorResult,
+    AnswerEvaluatorTypes,
+    AnswerFormat,
+    Document,
+    Query,
+)
 from ragelo.types.configurations import BaseAnswerEvaluatorConfig
+from ragelo.utils import load_retrieved_docs_from_csv
 
 
 class BaseAnswerEvaluator(BaseEvaluator):
-    output_columns = ["query_id", "agent", "raw_answer", "answer"]
     config: BaseAnswerEvaluatorConfig
+    output_columns = ["qid", "agent", "raw_answer", "answer"]
     output_file: str = "answers_evaluations.csv"
-    tuple_columns: list[str] = ["query_id", "agent"]
 
     def __init__(
         self,
@@ -33,7 +35,112 @@ class BaseAnswerEvaluator(BaseEvaluator):
         self.llm_provider = llm_provider
         if config.output_file is not None:
             self.output_file = config.output_file
-        self.reasonings = self._load_reasonings(self.config.reasoning_path)
+        if config.answer_format == AnswerFormat.MULTI_FIELD_JSON:
+            if isinstance(config.scoring_key, str):
+                scoring_keys = [config.scoring_key]
+            else:
+                scoring_keys = config.scoring_key
+            self.output_columns = ["qid", "agent", "raw_answer"] + scoring_keys
+
+    def batch_evaluate(self, queries: list[Query]) -> list[AnswerEvaluatorResult]:
+        use_progress_bar = self.config.verbose
+        failed_evaluations = 0
+        evaluations = [AnswerEvaluatorResult(**x) for x in self._get_existing_output()]
+        skip_tuples = {(x.qid, x.agent) for x in evaluations}
+        tuples_to_eval = []
+        all_tuples = 0
+        queries = self._add_retrieved_documents_to_queries(
+            queries, self.config.documents_path
+        )
+        for query in queries:
+            for agent_answer in query.answers:
+                qid = query.qid
+                agent = agent_answer.agent
+                all_tuples += 1
+                if (qid, agent) in skip_tuples:
+                    logger.debug(f"Skipping {qid} {agent}")
+                    continue
+                tuples_to_eval.append((query, agent_answer))
+        if len(tuples_to_eval) == 0:
+            logger.info("All answers have been evaluated")
+            if self.config.verbose:
+                print(
+                    f"All {all_tuples} answers are already evaluated.\n"
+                    "If you want to re-evaluate them, use the force flag"
+                )
+            return evaluations
+
+        for query, agent_answer in tqdm(
+            tuples_to_eval,
+            desc="Annotating Answers",
+            disable=not use_progress_bar,
+            ncols=100,
+            leave=False,
+            position=0,
+        ):
+            qid = query.qid
+            agent = agent_answer.agent
+            try:
+                raw_answer, answer = self.evaluate(query, agent_answer)
+            except (RetryError, ValueError):
+                failed_evaluations += 1
+                continue
+            evaluations.append(
+                AnswerEvaluatorResult(
+                    qid=qid, agent=agent, raw_answer=raw_answer, answer=answer
+                )
+            )
+            self._dump_response(evaluations[-1], self.output_columns, self.output_file)
+        if self.config.verbose:
+            print("✅ Done!")
+            print(f"Unparsed answers: {failed_evaluations}")
+            print(f"Total evaluations: {len(evaluations)}")
+        return evaluations
+
+    def evaluate(
+        self,
+        query: Query | str,
+        answer: AgentAnswer | str,
+        retrieved_documents: Optional[list[str] | list[Document]] = None,
+        document_metadata: Optional[list[dict[str, Any]]] = None,
+        query_metadata: Optional[dict[str, Any]] = None,
+        answer_metadata: Optional[dict[str, Any]] = None,
+    ) -> tuple[str, Any]:
+        query = self._assemble_query(query, query_metadata)
+        answer = self._assemble_answer(answer, answer_metadata)
+        if isinstance(retrieved_documents, str):
+            retrieved_documents = [retrieved_documents]
+        if retrieved_documents:
+            retrieved_and_assembled_docs = self._assemble_documents(
+                retrieved_documents, document_metadata
+            )
+            query.retrieved_docs = retrieved_and_assembled_docs
+
+        message = self._build_message(query, answer)
+        try:
+            raw_answer = self.llm_provider(message)
+        except RetryError as e:
+            logger.warning(
+                f"Failed to fetch answer for qid: {query.qid} agent: {answer.agent}"
+            )
+            raise e
+        try:
+            processed_answer = self._process_answer(raw_answer)
+
+        except ValueError as e:
+            logger.warning(
+                f"Failed to parse answer for qid: {query.qid} agent: {answer.agent}"
+                f"Full answer: {raw_answer}"
+            )
+            raise e
+        return raw_answer, processed_answer
+
+    @abstractmethod
+    def _build_message(
+        self, query: Query, answer: AgentAnswer
+    ) -> str | list[dict[str, str]]:
+        """Builds the message to send to the LLM evaluator"""
+        raise NotImplementedError
 
     @classmethod
     def from_config(
@@ -41,172 +148,43 @@ class BaseAnswerEvaluator(BaseEvaluator):
     ):
         return cls(config, llm_provider)
 
-    def run(self, answers: dict[str, list[AgentAnswer]]) -> list[dict[str, str]]:
-        use_progress_bar = self.config.verbose
-        unparsed_answers = 0
-        skip_tuples = self._get_skip_tuples()
-        evaluations: list[dict[str, str]] = []
-        for qid in tqdm(
-            answers,
-            desc="Annotating Answers",
-            disable=not use_progress_bar,
-            ncols=100,
-            leave=False,
-        ):
-            for answer in tqdm(
-                answers[qid],
-                desc=qid,
-                disable=not use_progress_bar,
-                ncols=100,
-                leave=False,
-            ):
-                if (qid, answer.agent) in skip_tuples:
-                    logging.debug(f"Skipping {qid} {answer.agent}")
-                    continue
-                try:
-                    answer_dict = self.evaluate_single_sample(answer)
-                except RetryError:
-                    continue
-                except ValueError:
-                    unparsed_answers += 1
-                    continue
-                self._dump_response(answer_dict)
-                evaluations.append(answer_dict)
-        if self.config.verbose:
-            print("✅ Done!")
-            print(f"Unparsed answers: {unparsed_answers}")
-            print(f"Total evaluations: {len(evaluations)}")
-        return evaluations
-
-    def evaluate_single_sample(self, answer) -> dict[str, str]:
-        message = self._build_message(answer)
-        try:
-            raw_answer = self.llm_provider(message)
-        except RetryError as e:
-            logger.warning(
-                f"Failed to get answer for {answer.query.qid} {answer.agent}"
-            )
-            raise e
-        try:
-            processed_answer = self._process_answer(raw_answer)
-
-        except ValueError as e:
-            logger.error(
-                f"Failed to parse answer for {answer.query.qid} {answer.agent}"
-                f"Full answer: {raw_answer}"
-            )
-            raise e
-        if isinstance(processed_answer, dict):
-            return {
-                "query_id": answer.query.qid,
-                "agent": answer.agent,
-                "raw_answer": raw_answer,
-                **processed_answer,
-            }
-        return {
-            "query_id": answer.query.qid,
-            "agent": answer.agent,
-            "raw_answer": raw_answer,
-            "answer": processed_answer,
-        }
-
-    def _get_skip_tuples(self) -> set[Sequence[str]]:
-        skip_tuples: set[Sequence[str]] = set()
-        if self.config.force and os.path.exists(self.output_file):
-            logging.warning(f"Removing existing {self.output_file}!")
-            os.remove(self.output_file)
-
-        if os.path.isfile(self.output_file):
-            line: dict[str, str]
-            with open(self.output_file, "r") as f:
-                reader = csv.DictReader(f, fieldnames=self.output_columns)
-                for line in reader:
-                    skip_tuples.add(tuple(line[col] for col in self.tuple_columns))
-        if len(skip_tuples) > 0:
-            logging.warning(
-                f"Skipping {len(skip_tuples)} games already evaluated! "
-                "If you want to re-evaluate them, please use the --force flag"
-            )
-        return skip_tuples
-
-    @abstractmethod
-    def _build_message(self, answer) -> str:
-        """Builds the message to send to the LLM evaluator"""
-        raise NotImplementedError
-
-    @abstractmethod
-    def _process_answer(self, answer: str) -> str | dict[str, str]:
-        """Processes the LLM evaluator output into some serializable format"""
-        raise NotImplementedError
-
-    def _dump_response(self, answer_dict: dict[str, str], file: Optional[str] = None):
-        self._print_response(answer_dict)
-        if not self.config.write_output:
-            return
-        output_file = file if file else self.output_file
-        if not os.path.isfile(output_file):
-            logging.debug(f"Creating new file {output_file}")
-            with open(output_file, "w") as f:
-                writer = csv.DictWriter(f, fieldnames=self.output_columns)
-                writer.writeheader()
-        with open(output_file, "a") as f:
-            writer = csv.DictWriter(f, fieldnames=self.output_columns)
-            writer.writerow(answer_dict)
-
-    def _print_response(self, answer_dict: dict[str, str]):
-        qid = answer_dict["query_id"]
-        agent = answer_dict["agent"]
-        raw_answer = answer_dict["raw_answer"]
-        answer_keys = set(answer_dict.keys()) - {"query_id", "agent", "raw_answer"}
-        if self.config.rich_print:
-            try:
-                import rich
-
-                rich.print(
-                    f"[not bold white][{qid}][/not bold white] "
-                    f"[bold blue]({agent})[/bold blue]"
-                )
-                rich.print(
-                    f"[bold green]Raw Answer:[/bold green] [not bold green]{raw_answer}[/not bold green]"
-                )
-                for k in answer_keys:
-                    rich.print(
-                        f"[bold green]{k}:[/bold green] [not bold green]{answer_dict['k']}[/not bold green]"
-                    )
-                rich.print("")
-            except ImportError:
-                logging.warning("Rich not installed. Using plain print")
-                self.config.rich_print = False
-        else:
-            tqdm.write(f"{qid} ({agent})")
-            tqdm.write(f"Raw Answer: {raw_answer}")
-            for k in answer_keys:
-                tqdm.write(f"{k}: {answer_dict[k]}")
-            tqdm.write("")
-
     @classmethod
     def get_config_class(cls) -> Type[BaseAnswerEvaluatorConfig]:
         return get_type_hints(cls)["config"]
 
-    def _load_reasonings(
-        self,
-        reasoning_path: str,
-        query_id_col: str = "query_id",
-        document_id_col: str = "did",
-        answer_col: str = "answer",
-    ) -> dict[str, dict[str, str]]:
-        reasoning: dict[str, dict[str, str]] = defaultdict(lambda: dict())
-        reasoning_read = 0
-        for line in csv.DictReader(open(reasoning_path)):
-            reasoning_read += 1
-            reasoning[line[query_id_col]][line[document_id_col]] = line[answer_col]
-        logging.info(f"Loaded {reasoning_read} reasonings")
-        return dict(reasoning)
+    @staticmethod
+    def _construct_list_of_answers(
+        answers: list[dict[str, str]]
+    ) -> list[AnswerEvaluatorResult]:
+        return [AnswerEvaluatorResult(**x) for x in answers]
 
-    def _prepare_reasonings(self, qid: str) -> str:
-        return "\n".join(
-            [" ".join([f"[{idx}]", r]) for (idx, r) in self.reasonings[qid].items()]
+    @staticmethod
+    def _prepare_documents(query: Query) -> str:
+        documents = [(d.did, d.text) for d in query.retrieved_docs]
+        if len(documents) == 0:
+            return "NO DOCUMENTS WERE RETRIEVED"
+        return "\n".join([f"[{did}] {doc.strip()}" for did, doc in documents])
+
+    def _add_retrieved_documents_to_queries(
+        self,
+        queries: list[Query],
+        documents_path: Optional[str],
+        text_column: str = "document_text",
+        overwrite: bool = False,
+    ):
+        if all([len(q.retrieved_docs) > 0 for q in queries]) and not overwrite:
+            logger.info("All queries already have retrieved documents")
+            return queries
+        if documents_path is None:
+            logger.warning(
+                "No path with retrieved documents provided."
+                "Evaluator performance may be affected."
+            )
+            return queries
+        queries_with_docs = load_retrieved_docs_from_csv(
+            documents_path, queries, document_text_col=text_column
         )
+        return queries_with_docs
 
 
 class AnswerEvaluatorFactory:
@@ -239,7 +217,7 @@ class AnswerEvaluatorFactory:
         if config is None:
             class_ = cls.registry[evaluator_name]
             type_config = class_.get_config_class()
-            valid_keys = [field.name for field in dataclasses.fields(type_config)]
+            valid_keys = [field for field in type_config.model_fields]
             valid_args = {k: v for k, v in kwargs.items() if k in valid_keys}
             config = type_config(**valid_args)
         return cls.registry[evaluator_name.lower()].from_config(

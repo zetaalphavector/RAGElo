@@ -4,11 +4,8 @@ https://arxiv.org/abs/2309.10621
 """
 
 import json
-import logging
-from typing import Optional
 
 import numpy as np
-from tenacity import RetryError
 
 from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     BaseRetrievalEvaluator,
@@ -54,7 +51,7 @@ Produce a JSON array of scores without providing any reasoning. Example: {exampl
 # Results
 """.strip()
 
-    NARRATIVE_DESCRIPTION_PROMPT = "They were looking for: {description} {narrative}"
+    NARRATIVE_DESCRIPTION_PROMPT = "They were looking for: {description}\n{narrative}"
     ASPECTS_NARRATIVE = """Measure how well the content matches a likely intent \
 of the query (M).
 Measure how trustworthy the web page is (T).""".strip()
@@ -64,7 +61,7 @@ Measure how trustworthy the web page is (T).""".strip()
 the relevance of the web page for the query.
 Each rater used their own independent judgement."""
     config: RDNAMEvaluatorConfig
-    output_columns = ["query_id", "did", "raw_answer", "answer"]
+    output_columns = ["qid", "did", "raw_answer", "answer"]
     scoring_key = "answer"
     output_file = "rdnam_evaluations.csv"
 
@@ -76,85 +73,29 @@ Each rater used their own independent judgement."""
         """Initializes an evaluator based on RDNAM framework."""
         super().__init__(config, llm_provider)
 
-        self.__role = self.config.role if self.config.role else ""
-        self.__use_narratives = False
-        self.__use_description = False
+        self.__role = self.config.annotator_role if self.config.annotator_role else ""
 
-        if self.config.narrative_file:
-            self.__narratives: dict[str, str] = self._load_from_csv(
-                self.config.narrative_file
-            )
-            self.__use_narratives = True
-        if self.config.description_file:
-            self.descriptions: dict[str, str] = self._load_from_csv(
-                self.config.description_file
-            )
-            self.__use_description = True
-
-        self.__aspects_prompt = self.ASPECTS_NARRATIVE if self.config.aspects else ""
-        self.multiple_prompt = self.MULTIPLE_PROMPT if self.config.multiple else ""
-        if self.config.multiple:
+        self.__aspects_prompt = (
+            self.ASPECTS_NARRATIVE if self.config.use_aspects else ""
+        )
+        self.__multiple_prompt = (
+            self.MULTIPLE_PROMPT if self.config.use_multiple_annotators else ""
+        )
+        if self.config.use_multiple_annotators:
             self.prompt += "\n[{{"
         else:
             self.prompt += "\n{{"
-        self.multiple = self.config.multiple
+        self.multiple = self.config.use_multiple_annotators
 
-    def evaluate_single_sample(
-        self, document: Document, query: Optional[Query] = None
-    ) -> dict[str, str | int]:
-        """Evaluates a single query-document pair. Returns the raw answer and the processed answer."""
-        if document.query is None:
-            if query is None:
-                raise ValueError(
-                    "No query provided for evaluating the relevance of a document!"
+    def _build_message(self, query: Query, document: Document) -> str:
+        narrative_description_str = ""
+        if query.metadata:
+            description = query.metadata.get("description", "")
+            narrative = query.metadata.get("narrative", "")
+            if narrative or description:
+                narrative_description_str = self.NARRATIVE_DESCRIPTION_PROMPT.format(
+                    narrative=narrative, description=description
                 )
-            elif query is not None:
-                document.query = query
-
-        message = self._build_message(document)
-        try:
-            raw_answer = self.llm_provider(message)
-        except RetryError as e:
-            logging.warning(
-                f"Failed to FETCH answers for {document.query.qid} {document.did}"
-            )
-            raise e
-        try:
-            answer = self._process_answer(raw_answer)
-        except ValueError as e:
-            logging.warning(
-                f"Failed to PARSE answer for {document.query.qid} {document.did}"
-            )
-            raise e
-        return {
-            "query_id": document.query.qid,
-            "did": document.did,
-            "raw_answer": raw_answer,
-            "answer": answer,
-        }
-
-    def _build_message(self, document: Document) -> str:
-        if document.query is None:
-            raise ValueError(f"Document {document.did} does not have a query.")
-        qid = document.query.qid
-        if self.__use_narratives and qid not in self.__narratives:
-            logging.warning(f"No narrative found for {qid}. Will not use it")
-        if self.__use_description and qid not in self.descriptions:
-            logging.warning(f"No description found for {qid}. Will not use it")
-
-        narrative = (
-            self.__narratives[qid]
-            if self.__use_narratives and qid in self.__narratives
-            else ""
-        )
-        description = (
-            self.descriptions[qid]
-            if self.__use_description and qid in self.descriptions
-            else ""
-        )
-        narrative_description_str = self.NARRATIVE_DESCRIPTION_PROMPT.format(
-            narrative=narrative, description=description
-        )
 
         example = (
             self.ASPECTS_EXAMPLE if self.__aspects_prompt else self.DEFAULT_EXAMPLE
@@ -162,11 +103,11 @@ Each rater used their own independent judgement."""
 
         formatted_prompt = self.prompt.format(
             role=self.__role,
-            query=document.query.query,
+            query=query.query,
             doc_content=document,
             narrative_description=narrative_description_str,
             aspects=self.__aspects_prompt,
-            multiple=self.multiple_prompt,
+            multiple=self.__multiple_prompt,
             example=example,
         )
         return formatted_prompt

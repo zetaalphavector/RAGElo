@@ -21,24 +21,24 @@ from ragelo.types.configurations import (
 )
 from ragelo.utils import (
     load_answers_from_csv,
-    load_documents_from_csv,
     load_queries_from_csv,
+    load_retrieved_docs_from_csv,
 )
 
 
 class MockLLMProvider(BaseLLMProvider):
     def __init__(self, config):
         self.config = config
+        self.call_mocker = Mock(
+            side_effect=lambda prompt: f"Received prompt: {prompt}. "
+        )
 
     @classmethod
     def from_configuration(cls, config: LLMProviderConfig):
         return cls(config)
 
-    def inner_call(self, prompt) -> str:
-        return f"Processed {prompt}. "
-
     def __call__(self, prompt) -> str:
-        return self.inner_call(prompt)
+        return self.call_mocker(prompt)
 
 
 @pytest.fixture
@@ -47,8 +47,16 @@ def queries_test():
 
 
 @pytest.fixture
-def documents_test(queries_test):
-    return load_documents_from_csv("tests/data/documents.csv", queries=queries_test)
+def qs_with_docs(queries_test):
+    return load_retrieved_docs_from_csv(
+        "tests/data/documents.csv", queries=queries_test
+    )
+
+
+@pytest.fixture
+def rdnam_queries():
+    queries = load_queries_from_csv("tests/data/rdnam_queries.csv")
+    return load_retrieved_docs_from_csv("tests/data/documents.csv", queries=queries)
 
 
 @pytest.fixture
@@ -64,7 +72,7 @@ def openai_client_config():
         api_type="open_ai",
         api_base=None,
         api_version=None,
-        model_name="fake model",
+        model="fake model",
     )
 
 
@@ -91,31 +99,35 @@ def openai_client_mock(mocker, chat_completion_mock):
 
 
 @pytest.fixture
-def retrieval_eval_config():
+def base_eval_config():
     return BaseEvaluatorConfig(
         documents_path="tests/data/documents.csv",
         query_path="tests/data/queries.csv",
         output_file="tests/data/output.csv",
         force=True,
         verbose=True,
+        write_output=False,
     )
 
 
 @pytest.fixture
-def pairwise_answer_eval_config():
-    return PairwiseEvaluatorConfig(
-        output_file="tests/data/output_answers.csv",
-        reasoning_path="tests/data/reasonings.csv",
+def pairwise_answer_eval_config(base_eval_config):
+    base_config = base_eval_config.model_dump()
+    del base_config["documents_path"]
+    config = PairwiseEvaluatorConfig(
+        documents_path="tests/data/reasonings.csv",
         bidirectional=False,
-        force=True,
-        verbose=True,
+        **base_config,
     )
+    return config
 
 
 @pytest.fixture
-def custom_answer_eval_config():
-    return CustomPromptAnswerEvaluatorConfig(
-        output_file="tests/data/output_answers.csv",
+def custom_answer_eval_config(base_eval_config):
+    base_config = base_eval_config.model_dump()
+    base_config["answer_format"] = "multi_field_json"
+    base_config["scoring_keys"] = ["quality", "trustworthiness", "originality"]
+    config = CustomPromptAnswerEvaluatorConfig(
         prompt="""
 You are an useful assistant for evaluating the quality of the answers generated \
 by RAG Agents. Given the following retrieved documents and a user query, evaluate \
@@ -124,67 +136,56 @@ The last line of your answer must be a json object with the keys "quality", \
 "trustworthiness" and originality, each of them with a single number between 0 and \
 2, where 2 is the highest score on that aspect.
 DOCUMENTS RETRIEVED:
-{docs_placeholder}
+{documents}
 
-User Query: {query_placeholder}
+User Query: {query}
 
-Agent answer: {answer_placeholder}
+Agent answer: {answer}
 """.strip(),
-        query_placeholder="query_placeholder",
-        answer_placeholder="answer_placeholder",
-        reasoning_path="tests/data/reasonings.csv",
-        documents_placeholder="docs_placeholder",
-        force=True,
-        verbose=True,
+        **base_config,
     )
+    return config
 
 
 @pytest.fixture
-def expert_retrieval_eval_config():
+def expert_retrieval_eval_config(base_eval_config):
+    base_eval_config = base_eval_config.model_dump()
+    del base_eval_config["scoring_key"]
+    del base_eval_config["answer_format"]
     return DomainExpertEvaluatorConfig(
-        documents_path="tests/data/documents.csv",
-        query_path="tests/data/queries.csv",
-        output_file="tests/data/output.csv",
-        force=True,
-        verbose=True,
         domain_long="Computer Science",
         domain_short="computer scientists",
         company="Zeta Alpha",
-        extra_guidelines="-Super precise answers only!",
+        extra_guidelines=["Super precise answers only!"],
+        **base_eval_config,
     )
 
 
 @pytest.fixture
-def rdnam_config():
+def rdnam_config(base_eval_config):
+    base_config = base_eval_config.model_dump()
+    base_config["query_path"] = "tests/data/rdnam_queries.csv"
     return RDNAMEvaluatorConfig(
-        documents_path="tests/data/documents.csv",
-        query_path="tests/data/queries.csv",
-        output_file="tests/data/output.csv",
-        force=True,
-        role="You are a search quality rater evaluating the relevance of web pages. ",
-        aspects=True,
-        multiple=True,
-        narrative_file="tests/data/rdnam_narratives.csv",
-        description_file="tests/data/rdnam_descriptions.csv",
+        annotator_role="You are a search quality rater evaluating the relevance of web pages. ",
+        use_multiple_annotators=True,
+        **base_config,
     )
 
 
 @pytest.fixture
-def custom_prompt_retrieval_eval_config():
-    return CustomPromptEvaluatorConfig(
-        documents_path="tests/data/documents.csv",
-        query_path="tests/data/queries.csv",
-        output_file="tests/data/output.csv",
-        force=True,
-        verbose=True,
-        prompt="query: {query_placeholder} doc: {document_placeholder}",
-        query_placeholder="query_placeholder",
-        document_placeholder="document_placeholder",
+def custom_prompt_retrieval_eval_config(base_eval_config):
+    base_eval_config = base_eval_config.model_dump()
+    del base_eval_config["scoring_key"]
+    config = CustomPromptEvaluatorConfig(
+        prompt="query: {query} doc: {document}",
+        scoring_key="relevance",
+        **base_eval_config,
     )
+    return config
 
 
 @pytest.fixture
-def few_shot_retrieval_eval_config():
+def few_shot_retrieval_eval_config(base_eval_config):
     few_shot_samples = [
         FewShotExample(
             passage="Few shot example 1",
@@ -200,29 +201,26 @@ def few_shot_retrieval_eval_config():
         ),
     ]
     return FewShotEvaluatorConfig(
-        documents_path="tests/data/documents.csv",
-        query_path="tests/data/queries.csv",
-        output_file="tests/data/output.csv",
-        force=True,
-        verbose=True,
         system_prompt="System prompt",
-        few_shot_user_prompt="query: {query_placeholder} doc: {document_placeholder}",
-        few_shot_assistant_answer=(
-            '{reasoning_placeholder} {{"relevance": {relevance_placeholder}}}'
-        ),
-        query_placeholder="query_placeholder",
-        document_placeholder="document_placeholder",
-        reasoning_placeholder="reasoning_placeholder",
-        relevance_placeholder="relevance_placeholder",
+        few_shot_user_prompt="query: {query} doc: {document}",
+        few_shot_assistant_answer=('{reasoning} {{"relevance": {relevance}}}'),
+        reasoning_placeholder="reasoning",
+        relevance_placeholder="relevance",
         few_shots=few_shot_samples,
+        **base_eval_config.model_dump(),
     )
 
 
 @pytest.fixture
 def llm_provider_mock(llm_provider_config):
+    return MockLLMProvider(llm_provider_config)
+
+
+@pytest.fixture
+def llm_provider_json_mock(llm_provider_config):
     provider = MockLLMProvider(llm_provider_config)
-    provider.inner_call = Mock(
-        side_effect=lambda prompt: f'Processed {prompt}\n{{"relevance": 0}}'
+    provider.call_mocker = Mock(
+        side_effect=lambda _: 'LLM JSON response\n{"relevance": 0}'
     )
     return provider
 
@@ -230,7 +228,7 @@ def llm_provider_mock(llm_provider_config):
 @pytest.fixture
 def llm_provider_pairwise_answer_mock(llm_provider_config):
     provider = MockLLMProvider(llm_provider_config)
-    provider.inner_call = Mock(
+    provider.call_mocker = Mock(
         side_effect=[
             "Agent [[A]] is better",
             "Agent [[B]] is better",
@@ -244,7 +242,7 @@ def llm_provider_pairwise_answer_mock(llm_provider_config):
 @pytest.fixture
 def llm_provider_answer_mock(llm_provider_config):
     provider = MockLLMProvider(llm_provider_config)
-    provider.inner_call = Mock(
+    provider.call_mocker = Mock(
         side_effect=lambda prompt: f"Answer for {prompt}\n"
         '{"quality": 2, "trustworthiness": 1, "originality": 1}',
     )
@@ -259,7 +257,7 @@ def llm_provider_mock_mock(mocker):
 @pytest.fixture
 def llm_provider_domain_expert_mock(llm_provider_config):
     provider = MockLLMProvider(llm_provider_config)
-    provider.inner_call = Mock(
+    provider.call_mocker = Mock(
         side_effect=["Reasoning answer", "2", "Reasoning_answer 2", "0"]
     )
     return provider
@@ -269,5 +267,5 @@ def llm_provider_domain_expert_mock(llm_provider_config):
 def llm_provider_mock_rdnam(llm_provider_config):
     mocked_scores = [{"M": 2, "T": 1, "O": 1}, {"M": 1, "T": 1, "O": 2}]
     provider = MockLLMProvider(llm_provider_config)
-    provider.inner_call = Mock(side_effect=lambda _: json.dumps(mocked_scores)[2:])
+    provider.call_mocker = Mock(side_effect=lambda _: json.dumps(mocked_scores)[2:])
     return provider

@@ -3,14 +3,13 @@ from ragelo.evaluators.retrieval_evaluators import (
     RetrievalEvaluatorFactory,
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
-from ragelo.types import Document, RetrievalEvaluatorTypes
+from ragelo.types import Document, Query, RetrievalEvaluatorTypes
 from ragelo.types.configurations import FewShotEvaluatorConfig
 
 
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.FEW_SHOT)
 class FewShotEvaluator(BaseRetrievalEvaluator):
     config: FewShotEvaluatorConfig
-    scoring_key: str = "relevance"
 
     def __init__(
         self,
@@ -24,13 +23,11 @@ class FewShotEvaluator(BaseRetrievalEvaluator):
         self.assistant_prompt = config.few_shot_assistant_answer
         self.few_shots = config.few_shots
 
-    def _build_message(self, document: Document) -> list[dict[str, str]]:
-        if document.query is None:
-            raise ValueError(f"Document {document.did} does not have a query.")
+    def _build_message(self, query: Query, document: Document) -> list[dict[str, str]]:
         system_prompt_msg = {"role": "system", "content": self.sys_prompt}
         messages = [system_prompt_msg] + self.__build_few_shot_samples()
         formatters = {
-            self.config.query_placeholder: document.query.query,
+            self.config.query_placeholder: query.query,
             self.config.document_placeholder: document.text,
         }
         user_message = self.prompt.format(**formatters)
@@ -58,6 +55,3 @@ class FewShotEvaluator(BaseRetrievalEvaluator):
             few_shot_messages.append(user_message)
             few_shot_messages.append(answer)
         return few_shot_messages
-
-    def _process_answer(self, answer: str) -> str:
-        return self.json_answer_parser(answer, self.scoring_key)

@@ -83,8 +83,7 @@ Please only answer with a single number.
     COMPANY_PROMPT_2 = " of {company}"
     DOMAIN_SHORT = " but it also serves some of your external users like {domain_short}"
     config: DomainExpertEvaluatorConfig
-    output_columns: list[str] = ["query_id", "did", "reasoning", "score"]
-    scoring_key: str = "score"
+    output_columns: list[str] = ["qid", "did", "reasoning", "score"]
     output_file: str = "domain_expert_evaluations.csv"
 
     def __init__(
@@ -123,36 +122,39 @@ Please only answer with a single number.
             ),
         )
         self.extra_guidelines = (
-            self.config.extra_guidelines if self.config.extra_guidelines else ""
+            self.config.extra_guidelines if self.config.extra_guidelines else []
         )
 
-    def __build_reason_message(self, document: Document) -> str:
-        if document.query is None:
-            raise ValueError(f"Document {document.did} does not have a query.")
+    def __build_reason_message(self, query: Query, document: Document) -> str:
+        guidelines = "\n".join(
+            [f"- {guideline}" for guideline in self.extra_guidelines]
+        )
         reason_prompt = self.reason_prompt.format(
-            query=document.query.query,
+            query=query.query,
             doc_content=document.text,
             domain_short=self.domain_short if self.domain_short else "",
-            extra_guidelines=self.extra_guidelines if self.extra_guidelines else "",
+            extra_guidelines=guidelines,
         )
         return reason_prompt
 
-    def evaluate_single_sample(
-        self, document: Document, query: Optional[Query] = None
-    ) -> dict[str, Any]:
+    def evaluate(
+        self,
+        query: Query | str,
+        document: Document | str,
+        query_metadata: Optional[dict[str, Any]] = None,
+        doc_metadata: Optional[dict[str, Any]] = None,
+    ) -> tuple[str, Any]:
         """Processes a single pair of qid, did in a two-shot manner"""
-        if document.query is None:
-            if query is None:
-                raise ValueError(
-                    "No query provided for evaluating the relevance of a document!"
-                )
-            elif query is not None:
-                document.query = query
+        if isinstance(query, str):
+            query = Query(qid="<no_qid>", query=query)
+        if isinstance(document, str):
+            document = Document(did="<no_did>", text=document)
+        query.add_metadata(query_metadata)
+        document.add_metadata(doc_metadata)
 
-        query = document.query
         qid = query.qid
         did = document.did
-        reason_message = self.__build_reason_message(document)
+        reason_message = self.__build_reason_message(query, document)
         messages_reasoning = [
             {"role": "system", "content": self.sys_prompt},
             {"role": "user", "content": reason_message},
@@ -178,12 +180,4 @@ Please only answer with a single number.
         except ValueError as e:
             logging.warning(f"Failed to parse evaluation for document {qid} {did}")
             raise e
-        return {
-            "query_id": qid,
-            "did": did,
-            "reasoning": reasoning_answer,
-            "score": score_answer,
-        }
-
-    def _process_answer(self, answer: str) -> str:
-        return answer
+        return reasoning_answer, score_answer

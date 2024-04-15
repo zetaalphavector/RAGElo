@@ -1,5 +1,3 @@
-from dataclasses import asdict
-
 import typer
 
 from ragelo import get_answer_evaluator, get_llm_provider, get_retrieval_evaluator
@@ -10,9 +8,9 @@ from ragelo.cli.args import get_params_from_function
 from ragelo.cli.retrieval_evaluator_cmd import app as retrieval_evaluator_app
 from ragelo.cli.utils import get_path
 from ragelo.types import AllConfig, EloAgentRankerConfig
-from ragelo.utils import load_answers_from_csv, load_documents_from_csv
+from ragelo.utils import load_answers_from_csv, load_retrieved_docs_from_csv
 
-typer.main.get_params_from_function = get_params_from_function  # type: ignore
+typer.main.get_params_from_function = get_params_from_function
 
 app = typer.Typer()
 
@@ -33,6 +31,7 @@ def run_all(config: AllConfig = AllConfig(), **kwargs):
         raise ValueError("The answer evaluator must be a pairwise_reasoning")
     if config.answer_ranker_name != "elo":
         raise ValueError("The answer ranker must be an elo")
+    config.verbose = True
 
     llm_provider = get_llm_provider(config.llm_provider, **kwargs)
 
@@ -48,7 +47,9 @@ def run_all(config: AllConfig = AllConfig(), **kwargs):
     config.reasoning_path = get_path(config.data_path, config.reasoning_path)
     config.evaluations_file = get_path(config.data_path, config.evaluations_file)
 
-    args_clean = {k: v for k, v in asdict(config).items() if k not in args_to_remove}
+    args_clean = {
+        k: v for k, v in config.model_dump().items() if k not in args_to_remove
+    }
 
     retrieval_evaluator = get_retrieval_evaluator(
         "reasoner",
@@ -56,13 +57,13 @@ def run_all(config: AllConfig = AllConfig(), **kwargs):
         output_file=config.reasoning_path,
         **args_clean,
     )
-    documents = load_documents_from_csv(
+    documents = load_retrieved_docs_from_csv(
         documents_path=config.documents_path, queries=config.query_path
     )
     answers = load_answers_from_csv(
         answers_path=config.answers_path, queries=config.query_path
     )
-    retrieval_evaluator.run(documents)
+    retrieval_evaluator.batch_evaluate(documents)
 
     answers_evaluator = get_answer_evaluator(
         "pairwise_reasoning",
@@ -71,7 +72,7 @@ def run_all(config: AllConfig = AllConfig(), **kwargs):
         **args_clean,
     )
 
-    answers_evaluator.run(answers)
+    answers_evaluator.batch_evaluate(answers)
 
     ranker_config = EloAgentRankerConfig(
         force=config.force,

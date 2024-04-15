@@ -2,7 +2,12 @@ from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     BaseRetrievalEvaluator,
     RetrievalEvaluatorFactory,
 )
-from ragelo.types import Document, RetrievalEvaluatorTypes
+from ragelo.types import (
+    Document,
+    Query,
+    ReasonerEvaluatorConfig,
+    RetrievalEvaluatorTypes,
+)
 
 
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.REASONER)
@@ -12,7 +17,9 @@ class ReasonerEvaluator(BaseRetrievalEvaluator):
     is relevant.
     """
 
+    output_columns: list[str] = ["qid", "did", "raw_answer", "answer"]
     output_file: str = "reasonings.csv"
+    config: ReasonerEvaluatorConfig
     prompt = """
 You are an expert document annotator, evaluating if a document contains relevant \
 information to answer a question submitted by a user. \
@@ -31,10 +38,8 @@ user question.
     [document content]
     {document}"""  # noqa: E501
 
-    def _build_message(self, document: Document) -> str:
-        if document.query is None:
-            raise ValueError(f"Document {document.did} does not have a query.")
-        return self.prompt.format(query=document.query.query, document=document.text)
+    def _build_message(self, query: Query, document: Document) -> str:
+        return self.prompt.format(query=query.query, document=document.text)
 
     def _process_answer(self, answer: str) -> str:
         return answer

@@ -4,14 +4,14 @@ from ragelo import get_llm_provider, get_retrieval_evaluator
 from ragelo.cli.args import get_params_from_function
 from ragelo.cli.utils import get_path
 from ragelo.types.configurations import (
-    BaseEvaluatorConfig,
     DomainExpertEvaluatorConfig,
     RDNAMEvaluatorConfig,
+    ReasonerEvaluatorConfig,
 )
 from ragelo.types.types import RetrievalEvaluatorTypes
-from ragelo.utils import load_documents_from_csv
+from ragelo.utils import load_retrieved_docs_from_csv
 
-typer.main.get_params_from_function = get_params_from_function  # type: ignore
+typer.main.get_params_from_function = get_params_from_function
 
 
 app = typer.Typer()
@@ -37,23 +37,25 @@ def domain_expert(
     config.documents_path = get_path(config.data_path, config.documents_path)
     config.output_file = get_path(config.data_path, config.output_file)
 
+    config.verbose = True
+
     llm_provider = get_llm_provider(config.llm_provider, **kwargs)
     evaluator = get_retrieval_evaluator(
         RetrievalEvaluatorTypes.DOMAIN_EXPERT, config=config, llm_provider=llm_provider
     )
-    documents = load_documents_from_csv(
+    documents = load_retrieved_docs_from_csv(
         config.documents_path, queries=config.query_path
     )
 
-    evaluator.run(documents)
+    evaluator.batch_evaluate(documents)
 
 
 @app.command()
-def reasoner(config: BaseEvaluatorConfig = BaseEvaluatorConfig(), **kwargs):
+def reasoner(config: ReasonerEvaluatorConfig = ReasonerEvaluatorConfig(), **kwargs):
     """
     A document Evaluator that only outputs the reasoning for why a document is relevant.
     """
-    config = BaseEvaluatorConfig(**kwargs)
+    config = ReasonerEvaluatorConfig(**kwargs)
     config.query_path = get_path(config.data_path, config.query_path)
     config.documents_path = get_path(config.data_path, config.documents_path)
     if not config.output_file:
@@ -61,15 +63,16 @@ def reasoner(config: BaseEvaluatorConfig = BaseEvaluatorConfig(), **kwargs):
     else:
         config.output_file = get_path(config.data_path, config.output_file)
 
+    config.verbose = True
     llm_provider = get_llm_provider(config.llm_provider, **kwargs)
     evaluator = get_retrieval_evaluator(
         RetrievalEvaluatorTypes.REASONER, config=config, llm_provider=llm_provider
     )
-    documents = load_documents_from_csv(
+    documents = load_retrieved_docs_from_csv(
         config.documents_path, queries=config.query_path
     )
 
-    evaluator.run(documents)
+    evaluator.batch_evaluate(documents)
 
 
 @app.command()
@@ -79,14 +82,15 @@ def rdnam(config: RDNAMEvaluatorConfig = RDNAMEvaluatorConfig(), **kwargs):
     config.query_path = get_path(config.data_path, config.query_path)
     config.documents_path = get_path(config.data_path, config.documents_path)
     config.output_file = get_path(config.data_path, config.output_file)
+    config.verbose = True
     llm_provider = get_llm_provider(config.llm_provider, **kwargs)
     evaluator = get_retrieval_evaluator(
         RetrievalEvaluatorTypes.RDNAM, config=config, llm_provider=llm_provider
     )
-    documents = load_documents_from_csv(
+    documents = load_retrieved_docs_from_csv(
         config.documents_path, queries=config.query_path
     )
-    evaluator.run(documents)
+    evaluator.batch_evaluate(documents)
 
 
 if __name__ == "__main__":

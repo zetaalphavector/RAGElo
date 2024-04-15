@@ -1,6 +1,5 @@
 """A LLM provider is a class that can be called with a string and returns with another string as an answer from an LLM model."""
 
-import dataclasses
 import logging
 import os
 from abc import ABC, abstractmethod
@@ -78,7 +77,7 @@ class LLMProviderFactory:
         if config is None:
             class_ = cls.registry[name]
             type_config = class_.get_config_class()
-            valid_keys = [field.name for field in dataclasses.fields(type_config)]
+            valid_keys = [field for field in type_config.model_fields]
             if "api_key" not in kwargs:
                 api_key = os.environ.get(class_.api_key_env_var)
                 if not api_key:

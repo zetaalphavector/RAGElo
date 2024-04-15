@@ -5,7 +5,7 @@ from ragelo.cli.args import get_params_from_function
 from ragelo.cli.utils import get_path
 from ragelo.types import EloAgentRankerConfig
 
-typer.main.get_params_from_function = get_params_from_function  # type: ignore
+typer.main.get_params_from_function = get_params_from_function
 app = typer.Typer()
 
 

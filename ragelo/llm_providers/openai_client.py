@@ -6,6 +6,7 @@ from ragelo.types import LLMProviderTypes
 from ragelo.types.configurations import OpenAIConfiguration
 
 
+# TODO: Change client to use json_mode
 @LLMProviderFactory.register(LLMProviderTypes.OPENAI)
 class OpenAIProvider(BaseLLMProvider):
     """A Wrapper over the OpenAI client."""
@@ -37,7 +38,7 @@ class OpenAIProvider(BaseLLMProvider):
         if isinstance(prompt, str):
             prompt = [{"role": "system", "content": prompt}]
         answers = self.__openai_client.chat.completions.create(
-            model=self.config.model_name,
+            model=self.config.model,
             messages=prompt,  # type: ignore
             temperature=temperature,
             max_tokens=max_tokens,
@@ -68,6 +69,3 @@ class OpenAIProvider(BaseLLMProvider):
             )
         else:
             raise Exception(f"Unknown OpenAI api type: {openai_config.api_type}")
-
-    def set_openai_client(self, openai_client: OpenAI):
-        self.__openai_client = openai_client

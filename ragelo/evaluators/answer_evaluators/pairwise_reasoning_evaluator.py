@@ -1,7 +1,9 @@
-import logging
+import csv
+import os
 import random
 import re
-from collections import defaultdict, deque
+from collections import defaultdict
+from typing import Any, Optional
 
 from tenacity import RetryError
 from tqdm.auto import tqdm
@@ -11,7 +13,14 @@ from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
     BaseAnswerEvaluator,
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
-from ragelo.types import AgentAnswer, AnswerEvaluatorTypes
+from ragelo.logger import logger
+from ragelo.types import (
+    AgentAnswer,
+    AnswerEvaluatorResult,
+    AnswerEvaluatorTypes,
+    Document,
+    Query,
+)
 from ragelo.types.configurations import PairwiseEvaluatorConfig
 
 
@@ -19,15 +28,9 @@ from ragelo.types.configurations import PairwiseEvaluatorConfig
 class PairwiseWithReasoningEvaluator(BaseAnswerEvaluator):
     """A evaluator that evaluates RAG-based answers pairwise, with document reasoning"""
 
-    output_columns: list[str] = [
-        "query_id",
-        "agent_a",
-        "agent_b",
-        "raw_answer",
-        "answer",
-    ]
-    tuple_columns: list[str] = ["query_id", "agent_a", "agent_b"]
     config: PairwiseEvaluatorConfig
+    output_columns: list[str] = ["qid", "agent_a", "agent_b", "raw_answer", "answer"]
+    output_file: str = "pairwise_answers_evaluations.csv"
     prompt = """
 Please act as an impartial judge and evaluate the quality of the responses provided \
 by two AI assistants tasked to answer the question displayed below, based on a set \
@@ -64,7 +67,6 @@ and "[[C]]" for a tie.
 {answer_b}
 [The End of Assistant B's Answer]
 """.strip()
-    output_file: str = "pairwise_answers_evaluations.csv"
 
     def __init__(
         self,
@@ -72,212 +74,171 @@ and "[[C]]" for a tie.
         llm_provider: BaseLLMProvider,
     ):
         super().__init__(config, llm_provider)
-        if not self.config.reasoning_path:
-            raise ValueError("Reasoning file is required for PairwiseWithReasoning")
         self.k = self.config.k
         self.bidirectional = self.config.bidirectional
         self.pattern = re.compile(r"\[\[([^]]+)]].*$(?:(?!\[\[).)*", re.DOTALL)
 
-    def run(self, answers: dict[str, list[AgentAnswer]]) -> list[dict[str, str]]:
-        use_progress_bar = self.config.verbose
-        unparsed_answers = 0
-        skip_tuples = self._get_skip_tuples()
-        evaluations: list[dict[str, str]] = []
-        tuples = self.__prepare_all_tuples(answers, use_progress_bar)
-        if len(tuples) - len(skip_tuples) > 0:
-            logging.info(f"Running {len(tuples) - len(skip_tuples)} games...")
-        for answer_a, answer_b in tqdm(
-            tuples,
+    def batch_evaluate(self, queries: list[Query]) -> list[AnswerEvaluatorResult]:
+        failed_evaluations = 0
+        evaluations = [AnswerEvaluatorResult(**x) for x in self._get_existing_output()]
+        skip_tuples = {(x.qid, x.agent_a, x.agent_b) for x in evaluations}
+        tuples_to_eval = []
+        all_tuples = 0
+        queries = self._add_retrieved_documents_to_queries(
+            queries, documents_path=self.config.documents_path, text_column="answer"
+        )
+        for query in queries:
+            games_to_play = self.__prepare_tuples_for_query(query)
+            for answer_a, answer_b in games_to_play:
+                qid = query.qid
+                agent_a = answer_a.agent
+                agent_b = answer_b.agent
+                all_tuples += 1
+                if (qid, agent_a, agent_b) in skip_tuples:
+                    logger.debug(f"Skipping {qid} {agent_a} {agent_b}")
+                    continue
+                tuples_to_eval.append((query, answer_a, answer_b))
+        if len(tuples_to_eval) == 0:
+            logger.info("All answers have been evaluated")
+            if self.config.verbose:
+                print(
+                    f"All {all_tuples} answers are already evaluated.\n"
+                    "If you want to re-evaluate them, use the force flag"
+                )
+            return evaluations
+
+        for query, answer_a, answer_b in tqdm(
+            tuples_to_eval,
             desc="Evaluating games",
             disable=not self.config.verbose,
             leave=False,
             position=0,
             ncols=100,
         ):
-            qid = answer_a.query.qid
             agent_a = answer_a.agent
             agent_b = answer_b.agent
-            if (qid, agent_a, agent_b) in skip_tuples:
-                logging.debug(f"Skipping {qid} {agent_a} {agent_b}")
-                continue
             try:
-                answer_dict = self.evaluate_single_sample((answer_a, answer_b))
-            except RetryError:
-                continue
-            except ValueError:
-                unparsed_answers += 1
-                continue
-            self._dump_response(answer_dict)
-            evaluations.append(answer_dict)
+                raw_answer, parsed_answer = self.evaluate_pairwise(
+                    query=query,
+                    answer_a=answer_a,
+                    answer_b=answer_b,
+                    retrieved_documents=query.retrieved_docs,
+                )
 
+            except (RetryError, ValueError):
+                failed_evaluations += 1
+                continue
+            evaluations.append(
+                AnswerEvaluatorResult(
+                    qid=query.qid,
+                    agent_a=agent_a,
+                    agent_b=agent_b,
+                    raw_answer=raw_answer,
+                    answer=parsed_answer,
+                )
+            )
+            self._dump_response(evaluations[-1], self.output_columns, self.output_file)
         if self.config.verbose:
             print("✅ Done!")
-            print(f"Unparsed answers: {unparsed_answers}")
+            print(f"Unparsed answers: {failed_evaluations}")
             print(f"Total evaluations: {len(evaluations)}")
         return evaluations
 
-    def _build_message(self, answer: tuple[AgentAnswer, AgentAnswer]) -> str:
-        qid = answer[0].query.qid
-        answer_agent_a = answer[0].text
-        answer_agent_b = answer[1].text
-        reasoning = self._prepare_reasonings(qid)
-        prompt = self.prompt.format(
-            query=answer[0].query.query,
-            documents=reasoning,
-            answer_a=answer_agent_a,
-            answer_b=answer_agent_b,
-        )
-        return prompt
+    def evaluate_pairwise(
+        self,
+        query: Query | str,
+        answer_a: AgentAnswer | str,
+        answer_b: AgentAnswer | str,
+        retrieved_documents: list[str] | list[Document],
+        query_metadata: Optional[dict[str, Any]] = None,
+        answer_a_metadata: Optional[dict[str, Any]] = None,
+        answer_b_metadata: Optional[dict[str, Any]] = None,
+        document_metadata: Optional[list[dict[str, Any]]] = None,
+    ) -> tuple[str, str]:
+        query = self._assemble_query(query, query_metadata)
+        answer_a = self._assemble_answer(answer_a, answer_a_metadata)
+        answer_b = self._assemble_answer(answer_b, answer_b_metadata)
+        if isinstance(retrieved_documents, str):
+            retrieved_documents = [retrieved_documents]
+        if retrieved_documents:
+            retrieved_and_assembled_docs = self._assemble_documents(
+                retrieved_documents, document_metadata
+            )
+            query.retrieved_docs = retrieved_and_assembled_docs
 
-    def evaluate_single_sample(
-        self, answer: tuple[AgentAnswer, AgentAnswer]
-    ) -> dict[str, str]:
-        prompt = self._build_message(answer)
-        qid = answer[0].query.qid
-        agent_a_id = answer[0].agent
-        agent_b_id = answer[1].agent
+        prompt = self._build_message_pairwise(query, (answer_a, answer_b))
+        qid = query.qid
+        agent_a_id = answer_a.agent
+        agent_b_id = answer_b.agent
 
         try:
             raw_answer = self.llm_provider(prompt)
         except RetryError as e:
-            logging.warning(
+            logger.warning(
                 f"Failed to FETCH answers for {qid} {agent_a_id}, {agent_b_id}"
             )
             raise e
         try:
             processed_answer = self._process_answer(raw_answer)
         except ValueError as e:
-            logging.warning(
+            logger.warning(
                 f"Failed extracting answer for {qid}, {agent_a_id}, {agent_b_id}."
                 "Probably not enough tokens in the answer."
                 f"Full answer:\n{raw_answer}",
             )
             raise e
-        return {
-            "query_id": qid,
-            "agent_a": agent_a_id,
-            "agent_b": agent_b_id,
-            "raw_answer": raw_answer,
-            "answer": processed_answer,
+        return raw_answer, processed_answer
+
+    def _build_message_pairwise(
+        self, query: Query, answer: AgentAnswer | tuple[AgentAnswer, AgentAnswer]
+    ) -> str:
+        assert isinstance(answer, tuple)
+        reasonings = self._prepare_documents(query)
+        query_metadata = self._get_usable_fields_from_metadata(
+            self.prompt, query.metadata, skip_fields=[self.config.query_placeholder]
+        )
+        answer_a_metadata = self._get_usable_fields_from_metadata(
+            self.prompt,
+            answer[0].metadata,
+            skip_fields=[self.config.answer_placeholder],
+        )
+        answer_b_metadata = self._get_usable_fields_from_metadata(
+            self.prompt,
+            answer[1].metadata,
+            skip_fields=[self.config.answer_placeholder],
+        )
+        formatters = {
+            self.config.query_placeholder: query.query,
+            self.config.documents_placeholder: reasonings,
+            "answer_a": answer[0].text,
+            "answer_b": answer[1].text,
+            **query_metadata,
+            **answer_a_metadata,
+            **answer_b_metadata,
         }
+        return self.prompt.format(**formatters)
 
-    def _print_response(self, answer_dict: dict[str, str]):
-        if not self.config.verbose:
-            return
-        qid = answer_dict["query_id"]
-        agent_a = answer_dict["agent_a"]
-        agent_b = answer_dict["agent_b"]
-        raw_answer = answer_dict["raw_answer"]
-        relevant = answer_dict["answer"]
-        if self.config.rich_print:
-            try:
-                import rich
+    def __generate_games_per_query(self, query: Query) -> list[tuple[str, str]]:
+        """Generates up to self.k random pairs of agents for the given query"""
+        query_agents = list({x.agent for x in query.answers})
+        # Create all possible pairs
+        pairs = [(a, b) for a in query_agents for b in query_agents if a != b]
+        if self.bidirectional:
+            pairs += [(b, a) for a, b in pairs]
+        random.shuffle(pairs)
+        return pairs[: self.k]
 
-                rich.print(
-                    f"[not bold white][{qid}][/not bold white] "
-                    f"[bold blue] {agent_a:<18} [/bold blue] 🆚  "
-                    f"[bold red] {agent_b}[/bold red]"
-                )
-                rich.print("[bold white] Evaluator answer: [/bold white]")
-                if relevant == "A":
-                    parser_ans = raw_answer.replace("[[A]]", "[bold blue]A[/bold blue]")
-                elif relevant == "B":
-                    parser_ans = raw_answer.replace("[[B]]", "[bold red]B[/bold red]")
-                else:
-                    parser_ans = raw_answer.replace(
-                        "[[C]]", "[bold purple]C[/bold purple]"
-                    )
-                rich.print(parser_ans)
-            except ImportError:
-                logging.warning("Rich not installed. Using plain print")
-                self.config.rich_print = False
-        else:
-            tqdm.write(f"{qid}: {agent_a} vs {agent_b}")
-            tqdm.write(f"Evaluator full answer: {raw_answer}")
-            tqdm.write(f"Relevant answer: {relevant}")
-
-    def __generate_random_games(
-        self, answers: dict[str, list[AgentAnswer]]
-    ) -> list[tuple[str, str]]:
-        """Creates all prompts necessary for running the evaluator"""
-        all_agents = list({x.agent for ans in answers.values() for x in ans})
-        total_agents = len(all_agents)
-        if self.k == -1:
-            logging.info("Creating all possible games...")
-            pairs = []
-            for i in range(total_agents):
-                for j in range(i + 1, total_agents):
-                    pairs.append((all_agents[i], all_agents[j]))
-            random.shuffle(pairs)
-            return pairs
-        rounds_per_agent = self.k // total_agents
-        leftover_rounds = self.k % total_agents
-
-        extra_samples_1 = random.sample(all_agents, k=leftover_rounds)
-        extra_samples_2 = random.sample(all_agents, k=leftover_rounds)
-
-        first_agents = all_agents * rounds_per_agent + extra_samples_1
-        second_agents = all_agents * rounds_per_agent + extra_samples_2
-
-        # Shuffle both lists
-        random.shuffle(first_agents)
-        random.shuffle(second_agents)
-
-        # use deque to pop from the left
-        first_agents_q = deque(first_agents)
-        second_agents_q = deque(second_agents)
-
-        used_pairs = set()  # avoid re-using pairs
-        pairs = []
-        while first_agents_q and len(pairs) < self.k:
-            agent_a = first_agents_q.popleft()
-
-            for _ in range(len(second_agents)):
-                agent_b = second_agents_q.popleft()
-                if agent_b != agent_a and (agent_a, agent_b) not in used_pairs:
-                    used_pairs.add((agent_a, agent_b))
-                    pairs.append((agent_a, agent_b))
-                    logging.debug(f"Created game {agent_a} vs {agent_b}")
-                    if self.bidirectional:
-                        pairs.append((agent_b, agent_a))
-                        used_pairs.add((agent_b, agent_a))
-                        logging.debug(f"Created game {agent_b} vs {agent_a}")
-                    else:
-                        used_pairs.add((agent_b, agent_a))
-                    second_agents_q.append(agent_b)
-                    break
-                second_agents_q.append(agent_b)
-        logging.info(f"Created {len(pairs)} games")
-        return pairs
-
-    def __prepare_all_tuples(
+    def __prepare_tuples_for_query(
         self,
-        answers: dict[str, list[AgentAnswer]],
-        use_progress_bar: bool = True,
+        query: Query,
     ) -> list[tuple[AgentAnswer, AgentAnswer]]:
         all_tuples = []
-        random_pairs = self.__generate_random_games(answers)
-
-        answers_per_agent: dict[str, dict[str, AgentAnswer]] = defaultdict(dict)
-        queries_per_agent: defaultdict[str, set] = defaultdict(set)
-        for qid, answers_list in answers.items():
-            for answer in answers_list:
-                answers_per_agent[answer.agent][qid] = answer
-                queries_per_agent[answer.agent].add(qid)
-
-        for qid in tqdm(
-            answers,
-            desc="Creating prompts",
-            disable=not use_progress_bar,
-            ncols=100,
-            leave=False,
-        ):
-            for a, b in random_pairs:
-                if qid not in queries_per_agent[a] or qid not in queries_per_agent[b]:
-                    continue
-                all_tuples.append(
-                    (answers_per_agent[a][qid], answers_per_agent[b][qid])
-                )
+        answers = {}
+        for agent_answer in query.answers:
+            answers[agent_answer.agent] = agent_answer
+        random_pairs = self.__generate_games_per_query(query)
+        for agent_a, agent_b in random_pairs:
+            all_tuples.append((answers[agent_a], answers[agent_b]))
         return all_tuples
 
     def _process_answer(self, answer: str) -> str:
@@ -289,3 +250,27 @@ and "[[C]]" for a tie.
         if answer not in ["A", "B", "C"]:
             raise ValueError(f"Unknown answer: {answer}")
         return answer
+
+    def _build_message(
+        self, query: Query, answer: AgentAnswer
+    ) -> str | list[dict[str, str]]:
+        raise NotImplementedError
+
+    @staticmethod
+    def _load_reasonings(
+        reasoning_path: str,
+        query_id_col: str = "qid",
+        document_id_col: str = "did",
+        answer_col: str = "answer",
+    ) -> dict[str, dict[str, str]]:
+        reasoning: dict[str, dict[str, str]] = defaultdict(lambda: dict())
+        reasoning_read = 0
+        if not os.path.exists(reasoning_path):
+            raise FileNotFoundError(f"Reasoning file {reasoning_path} not found")
+
+        logger.info(f"Loading reasonings from {reasoning_path}")
+        for line in csv.DictReader(open(reasoning_path)):
+            reasoning_read += 1
+            reasoning[line[query_id_col]][line[document_id_col]] = line[answer_col]
+        logger.info(f"Loaded {reasoning_read} reasonings")
+        return dict(reasoning)

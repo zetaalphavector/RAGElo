@@ -3,7 +3,7 @@ from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
     BaseAnswerEvaluator,
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
-from ragelo.types import AgentAnswer, AnswerEvaluatorTypes
+from ragelo.types import AgentAnswer, AnswerEvaluatorTypes, Query
 from ragelo.types.configurations import CustomPromptAnswerEvaluatorConfig
 
 
@@ -11,7 +11,6 @@ from ragelo.types.configurations import CustomPromptAnswerEvaluatorConfig
 class CustomPromptEvaluator(BaseAnswerEvaluator):
     config: CustomPromptAnswerEvaluatorConfig
     output_file: str = "custom_prompt_evaluations.csv"
-    output_columns = ["query_id", "agent", "raw_answer"]
 
     def __init__(
         self,
@@ -19,19 +18,24 @@ class CustomPromptEvaluator(BaseAnswerEvaluator):
         llm_provider: BaseLLMProvider,
     ):
         super().__init__(config, llm_provider)
-        self.__prompt = config.prompt
-        self.__scoring_fields = config.scoring_fields
-        self.output_columns.extend(self.__scoring_fields)
+        self.prompt = config.prompt
 
-    def _build_message(self, answer: AgentAnswer) -> str:
-        reasonings = self._prepare_reasonings(answer.query.qid)
+    def _build_message(self, query: Query, answer: AgentAnswer) -> str:
+        documents = self._prepare_documents(query)
+        query_metadata = self._get_usable_fields_from_metadata(
+            self.prompt, query.metadata, skip_fields=[self.config.query_placeholder]
+        )
+        answer_metadata = self._get_usable_fields_from_metadata(
+            self.prompt,
+            answer.metadata,
+            skip_fields=[self.config.answer_placeholder],
+        )
         formatters = {
-            self.config.query_placeholder: answer.query.query,
+            self.config.query_placeholder: query.query,
             self.config.answer_placeholder: answer.text,
-            self.config.documents_placeholder: reasonings,
+            self.config.documents_placeholder: documents,
+            **query_metadata,
+            **answer_metadata,
         }
 
-        return self.__prompt.format(**formatters)
-
-    def _process_answer(self, answer: str) -> dict[str, str]:
-        return self.json_answer_parser_multifields(answer, self.__scoring_fields)
+        return self.prompt.format(**formatters)
