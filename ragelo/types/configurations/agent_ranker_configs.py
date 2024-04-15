@@ -1,6 +1,7 @@
 from typing import Optional
 
-from ragelo.pydantic_v1 import Field
+from pydantic import Field
+
 from ragelo.types.configurations.base_configs import BaseConfig
 
 

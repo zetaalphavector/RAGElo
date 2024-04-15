@@ -6,6 +6,7 @@ from typing import Any, Callable, get_type_hints
 from typer.models import ArgumentInfo, OptionInfo, ParameterInfo, ParamMeta
 
 from ragelo.types import BaseConfig
+from ragelo.types.configurations.base_configs import _PYDANTIC_MAJOR_VERSION
 
 arguments = {
     "query_path",
@@ -39,7 +40,10 @@ def get_params_from_function(func: Callable[..., Any]) -> dict[str, ParamMeta]:
                 _type = v.annotation
                 if not isinstance(v, ParameterInfo):
                     # get the description from Pydantic model
-                    description = v.description
+                    if _PYDANTIC_MAJOR_VERSION == 2:
+                        description = v.description  # type: ignore
+                    else:
+                        description = v.field_info.description  # type: ignore
                     if k in arguments:
                         argument = ArgumentInfo(default=v.default, help=description)
                         params[k] = ParamMeta(

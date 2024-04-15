@@ -1,6 +1,7 @@
 from typing import List, Optional
 
-from ragelo.pydantic_v1 import Field
+from pydantic import Field
+
 from ragelo.types.configurations.base_configs import AnswerFormat, BaseEvaluatorConfig
 from ragelo.types.types import FewShotExample
 

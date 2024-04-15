@@ -1,9 +1,27 @@
 from enum import StrEnum
+from importlib import metadata
 from typing import Any, Optional
 
+from pydantic import BaseModel as PydanticBaseModel
+
 from ragelo.logger import logger
-from ragelo.pydantic_v1 import _PYDANTIC_MAJOR_VERSION
-from ragelo.pydantic_v1 import BaseModel as PydanticBaseModel
+
+_PYDANTIC_MAJOR_VERSION: int = int(metadata.version("pydantic").split(".")[0])
+
+
+class BaseModel(PydanticBaseModel):
+    @classmethod
+    def get_model_fields(cls):
+        if _PYDANTIC_MAJOR_VERSION == 1:
+            return cls.__fields__  # type: ignore
+        else:
+            return cls.model_fields  # type: ignore
+
+    def model_dump(self):
+        if _PYDANTIC_MAJOR_VERSION == 1:
+            return self.dict()  # type: ignore
+        else:
+            return super().model_dump()  # type: ignore
 
 
 class AnswerFormat(StrEnum):
@@ -35,14 +53,6 @@ class AnswerEvaluatorTypes(StrEnum):
 
     PAIRWISE_REASONING = "pairwise_reasoning"
     CUSTOM_PROMPT = "custom_prompt"
-
-
-class BaseModel(PydanticBaseModel):
-    def model_dump(self):
-        if _PYDANTIC_MAJOR_VERSION == 1:
-            return self.dict()  # type: ignore
-        else:
-            return super().model_dump()  # type: ignore
 
 
 class FewShotExample(BaseModel):
