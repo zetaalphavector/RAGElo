@@ -141,20 +141,44 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         pbar.close()
         return answers
 
+    # def batch_evaluate(self, queries: list[Query]) -> list[RetrievalEvaluatorResult]:
+    #     """Evaluate all the documents for a list of queries"""
+    #     use_progress_bar = self.config.verbose
+    #     answers = [RetrievalEvaluatorResult(**x) for x in self._get_existing_output()]
+    #     tuples_to_eval = self.__get_tuples_to_evaluate(queries, answers)
+    #     failed_evaluations = 0
+    #     if len(tuples_to_eval) == 0:
     def batch_evaluate(self, queries: list[Query]) -> list[RetrievalEvaluatorResult]:
         """Evaluate all the documents for a list of queries"""
         use_progress_bar = self.config.verbose
         answers = [RetrievalEvaluatorResult(**x) for x in self._get_existing_output()]
-        tuples_to_eval = self.__get_tuples_to_evaluate(queries, answers)
+        skip_docs = {(x.qid, x.did) for x in answers}
         failed_evaluations = 0
+        tuples_to_eval = []
+        all_tuples = 0
+        for query in queries:
+            for document in query.retrieved_docs:
+                qid = query.qid
+                did = document.did
+                all_tuples += 1
+                if (qid, did) in skip_docs:
+                    logger.debug(f"Skipping {qid} {did}")
+                    continue
+                tuples_to_eval.append((query, document))
         if len(tuples_to_eval) == 0:
+            logger.info("All documents have been evaluated")
+            if self.config.verbose:
+                print(
+                    f"All {all_tuples} documents are already evaluated.\n"
+                    "If you want to re-evaluate documents, use the --force flag."
+                )
             return answers
         for query, document in tqdm(
             tuples_to_eval,
             desc="Evaluating retrieved documents",
             disable=not use_progress_bar,
             ncols=100,
-            leave=False,
+            # leave=False,
             position=0,
         ):
             qid = query.qid
