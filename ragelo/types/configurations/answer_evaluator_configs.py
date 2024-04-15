@@ -1,7 +1,6 @@
 from pydantic import Field
 
-from ragelo.types.configurations.base_configs import BaseEvaluatorConfig
-from ragelo.types.types import AnswerFormat
+from ragelo.types.configurations.base_configs import AnswerFormat, BaseEvaluatorConfig
 
 
 class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):

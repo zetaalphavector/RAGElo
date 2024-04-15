@@ -1,6 +1,6 @@
 from typing import Optional
 
-from pydantic import BaseModel
+from ragelo.types.configurations import BaseModel
 
 
 class LLMProviderConfig(BaseModel):

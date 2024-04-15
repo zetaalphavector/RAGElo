@@ -24,7 +24,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: System :: Benchmark",
 ]
-dependencies = ["openai>=1.10", "tenacity", "typer", "numpy", "pydantic>=2.7"]
+dependencies = ["openai>=1.10", "tenacity", "typer", "numpy", "pydantic>=1.9"]
 
 [project.optional-dependencies]
 cli = ["typer[all]"]
@@ -38,6 +38,7 @@ dev = [
     "mypy==1.9.0",
     "Flake8-pyproject==1.2.3",
     "types-tqdm==4.66.0",
+    "pydantic==2.7.0",
 ]
 
 [project.scripts]
@@ -60,7 +61,6 @@ show_column_numbers = true
 namespace_packages = true
 follow_imports = "silent"
 warn_redundant_casts = true
-warn_unused_ignores = true
 check_untyped_defs = true
 implicit_reexport = true
 exclude = ["build/", "dist/", "venv/"]

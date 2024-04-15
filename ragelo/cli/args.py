@@ -3,8 +3,10 @@
 import inspect
 from typing import Any, Callable, get_type_hints
 
-import pydantic
 from typer.models import ArgumentInfo, OptionInfo, ParameterInfo, ParamMeta
+
+from ragelo.types import BaseConfig
+from ragelo.types.configurations.base_configs import _PYDANTIC_MAJOR_VERSION
 
 arguments = {
     "query_path",
@@ -32,13 +34,17 @@ def get_params_from_function(func: Callable[..., Any]) -> dict[str, ParamMeta]:
             continue
         if param.name in type_hints:
             annotation = type_hints[param.name]
-        if inspect.isclass(annotation) and issubclass(annotation, pydantic.BaseModel):
-            fields = annotation.model_fields
+        if inspect.isclass(annotation) and issubclass(annotation, BaseConfig):
+            fields = annotation.get_model_fields()
             for k, v in fields.items():
-                _type = v.annotation
+                if _PYDANTIC_MAJOR_VERSION == 2:
+                    description = v.description  # type: ignore
+                    _type = v.annotation
+                else:
+                    description = v.field_info.description  # type: ignore
+                    _type = v.type_
                 if not isinstance(v, ParameterInfo):
                     # get the description from Pydantic model
-                    description = v.description
                     if k in arguments:
                         argument = ArgumentInfo(default=v.default, help=description)
                         params[k] = ParamMeta(
