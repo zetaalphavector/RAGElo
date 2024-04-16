@@ -44,6 +44,15 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 scoring_keys = config.scoring_key
             self.output_columns = ["qid", "agent", "raw_answer"] + scoring_keys
 
+        if config.scoring_key and config.scoring_key not in self.output_columns:
+            print(f"Adding scoring key {config.scoring_key} to output columns")
+            self.output_columns.append(self.config.scoring_key)
+        if config.scoring_keys:
+            missing_keys = [
+                key for key in config.scoring_keys if key not in self.output_columns
+            ]
+            self.output_columns.extend(missing_keys)
+
     def __get_tuples_to_evaluate(
         self, queries: list[Query], evaluations: list[AnswerEvaluatorResult]
     ) -> list[tuple[Query, AgentAnswer]]:

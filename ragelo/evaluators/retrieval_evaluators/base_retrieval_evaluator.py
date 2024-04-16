@@ -46,7 +46,12 @@ class BaseRetrievalEvaluator(BaseEvaluator):
 
         if config.scoring_key and config.scoring_key not in self.output_columns:
             print(f"Adding scoring key {config.scoring_key} to output columns")
-            self.output_columns.extend(self.config.scoring_key)
+            self.output_columns.append(self.config.scoring_key)
+        if config.scoring_keys:
+            missing_keys = [
+                key for key in config.scoring_keys if key not in self.output_columns
+            ]
+            self.output_columns.extend(missing_keys)
 
     def __get_tuples_to_evaluate(
         self, queries: list[Query], answers: list[RetrievalEvaluatorResult]
@@ -111,6 +116,8 @@ class BaseRetrievalEvaluator(BaseEvaluator):
     ) -> list[RetrievalEvaluatorResult]:
         """Evaluate all the documents for a list of queries"""
         use_progress_bar = self.config.verbose
+        existing_output = self._get_existing_output()
+        print(existing_output)
         answers = [RetrievalEvaluatorResult(**x) for x in self._get_existing_output()]
         tuples_to_eval = self.__get_tuples_to_evaluate(queries, answers)
         if len(tuples_to_eval) == 0:
