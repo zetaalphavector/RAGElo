@@ -16,17 +16,8 @@ permissions:
   contents: read
 
 jobs:
-  build-and-publish:
+  build:
     runs-on: ubuntu-latest
-    environment:
-      # Production pypi
-      # name: pypi
-      # url: https://pypi.org/p/ragelo
-      # Testing pypi
-      name: testpypi
-      url: https://test.pypi.org/p/ragelo
-    permissions:
-      id-token: write  # IMPORTANT: mandatory for trusted publishing
     steps:
     - uses: actions/checkout@v4
     - name: Set up Python
@@ -41,8 +32,48 @@ jobs:
         --user
     - name: Build a binary wheel and a source tarball
       run: python3 -m build
+    - name: Store the distribution packages
+      uses: actions/upload-artifact@v3
+      with:
+        name: python-package-distributions
+        path: dist/
+  publish-to-testpypi:
+    name: publish to testpypi
+    needs:
+    - build
+    runs-on: ubuntu-latest
+    environment:
+      # Testing pypi
+      name: testpypi
+      url: https://test.pypi.org/p/ragelo
+    permissions:
+      id-token: write  # IMPORTANT: mandatory for trusted publishing
+    steps:
+    - name: Download all the dists
+      uses: actions/download-artifact@v3
+      with:
+        name: python-package-distributions
+        path: dist/
     - name: Publish distribution 📦 to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
-      # Testing pypi. Remove for production.
       with:
         repository-url: https://test.pypi.org/legacy/
+  publish-to-pypi:
+    if: "!github.event.release.prerelease"
+    name: publish to pypi
+    needs:
+    - build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/ragelo
+    permissions:
+      id-token: write  # IMPORTANT: mandatory for trusted publishing
+    steps:
+    - name: Download all the dists
+      uses: actions/download-artifact@v3
+      with:
+        name: python-package-distributions
+        path: dist/
+    - name: Publish distribution 📦 to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
