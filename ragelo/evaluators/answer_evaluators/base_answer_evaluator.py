@@ -110,6 +110,10 @@ class BaseAnswerEvaluator(BaseEvaluator):
         """Evaluate all the documents for a list of queries"""
         use_progress_bar = self.config.verbose
         answers = [AnswerEvaluatorResult(**x) for x in self._get_existing_output()]
+        queries = self._add_retrieved_documents_to_queries(
+            queries, self.config.documents_path
+        )
+
         tuples_to_eval = self.__get_tuples_to_evaluate(queries, answers)
         if len(tuples_to_eval) == 0:
             return answers
@@ -143,6 +147,10 @@ class BaseAnswerEvaluator(BaseEvaluator):
         use_progress_bar = self.config.verbose
         failed_evaluations = 0
         evaluations = [AnswerEvaluatorResult(**x) for x in self._get_existing_output()]
+        queries = self._add_retrieved_documents_to_queries(
+            queries, self.config.documents_path
+        )
+
         tuples_to_eval = self.__get_tuples_to_evaluate(queries, evaluations)
         if len(tuples_to_eval) == 0:
             return evaluations

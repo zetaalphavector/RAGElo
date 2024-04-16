@@ -54,7 +54,6 @@ class TestCustomPromptEvaluator:
         llm_provider_answer_mock,
         custom_answer_eval_config,
         answers_test,
-        mock_async_openai_multi_json_response,
     ):
         evaluator = CustomPromptEvaluator.from_config(
             config=custom_answer_eval_config,
