@@ -2,6 +2,7 @@ import json
 from unittest.mock import Mock
 
 import pytest
+from aioresponses import aioresponses
 from openai import OpenAI
 from openai.resources.chat import Chat
 from openai.resources.chat.completions import Completions
@@ -24,6 +25,62 @@ from ragelo.utils import (
     load_queries_from_csv,
     load_retrieved_docs_from_csv,
 )
+
+
+@pytest.fixture
+def mock_async_openai_json_response():
+    with aioresponses() as m:
+        m.post(
+            "https://api.openai.com/v1/chat/completions",
+            status=200,
+            repeat=True,
+            payload={
+                "id": "requestID",
+                "object": "chat.completion",
+                "created": 1713271118,
+                "model": "fake-model",
+                "choices": [
+                    {
+                        "finish_reason": "stop",
+                        "index": 0,
+                        "logprobs": None,
+                        "message": {
+                            "content": 'async LLM JSON response\n{"relevance": 0}',
+                            "role": "assistant",
+                        },
+                    }
+                ],
+            },
+        )
+        yield m
+
+
+@pytest.fixture
+def mock_async_openai_multi_json_response():
+    with aioresponses() as m:
+        m.post(
+            "https://api.openai.com/v1/chat/completions",
+            status=200,
+            repeat=True,
+            payload={
+                "id": "requestID",
+                "object": "chat.completion",
+                "created": 1713271118,
+                "model": "fake-model",
+                "choices": [
+                    {
+                        "finish_reason": "stop",
+                        "index": 0,
+                        "logprobs": None,
+                        "message": {
+                            "content": 'async LLM JSON response\n{"quality": 2, "trustworthiness": 1, "originality": 1}',
+                            "role": "assistant",
+                        },
+                    }
+                ],
+            },
+        )
+        yield m
 
 
 class MockLLMProvider(BaseLLMProvider):

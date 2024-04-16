@@ -3,8 +3,6 @@ It receives a set of queries used to retrieve a document and their respective re
 and returns a score or a label for each document."""
 
 import asyncio
-
-# import dataclasses
 from typing import Any, Callable, Optional, Type, get_type_hints
 
 from aiohttp import ClientSession
@@ -118,9 +116,6 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         if len(tuples_to_eval) == 0:
             return answers
 
-        # We will process one chunk at a time
-        # Each chunk will be processed using asyncio to fetch
-        # the answers in parallel
         chunks = [
             tuples_to_eval[i : i + self.config.n_processes]
             for i in range(0, len(tuples_to_eval), self.config.n_processes)
@@ -146,30 +141,13 @@ class BaseRetrievalEvaluator(BaseEvaluator):
 
         return answers
 
-    # def batch_evaluate(self, queries: list[Query]) -> list[RetrievalEvaluatorResult]:
-    #     """Evaluate all the documents for a list of queries"""
-    #     use_progress_bar = self.config.verbose
-    #     answers = [RetrievalEvaluatorResult(**x) for x in self._get_existing_output()]
-    #     tuples_to_eval = self.__get_tuples_to_evaluate(queries, answers)
-    #     failed_evaluations = 0
-    #     if len(tuples_to_eval) == 0:
     def batch_evaluate(self, queries: list[Query]) -> list[RetrievalEvaluatorResult]:
         """Evaluate all the documents for a list of queries"""
         use_progress_bar = self.config.verbose
         answers = [RetrievalEvaluatorResult(**x) for x in self._get_existing_output()]
-        skip_docs = {(x.qid, x.did) for x in answers}
         failed_evaluations = 0
-        tuples_to_eval = []
+        tuples_to_eval = self.__get_tuples_to_evaluate(queries, answers)
         all_tuples = 0
-        for query in queries:
-            for document in query.retrieved_docs:
-                qid = query.qid
-                did = document.did
-                all_tuples += 1
-                if (qid, did) in skip_docs:
-                    logger.debug(f"Skipping {qid} {did}")
-                    continue
-                tuples_to_eval.append((query, document))
         if len(tuples_to_eval) == 0:
             logger.info("All documents have been evaluated")
             if self.config.verbose:
