@@ -39,6 +39,7 @@ dev = [
     "Flake8-pyproject==1.2.3",
     "types-tqdm==4.66.0",
     "pydantic==2.7.0",
+    "aioresponses==0.7.6",
 ]
 
 [project.scripts]

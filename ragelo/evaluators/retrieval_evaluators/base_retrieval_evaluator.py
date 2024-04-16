@@ -108,7 +108,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
                 )
         return parsed_answers
 
-    def batch_evaluate_parallel(
+    async def batch_evaluate_async(
         self, queries: list[Query]
     ) -> list[RetrievalEvaluatorResult]:
         """Evaluate all the documents for a list of queries"""
@@ -122,7 +122,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         # Each chunk will be processed using asyncio to fetch
         # the answers in parallel
         chunks = [
-            tuples_to_eval[i : i + self.config.n_processes]  # noqa
+            tuples_to_eval[i : i + self.config.n_processes]
             for i in range(0, len(tuples_to_eval), self.config.n_processes)
         ]
         pbar = tqdm(
@@ -133,12 +133,17 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             leave=False,
             position=0,
         )
-        with asyncio.Runner() as runner:
-            for chunk in chunks:
-                responses = runner.run(self.__fetch_chunk(chunk))
-                answers.extend(responses)
-                pbar.update(len(chunk))
+
+        for chunk in chunks:
+            responses = await self.__fetch_chunk(chunk)
+            answers.extend(responses)
+            pbar.update(len(chunk))
         pbar.close()
+
+        if self.config.verbose:
+            print("✅ Done!")
+            print(f"Total evaluations: {len(answers)}")
+
         return answers
 
     # def batch_evaluate(self, queries: list[Query]) -> list[RetrievalEvaluatorResult]:

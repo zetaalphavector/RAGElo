@@ -74,7 +74,7 @@ class OpenAIProvider(BaseLLMProvider):
             "temperature": self.config.temperature,
             "max_tokens": self.config.max_tokens,
         }
-        url = f"{self.__openai_client.base_url}/chat/completions"
+        url = f"{self.__openai_client.base_url}chat/completions"
         headers = {
             "Authorization": f"Bearer {self.__openai_client.api_key}",
             "Content-Type": "application/json",

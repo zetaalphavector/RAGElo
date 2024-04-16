@@ -1,5 +1,9 @@
+import asyncio
 import json
 from unittest.mock import Mock
+
+import aiohttp
+from aioresponses import aioresponses
 
 from ragelo import get_retrieval_evaluator
 from ragelo.evaluators.retrieval_evaluators import (
@@ -10,6 +14,7 @@ from ragelo.evaluators.retrieval_evaluators import (
     RDNAMEvaluator,
     ReasonerEvaluator,
 )
+from ragelo.llm_providers.openai_client import OpenAIProvider
 from ragelo.types import Document, Query
 
 
@@ -62,6 +67,43 @@ class TestRetrievalEvaluator:
                 expected_prompts.append(f"Query: {query.query}\nDocument: {doc.text}")
         for i, call in enumerate(call_args):
             assert call[0][0] == expected_prompts[i]
+
+    def test_batch_eval_async(
+        self, openai_client_config, base_eval_config, qs_with_docs
+    ):
+        base_eval_config.answer_format = "json"
+        base_eval_config.n_processes = 2
+        llm_provider = OpenAIProvider(config=openai_client_config)
+        evaluator = RetrievalEvaluator.from_config(
+            config=base_eval_config, llm_provider=llm_provider
+        )
+        with aioresponses() as m:
+            with asyncio.Runner() as runner:
+                m.post(
+                    "https://api.openai.com/v1/chat/completions",
+                    status=200,
+                    repeat=True,
+                    payload={
+                        "id": "requestID",
+                        "object": "chat.completion",
+                        "created": 1713271118,
+                        "model": "fake-model",
+                        "choices": [
+                            {
+                                "finish_reason": "stop",
+                                "index": 0,
+                                "logprobs": None,
+                                "message": {
+                                    "content": 'LLM JSON response\n{"relevance": 0}',
+                                    "role": "assistant",
+                                },
+                            }
+                        ],
+                    },
+                )
+
+                result = runner.run(evaluator.batch_evaluate_async(qs_with_docs))
+        assert len(result) == 4
 
     def test_evaluate_with_text(self, llm_provider_json_mock, base_eval_config):
         evaluator = RetrievalEvaluator.from_config(
