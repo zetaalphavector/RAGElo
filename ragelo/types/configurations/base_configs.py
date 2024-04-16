@@ -70,7 +70,6 @@ class BaseEvaluatorConfig(BaseConfig):
     )
 
 
-
 class AllConfig(BaseEvaluatorConfig):
     reasoning_path: str = Field(
         default="reasonings.csv",
