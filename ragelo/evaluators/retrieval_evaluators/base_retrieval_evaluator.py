@@ -117,7 +117,6 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         """Evaluate all the documents for a list of queries"""
         use_progress_bar = self.config.verbose
         existing_output = self._get_existing_output()
-        print(existing_output)
         answers = [RetrievalEvaluatorResult(**x) for x in self._get_existing_output()]
         tuples_to_eval = self.__get_tuples_to_evaluate(queries, answers)
         if len(tuples_to_eval) == 0:

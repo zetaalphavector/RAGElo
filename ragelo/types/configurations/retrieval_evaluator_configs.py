@@ -18,6 +18,16 @@ class ReasonerEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default=AnswerFormat.TEXT,
         description="The format of the answer returned by the LLM",
     )
+    scoring_key: str = Field(
+        default="answer",
+        description="When using answer_format=json, the key to extract from the answer",
+    )
+    scoring_keys: list[str] = Field(
+        default=[],
+        description="When using answer_format=multi_field_json, the keys to extract from the answer",
+    )
+
+    output_file: Optional[str] = Field(default=None, description="reasonings.csv")
 
 
 class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
