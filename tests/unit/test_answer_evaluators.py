@@ -1,8 +1,6 @@
 import asyncio
 from typing import cast
 
-from aioresponses import aioresponses
-
 from ragelo import get_answer_evaluator
 from ragelo.evaluators.answer_evaluators import (
     CustomPromptEvaluator,

@@ -60,10 +60,6 @@ class TestOpenAIProvider:
     ):
         openai_client = OpenAIProvider(config=openai_client_config)
         prompt = "hello world"
-        prompts = [
-            {"role": "system", "content": "hello world"},
-            {"role": "user", "content": "hello openai"},
-        ]
 
         with aioresponses() as m:
             with asyncio.Runner() as runner:
