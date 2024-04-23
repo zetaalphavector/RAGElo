@@ -1,11 +1,11 @@
 import json
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
-from aioresponses import aioresponses
-from openai import OpenAI
-from openai.resources.chat import Chat
-from openai.resources.chat.completions import Completions
+from openai import AsyncOpenAI
+from openai.resources.chat import AsyncChat
+from openai.types.chat.chat_completion import ChatCompletion, Choice
+from openai.types.chat.chat_completion_message import ChatCompletionMessage
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.llm_providers.openai_client import OpenAIConfiguration
@@ -25,62 +25,6 @@ from ragelo.utils import (
     load_queries_from_csv,
     load_retrieved_docs_from_csv,
 )
-
-
-@pytest.fixture
-def mock_async_openai_json_response():
-    with aioresponses() as m:
-        m.post(
-            "https://api.openai.com/v1/chat/completions",
-            status=200,
-            repeat=True,
-            payload={
-                "id": "requestID",
-                "object": "chat.completion",
-                "created": 1713271118,
-                "model": "fake-model",
-                "choices": [
-                    {
-                        "finish_reason": "stop",
-                        "index": 0,
-                        "logprobs": None,
-                        "message": {
-                            "content": 'async LLM JSON response\n{"relevance": 0}',
-                            "role": "assistant",
-                        },
-                    }
-                ],
-            },
-        )
-        yield m
-
-
-@pytest.fixture
-def mock_async_openai_multi_json_response():
-    with aioresponses() as m:
-        m.post(
-            "https://api.openai.com/v1/chat/completions",
-            status=200,
-            repeat=True,
-            payload={
-                "id": "requestID",
-                "object": "chat.completion",
-                "created": 1713271118,
-                "model": "fake-model",
-                "choices": [
-                    {
-                        "finish_reason": "stop",
-                        "index": 0,
-                        "logprobs": None,
-                        "message": {
-                            "content": 'async LLM JSON response\n{"quality": 2, "trustworthiness": 1, "originality": 1}',
-                            "role": "assistant",
-                        },
-                    }
-                ],
-            },
-        )
-        yield m
 
 
 class MockLLMProvider(BaseLLMProvider):
@@ -145,13 +89,32 @@ def llm_provider_config():
 
 @pytest.fixture
 def chat_completion_mock(mocker):
-    return mocker.Mock(Completions)
+
+    fake_response = ChatCompletion(
+        id="fake id",
+        choices=[
+            Choice(
+                finish_reason="stop",
+                index=0,
+                logprobs=None,
+                message=ChatCompletionMessage(
+                    content="fake response", role="assistant"
+                ),
+            )
+        ],
+        created=0,
+        model="fake model",
+        object="chat.completion",
+    )
+    async_mock = AsyncMock()
+    async_mock.create.return_value = fake_response
+    return async_mock
 
 
 @pytest.fixture
 def openai_client_mock(mocker, chat_completion_mock):
-    openai_client = mocker.Mock(OpenAI)
-    type(openai_client).chat = mocker.Mock(Chat)
+    openai_client = mocker.AsyncMock(AsyncOpenAI)
+    type(openai_client).chat = mocker.AsyncMock(AsyncChat)
     type(openai_client.chat).completions = mocker.PropertyMock(
         return_value=chat_completion_mock
     )
