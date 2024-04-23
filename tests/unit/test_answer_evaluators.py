@@ -99,15 +99,45 @@ class TestCustomPromptEvaluator:
         custom_answer_eval_config,
         answers_test,
     ):
+        custom_answer_eval_config.n_processes = 2
         evaluator = CustomPromptEvaluator.from_config(
             config=custom_answer_eval_config,
             llm_provider=llm_provider_answer_mock,
         )
 
-        results = await evaluator.batch_evaluate_async(answers_test)
+        answers = await evaluator.batch_evaluate_async(answers_test)
+        flat_answers = [(q, a) for q in answers_test for a in q.answers]
 
-        assert len(results) == 4
-        assert all([isinstance(a.answer, dict) for a in results])
+        assert all([isinstance(a.answer, dict) for a in answers])
+        assert len(answers) == 4
+        assert answers[0].agent == answers[2].agent == "agent1"
+        assert answers[1].agent == answers[3].agent == "agent2"
+
+        parsed_answer = cast(dict[str, int], answers[0].answer)
+        assert parsed_answer["quality"] == 1
+        assert parsed_answer["trustworthiness"] == 0
+        assert parsed_answer["originality"] == 0
+
+        llm_call_args = llm_provider_answer_mock.async_call_mocker.call_args_list
+        assert (
+            len(
+                llm_call_args[0][0][0]
+                .split("DOCUMENTS RETRIEVED:")[1]
+                .split("User Query")[0]
+                .strip()
+                .split("\n")
+            )
+            == 2
+        )
+        for (q, a), args in zip(flat_answers, llm_call_args):
+            submitted_query = args[0][0].split("User Query: ")[1].split("\n")[0].strip()
+            submitted_answer = (
+                args[0][0].split("Agent answer: ")[1].split("\n")[-1].strip()
+            )
+            expected_query = q.query
+            expected_answer = a.text
+            assert submitted_query == expected_query
+            assert submitted_answer == expected_answer
 
 
 def test_get_by_name(llm_provider_pairwise_answer_mock, pairwise_answer_eval_config):

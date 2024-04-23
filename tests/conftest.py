@@ -2,6 +2,7 @@ import json
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from more_itertools import side_effect
 from openai import AsyncOpenAI
 from openai.resources.chat import AsyncChat
 from openai.types.chat.chat_completion import ChatCompletion, Choice
@@ -31,7 +32,10 @@ class MockLLMProvider(BaseLLMProvider):
     def __init__(self, config):
         self.config = config
         self.call_mocker = Mock(
-            side_effect=lambda prompt: f"Received prompt: {prompt}. "
+            side_effect=lambda prompt: f"Received prompt: {prompt}."
+        )
+        self.async_call_mocker = AsyncMock(
+            side_effect=lambda prompt: f"Async prompt: {prompt}."
         )
 
     @classmethod
@@ -39,7 +43,7 @@ class MockLLMProvider(BaseLLMProvider):
         return cls(config)
 
     async def call_async(self, prompt):
-        return self.call_mocker(prompt)
+        return await self.async_call_mocker(prompt)
 
     def __call__(self, prompt) -> str:
         return self.call_mocker(prompt)
@@ -268,6 +272,10 @@ def llm_provider_answer_mock(llm_provider_config):
     provider.call_mocker = Mock(
         side_effect=lambda prompt: f"Answer for {prompt}\n"
         '{"quality": 2, "trustworthiness": 1, "originality": 1}',
+    )
+    provider.async_call_mocker = AsyncMock(
+        side_effect=lambda prompt: f"Async answer for {prompt}\n"
+        '{"quality": 1, "trustworthiness": 0, "originality": 0}',
     )
     return provider
 

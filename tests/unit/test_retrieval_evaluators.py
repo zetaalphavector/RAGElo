@@ -2,6 +2,8 @@ import asyncio
 import json
 from unittest.mock import Mock
 
+import pytest
+
 from ragelo import get_retrieval_evaluator
 from ragelo.evaluators.retrieval_evaluators import (
     BaseRetrievalEvaluator,
@@ -65,14 +67,17 @@ class TestRetrievalEvaluator:
         for i, call in enumerate(call_args):
             assert call[0][0] == expected_prompts[i]
 
-    def test_batch_eval_async(
+    @pytest.mark.asyncio
+    async def test_batch_eval_async(
         self,
-        openai_client_config,
+        llm_provider_json_mock,
         base_eval_config,
         qs_with_docs,
-        mock_async_openai_json_response,
     ):
         base_eval_config.answer_format = "json"
+        evaluator = RetrievalEvaluator.from_config(
+            config=base_eval_config, llm_provider=llm_provider_json_mock
+        )
         base_eval_config.n_processes = 2
         llm_provider = OpenAIProvider(config=openai_client_config)
         evaluator = RetrievalEvaluator.from_config(
