@@ -1,6 +1,8 @@
 import asyncio
 from typing import cast
 
+import pytest
+
 from ragelo import get_answer_evaluator
 from ragelo.evaluators.answer_evaluators import (
     CustomPromptEvaluator,
@@ -90,24 +92,22 @@ class TestCustomPromptEvaluator:
             assert submitted_query == expected_query
             assert submitted_answer == expected_answer
 
-    def test_batch_eval_async(
+    @pytest.mark.asyncio
+    async def test_batch_eval_async(
         self,
-        openai_client_config,
+        llm_provider_answer_mock,
         custom_answer_eval_config,
         answers_test,
-        mock_async_openai_multi_json_response,
     ):
-        llm_provider = OpenAIProvider(config=openai_client_config)
         evaluator = CustomPromptEvaluator.from_config(
             config=custom_answer_eval_config,
-            llm_provider=llm_provider,
+            llm_provider=llm_provider_answer_mock,
         )
-        with asyncio.Runner() as runner:
-            results = runner.run(evaluator.batch_evaluate_async(answers_test))
+
+        results = await evaluator.batch_evaluate_async(answers_test)
 
         assert len(results) == 4
         assert all([isinstance(a.answer, dict) for a in results])
-        assert all(["async" in a.raw_answer for a in results])
 
 
 def test_get_by_name(llm_provider_pairwise_answer_mock, pairwise_answer_eval_config):

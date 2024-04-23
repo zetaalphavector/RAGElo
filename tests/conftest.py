@@ -38,7 +38,7 @@ class MockLLMProvider(BaseLLMProvider):
     def from_configuration(cls, config: LLMProviderConfig):
         return cls(config)
 
-    async def call_async(self, prompt, session):
+    async def call_async(self, prompt):
         return self.call_mocker(prompt)
 
     def __call__(self, prompt) -> str:
