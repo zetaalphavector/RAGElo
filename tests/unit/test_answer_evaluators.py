@@ -1,4 +1,3 @@
-import asyncio
 from typing import cast
 
 import pytest
@@ -8,7 +7,6 @@ from ragelo.evaluators.answer_evaluators import (
     CustomPromptEvaluator,
     PairwiseWithReasoningEvaluator,
 )
-from ragelo.llm_providers.openai_client import OpenAIProvider
 
 
 class TestPairwiseWithReasoningEvaluator:
@@ -112,6 +110,7 @@ class TestCustomPromptEvaluator:
         assert len(answers) == 4
         assert answers[0].agent == answers[2].agent == "agent1"
         assert answers[1].agent == answers[3].agent == "agent2"
+        assert all([x.raw_answer.startswith("Async") for x in answers])
 
         parsed_answer = cast(dict[str, int], answers[0].answer)
         assert parsed_answer["quality"] == 1

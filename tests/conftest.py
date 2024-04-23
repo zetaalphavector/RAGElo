@@ -2,7 +2,6 @@ import json
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from more_itertools import side_effect
 from openai import AsyncOpenAI
 from openai.resources.chat import AsyncChat
 from openai.types.chat.chat_completion import ChatCompletion, Choice
@@ -93,7 +92,6 @@ def llm_provider_config():
 
 @pytest.fixture
 def chat_completion_mock(mocker):
-
     fake_response = ChatCompletion(
         id="fake id",
         choices=[
@@ -249,6 +247,9 @@ def llm_provider_json_mock(llm_provider_config):
     provider.call_mocker = Mock(
         side_effect=lambda _: 'LLM JSON response\n{"relevance": 0}'
     )
+    provider.async_call_mocker = AsyncMock(
+        side_effect=lambda _: 'Async LLM JSON response\n{"relevance": 1}'
+    )
     return provider
 
 
@@ -283,15 +284,6 @@ def llm_provider_answer_mock(llm_provider_config):
 @pytest.fixture
 def llm_provider_mock_mock(mocker):
     return mocker.Mock(MockLLMProvider)
-
-
-@pytest.fixture
-def llm_provider_domain_expert_mock(llm_provider_config):
-    provider = MockLLMProvider(llm_provider_config)
-    provider.call_mocker = Mock(
-        side_effect=["Reasoning answer", "2", "Reasoning_answer 2", "0"]
-    )
-    return provider
 
 
 @pytest.fixture
