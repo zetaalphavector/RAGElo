@@ -1,8 +1,10 @@
 """Base model for dealing with answer evaluators"""
 
+import asyncio
 from abc import abstractmethod
 from typing import Any, Callable, Optional, Type, get_type_hints
 
+from aiohttp import ClientSession
 from tenacity import RetryError
 from tqdm import tqdm
 
@@ -42,16 +44,21 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 scoring_keys = config.scoring_key
             self.output_columns = ["qid", "agent", "raw_answer"] + scoring_keys
 
-    def batch_evaluate(self, queries: list[Query]) -> list[AnswerEvaluatorResult]:
-        use_progress_bar = self.config.verbose
-        failed_evaluations = 0
-        evaluations = [AnswerEvaluatorResult(**x) for x in self._get_existing_output()]
+        if config.scoring_key and config.scoring_key not in self.output_columns:
+            print(f"Adding scoring key {config.scoring_key} to output columns")
+            self.output_columns.append(self.config.scoring_key)
+        if config.scoring_keys:
+            missing_keys = [
+                key for key in config.scoring_keys if key not in self.output_columns
+            ]
+            self.output_columns.extend(missing_keys)
+
+    def __get_tuples_to_evaluate(
+        self, queries: list[Query], evaluations: list[AnswerEvaluatorResult]
+    ) -> list[tuple[Query, AgentAnswer]]:
         skip_tuples = {(x.qid, x.agent) for x in evaluations}
         tuples_to_eval = []
         all_tuples = 0
-        queries = self._add_retrieved_documents_to_queries(
-            queries, self.config.documents_path
-        )
         for query in queries:
             for agent_answer in query.answers:
                 qid = query.qid
@@ -68,6 +75,93 @@ class BaseAnswerEvaluator(BaseEvaluator):
                     f"All {all_tuples} answers are already evaluated.\n"
                     "If you want to re-evaluate them, use the force flag"
                 )
+
+        return tuples_to_eval
+
+    async def __fetch_chunk(
+        self, chunk: list[tuple[Query, AgentAnswer]]
+    ) -> list[AnswerEvaluatorResult]:
+        qids = []
+        agent_ids = []
+        async with ClientSession() as session:
+            tasks = []
+            for query, agent_answer in chunk:
+                message = self._build_message(query, agent_answer)
+                qids.append(query.qid)
+                agent_ids.append(agent_answer.agent)
+                tasks.append(self.llm_provider.call_async(message, session))
+            raw_answers = await asyncio.gather(*tasks)
+            parsed_answers = []
+            for qid, agent_id, raw_answer in zip(qids, agent_ids, raw_answers):
+                try:
+                    answer = self._process_answer(raw_answer)
+                except ValueError:
+                    logger.warning(
+                        f"Failed to PARSE answer for qid: {qid} agent: {agent_id}"
+                    )
+                    continue
+                parsed_answers.append(
+                    AnswerEvaluatorResult(
+                        qid=qid,
+                        agent=agent_id,
+                        raw_answer=raw_answer,
+                        answer=answer,
+                    )
+                )
+                self._dump_response(
+                    parsed_answers[-1], self.output_columns, self.output_file
+                )
+        return parsed_answers
+
+    async def batch_evaluate_async(
+        self, queries: list[Query]
+    ) -> list[AnswerEvaluatorResult]:
+        """Evaluate all the documents for a list of queries"""
+        use_progress_bar = self.config.verbose
+        answers = [AnswerEvaluatorResult(**x) for x in self._get_existing_output()]
+        queries = self._add_retrieved_documents_to_queries(
+            queries, self.config.documents_path
+        )
+
+        tuples_to_eval = self.__get_tuples_to_evaluate(queries, answers)
+        if len(tuples_to_eval) == 0:
+            return answers
+
+        chunks = [
+            tuples_to_eval[i : i + self.config.n_processes]
+            for i in range(0, len(tuples_to_eval), self.config.n_processes)
+        ]
+        pbar = tqdm(
+            total=len(tuples_to_eval),
+            ncols=100,
+            desc="Evaluating documents",
+            disable=not use_progress_bar,
+            leave=False,
+            position=0,
+        )
+
+        for chunk in chunks:
+            responses = await self.__fetch_chunk(chunk)
+            answers.extend(responses)
+            pbar.update(len(chunk))
+        pbar.close()
+
+        if self.config.verbose:
+            print("✅ Done!")
+            print(f"Total evaluations: {len(answers)}")
+
+        return answers
+
+    def batch_evaluate(self, queries: list[Query]) -> list[AnswerEvaluatorResult]:
+        use_progress_bar = self.config.verbose
+        failed_evaluations = 0
+        evaluations = [AnswerEvaluatorResult(**x) for x in self._get_existing_output()]
+        queries = self._add_retrieved_documents_to_queries(
+            queries, self.config.documents_path
+        )
+
+        tuples_to_eval = self.__get_tuples_to_evaluate(queries, evaluations)
+        if len(tuples_to_eval) == 0:
             return evaluations
 
         for query, agent_answer in tqdm(

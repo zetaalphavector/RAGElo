@@ -5,6 +5,8 @@ import os
 from abc import ABC, abstractmethod
 from typing import Optional, Type, get_type_hints
 
+from aiohttp import ClientSession
+
 from ragelo.types import LLMProviderConfig, LLMProviderTypes
 
 
@@ -30,6 +32,15 @@ class BaseLLMProvider(ABC):
 
     @abstractmethod
     def __call__(self, prompt: str | list[dict[str, str]]) -> str:
+        """Submits a single query-document pair to the LLM and returns the answer."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def call_async(
+        self,
+        prompt: str | list[dict[str, str]],
+        session: ClientSession,
+    ) -> str:
         """Submits a single query-document pair to the LLM and returns the answer."""
         raise NotImplementedError
 
@@ -77,7 +88,6 @@ class LLMProviderFactory:
         if config is None:
             class_ = cls.registry[name]
             type_config = class_.get_config_class()
-            print(type_config.__fields__)
             valid_keys = [field for field in type_config.get_model_fields()]
             if "api_key" not in kwargs:
                 api_key = os.environ.get(class_.api_key_env_var)

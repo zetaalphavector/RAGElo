@@ -39,6 +39,7 @@ dev = [
     "Flake8-pyproject==1.2.3",
     "types-tqdm==4.66.0",
     "pydantic==2.7.0",
+    "aioresponses==0.7.6",
 ]
 
 [project.scripts]
@@ -67,7 +68,7 @@ exclude = ["build/", "dist/", "venv/"]
 
 
 [tool.flake8]
-ignore = ['E501', "W503"]
+ignore = ['E501', "W503", "E203"]
 per-file-ignores = ['__init__.py:F401,F403']
 exclude = ["build/", "dist/", "venv/"]
 
