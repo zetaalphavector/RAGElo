@@ -4,7 +4,6 @@ import asyncio
 from abc import abstractmethod
 from typing import Any, Callable, Optional, Type, get_type_hints
 
-from aiohttp import ClientSession
 from tenacity import RetryError
 from tqdm import tqdm
 

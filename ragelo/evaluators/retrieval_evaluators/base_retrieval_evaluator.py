@@ -5,7 +5,6 @@ and returns a score or a label for each document."""
 import asyncio
 from typing import Any, Callable, Optional, Type, get_type_hints
 
-from aiohttp import ClientSession
 from tenacity import RetryError
 from tqdm.auto import tqdm
 
@@ -115,7 +114,6 @@ class BaseRetrievalEvaluator(BaseEvaluator):
     ) -> list[RetrievalEvaluatorResult]:
         """Evaluate all the documents for a list of queries"""
         use_progress_bar = self.config.verbose
-        existing_output = self._get_existing_output()
         answers = [RetrievalEvaluatorResult(**x) for x in self._get_existing_output()]
         tuples_to_eval = self.__get_tuples_to_evaluate(queries, answers)
         if len(tuples_to_eval) == 0:

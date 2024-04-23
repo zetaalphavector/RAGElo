@@ -1,6 +1,5 @@
 import asyncio
 
-import aiohttp
 from aioresponses import aioresponses
 from openai.types.chat.chat_completion import ChatCompletion, Choice
 from openai.types.chat.chat_completion_message import ChatCompletionMessage
