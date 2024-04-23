@@ -83,32 +83,31 @@ class BaseRetrievalEvaluator(BaseEvaluator):
     ) -> list[RetrievalEvaluatorResult]:
         qids = []
         dids = []
-        async with ClientSession() as session:
-            tasks = []
-            for query, document in chunk:
-                message = self._build_message(query, document)
-                qids.append(query.qid)
-                dids.append(document.did)
-                tasks.append(self.llm_provider.call_async(message, session))
-            raw_answers = await asyncio.gather(*tasks)
-            parsed_answers = []
-            for qid, did, raw_answer in zip(qids, dids, raw_answers):
-                try:
-                    answer = self._process_answer(raw_answer)
-                except ValueError:
-                    logger.warning(f"Failed to PARSE answer for qid: {qid} did: {did}")
-                    continue
-                parsed_answers.append(
-                    RetrievalEvaluatorResult(
-                        qid=qid,
-                        did=did,
-                        raw_answer=raw_answer,
-                        answer=answer,
-                    )
+        tasks = []
+        for query, document in chunk:
+            message = self._build_message(query, document)
+            qids.append(query.qid)
+            dids.append(document.did)
+            tasks.append(self.llm_provider.call_async(message))
+        raw_answers = await asyncio.gather(*tasks)
+        parsed_answers = []
+        for qid, did, raw_answer in zip(qids, dids, raw_answers):
+            try:
+                answer = self._process_answer(raw_answer)
+            except ValueError:
+                logger.warning(f"Failed to PARSE answer for qid: {qid} did: {did}")
+                continue
+            parsed_answers.append(
+                RetrievalEvaluatorResult(
+                    qid=qid,
+                    did=did,
+                    raw_answer=raw_answer,
+                    answer=answer,
                 )
-                self._dump_response(
-                    parsed_answers[-1], self.output_columns, self.output_file
-                )
+            )
+            self._dump_response(
+                parsed_answers[-1], self.output_columns, self.output_file
+            )
         return parsed_answers
 
     async def batch_evaluate_async(

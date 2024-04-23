@@ -63,7 +63,6 @@ class TestOpenAIProvider:
 
         with aioresponses() as m:
             with asyncio.Runner() as runner:
-                session = aiohttp.ClientSession()
                 m.post(
                     "https://api.openai.com/v1/chat/completions",
                     status=200,
@@ -85,9 +84,7 @@ class TestOpenAIProvider:
                         ],
                     },
                 )
-                result = runner.run(
-                    openai_client.call_async(prompt=prompt, session=session)
-                )
+                result = runner.run(openai_client.call_async(prompt=prompt))
 
         assert result == "fake response"
         messages_sent = m.requests[
