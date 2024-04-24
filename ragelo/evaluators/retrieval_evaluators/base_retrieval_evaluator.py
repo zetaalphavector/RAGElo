@@ -33,10 +33,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         self.document_evaluations_path = config.document_evaluations_path
         self.output_columns = config.output_columns
         if config.answer_format == AnswerFormat.MULTI_FIELD_JSON:
-            if isinstance(config.scoring_key, str):
-                self.config.scoring_keys = [config.scoring_key]
-            else:
-                self.config.scoring_keys = config.scoring_key
+            self.config.scoring_keys = config.scoring_keys
             self.output_columns = [
                 "qid",
                 "did",
@@ -121,13 +118,15 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             )
             exc = str(e)
             answer = None
-        return RetrievalEvaluatorResult(
+        ans = RetrievalEvaluatorResult(
             qid=query.qid,
             did=document.did,
             raw_answer=raw_answer,
             answer=answer,
             exception=exc,
         )
+        self._dump_response(ans, self.output_columns, self.document_evaluations_path)
+        return ans
 
     def __prepare_queries(self, queries: list[Query]) -> list[Query]:
         queries = self._load_retrieved_documents(queries)

@@ -1,5 +1,6 @@
+import asyncio
 import json
-from unittest.mock import Mock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -13,6 +14,7 @@ from ragelo.evaluators.retrieval_evaluators import (
     ReasonerEvaluator,
 )
 from ragelo.types import Document, Query
+from ragelo.types.types import RetrievalEvaluatorResult
 
 
 class RetrievalEvaluator(BaseRetrievalEvaluator):
@@ -33,40 +35,15 @@ class TestRetrievalEvaluator:
         query = qs_with_docs[0]
         doc = query.retrieved_docs[0]
         raw_answer, answer = evaluator.evaluate(query, doc)
-        assert raw_answer == 'LLM JSON response\n{"relevance": 0}'
-        assert answer == 0
+        assert raw_answer == 'Async LLM JSON response\n{"relevance": 1}'
+        assert answer == 1
 
         expected_prompt = f"Query: {query.query}\nDocument: {doc.text}"
-        call_args = llm_provider_json_mock.call_mocker.call_args_list
+        call_args = llm_provider_json_mock.async_call_mocker.call_args_list
         assert call_args[0][0][0] == expected_prompt
 
-    def test_batch_eval(
-        self,
-        llm_provider_json_mock,
-        base_eval_config,
-        qs_with_docs,
-    ):
-        base_eval_config.answer_format = "json"
-        evaluator = RetrievalEvaluator.from_config(
-            config=base_eval_config, llm_provider=llm_provider_json_mock
-        )
-        results = evaluator.batch_evaluate(qs_with_docs)
-        assert len(results) == 4
-        assert results[0].qid == results[1].qid == "0"
-        assert results[2].qid == results[3].qid == "1"
-        assert results[0].did == "0"
-        assert results[2].did == "2"
-
-        call_args = llm_provider_json_mock.call_mocker.call_args_list
-        expected_prompts = []
-        for query in qs_with_docs:
-            for doc in query.retrieved_docs:
-                expected_prompts.append(f"Query: {query.query}\nDocument: {doc.text}")
-        for i, call in enumerate(call_args):
-            assert call[0][0] == expected_prompts[i]
-
     @pytest.mark.asyncio
-    async def test_batch_eval_async(
+    async def test_batch_eval(
         self,
         llm_provider_json_mock,
         base_eval_config,
@@ -76,14 +53,17 @@ class TestRetrievalEvaluator:
         evaluator = RetrievalEvaluator.from_config(
             config=base_eval_config, llm_provider=llm_provider_json_mock
         )
-        results = await evaluator.batch_evaluate_async(qs_with_docs)
-
-        assert all([x.raw_answer.startswith("Async") for x in results])
-        assert len(results) == 4
-        assert results[0].qid == results[1].qid == "0"
-        assert results[2].qid == results[3].qid == "1"
-        assert results[0].did == "0"
-        assert results[2].did == "2"
+        queries = await evaluator.batch_evaluate(qs_with_docs)
+        evaluations = [a.evaluation for q in queries for a in q.retrieved_docs]
+        doc_ids = ["0", "1", "2", "3"]
+        qids = ["0", "0", "1", "1"]
+        for e, did, qid in zip(evaluations, doc_ids, qids):
+            assert isinstance(e, RetrievalEvaluatorResult)
+            assert isinstance(e.raw_answer, str)
+            assert e.raw_answer.startswith("Async")
+            assert isinstance(e.answer, int)
+            assert e.did == did
+            assert e.qid == qid
 
     def test_evaluate_with_text(self, llm_provider_json_mock, base_eval_config):
         evaluator = RetrievalEvaluator.from_config(
@@ -92,8 +72,8 @@ class TestRetrievalEvaluator:
         raw_answer, processed_answer = evaluator.evaluate(
             document="This is a query", query="This is a document"
         )
-        assert raw_answer == 'LLM JSON response\n{"relevance": 0}'
-        assert processed_answer == 0
+        assert raw_answer == 'Async LLM JSON response\n{"relevance": 1}'
+        assert processed_answer == 1
 
     def test_rich_printing(
         self,
@@ -107,7 +87,7 @@ class TestRetrievalEvaluator:
             config=base_eval_config,
             llm_provider=llm_provider_json_mock,
         )
-        _ = evaluator.batch_evaluate(qs_with_docs)
+        _ = asyncio.run(evaluator.batch_evaluate(qs_with_docs))
         captured = capsys.readouterr()
         assert "🔎" in captured.out
 
@@ -146,7 +126,7 @@ class TestRDNAMEvaluator:
         assert raw_answer == '"M": 2, "T": 1, "O": 1}, {"M": 1, "T": 1, "O": 2}]'
         assert answer == 1
 
-        call_args = llm_provider_mock_rdnam.call_mocker.call_args_list
+        call_args = llm_provider_mock_rdnam.async_call_mocker.call_args_list
         assert call_args[0][0][0].startswith(
             "You are a search quality rater evaluating"
         )
@@ -167,7 +147,7 @@ class TestReasonerEvaluator:
         doc = query.retrieved_docs[0]
         raw_answer, answer = evaluator.evaluate(query, doc)
         formatted_prompt = evaluator.prompt.format(query=query.query, document=doc.text)
-        call_args = llm_provider_mock.call_mocker.call_args_list
+        call_args = llm_provider_mock.async_call_mocker.call_args_list
 
         assert raw_answer == answer
         assert formatted_prompt in raw_answer
@@ -197,9 +177,9 @@ class TestCustomPromptEvaluator:
         )
 
         _, answer = evaluator.evaluate(query, doc)
-        call_args = llm_provider_json_mock.call_mocker.call_args_list
+        call_args = llm_provider_json_mock.async_call_mocker.call_args_list
 
-        assert answer == 0
+        assert answer == 1
         assert call_args[0][0][0] == formatted_prompt
 
     def test_process_with_custom_fields(
@@ -220,7 +200,7 @@ class TestCustomPromptEvaluator:
             doc_metadata={"d_metadata": "d_1"},
         )
         assert (
-            llm_provider_json_mock.call_mocker.call_args_list[0][0][0]
+            llm_provider_json_mock.async_call_mocker.call_args_list[0][0][0]
             == "query: this is a query doc: this is a document q_metadata: q_1 d_metadata: d_1"
         )
 
@@ -239,20 +219,20 @@ class TestDomainExpertEvaluator:
 
     def test_process_single_answer(
         self,
-        llm_provider_mock_mock,
+        llm_provider_mock,
         expert_retrieval_eval_config,
         qs_with_docs,
     ):
         evaluator = DomainExpertEvaluator.from_config(
             config=expert_retrieval_eval_config,
-            llm_provider=llm_provider_mock_mock,
+            llm_provider=llm_provider_mock,
         )
         query = qs_with_docs[0]
         doc = query.retrieved_docs[0]
         _, _ = evaluator.evaluate(query, doc)
 
-        assert llm_provider_mock_mock.call_count == 2
-        call_args = llm_provider_mock_mock.call_args_list
+        assert llm_provider_mock.async_call_mocker.call_count == 2
+        call_args = llm_provider_mock.async_call_mocker.call_args_list
         prompts_reasoning = call_args[0][0][0]
         prompts_score = call_args[1][0][0]
         assert len(prompts_reasoning) == 2
@@ -284,9 +264,9 @@ class TestFewShotEvaluator:
         doc = query.retrieved_docs[0]
 
         raw_answer, answer = evaluator.evaluate(query, doc)
-        assert raw_answer == 'LLM JSON response\n{"relevance": 0}'
-        assert answer == 0
-        call_args = llm_provider_json_mock.call_mocker.call_args_list
+        assert raw_answer == 'Async LLM JSON response\n{"relevance": 1}'
+        assert answer == 1
+        call_args = llm_provider_json_mock.async_call_mocker.call_args_list
         call_messages = call_args[0][0][0]
         assert len(call_messages) == 6
         assert call_messages[0]["role"] == "system"
@@ -301,7 +281,9 @@ class TestFewShotEvaluator:
 
 class TestReadmeExamples:
     def test_rdnam_example(self, llm_provider_mock_rdnam):
-        llm_provider_mock_rdnam.call_mocker = Mock(side_effect=lambda _: '"O": 0\n}')
+        llm_provider_mock_rdnam.async_call_mocker = AsyncMock(
+            side_effect=lambda _: '"O": 0\n}'
+        )
         evaluator = get_retrieval_evaluator(
             "RDNAM", llm_provider=llm_provider_mock_rdnam
         )
@@ -338,7 +320,9 @@ WRITE YOUR ANSWER ON A SINGLE LINE AS A JSON OBJECT WITH THE FOLLOWING KEYS:
             "reasoning": "The document is outdated and incorrect. Rio de Janeiro was the capital of Brazil until 1960 when it was changed to Brasília.",
         }
         mocked_llm_answer = json.dumps(answer_dict)
-        llm_provider_mock.call_mocker = Mock(side_effect=lambda _: mocked_llm_answer)
+        llm_provider_mock.async_call_mocker = AsyncMock(
+            side_effect=lambda _: mocked_llm_answer
+        )
         evaluator = get_retrieval_evaluator(
             "custom_prompt",
             llm_provider=llm_provider_mock,
@@ -355,7 +339,7 @@ WRITE YOUR ANSWER ON A SINGLE LINE AS A JSON OBJECT WITH THE FOLLOWING KEYS:
             query_metadata={"today_date": "08-04-2024"},
             doc_metadata={"document_date": "04-03-1950"},
         )
-        call_args = llm_provider_mock.call_mocker.call_args_list
+        call_args = llm_provider_mock.async_call_mocker.call_args_list
         assert raw_answer == mocked_llm_answer
         assert answer == answer_dict
         assert len(call_args) == 1

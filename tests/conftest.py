@@ -91,7 +91,7 @@ def llm_provider_config():
 
 
 @pytest.fixture
-def chat_completion_mock(mocker):
+def chat_completion_mock():
     fake_response = ChatCompletion(
         id="fake id",
         choices=[
@@ -296,4 +296,7 @@ def llm_provider_mock_rdnam(llm_provider_config):
     mocked_scores = [{"M": 2, "T": 1, "O": 1}, {"M": 1, "T": 1, "O": 2}]
     provider = MockLLMProvider(llm_provider_config)
     provider.call_mocker = Mock(side_effect=lambda _: json.dumps(mocked_scores)[2:])
+    provider.async_call_mocker = AsyncMock(
+        side_effect=lambda _: json.dumps(mocked_scores)[2:]
+    )
     return provider
