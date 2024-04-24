@@ -137,7 +137,7 @@ class BaseEvaluator(ABC):
         response: AnswerEvaluatorResult | RetrievalEvaluatorResult,
         rich_print: bool = False,
     ):
-        answer: str | dict[str, str] | int
+        answer: Optional[str | dict[str, str] | int]
         if isinstance(response.answer, dict):
             # Print the answer in a more readable format
             answer = json.dumps(response.answer, indent=4)
