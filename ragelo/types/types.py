@@ -3,10 +3,21 @@ from importlib import metadata
 from typing import Any, Optional
 
 from pydantic import BaseModel as PydanticBaseModel
+from pydantic import ValidationError
 
 from ragelo.logger import logger
 
 _PYDANTIC_MAJOR_VERSION: int = int(metadata.version("pydantic").split(".")[0])
+if _PYDANTIC_MAJOR_VERSION == 1:
+    from pydantic import root_validator
+
+    validator = root_validator(pre=True)  # type: ignore
+else:
+    from pydantic import model_validator
+
+    validator = model_validator(mode="before")  # type: ignore
+
+Metadata = dict[str, Any]
 
 
 class BaseModel(PydanticBaseModel):
@@ -52,7 +63,49 @@ class AnswerEvaluatorTypes(StrEnum):
     """Enum that contains the names of the available answer evaluators"""
 
     PAIRWISE_REASONING = "pairwise_reasoning"
+    PAIRWISE = "pairwise"
     CUSTOM_PROMPT = "custom_prompt"
+
+
+class AnswerEvaluatorResult(BaseModel):
+    qid: str
+    raw_answer: Optional[str]
+    answer: Optional[str | int | dict[str, Any]]
+    agent: Optional[str] = None
+    agent_a: Optional[str] = None
+    agent_b: Optional[str] = None
+    pairwise: bool = False
+    exception: Optional[str] = None
+
+    @validator
+    @classmethod
+    def check_agents(cls, v):
+        agent = v.get("agent")
+        agent_a = v.get("agent_a")
+        agent_b = v.get("agent_b")
+        raw_answer = v.get("raw_answer")
+        answer = v.get("answer")
+        exception = v.get("exception")
+        if not agent:
+            if not agent_a or not agent_b:
+                raise ValidationError(
+                    "Either agent or agent_a and agent_b must be provided"
+                )
+        if not raw_answer or not answer:
+            if not exception:
+                raise ValidationError(
+                    "Either answer or raw_answer must be provided. Otherwise, an exception must be provided."
+                )
+        if agent_a and agent_b:
+            v["pairwise"] = True
+        return v
+
+
+class RetrievalEvaluatorResult(BaseModel):
+    qid: str
+    did: str
+    raw_answer: str
+    answer: str | int | dict[str, Any]
 
 
 class FewShotExample(BaseModel):
@@ -126,19 +179,3 @@ class Query(BaseModel):
                     f"New metadata: {metadata[k]}\n"
                 )
             self.metadata[k] = metadata[k]
-
-
-class RetrievalEvaluatorResult(BaseModel):
-    qid: str
-    did: str
-    raw_answer: str
-    answer: str | int | dict[str, Any]
-
-
-class AnswerEvaluatorResult(BaseModel):
-    qid: str
-    raw_answer: str
-    answer: str | int | dict[str, Any]
-    agent: Optional[str] = None
-    agent_a: Optional[str] = None
-    agent_b: Optional[str] = None
