@@ -22,7 +22,7 @@ class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
         description="The columns to output in the CSV file",
     )
     document_template: str = Field(
-        default="[{did}] {doc}\n",
+        default="[{did}] {doc}",
         description="The template to format each individual document in the prompt",
     )
 
@@ -34,7 +34,7 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
         default=False, description="Whether or not to run each game in both directions"
     )
     k: int = Field(default=100, description="Number of games to generate")
-    output_file: str = Field(
+    games_evaluations_path: str = Field(
         default="pairwise_answers_evaluations.csv",
         description="Path to the output file",
     )
@@ -56,7 +56,7 @@ class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
         default="retrieved documents: {documents} query: {query} answer: {answer}",
         description="The prompt to be used to evaluate the documents. It should contain a {query} and a {document} placeholder",
     )
-    output_file: str = Field(
+    answers_evaluations_path: str = Field(
         default="custom_prompt_answers_evaluations.csv",
         description="Path to the output file",
     )

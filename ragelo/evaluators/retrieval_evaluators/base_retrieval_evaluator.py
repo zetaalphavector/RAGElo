@@ -5,7 +5,6 @@ and returns a score or a label for each document."""
 import asyncio
 from typing import Any, Callable, Optional, Type, get_type_hints
 
-from tenacity import RetryError
 from tqdm.auto import tqdm
 
 from ragelo.evaluators.base_evaluator import BaseEvaluator
@@ -132,7 +131,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
 
     def __prepare_queries(self, queries: list[Query]) -> list[Query]:
         queries = self._load_retrieved_documents(queries)
-        queries = self._load_document_evaluations(queries)
+        queries = self._load_document_evaluations(queries, force=self.config.force)
         return queries
 
     def __get_tuples_to_evaluate(

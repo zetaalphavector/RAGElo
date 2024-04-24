@@ -17,7 +17,6 @@ from ragelo.types import (
     AnswerFormat,
     BaseAnswerEvaluatorConfig,
     Document,
-    Evaluable,
     PairwiseEvaluatorConfig,
     PairwiseGame,
     Query,
@@ -37,16 +36,13 @@ class BaseAnswerEvaluator(BaseEvaluator):
         self.answers_evaluations_path = config.answers_evaluations_path
         self.output_columns = config.output_columns
         if config.answer_format == AnswerFormat.MULTI_FIELD_JSON:
-            if isinstance(config.scoring_key, str):
-                self.config.scoring_keys = [config.scoring_key]
-            else:
-                self.config.scoring_keys = config.scoring_key
+            self.config.scoring_keys = config.scoring_keys
             self.output_columns = [
                 "qid",
                 "agent",
                 "raw_answer",
             ] + self.config.scoring_keys
-        if config.scoring_key and config.scoring_key not in self.output_columns:
+        elif config.scoring_key and config.scoring_key not in self.output_columns:
             print(f"Adding scoring key {config.scoring_key} to output columns")
             self.output_columns.append(self.config.scoring_key)
         if config.scoring_keys:
@@ -243,13 +239,15 @@ class BaseAnswerEvaluator(BaseEvaluator):
 
     def __prepare_queries(self, queries: list[Query]) -> list[Query]:
         queries = self._load_retrieved_documents(queries)
-        queries = self._load_document_evaluations(queries)
+        queries = self._load_document_evaluations(queries, force=False)
         queries = self._load_agent_answers(queries)
-        queries = self._load_answers_evaluations(queries)
+        queries = self._load_answers_evaluations(queries, force=self.config.force)
         queries = self.__add_pairwise_games(queries)
         return queries
 
     def __add_pairwise_games(self, queries: list[Query]) -> list[Query]:
+        if not self.config.pairwise:
+            return queries
         for query in queries:
             query_agents = list({x.agent for x in query.answers})
             pairs = list(itertools.combinations(query_agents, 2))

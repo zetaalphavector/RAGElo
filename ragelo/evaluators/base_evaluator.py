@@ -136,9 +136,11 @@ class BaseEvaluator(ABC):
                 existing_lines.append(line_dict)
         return existing_lines
 
-    def _get_existing_evaluations(self, evaluation_file: str) -> list[dict[str, Any]]:
+    def _get_existing_evaluations(
+        self, evaluation_file: str, force: bool = False
+    ) -> list[dict[str, Any]]:
         existing_lines: list[dict[str, str]] = []
-        if self.config.force and os.path.exists(evaluation_file):
+        if force and os.path.exists(evaluation_file):
             logger.warning(f"Removing existing {evaluation_file}!")
             os.remove(evaluation_file)
         if not os.path.isfile(evaluation_file):
@@ -350,10 +352,6 @@ class BaseEvaluator(ABC):
         document_text_col: str = "document_text",
     ) -> list[Query]:
         # Check if we actually need to do something
-        if self.config.force:
-            logger.info("Clearing existing documents")
-            for q in queries:
-                q.retrieved_docs = []
         queries_with_documents = len([q for q in queries if len(q.retrieved_docs) > 0])
         if queries_with_documents == len(queries):
             logger.info("All Queries already have retrieved documents. Skipping")
@@ -394,10 +392,6 @@ class BaseEvaluator(ABC):
         agent_col: str = "agent",
         answer_col: str = "answer",
     ):
-        if self.config.force:
-            logger.info("Clearing existing answers")
-            for q in queries:
-                q.answers = []
         queries_with_answers = len([q for q in queries if len(q.answers) > 0])
         if queries_with_answers == len(queries):
             logger.info("All Queries already have answers. Skipping")
@@ -428,8 +422,10 @@ class BaseEvaluator(ABC):
         logger.info(f"Loaded {answers_read} answers")
         return queries
 
-    def _load_document_evaluations(self, queries: list[Query]) -> list[Query]:
-        if self.config.force:
+    def _load_document_evaluations(
+        self, queries: list[Query], force: bool = False
+    ) -> list[Query]:
+        if force:
             logger.info("Clearing existing document evaluations")
             for q in queries:
                 for doc in q.retrieved_docs:
@@ -437,13 +433,16 @@ class BaseEvaluator(ABC):
         document_evaluations = [
             RetrievalEvaluatorResult(**x)
             for x in self._get_existing_evaluations(
-                self.config.document_evaluations_path
+                self.config.document_evaluations_path,
+                force,
             )
         ]
         return self._add_document_evaluations(queries, document_evaluations)
 
     def _add_document_evaluations(
-        self, queries: list[Query], evaluations: list[RetrievalEvaluatorResult]
+        self,
+        queries: list[Query],
+        evaluations: list[RetrievalEvaluatorResult],
     ) -> list[Query]:
         queries_idx = {q.qid: idx for idx, q in enumerate(queries)}
         doc_idxs = {}
@@ -466,8 +465,10 @@ class BaseEvaluator(ABC):
             ].evaluation = evaluation
         return queries
 
-    def _load_answers_evaluations(self, queries: list[Query]) -> list[Query]:
-        if self.config.force:
+    def _load_answers_evaluations(
+        self, queries: list[Query], force: bool = False
+    ) -> list[Query]:
+        if force:
             logger.info("Clearing existing answers evaluations")
             for q in queries:
                 for ans in q.answers:

@@ -131,16 +131,15 @@ def base_eval_config():
         force=True,
         verbose=True,
         write_output=False,
-        output_columns=["qid", "did", "raw_answer", "answer", "exception"],
     )
 
 
 @pytest.fixture
 def pairwise_answer_eval_config(base_eval_config):
     base_config = base_eval_config.model_dump()
+    base_config["document_evaluations_path"] = "tests/data/reasonings.csv"
     config = PairwiseEvaluatorConfig(
-        document_evaluations_path="tests/data/reasonings.csv",
-        bidirectional=False,
+        bidirectional=True,
         **base_config,
     )
     return config
@@ -161,7 +160,6 @@ The last line of your answer must be a json object with the keys "quality", \
 2, where 2 is the highest score on that aspect.
 DOCUMENTS RETRIEVED:
 {documents}
-
 User Query: {query}
 
 Agent answer: {answer}
@@ -261,6 +259,14 @@ def llm_provider_pairwise_answer_mock(llm_provider_config):
             "Agent [[B]] is better",
             "A tie. Therefore, [[C]]",
             "I don't know. [[C]]",
+        ]
+    )
+    provider.async_call_mocker = AsyncMock(
+        side_effect=[
+            "Async Agent [[A]] is better",
+            "Async Agent [[B]] is better",
+            "Async A tie. Therefore, [[C]]",
+            "Async I don't know. [[C]]",
         ]
     )
     return provider
