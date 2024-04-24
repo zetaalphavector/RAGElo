@@ -1,6 +1,7 @@
-import asyncio
 import json
 from unittest.mock import Mock
+
+import pytest
 
 from ragelo import get_retrieval_evaluator
 from ragelo.evaluators.retrieval_evaluators import (
@@ -11,7 +12,6 @@ from ragelo.evaluators.retrieval_evaluators import (
     RDNAMEvaluator,
     ReasonerEvaluator,
 )
-from ragelo.llm_providers.openai_client import OpenAIProvider
 from ragelo.types import Document, Query
 
 
@@ -65,25 +65,25 @@ class TestRetrievalEvaluator:
         for i, call in enumerate(call_args):
             assert call[0][0] == expected_prompts[i]
 
-    def test_batch_eval_async(
+    @pytest.mark.asyncio
+    async def test_batch_eval_async(
         self,
-        openai_client_config,
+        llm_provider_json_mock,
         base_eval_config,
         qs_with_docs,
-        mock_async_openai_json_response,
     ):
         base_eval_config.answer_format = "json"
-        base_eval_config.n_processes = 2
-        llm_provider = OpenAIProvider(config=openai_client_config)
         evaluator = RetrievalEvaluator.from_config(
-            config=base_eval_config, llm_provider=llm_provider
+            config=base_eval_config, llm_provider=llm_provider_json_mock
         )
+        results = await evaluator.batch_evaluate_async(qs_with_docs)
 
-        with asyncio.Runner() as runner:
-            result = runner.run(evaluator.batch_evaluate_async(qs_with_docs))
-        assert len(result) == 4
-        assert all([x.answer == 0 for x in result])
-        assert all(["async" in x.raw_answer for x in result])
+        assert all([x.raw_answer.startswith("Async") for x in results])
+        assert len(results) == 4
+        assert results[0].qid == results[1].qid == "0"
+        assert results[2].qid == results[3].qid == "1"
+        assert results[0].did == "0"
+        assert results[2].did == "2"
 
     def test_evaluate_with_text(self, llm_provider_json_mock, base_eval_config):
         evaluator = RetrievalEvaluator.from_config(

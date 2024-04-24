@@ -4,7 +4,6 @@ import asyncio
 from abc import abstractmethod
 from typing import Any, Callable, Optional, Type, get_type_hints
 
-from aiohttp import ClientSession
 from tenacity import RetryError
 from tqdm import tqdm
 
@@ -83,34 +82,33 @@ class BaseAnswerEvaluator(BaseEvaluator):
     ) -> list[AnswerEvaluatorResult]:
         qids = []
         agent_ids = []
-        async with ClientSession() as session:
-            tasks = []
-            for query, agent_answer in chunk:
-                message = self._build_message(query, agent_answer)
-                qids.append(query.qid)
-                agent_ids.append(agent_answer.agent)
-                tasks.append(self.llm_provider.call_async(message, session))
-            raw_answers = await asyncio.gather(*tasks)
-            parsed_answers = []
-            for qid, agent_id, raw_answer in zip(qids, agent_ids, raw_answers):
-                try:
-                    answer = self._process_answer(raw_answer)
-                except ValueError:
-                    logger.warning(
-                        f"Failed to PARSE answer for qid: {qid} agent: {agent_id}"
-                    )
-                    continue
-                parsed_answers.append(
-                    AnswerEvaluatorResult(
-                        qid=qid,
-                        agent=agent_id,
-                        raw_answer=raw_answer,
-                        answer=answer,
-                    )
+        tasks = []
+        for query, agent_answer in chunk:
+            message = self._build_message(query, agent_answer)
+            qids.append(query.qid)
+            agent_ids.append(agent_answer.agent)
+            tasks.append(self.llm_provider.call_async(message))
+        raw_answers = await asyncio.gather(*tasks)
+        parsed_answers = []
+        for qid, agent_id, raw_answer in zip(qids, agent_ids, raw_answers):
+            try:
+                answer = self._process_answer(raw_answer)
+            except ValueError:
+                logger.warning(
+                    f"Failed to PARSE answer for qid: {qid} agent: {agent_id}"
                 )
-                self._dump_response(
-                    parsed_answers[-1], self.output_columns, self.output_file
+                continue
+            parsed_answers.append(
+                AnswerEvaluatorResult(
+                    qid=qid,
+                    agent=agent_id,
+                    raw_answer=raw_answer,
+                    answer=answer,
                 )
+            )
+            self._dump_response(
+                parsed_answers[-1], self.output_columns, self.output_file
+            )
         return parsed_answers
 
     async def batch_evaluate_async(
