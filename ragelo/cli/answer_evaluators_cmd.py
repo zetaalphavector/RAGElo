@@ -21,7 +21,9 @@ def pairwise_reasoning(
     config = PairwiseEvaluatorConfig(**kwargs)
     config.query_path = get_path(config.data_path, config.query_path)
     config.answers_path = get_path(config.data_path, config.answers_path)
-    config.output_file = get_path(config.data_path, config.output_file)
+    config.answers_evaluations_path = get_path(
+        config.data_path, config.answers_evaluations_path
+    )
     config.documents_path = get_path(config.data_path, config.documents_path)
 
     llm_provider = get_llm_provider(config.llm_provider, **kwargs)

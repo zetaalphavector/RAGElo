@@ -1,5 +1,3 @@
-from typing import cast
-
 import pytest
 
 from ragelo import get_answer_evaluator

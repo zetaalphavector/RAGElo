@@ -285,7 +285,7 @@ class TestReadmeExamples:
             side_effect=lambda _: '"O": 0\n}'
         )
         evaluator = get_retrieval_evaluator(
-            "RDNAM", llm_provider=llm_provider_mock_rdnam
+            "RDNAM", llm_provider=llm_provider_mock_rdnam, write_output=False
         )
         raw_answer, processed_answer = evaluator.evaluate(
             query="What is the capital of France?",
@@ -331,6 +331,7 @@ WRITE YOUR ANSWER ON A SINGLE LINE AS A JSON OBJECT WITH THE FOLLOWING KEYS:
             document_placeholder="d",
             scoring_keys=["relevance", "recency", "truthfulness", "reasoning"],
             answer_format="multi_field_json",
+            write_output=False,
         )
 
         raw_answer, answer = evaluator.evaluate(
