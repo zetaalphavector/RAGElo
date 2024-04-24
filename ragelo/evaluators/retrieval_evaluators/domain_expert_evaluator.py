@@ -1,16 +1,17 @@
 """Evaluator with a domain expert persona"""
 
-import logging
-from typing import Any, Optional
-
-from tenacity import RetryError
-
 from ragelo.evaluators.retrieval_evaluators import (
     BaseRetrievalEvaluator,
     RetrievalEvaluatorFactory,
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
-from ragelo.types import Document, Query, RetrievalEvaluatorTypes
+from ragelo.logger import logger
+from ragelo.types import (
+    Document,
+    Query,
+    RetrievalEvaluatorResult,
+    RetrievalEvaluatorTypes,
+)
 from ragelo.types.configurations import DomainExpertEvaluatorConfig
 
 
@@ -124,6 +125,7 @@ Please only answer with a single number.
         self.extra_guidelines = (
             self.config.extra_guidelines if self.config.extra_guidelines else []
         )
+        # self.reasoner_eva
 
     def __build_reason_message(self, query: Query, document: Document) -> str:
         guidelines = "\n".join(
@@ -137,47 +139,49 @@ Please only answer with a single number.
         )
         return reason_prompt
 
-    def evaluate(
-        self,
-        query: Query | str,
-        document: Document | str,
-        query_metadata: Optional[dict[str, Any]] = None,
-        doc_metadata: Optional[dict[str, Any]] = None,
-    ) -> tuple[str, Any]:
-        """Processes a single pair of qid, did in a two-shot manner"""
-        if isinstance(query, str):
-            query = Query(qid="<no_qid>", query=query)
-        if isinstance(document, str):
-            document = Document(did="<no_did>", text=document)
-        query.add_metadata(query_metadata)
-        document.add_metadata(doc_metadata)
-
-        qid = query.qid
-        did = document.did
+    async def _async_evaluate(
+        self, eval_sample: tuple[Query, Document]
+    ) -> RetrievalEvaluatorResult:
+        query, document = eval_sample
         reason_message = self.__build_reason_message(query, document)
         messages_reasoning = [
             {"role": "system", "content": self.sys_prompt},
             {"role": "user", "content": reason_message},
         ]
+        exc = None
         try:
-            reasoning_answer = self.llm_provider(messages_reasoning)
-
-        except RetryError as e:
-            logging.warning(f"Failed to fetch reasoning for document {qid} {did}")
-            raise e
-        except ValueError as e:
-            logging.warning(f"Failed to parse reasoning for document {qid} {did}")
-            raise e
-
+            reasoning_answer = await self.llm_provider.call_async(messages_reasoning)
+        except Exception as e:
+            logger.warning(f"Failed to FETCH reasonings for qid: {query.qid}")
+            logger.warning(f"document id: {document.did}")
+            exc = str(e)
+            return RetrievalEvaluatorResult(
+                qid=query.qid,
+                did=document.did,
+                raw_answer=None,
+                answer=None,
+                exception=exc,
+            )
         messages_score = messages_reasoning.copy()
         messages_score.append({"role": "assistant", "content": reasoning_answer})
         messages_score.append({"role": "user", "content": self.score_prompt})
         try:
-            score_answer = self._process_answer(self.llm_provider(messages_score))
-        except RetryError as e:
-            logging.warning(f"Failed to fetch evaluation for document {qid} {did}")
-            raise e
+            score_answer = await self.llm_provider.call_async(messages_score)
+            score_answer = self._process_answer(score_answer)
         except ValueError as e:
-            logging.warning(f"Failed to parse evaluation for document {qid} {did}")
-            raise e
-        return reasoning_answer, score_answer
+            logger.warning(f"Failed to parse scores for qid: {query.qid}")
+            logger.warning(f"document id: {document.did}")
+            score_answer = None
+            exc = str(e)
+        except Exception as e:
+            logger.warning(f"Failed to FETCH scores for qid: {query.qid}")
+            logger.warning(f"document id: {document.did}")
+            score_answer = None
+            exc = str(e)
+        return RetrievalEvaluatorResult(
+            qid=query.qid,
+            did=document.did,
+            raw_answer=reasoning_answer,
+            answer=score_answer,
+            exception=exc,
+        )

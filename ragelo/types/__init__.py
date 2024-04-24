@@ -1,9 +1,11 @@
 from ragelo.types.configurations import (  # ReasonerEvaluatorConfig,
     AgentRankerConfig,
     AllConfig,
+    BaseAnswerEvaluatorConfig,
     BaseConfig,
     EloAgentRankerConfig,
     LLMProviderConfig,
+    PairwiseEvaluatorConfig,
 )
 from ragelo.types.types import (
     AgentAnswer,
@@ -13,6 +15,7 @@ from ragelo.types.types import (
     Document,
     EvaluatorResult,
     LLMProviderTypes,
+    PairwiseGame,
     Query,
     RetrievalEvaluatorResult,
     RetrievalEvaluatorTypes,

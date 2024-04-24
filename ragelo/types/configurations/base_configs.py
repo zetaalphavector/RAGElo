@@ -36,6 +36,9 @@ class BaseConfig(BaseModel):
     write_output: bool = Field(
         default=True, description="Whether or not to write the output to a file"
     )
+    use_progress_bar: bool = Field(
+        default=True, description="Whether or not to show a progress bar"
+    )
 
 
 class BaseEvaluatorConfig(BaseConfig):
@@ -45,8 +48,20 @@ class BaseEvaluatorConfig(BaseConfig):
     documents_path: str = Field(
         default="documents.csv", description="Path to the documents file"
     )
-    output_file: Optional[str] = Field(
-        default=None, description="Path to the output file"
+    answers_path: str = Field(
+        default="answers.csv", description="Path with agents answers"
+    )
+    document_evaluations_path: str = Field(
+        default="reasonings.csv",
+        description="Path to write (or read) the evaluations of the retrieved documents",
+    )
+    answers_evaluations_path: str = Field(
+        default="answers_evaluations.csv",
+        description="Path to write (or read) the evaluations of each agent's answers",
+    )
+    games_evaluations_path: str = Field(
+        default="pairwise_answer_evaluations.csv",
+        description="Path to write (or read) the evaluations of the pairwise games between agents answers",
     )
     query_placeholder: str = Field(
         default="query",
@@ -68,15 +83,15 @@ class BaseEvaluatorConfig(BaseConfig):
         default=1,
         description="The number of parallel LLM calls to use for the evaluation",
     )
+    output_columns: list[str] = Field(
+        description="The columns to output in the CSV file"
+    )
 
 
 class AllConfig(BaseEvaluatorConfig):
     reasoning_path: str = Field(
         default="reasonings.csv",
         description="CSV file with the reasoning for each retrieved document",
-    )
-    answers_path: str = Field(
-        default="answers.csv", description="Path to the answers file"
     )
     evaluations_file: str = Field(
         default="answers_evaluations.csv",

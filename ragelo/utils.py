@@ -143,7 +143,6 @@ def load_answers_from_csv(
     agent_col: str = "agent",
     answer_col: str = "answer",
 ) -> list[Query]:
-    # ) -> dict[str, dict[str, str]]:
     """Loads all answers and agents from an answers CSV file.
     Args:
         answers_path (str): Path to the CSV file with the answers.

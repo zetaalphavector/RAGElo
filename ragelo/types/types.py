@@ -17,8 +17,6 @@ else:
 
     validator = model_validator(mode="before")  # type: ignore
 
-Metadata = dict[str, Any]
-
 
 class BaseModel(PydanticBaseModel):
     @classmethod
@@ -120,46 +118,39 @@ class FewShotExample(BaseModel):
     reasoning: str
 
 
-class Document(BaseModel):
+class Evaluable(BaseModel):
+    evaluation: Optional[EvaluatorResult] = None
+    metadata: Optional[dict[str, Any]] = None
+
+    def add_metadata(self, metadata: Optional[dict[str, Any]]):
+        if not metadata:
+            return
+        if self.metadata is None:
+            self.metadata = {}
+        for k in metadata:
+            if k in self.metadata:
+                logger.warning(
+                    f"Metadata {k} for {self.__class__.__name__}"
+                    " is being overwritten!\n"
+                    f"Old metadata: {self.metadata[k]}\n"
+                    f"New metadata: {metadata[k]}\n"
+                )
+            self.metadata[k] = metadata[k]
+
+
+class Document(Evaluable):
     did: str
     text: str
-    metadata: Optional[dict[str, Any]] = None
-
-    def add_metadata(self, metadata: Optional[dict[str, Any]]):
-        if not metadata:
-            return
-        if self.metadata is None:
-            self.metadata = {}
-        for k in metadata:
-            if k in self.metadata:
-                logger.warning(
-                    f"Metadata {k} for document {self.did}"
-                    " is being overwritten!\n"
-                    f"Old metadata: {self.metadata[k]}\n"
-                    f"New metadata: {metadata[k]}\n"
-                )
-            self.metadata[k] = metadata[k]
 
 
-class AgentAnswer(BaseModel):
+class AgentAnswer(Evaluable):
     agent: str
     text: str
-    metadata: Optional[dict[str, Any]] = None
 
-    def add_metadata(self, metadata: Optional[dict[str, Any]]):
-        if not metadata:
-            return
-        if self.metadata is None:
-            self.metadata = {}
-        for k in metadata:
-            if k in self.metadata:
-                logger.warning(
-                    f"Metadata {k} for answer from agent {self.agent}"
-                    " is being overwritten!\n"
-                    f"Old metadata: {self.metadata[k]}\n"
-                    f"New metadata: {metadata[k]}\n"
-                )
-            self.metadata[k] = metadata[k]
+
+class PairwiseGame(Evaluable):
+    agent_a_answer: AgentAnswer
+    agent_b_answer: AgentAnswer
 
 
 class Query(BaseModel):
@@ -168,6 +159,7 @@ class Query(BaseModel):
     metadata: Optional[dict[str, Any]] = None
     retrieved_docs: list[Document] = []
     answers: list[AgentAnswer] = []
+    pairwise_games: list[PairwiseGame] = []
 
     def add_metadata(self, metadata: Optional[dict[str, Any]]):
         if not metadata:

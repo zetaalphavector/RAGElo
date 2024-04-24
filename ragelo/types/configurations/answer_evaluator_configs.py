@@ -14,6 +14,17 @@ class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
         default="documents",
         description="The placeholder for the documents in the prompt",
     )
+    pairwise: bool = Field(
+        default=False, description="Whether or not to the evaluator is pairwise"
+    )
+    output_columns: list[str] = Field(
+        default=["qid", "agent", "raw_answer", "answer"],
+        description="The columns to output in the CSV file",
+    )
+    document_template: str = Field(
+        default="[{did}] {doc}\n",
+        description="The template to format each individual document in the prompt",
+    )
 
 
 class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
@@ -30,6 +41,13 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     documents_path: str = Field(
         default="reasonings.csv",
         description="Path with the outputs from the reasoner Retrieval Evaluator",
+    )
+    pairwise: bool = Field(
+        default=True, description="Whether or not to the evaluator is pairwise"
+    )
+    document_template: str = Field(
+        default="[{did}] {annotation}",
+        description="The template to format each individual document in the prompt",
     )
 
 
