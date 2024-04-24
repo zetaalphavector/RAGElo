@@ -1,3 +1,5 @@
+import asyncio
+
 import typer
 
 from ragelo import get_answer_evaluator, get_llm_provider, get_retrieval_evaluator
@@ -63,7 +65,7 @@ def run_all(config: AllConfig = AllConfig(), **kwargs):
     answers = load_answers_from_csv(
         answers_path=config.answers_path, queries=config.query_path
     )
-    retrieval_evaluator.batch_evaluate(documents)
+    asyncio.run(retrieval_evaluator.batch_evaluate(documents))
 
     answers_evaluator = get_answer_evaluator(
         "pairwise_reasoning",
@@ -71,8 +73,8 @@ def run_all(config: AllConfig = AllConfig(), **kwargs):
         output_file=config.evaluations_file,
         **args_clean,
     )
-
-    answers_evaluator.batch_evaluate(answers)
+    with asyncio.Runner() as runner:
+        runner.run(answers_evaluator.batch_evaluate(answers))
 
     ranker_config = EloAgentRankerConfig(
         force=config.force,

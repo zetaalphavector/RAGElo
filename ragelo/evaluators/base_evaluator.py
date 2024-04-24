@@ -472,8 +472,8 @@ class BaseEvaluator(ABC):
             for q in queries:
                 for ans in q.answers:
                     ans.evaluation = None
-                for ans in q.pairwise_games:
-                    ans.evaluation = None
+                for game in q.pairwise_games:
+                    game.evaluation = None
         evaluations = [
             AnswerEvaluatorResult(**x)
             for x in self._get_existing_evaluations(

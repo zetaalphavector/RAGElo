@@ -128,19 +128,18 @@ def base_eval_config():
     return BaseEvaluatorConfig(
         documents_path="tests/data/documents.csv",
         query_path="tests/data/queries.csv",
-        output_file="tests/data/output.csv",
         force=True,
         verbose=True,
         write_output=False,
+        output_columns=["qid", "did", "raw_answer", "answer", "exception"],
     )
 
 
 @pytest.fixture
 def pairwise_answer_eval_config(base_eval_config):
     base_config = base_eval_config.model_dump()
-    del base_config["documents_path"]
     config = PairwiseEvaluatorConfig(
-        documents_path="tests/data/reasonings.csv",
+        document_evaluations_path="tests/data/reasonings.csv",
         bidirectional=False,
         **base_config,
     )

@@ -83,9 +83,6 @@ class BaseEvaluatorConfig(BaseConfig):
         default=1,
         description="The number of parallel LLM calls to use for the evaluation",
     )
-    output_columns: list[str] = Field(
-        description="The columns to output in the CSV file"
-    )
 
 
 class AllConfig(BaseEvaluatorConfig):

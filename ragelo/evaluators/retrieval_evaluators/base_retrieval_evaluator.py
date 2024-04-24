@@ -176,7 +176,6 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         self,
         query: Query,
         document: Document,
-        context: Optional[list[dict[str, Any]]] = None,
     ) -> str | list[dict[str, str]]:
         """Builds the prompt to send to the LLM."""
         raise NotImplementedError

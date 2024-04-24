@@ -13,6 +13,7 @@ from ragelo.types.types import (
     AnswerEvaluatorTypes,
     AnswerFormat,
     Document,
+    Evaluable,
     EvaluatorResult,
     LLMProviderTypes,
     PairwiseGame,

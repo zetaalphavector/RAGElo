@@ -1,3 +1,4 @@
+import asyncio
 from typing import cast
 
 import pytest
@@ -10,7 +11,8 @@ from ragelo.evaluators.answer_evaluators import (
 
 
 class TestPairwiseWithReasoningEvaluator:
-    def test_run(
+    @pytest.mark.asyncio
+    async def test_batch_eval(
         self,
         llm_provider_pairwise_answer_mock,
         pairwise_answer_eval_config,
@@ -20,12 +22,29 @@ class TestPairwiseWithReasoningEvaluator:
             config=pairwise_answer_eval_config,
             llm_provider=llm_provider_pairwise_answer_mock,
         )
-        answers = evaluator.batch_evaluate(answers_test)
-        assert len(answers) == 4
-        assert answers[0].answer == "A" and "[[A]]" in answers[0].raw_answer
-        assert answers[1].answer == "B" and "[[B]]" in answers[1].raw_answer
-        assert answers[2].answer == "C" and "[[C]]" in answers[2].raw_answer
-        assert answers[3].answer == "C" and "[[C]]" in answers[2].raw_answer
+        queries = await evaluator.batch_evaluate(answers_test)
+        flat_answers = [(q, a) for q in queries for a in q.answers]
+        flat_evaluations = [a.evaluation for (_, a) in flat_answers]
+        assert all([isinstance(a, dict) for a in flat_evaluations])
+        assert len(flat_answers) == 4
+        assert all([isinstance(a.raw_answer, str) for a in flat_evaluations])
+        assert all([isinstance(a.answer, str) for a in flat_evaluations])
+        assert (
+            flat_evaluations[0].answer == "A"
+            and "[[A]]" in flat_evaluations[0].raw_answer
+        )
+        assert (
+            flat_evaluations[1].answer == "B"
+            and "[[B]]" in flat_evaluations[1].raw_answer
+        )
+        assert (
+            flat_evaluations[2].answer == "C"
+            and "[[C]]" in flat_evaluations[2].raw_answer
+        )
+        assert (
+            flat_evaluations[3].answer == "C"
+            and "[[C]]" in flat_evaluations[2].raw_answer
+        )
 
         llm_call_args = llm_provider_pairwise_answer_mock.call_mocker.call_args_list
         assert len(llm_call_args) == 4
@@ -44,6 +63,14 @@ class TestPairwiseWithReasoningEvaluator:
                 .split("[The End of Assistant B's Answer]")[0]
             ).strip()
             assert agent_a_answer != agent_b_answer
+
+    def test_run(
+        self,
+        llm_provider_pairwise_answer_mock,
+        pairwise_answer_eval_config,
+        answers_test,
+    ):
+        pass
 
 
 class TestCustomPromptEvaluator:

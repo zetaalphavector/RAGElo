@@ -31,7 +31,7 @@ class ReasonerEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         description="When using answer_format=multi_field_json, the keys to extract from the answer",
     )
 
-    document_evaluations_path: Optional[str] = Field(
+    document_evaluations_path: str = Field(
         default="reasonings.csv",
         description="Path to write (or read) the evaluations of the retrieved documents",
     )
@@ -86,9 +86,10 @@ class CustomPromptEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         description="The format of the answer returned by the LLM",
     )
     document_evaluations_path: str = Field(
-        default="custom_prompt_evaluations.csv"
+        default="custom_prompt_evaluations.csv",
         description="Path to write (or read) the evaluations of the retrieved documents",
     )
+
 
 class FewShotEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     system_prompt: str = Field(

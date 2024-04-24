@@ -17,6 +17,7 @@ from ragelo.types import (
     AnswerFormat,
     BaseAnswerEvaluatorConfig,
     Document,
+    Evaluable,
     PairwiseEvaluatorConfig,
     PairwiseGame,
     Query,
@@ -151,14 +152,17 @@ class BaseAnswerEvaluator(BaseEvaluator):
         return result.raw_answer, result.answer
 
     async def _async_evaluate(
-        self, eval_sample: tuple[Query, AgentAnswer | PairwiseGame]
+        self, eval_sample: tuple[Query, PairwiseGame | AgentAnswer]
     ) -> AnswerEvaluatorResult:
         query, evaluable = eval_sample
-        agent = (
-            evaluable.agent
-            if isinstance(evaluable, AgentAnswer)
-            else (evaluable.agent_a_answer.agent, evaluable.agent_b_answer.agent)
-        )
+        agent: str | tuple[str, str]
+        if isinstance(evaluable, AgentAnswer):
+            agent = evaluable.agent
+        elif isinstance(evaluable, PairwiseGame):
+            agent = (evaluable.agent_a_answer.agent, evaluable.agent_b_answer.agent)
+        else:
+            raise ValueError(f"Unknown evaluable type {type(evaluable)}")
+
         exc = None
         if isinstance(evaluable, AgentAnswer):
             prompt = self._build_message(query, evaluable)
@@ -275,15 +279,15 @@ class BaseAnswerEvaluator(BaseEvaluator):
     def __get_tuples_to_evaluate(
         self,
         queries: list[Query],
-    ) -> list[tuple[Query, AgentAnswer | PairwiseGame]]:
-        tuples_to_eval = []
+    ) -> list[tuple[Query, PairwiseGame | AgentAnswer]]:
+        tuples_to_eval: list[tuple[Query, PairwiseGame | AgentAnswer]] = []
         all_tuples = 0
         for q in queries:
             if self.config.pairwise:
-                for a in q.pairwise_games:
+                for g in q.pairwise_games:
                     all_tuples += 1
-                    if a.evaluation is None:
-                        tuples_to_eval.append((q, a))
+                    if g.evaluation is None:
+                        tuples_to_eval.append((q, g))
             else:
                 for a in q.answers:
                     all_tuples += 1
