@@ -287,11 +287,6 @@ def llm_provider_answer_mock(llm_provider_config):
 
 
 @pytest.fixture
-def llm_provider_mock_mock(mocker):
-    return mocker.Mock(MockLLMProvider)
-
-
-@pytest.fixture
 def llm_provider_mock_rdnam(llm_provider_config):
     mocked_scores = [{"M": 2, "T": 1, "O": 1}, {"M": 1, "T": 1, "O": 2}]
     provider = MockLLMProvider(llm_provider_config)
