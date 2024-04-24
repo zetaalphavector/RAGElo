@@ -9,13 +9,7 @@ from tqdm.auto import tqdm
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.logger import logger
-from ragelo.types import (
-    AgentAnswer,
-    AnswerEvaluatorResult,
-    Document,
-    Query,
-    RetrievalEvaluatorResult,
-)
+from ragelo.types import AgentAnswer, Document, EvaluatorResult, Query
 from ragelo.types.configurations import AnswerFormat, BaseEvaluatorConfig
 
 
@@ -134,7 +128,7 @@ class BaseEvaluator(ABC):
 
     @staticmethod
     def _print_response(
-        response: AnswerEvaluatorResult | RetrievalEvaluatorResult,
+        response: EvaluatorResult,
         rich_print: bool = False,
     ):
         answer: Optional[str | dict[str, str] | int]
@@ -143,35 +137,44 @@ class BaseEvaluator(ABC):
             answer = json.dumps(response.answer, indent=4)
         else:
             answer = response.answer
+        response_dict = response.model_dump()
+        agent_a = response_dict.get("agent_a")
+        agent_b = response_dict.get("agent_b")
+        agent = response_dict.get("agent")
+        qid = response_dict.get("qid")
+        did = response_dict.get("did")
+        raw_answer = response_dict.get("raw_answer")
+
         if rich_print:
             try:
                 import rich
 
-                rich.print(f"[bold blue]🔎 Query ID[/bold blue]: {response.qid}")
-                if isinstance(response, RetrievalEvaluatorResult):
-                    rich.print(f"[bold blue]📜 Document ID[/bold blue]: {response.did}")
-                elif response.agent_a and response.agent_b:
+                rich.print(f"[bold blue]🔎 Query ID[/bold blue]: {qid}")
+                did = response_dict.get("did")
+                if did:
+                    rich.print(f"[bold blue]📜 Document ID[/bold blue]: {did}")
+                if agent_a and agent_b:
                     rich.print(
-                        f"[bold blue] {response.agent_a:<18} [/bold blue] 🆚  "
-                        f"[bold red] {response.agent_b}[/bold red]"
+                        f"[bold blue] {agent_a:<18} [/bold blue] 🆚  "
+                        f"[bold red] {agent_b}[/bold red]"
                     )
-                else:
-                    rich.print(f"[bold blue]🕵️ Agent[/bold blue]: {response.agent}")
+                elif agent:
+                    rich.print(f"[bold blue]🕵️ Agent[/bold blue]: {agent}")
 
-                rich.print(f"[bold blue]Raw Answer[/bold blue]: {response.raw_answer}")
+                rich.print(f"[bold blue]Raw Answer[/bold blue]: {raw_answer}")
                 rich.print(f"[bold blue]Parsed Answer[/bold blue]: {answer}")
                 rich.print("")
                 return
             except ImportError:
                 logger.warning("Rich not installed. Using plain print")
-        tqdm.write(f"Query ID: {response.qid}")
-        if isinstance(response, RetrievalEvaluatorResult):
-            tqdm.write(f"Document ID: {response.did}")
-        elif response.agent_a and response.agent_b:
-            tqdm.write(f"{response.agent_a} vs {response.agent_b}")
-        else:
-            tqdm.write(f"Agent: {response.agent}")
-        tqdm.write(f"Raw Answer: {response.raw_answer}")
+        tqdm.write(f"Query ID: {qid}")
+        if did:
+            tqdm.write(f"Document ID: {did}")
+        if agent_a and agent_b:
+            tqdm.write(f"{agent_a} vs {agent_b}")
+        elif agent:
+            tqdm.write(f"Agent: {agent}")
+        tqdm.write(f"Raw Answer: {raw_answer}")
         tqdm.write(f"Parsed Answer: {answer}")
         tqdm.write("")
 
@@ -219,7 +222,7 @@ class BaseEvaluator(ABC):
 
     def _dump_response(
         self,
-        response: AnswerEvaluatorResult | RetrievalEvaluatorResult,
+        response: EvaluatorResult,
         output_columns: list[str],
         file: Optional[str] = None,
     ):

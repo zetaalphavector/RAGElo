@@ -11,6 +11,7 @@ from ragelo.types.types import (
     AnswerEvaluatorTypes,
     AnswerFormat,
     Document,
+    EvaluatorResult,
     LLMProviderTypes,
     Query,
     RetrievalEvaluatorResult,

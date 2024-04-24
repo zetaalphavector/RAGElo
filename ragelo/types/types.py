@@ -67,15 +67,30 @@ class AnswerEvaluatorTypes(StrEnum):
     CUSTOM_PROMPT = "custom_prompt"
 
 
-class AnswerEvaluatorResult(BaseModel):
+class EvaluatorResult(BaseModel):
     qid: str
     raw_answer: Optional[str]
     answer: Optional[str | int | dict[str, Any]]
+    exception: Optional[str] = None
+
+    @validator
+    @classmethod
+    def check_agents(cls, v):
+        exception = v.get("exception")
+        raw_answer = v.get("raw_answer")
+        answer = v.get("answer")
+        if (raw_answer is None or answer is None) and exception is None:
+            raise ValidationError(
+                "Either answer or raw_answer must be provided. Otherwise, an exception must be provided."
+            )
+        return v
+
+
+class AnswerEvaluatorResult(EvaluatorResult):
     agent: Optional[str] = None
     agent_a: Optional[str] = None
     agent_b: Optional[str] = None
     pairwise: bool = False
-    exception: Optional[str] = None
 
     @validator
     @classmethod
@@ -83,29 +98,17 @@ class AnswerEvaluatorResult(BaseModel):
         agent = v.get("agent")
         agent_a = v.get("agent_a")
         agent_b = v.get("agent_b")
-        raw_answer = v.get("raw_answer")
-        answer = v.get("answer")
-        exception = v.get("exception")
-        if not agent:
-            if not agent_a or not agent_b:
-                raise ValidationError(
-                    "Either agent or agent_a and agent_b must be provided"
-                )
-        if not raw_answer or not answer:
-            if not exception:
-                raise ValidationError(
-                    "Either answer or raw_answer must be provided. Otherwise, an exception must be provided."
-                )
-        if agent_a and agent_b:
+        if agent is None and agent_a is None and agent_b is None:
+            raise ValidationError(
+                "Either agent or agent_a and agent_b must be provided"
+            )
+        if agent_a is not None and agent_b is not None:
             v["pairwise"] = True
         return v
 
 
-class RetrievalEvaluatorResult(BaseModel):
-    qid: str
+class RetrievalEvaluatorResult(EvaluatorResult):
     did: str
-    raw_answer: str
-    answer: str | int | dict[str, Any]
 
 
 class FewShotExample(BaseModel):
