@@ -366,6 +366,7 @@ class BaseEvaluator(ABC):
             return queries
 
         queries_idx = {q.qid: idx for idx, q in enumerate(queries)}
+        docs_per_query = {}
         for line in csv.DictReader(open(self.config.documents_path)):
             qid = line[query_id_col].strip()
             did = line[document_id_col].strip()
@@ -378,6 +379,14 @@ class BaseEvaluator(ABC):
             if qid not in queries_idx:
                 logger.info(f"Query {qid} not in the provided queries. Skipping")
                 continue
+            if qid not in docs_per_query:
+                docs_per_query[qid] = set()
+            if did in docs_per_query[qid]:
+                logger.warning(
+                    f"Document {did} already in the retrieved documents for query {qid}. Skipping"
+                )
+                continue
+            docs_per_query[qid].add(did)
             queries[queries_idx[qid]].retrieved_docs.append(
                 Document(did=did, text=text, metadata=extra_metadata or None)
             )
