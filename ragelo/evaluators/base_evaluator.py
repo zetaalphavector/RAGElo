@@ -413,6 +413,7 @@ class BaseEvaluator(ABC):
             return queries
         queries_idx = {q.qid: idx for idx, q in enumerate(queries)}
         answers_read = 0
+        answers_per_query = {}
         for line in csv.DictReader(open(self.config.answers_path)):
             qid = line[query_id_col].strip()
             agent = line[agent_col].strip()
@@ -425,6 +426,14 @@ class BaseEvaluator(ABC):
             if qid not in queries_idx:
                 logger.info(f"Query {qid} not in the provided queries. Skipping")
                 continue
+            if qid not in answers_per_query:
+                answers_per_query[qid] = set()
+            if agent in answers_per_query[qid]:
+                logger.warning(
+                    f"Answer for agent {agent} already in the answers for query {qid}. Skipping"
+                )
+                continue
+            answers_per_query[qid].add(agent)
             ans = AgentAnswer(agent=agent, text=answer, metadata=extra_metadata or None)
             queries[queries_idx[qid]].answers.append(ans)
             answers_read += 1
