@@ -3,7 +3,7 @@ import pytest
 from ragelo import get_answer_evaluator
 from ragelo.evaluators.answer_evaluators import (
     CustomPromptEvaluator,
-    PairwiseWithReasoningEvaluator,
+    PairwiseAnswerEvaluator,
 )
 from ragelo.types.types import AnswerEvaluatorResult
 
@@ -16,7 +16,7 @@ class TestPairwiseWithReasoningEvaluator:
         pairwise_answer_eval_config,
         answers_test,
     ):
-        evaluator = PairwiseWithReasoningEvaluator.from_config(
+        evaluator = PairwiseAnswerEvaluator.from_config(
             config=pairwise_answer_eval_config,
             llm_provider=llm_provider_pairwise_answer_mock,
         )
@@ -108,4 +108,4 @@ def test_get_by_name(llm_provider_pairwise_answer_mock, pairwise_answer_eval_con
         "pairwise_reasoning",
         llm_provider_pairwise_answer_mock,
     )
-    assert isinstance(evaluator, PairwiseWithReasoningEvaluator)
+    assert isinstance(evaluator, PairwiseAnswerEvaluator)

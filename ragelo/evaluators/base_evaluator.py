@@ -382,7 +382,7 @@ class BaseEvaluator(ABC):
             if qid not in docs_per_query:
                 docs_per_query[qid] = set()
             if did in docs_per_query[qid]:
-                logger.warning(
+                logger.info(
                     f"Document {did} already in the retrieved documents for query {qid}. Skipping"
                 )
                 continue

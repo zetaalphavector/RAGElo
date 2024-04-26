@@ -27,6 +27,21 @@ class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
         default="[{did}] {doc}",
         description="The template to format each individual document in the prompt",
     )
+    has_citations: bool = Field(
+        default=True,
+        description=(
+            "Whether or not the answers contain document citations in square brackets. "
+            "If used, the document_ids in the documents and in the answers should match."
+        ),
+    )
+    include_annotations: bool = Field(
+        default=True,
+        description="Whether or not to include the document relevance annotations in the prompt",
+    )
+    include_raw_documents: bool = Field(
+        default=False,
+        description="Whether or not to include the raw documents in the prompt",
+    )
 
 
 class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
@@ -54,6 +69,16 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     prompt: Optional[str] = Field(
         default=None,
         description="Prompt to use for the evaluator. If not provided, a default prompt will be used",
+    )
+    factors: str = Field(
+        default=(
+            "the correctness, helpfulness, completeness, accuracy, depth, and "
+            "level of detail of their responses"
+        ),
+        description=(
+            "A string containing the factors to be used when evaluating an answer. "
+            "If not provided, a default string will be used"
+        ),
     )
 
 

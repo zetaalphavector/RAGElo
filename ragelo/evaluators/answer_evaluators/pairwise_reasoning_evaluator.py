@@ -10,22 +10,38 @@ from ragelo.types.configurations import PairwiseEvaluatorConfig
 
 
 @AnswerEvaluatorFactory.register(AnswerEvaluatorTypes.PAIRWISE_REASONING)
-class PairwiseWithReasoningEvaluator(BaseAnswerEvaluator):
-    """A evaluator that evaluates RAG-based answers pairwise, with document reasoning"""
+class PairwiseAnswerEvaluator(BaseAnswerEvaluator):
+    """A evaluator that evaluates RAG-based answers pairwise, with document reasoning and citations."""
 
     config: PairwiseEvaluatorConfig
+    citations_prompt = " Answers cite documents using square brackets."
+    document_template_raw_only = "[{did}] {doc}"
+    document_template_annotation_only = ("[{did}] {annotation}",)
+    document_template_raw_and_annotation = (
+        "[RETRIEVED DOCUMENT]\n{doc}\n[DOCUMENT RELEVANCE]\n{annotation}\n"
+    )
+    documents_prompt_relevance_only = (
+        "For each reference document, you will be provided with a reasoning "
+        "explaining why the document is or is not relevant."
+    )
+    documents_prompt_raw_and_relevance = (
+        "For each reference document, you will you be provided with the text "
+        "of the document as well as a reasoning  why the document "
+        "is or is not relevant."
+    )
+    documents_prompt_raw_only = (
+        "You will be provided with the text of each reference document."
+    )
     output_columns: list[str] = ["qid", "agent_a", "agent_b", "raw_answer", "answer"]
-    output_file: str = "pairwise_answers_evaluations.csv"
+
     prompt = """
 Please act as an impartial judge and evaluate the quality of the responses provided \
 by two AI assistants tasked to answer the question displayed below, based on a set \
 of documents retrieved by a search engine.
 You should choose the assistant that best answers the user question based on a set \
-of reference documents that may or not be relevant.
-Answers cite documents using square brackets. For each reference document, you will \
-be provided with a reasoning explaining why the document is or is not relevant.
-Your evaluation should consider factors such as the correctness, helpfulness, \
-completeness, accuracy, depth, and level of detail of their responses.\
+of reference documents that may or not be relevant.{citations}
+{document_rel}
+Your evaluation should consider factors such as {factors}.
 Details are only useful if they answer the user question. If an answer \
 contains non-relevant details, it should not be preferred over one that only \
 use relevant information.
@@ -59,16 +75,15 @@ and "[[C]]" for a tie.
         llm_provider: BaseLLMProvider,
     ):
         super().__init__(config, llm_provider)
-        self.k = self.config.k
-        self.bidirectional = self.config.bidirectional
         self.pattern = re.compile(r"\[\[([^]]+)]].*$(?:(?!\[\[).)*", re.DOTALL)
+        self.factors = config.factors
         if config.prompt:
             self.prompt = config.prompt
 
     def _build_message_pairwise(
         self, query: Query, game: PairwiseGame
     ) -> str | list[dict[str, str]]:
-        reasonings = self._prepare_documents(query)
+        documents = self._prepare_documents(query)
         query_metadata = self._get_usable_fields_from_metadata(
             self.prompt, query.metadata, skip_fields=[self.config.query_placeholder]
         )
@@ -82,11 +97,17 @@ and "[[C]]" for a tie.
             game.agent_b_answer.metadata,
             skip_fields=[self.config.answer_placeholder],
         )
+        if self.config.has_citations:
+            citations = self.citations_prompt
+        else:
+            citations = ""
         formatters = {
             self.config.query_placeholder: query.query,
-            self.config.documents_placeholder: reasonings,
+            self.config.documents_placeholder: documents,
             "answer_a": game.agent_a_answer.text,
             "answer_b": game.agent_b_answer.text,
+            "citations": citations,
+            "factors": self.factors,
             **query_metadata,
             **answer_a_metadata,
             **answer_b_metadata,
