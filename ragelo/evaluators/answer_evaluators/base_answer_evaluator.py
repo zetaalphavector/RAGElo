@@ -254,8 +254,8 @@ class BaseAnswerEvaluator(BaseEvaluator):
         queries = self._load_retrieved_documents(queries)
         queries = self._load_document_evaluations(queries, force=False)
         queries = self._load_agent_answers(queries)
-        queries = self._load_answers_evaluations(queries, force=self.config.force)
         queries = self.__add_pairwise_games(queries)
+        queries = self._load_answers_evaluations(queries, force=self.config.force)
         return queries
 
     def __add_pairwise_games(self, queries: list[Query]) -> list[Query]:
