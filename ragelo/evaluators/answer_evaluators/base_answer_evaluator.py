@@ -53,6 +53,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
 
     async def batch_evaluate(self, queries: list[Query]) -> list[Query]:
         use_progress_bar = self.config.use_progress_bar
+        failed_queries = 0
         queries = self.__prepare_queries(queries)
         tuples_to_eval = self.__get_tuples_to_evaluate(queries)
 
@@ -92,12 +93,14 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 evaluation = await done.pop()
                 pbar.update()
                 if evaluation.exception:
+                    failed_queries += 1
                     continue
                 evaluations.append(evaluation)
         pbar.close()
         self._add_answers_evaluations(queries, evaluations)
         if self.config.verbose:
             print("✅ Done!")
+            print("Failed evaluations:", failed_queries)
             print(f"Total evaluations: {len(evaluations)}")
         return queries
 
@@ -199,7 +202,8 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 pairwise=True,
                 exception=exc,
             )
-        self._dump_response(ans, self.output_columns, self.answers_evaluations_path)
+        if ans.exception is None:
+            self._dump_response(ans, self.output_columns, self.answers_evaluations_path)
         return ans
 
     def _build_message(

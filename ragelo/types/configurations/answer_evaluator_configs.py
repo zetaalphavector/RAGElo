@@ -6,9 +6,6 @@ from ragelo.types.configurations.base_configs import AnswerFormat, BaseEvaluator
 
 
 class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
-    answers_path: str = Field(
-        default="answers.csv", description="Path to the answers file"
-    )
     answer_placeholder: str = Field(
         default="answer", description="The placeholder for the answer in the prompt"
     )

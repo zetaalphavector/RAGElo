@@ -216,7 +216,7 @@ class BaseEvaluator(ABC):
                 f"Expected output columns: {output_columns}. \n"
                 f"Answer fields: {answer_dict.keys()}"
             )
-
+        answer_dict = {k: answer_dict.get(k, None) for k in output_columns}
         if not os.path.isfile(output_file):
             logger.debug(f"Creating new file {output_file}")
             with open(output_file, "w") as f:
