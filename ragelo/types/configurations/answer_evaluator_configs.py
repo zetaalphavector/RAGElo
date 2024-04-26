@@ -47,6 +47,10 @@ class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
 class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     """Configuration for the pairwise evaluator."""
 
+    output_columns: list[str] = Field(
+        default=["qid", "agent_a", "agent_b", "raw_answer", "answer"],
+        description="The columns to output in the CSV file",
+    )
     bidirectional: bool = Field(
         default=False, description="Whether or not to run each game in both directions"
     )
