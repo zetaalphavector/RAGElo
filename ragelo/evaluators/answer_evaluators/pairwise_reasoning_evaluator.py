@@ -62,6 +62,8 @@ and "[[C]]" for a tie.
         self.k = self.config.k
         self.bidirectional = self.config.bidirectional
         self.pattern = re.compile(r"\[\[([^]]+)]].*$(?:(?!\[\[).)*", re.DOTALL)
+        if config.prompt:
+            self.prompt = config.prompt
 
     def _build_message_pairwise(
         self, query: Query, game: PairwiseGame

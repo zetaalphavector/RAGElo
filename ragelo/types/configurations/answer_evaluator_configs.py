@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pydantic import Field
 
 from ragelo.types.configurations.base_configs import AnswerFormat, BaseEvaluatorConfig
@@ -48,6 +50,10 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     document_template: str = Field(
         default="[{did}] {annotation}",
         description="The template to format each individual document in the prompt",
+    )
+    prompt: Optional[str] = Field(
+        default=None,
+        description="Prompt to use for the evaluator. If not provided, a default prompt will be used",
     )
 
 
