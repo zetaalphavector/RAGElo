@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Callable, Optional
 
 from pydantic import Field
 
@@ -38,6 +38,9 @@ class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
     include_raw_documents: bool = Field(
         default=False,
         description="Whether or not to include the raw documents in the prompt",
+    )
+    document_filter: Optional[Callable[[str], bool]] = Field(
+        default=None, description="A function to filter the documents"
     )
 
 

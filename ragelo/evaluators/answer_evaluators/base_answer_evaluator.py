@@ -231,6 +231,9 @@ class BaseAnswerEvaluator(BaseEvaluator):
     def _prepare_documents(self, query: Query) -> str:
         documents = []
         for d in query.retrieved_docs:
+            if self.config.document_filter is not None:
+                if not self.config.document_filter(d.evaluation.answer):
+                    continue
             formatters = {
                 "did": d.did,
                 "doc": d.text,

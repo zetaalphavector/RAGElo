@@ -9,7 +9,7 @@ from ragelo.types import AnswerEvaluatorTypes, PairwiseGame, Query
 from ragelo.types.configurations import PairwiseEvaluatorConfig
 
 
-@AnswerEvaluatorFactory.register(AnswerEvaluatorTypes.PAIRWISE_REASONING)
+@AnswerEvaluatorFactory.register(AnswerEvaluatorTypes.PAIRWISE)
 class PairwiseAnswerEvaluator(BaseAnswerEvaluator):
     """A evaluator that evaluates RAG-based answers pairwise, with document reasoning and citations."""
 
@@ -77,6 +77,19 @@ and "[[C]]" for a tie.
         super().__init__(config, llm_provider)
         self.pattern = re.compile(r"\[\[([^]]+)]].*$(?:(?!\[\[).)*", re.DOTALL)
         self.factors = config.factors
+        if config.include_annotations and config.include_raw_documents:
+            config.document_template = self.document_template_raw_and_annotation
+            self.documents_prompt = self.documents_prompt_raw_and_relevance
+        elif config.include_annotations:
+            config.document_template = self.document_template_annotation_only
+            self.documents_prompt = self.documents_prompt_relevance_only
+        elif config.include_raw_documents:
+            config.document_template = self.document_template_raw_only
+            self.documents_prompt = self.documents_prompt_raw_only
+        else:
+            raise ValueError(
+                "At least one of include_annotations or include_raw_documents must be True"
+            )
         if config.prompt:
             self.prompt = config.prompt
 
@@ -108,6 +121,7 @@ and "[[C]]" for a tie.
             "answer_b": game.agent_b_answer.text,
             "citations": citations,
             "factors": self.factors,
+            "document_rel": self.documents_prompt,
             **query_metadata,
             **answer_a_metadata,
             **answer_b_metadata,
