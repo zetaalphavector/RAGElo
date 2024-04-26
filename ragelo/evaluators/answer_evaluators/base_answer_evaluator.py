@@ -33,7 +33,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
     ):
         self.config = config
         self.llm_provider = llm_provider
-        self.answers_evaluations_path = config.answers_evaluations_path
+
         self.output_columns = config.output_columns
         if config.answer_format == AnswerFormat.MULTI_FIELD_JSON:
             self.config.scoring_keys = config.scoring_keys
@@ -42,6 +42,8 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 "agent",
                 "raw_answer",
             ] + self.config.scoring_keys
+        elif config.answer_format == AnswerFormat.JSON:
+            config.scoring_keys = []
         elif config.scoring_key and config.scoring_key not in self.output_columns:
             print(f"Adding scoring key {config.scoring_key} to output columns")
             self.output_columns.append(self.config.scoring_key)
@@ -184,6 +186,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
             exc = str(e)
             answer = None
         if isinstance(evaluable, AgentAnswer):
+            output_file = self.config.answers_evaluations_path
             ans = AnswerEvaluatorResult(
                 qid=query.qid,
                 agent=evaluable.agent,
@@ -193,6 +196,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 exception=exc,
             )
         else:
+            output_file = self.config.games_evaluations_path
             ans = AnswerEvaluatorResult(
                 qid=query.qid,
                 agent_a=evaluable.agent_a_answer.agent,
@@ -203,7 +207,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 exception=exc,
             )
         if ans.exception is None:
-            self._dump_response(ans, self.output_columns, self.answers_evaluations_path)
+            self._dump_response(ans, self.output_columns, output_file)
         return ans
 
     def _build_message(

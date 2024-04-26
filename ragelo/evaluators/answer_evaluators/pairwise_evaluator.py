@@ -32,7 +32,6 @@ class PairwiseAnswerEvaluator(BaseAnswerEvaluator):
     documents_prompt_raw_only = (
         "You will be provided with the text of each reference document."
     )
-    output_columns: list[str] = ["qid", "agent_a", "agent_b", "raw_answer", "answer"]
 
     prompt = """
 Please act as an impartial judge and evaluate the quality of the responses provided \
