@@ -119,7 +119,7 @@ class BaseEvaluator(ABC):
         scoring_keys: list[str] = [],
     ) -> list[dict[str, Any]]:
         existing_lines: list[dict[str, str]] = []
-        base_columns = ["qid", "did", "agent", "raw_answer"]
+        base_columns = ["qid", "did", "agent", "raw_answer", "agent_a", "agent_b"]
         with open(output_file, "r") as f:
             reader = csv.DictReader(f)
             line: dict[str, str]
@@ -426,7 +426,7 @@ class BaseEvaluator(ABC):
             if qid not in answers_per_query:
                 answers_per_query[qid] = set()
             if agent in answers_per_query[qid]:
-                logger.warning(
+                logger.info(
                     f"Answer for agent {agent} already in the answers for query {qid}. Skipping"
                 )
                 continue
