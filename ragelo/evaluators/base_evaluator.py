@@ -119,23 +119,17 @@ class BaseEvaluator(ABC):
         scoring_keys: list[str] = [],
     ) -> list[dict[str, Any]]:
         existing_lines: list[dict[str, str]] = []
+        base_columns = ["qid", "did", "agent", "raw_answer"]
         with open(output_file, "r") as f:
             reader = csv.DictReader(f)
             line: dict[str, str]
             for line in reader:
-                if len(scoring_keys) > 0 and any(
-                    k in scoring_keys for k in line.keys()
-                ):
-                    line_dict: dict[str, Any] = {
-                        "answer": {k: line[k] for k in scoring_keys}
-                    }
-                    left_keys = set(line.keys()) - set(line_dict.keys())
-                    for k in left_keys:
-                        line_dict[k] = line[k]
+                line_dict = line
+                if "answer" in line and line["answer"]:
+                    line_dict["answer"] = line["answer"]
                 else:
-                    line_dict = line
-                # remove any keys with empty values or None
-                line_dict = {k: v for k, v in line_dict.items() if v and k}
+                    remaining_keys = {k for k in line.keys() if k not in base_columns}
+                    line_dict["answer"] = {k: line[k] for k in remaining_keys}
                 existing_lines.append(line_dict)
         return existing_lines
 
@@ -496,6 +490,7 @@ class BaseEvaluator(ABC):
                     ans.evaluation = None
                 for game in q.pairwise_games:
                     game.evaluation = None
+
         evaluations = [
             AnswerEvaluatorResult(**x)
             for x in self._get_existing_evaluations(

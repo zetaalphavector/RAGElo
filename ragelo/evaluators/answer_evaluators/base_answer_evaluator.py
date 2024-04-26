@@ -232,7 +232,9 @@ class BaseAnswerEvaluator(BaseEvaluator):
         documents = []
         for d in query.retrieved_docs:
             if self.config.document_filter is not None:
-                if not self.config.document_filter(d.evaluation.answer):
+                if d.evaluation is None:
+                    continue
+                if not self.config.document_filter(str(d.evaluation.answer)):
                     continue
             formatters = {
                 "did": d.did,
