@@ -35,51 +35,54 @@ class BaseEvaluator(ABC):
         raise NotImplementedError
 
     @staticmethod
-    def json_answer_parser(answer: str, key: str) -> str:
-        """Parses a Json answer from the LLM and returns a specific key"""
-
-        # Finds all valid JSON objects in the answer that contain the key
-        json_objects = []
-        for line in answer.strip().split("\n"):
-            try:
-                json_object = json.loads(line)
-                if key in json_object:
-                    json_objects.append(json_object)
-            except json.JSONDecodeError:
-                pass
-
-        # Assumes the valid JSON object is the last one
-        if not json_objects:
-            raise ValueError(
-                "Answer does not contain a valid json object\n"
-                f"with the key {key}\n{answer}"
-            )
-        json_dict = json_objects[-1]
-        return json_dict[key]
-
-    @staticmethod
-    def json_answer_parser_multifields(answer: str, keys: list[str]) -> dict[str, str]:
-        """Parses a Json answer from the LLM and returns the values from multiple fields"""
-
-        # Finds all valid JSON objects in the answer that contain the key
-        parsed_answer = {}
+    def __parse_json(answer: str, keys: str | list[str]) -> dict[str, Any]:
+        # Checks if there is block of json in the answer like ```json\n{...}\n```
+        json_block = answer.split("```json\n")
+        if len(json_block) > 1:
+            json_block = json_block[1].split("\n```")[0]
+            return json.loads(json_block)
+        # Otherwise, go line by line
+        if isinstance(keys, str):
+            keys = [keys]
+        json_dict = {}
         for line in answer.strip().split("\n"):
             try:
                 json_object = json.loads(line)
                 for k in keys:
                     if k in json_object:
-                        parsed_answer[k] = json_object[k]
+                        json_dict[k] = json_object[k]
             except json.JSONDecodeError:
                 pass
+        return json_dict
 
-        valid_keys = set(parsed_answer.keys()).intersection(keys)
+    def json_answer_parser(self, answer: str, key: str) -> str:
+        """Parses a Json answer from the LLM and returns a specific key"""
+
+        # Finds all valid JSON objects in the answer that contain the key
+        json_dict = self.__parse_json(answer, key)
+        if key not in json_dict:
+            raise ValueError(
+                "Answer does not contain the necessary key\n"
+                f"Expected {key}, found {json_dict.keys()}\n{answer}"
+            )
+        return json_dict[key]
+
+    def json_answer_parser_multifields(
+        self, answer: str, keys: list[str]
+    ) -> dict[str, str]:
+        """Parses a Json answer from the LLM and returns the values from multiple fields"""
+
+        # Finds all valid JSON objects in the answer that contain the key
+        json_dict = self.__parse_json(answer, keys)
+
+        valid_keys = set(json_dict.keys()).intersection(keys)
         if len(valid_keys) != len(keys):
             raise ValueError(
                 "Answer does not contain all necessary keys\n"
                 f"Expected {keys}, found {valid_keys}.\n"
                 f"Full Answer:\n{answer}"
             )
-        return parsed_answer
+        return json_dict
 
     @staticmethod
     def _get_fields_from_string(s: str) -> list[str]:
