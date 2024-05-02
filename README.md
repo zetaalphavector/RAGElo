@@ -37,9 +37,9 @@ from ragelo import get_retrieval_evaluator
 evaluator = get_retrieval_evaluator("RDNAM", llm_provider="openai")
 raw_answer, processed_answer = evaluator.evaluate(query="What is the capital of France?", document='Lyon is the second largest city in France.')
 print(processed_answer)
-# Output: 0
+# Output: 1
 print(raw_answer)
-# Output: '"O": 0\n}'
+# Output: '"O": 1\n}'
 ```
 
 For a more complete example, we can evaluate with a custom prompt, and inject metadata into our evaluation prompt:

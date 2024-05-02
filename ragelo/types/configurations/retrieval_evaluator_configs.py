@@ -11,6 +11,10 @@ class BaseRetrievalEvaluatorConfig(BaseEvaluatorConfig):
         default="document",
         description="The placeholder for the document in the prompt",
     )
+    output_columns: list[str] = Field(
+        default=["qid", "did", "raw_answer", "answer"],
+        description="The columns to output in the CSV file",
+    )
 
 
 class ReasonerEvaluatorConfig(BaseRetrievalEvaluatorConfig):
@@ -27,7 +31,10 @@ class ReasonerEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         description="When using answer_format=multi_field_json, the keys to extract from the answer",
     )
 
-    output_file: Optional[str] = Field(default=None, description="reasonings.csv")
+    document_evaluations_path: str = Field(
+        default="reasonings.csv",
+        description="Path to write (or read) the evaluations of the retrieved documents",
+    )
 
 
 class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
@@ -51,9 +58,9 @@ class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         description="A list of extra guidelines to be used when reasoning about the "
         "relevancy of the document.",
     )
-    output_file: str = Field(
+    document_evaluations_path: str = Field(
         default="domain_expert_evaluations.csv",
-        description="Path to the output file",
+        description="Path to write (or read) the evaluations of the retrieved documents",
     )
     answer_format: str = Field(
         default="text",
@@ -77,6 +84,10 @@ class CustomPromptEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     answer_format: str = Field(
         default=AnswerFormat.MULTI_FIELD_JSON,
         description="The format of the answer returned by the LLM",
+    )
+    document_evaluations_path: str = Field(
+        default="custom_prompt_evaluations.csv",
+        description="Path to write (or read) the evaluations of the retrieved documents",
     )
 
 
@@ -128,6 +139,10 @@ class RDNAMEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default=False,
         description="Should the prompt ask the LLM to mimic multiple annotators?",
     )
-    output_file: str = Field(
+    document_evaluations_path: str = Field(
         default="rdnam_evaluations.csv", description="Path to the output file"
+    )
+    scoring_key: str = Field(
+        default="answer",
+        description="The field to use when parsing the llm answer",
     )

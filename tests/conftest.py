@@ -91,7 +91,7 @@ def llm_provider_config():
 
 
 @pytest.fixture
-def chat_completion_mock(mocker):
+def chat_completion_mock():
     fake_response = ChatCompletion(
         id="fake id",
         choices=[
@@ -128,7 +128,6 @@ def base_eval_config():
     return BaseEvaluatorConfig(
         documents_path="tests/data/documents.csv",
         query_path="tests/data/queries.csv",
-        output_file="tests/data/output.csv",
         force=True,
         verbose=True,
         write_output=False,
@@ -138,10 +137,9 @@ def base_eval_config():
 @pytest.fixture
 def pairwise_answer_eval_config(base_eval_config):
     base_config = base_eval_config.model_dump()
-    del base_config["documents_path"]
+    base_config["document_evaluations_path"] = "tests/data/reasonings.csv"
     config = PairwiseEvaluatorConfig(
-        documents_path="tests/data/reasonings.csv",
-        bidirectional=False,
+        bidirectional=True,
         **base_config,
     )
     return config
@@ -162,7 +160,6 @@ The last line of your answer must be a json object with the keys "quality", \
 2, where 2 is the highest score on that aspect.
 DOCUMENTS RETRIEVED:
 {documents}
-
 User Query: {query}
 
 Agent answer: {answer}
@@ -264,6 +261,14 @@ def llm_provider_pairwise_answer_mock(llm_provider_config):
             "I don't know. [[C]]",
         ]
     )
+    provider.async_call_mocker = AsyncMock(
+        side_effect=[
+            "Async Agent [[A]] is better",
+            "Async Agent [[B]] is better",
+            "Async A tie. Therefore, [[C]]",
+            "Async I don't know. [[C]]",
+        ]
+    )
     return provider
 
 
@@ -282,13 +287,11 @@ def llm_provider_answer_mock(llm_provider_config):
 
 
 @pytest.fixture
-def llm_provider_mock_mock(mocker):
-    return mocker.Mock(MockLLMProvider)
-
-
-@pytest.fixture
 def llm_provider_mock_rdnam(llm_provider_config):
     mocked_scores = [{"M": 2, "T": 1, "O": 1}, {"M": 1, "T": 1, "O": 2}]
     provider = MockLLMProvider(llm_provider_config)
     provider.call_mocker = Mock(side_effect=lambda _: json.dumps(mocked_scores)[2:])
+    provider.async_call_mocker = AsyncMock(
+        side_effect=lambda _: json.dumps(mocked_scores)[2:]
+    )
     return provider

@@ -13,6 +13,7 @@ from ragelo.types import (
     AgentAnswer,
     AnswerEvaluatorResult,
     Document,
+    EvaluatorResult,
     Query,
     RetrievalEvaluatorResult,
 )
@@ -101,77 +102,107 @@ class BaseEvaluator(ABC):
         return valid_fields
 
     @staticmethod
-    def __get_existing_output_from_json(output_file: str) -> list[dict[str, str]]:
+    def __get_existing_evaluations_from_json(output_file: str) -> list[dict[str, str]]:
         return json.load(open(output_file, "r"))
 
     @staticmethod
-    def __get_existing_output_from_jsonl(output_file: str) -> list[dict[str, str]]:
+    def __get_existing_evaluations_from_jsonl(output_file: str) -> list[dict[str, str]]:
         with open(output_file, "r") as f:
             return [json.loads(line) for line in f]
 
     @staticmethod
-    def __get_existing_output_from_csv(output_file: str) -> list[dict[str, str]]:
+    def __get_existing_evaluations_from_csv(
+        output_file: str,
+        scoring_keys: list[str] = [],
+    ) -> list[dict[str, Any]]:
         existing_lines: list[dict[str, str]] = []
         with open(output_file, "r") as f:
             reader = csv.DictReader(f)
+            line: dict[str, str]
             for line in reader:
-                existing_lines.append(line)
+                if len(scoring_keys) > 0 and any(
+                    k in scoring_keys for k in line.keys()
+                ):
+                    line_dict: dict[str, Any] = {
+                        "answer": {k: line[k] for k in scoring_keys}
+                    }
+                    left_keys = set(line.keys()) - set(line_dict.keys())
+                    for k in left_keys:
+                        line_dict[k] = line[k]
+                else:
+                    line_dict = line
+                # remove any keys with empty values or None
+                line_dict = {k: v for k, v in line_dict.items() if v and k}
+                existing_lines.append(line_dict)
         return existing_lines
 
-    def _get_existing_output(self) -> list[dict[str, str]]:
+    def _get_existing_evaluations(
+        self, evaluation_file: str, force: bool = False
+    ) -> list[dict[str, Any]]:
         existing_lines: list[dict[str, str]] = []
-        if self.config.force and os.path.exists(self.output_file):
-            logger.warning(f"Removing existing {self.output_file}!")
-            os.remove(self.output_file)
-        if not os.path.isfile(self.output_file):
+        if force and os.path.exists(evaluation_file):
+            logger.warning(f"Removing existing {evaluation_file}!")
+            os.remove(evaluation_file)
+        if not os.path.isfile(evaluation_file):
             return existing_lines
-        if self.output_file.endswith(".json"):
-            return self.__get_existing_output_from_json(self.output_file)
-        if self.output_file.endswith(".jsonl"):
-            return self.__get_existing_output_from_jsonl(self.output_file)
+        if evaluation_file.endswith(".json"):
+            return self.__get_existing_evaluations_from_json(evaluation_file)
+        if evaluation_file.endswith(".jsonl"):
+            return self.__get_existing_evaluations_from_jsonl(evaluation_file)
         else:
-            return self.__get_existing_output_from_csv(self.output_file)
+            return self.__get_existing_evaluations_from_csv(
+                evaluation_file, self.config.scoring_keys
+            )
 
     @staticmethod
     def _print_response(
-        response: AnswerEvaluatorResult | RetrievalEvaluatorResult,
+        response: EvaluatorResult,
         rich_print: bool = False,
     ):
-        answer: str | dict[str, str] | int
+        answer: Optional[str | dict[str, str] | int]
         if isinstance(response.answer, dict):
             # Print the answer in a more readable format
             answer = json.dumps(response.answer, indent=4)
         else:
             answer = response.answer
+        response_dict = response.model_dump()
+        agent_a = response_dict.get("agent_a")
+        agent_b = response_dict.get("agent_b")
+        agent = response_dict.get("agent")
+        qid = response_dict.get("qid")
+        did = response_dict.get("did")
+        raw_answer = response_dict.get("raw_answer")
+
         if rich_print:
             try:
                 import rich
 
-                rich.print(f"[bold blue]🔎 Query ID[/bold blue]: {response.qid}")
-                if isinstance(response, RetrievalEvaluatorResult):
-                    rich.print(f"[bold blue]📜 Document ID[/bold blue]: {response.did}")
-                elif response.agent_a and response.agent_b:
+                rich.print(f"[bold blue]🔎 Query ID[/bold blue]: {qid}")
+                did = response_dict.get("did")
+                if did:
+                    rich.print(f"[bold blue]📜 Document ID[/bold blue]: {did}")
+                if agent_a and agent_b:
                     rich.print(
-                        f"[bold blue] {response.agent_a:<18} [/bold blue] 🆚  "
-                        f"[bold red] {response.agent_b}[/bold red]"
+                        f"[bold blue] {agent_a:<18} [/bold blue] 🆚  "
+                        f"[bold red] {agent_b}[/bold red]"
                     )
-                else:
-                    rich.print(f"[bold blue]🕵️ Agent[/bold blue]: {response.agent}")
+                elif agent:
+                    rich.print(f"[bold blue]🕵️ Agent[/bold blue]: {agent}")
 
-                rich.print(f"[bold blue]Raw Answer[/bold blue]: {response.raw_answer}")
+                rich.print(f"[bold blue]Raw Answer[/bold blue]: {raw_answer}")
                 rich.print(f"[bold blue]Parsed Answer[/bold blue]: {answer}")
                 rich.print("")
                 return
             except ImportError:
                 logger.warning("Rich not installed. Using plain print")
-        tqdm.write(f"Query ID: {response.qid}")
-        if isinstance(response, RetrievalEvaluatorResult):
-            tqdm.write(f"Document ID: {response.did}")
-        elif response.agent_a and response.agent_b:
-            tqdm.write(f"{response.agent_a} vs {response.agent_b}")
-        else:
-            tqdm.write(f"Agent: {response.agent}")
-        tqdm.write(f"Raw Answer: {response.raw_answer}")
+        tqdm.write(f"Query ID: {qid}")
+        if did:
+            tqdm.write(f"Document ID: {did}")
+        if agent_a and agent_b:
+            tqdm.write(f"{agent_a} vs {agent_b}")
+        elif agent:
+            tqdm.write(f"Agent: {agent}")
+        tqdm.write(f"Raw Answer: {raw_answer}")
         tqdm.write(f"Parsed Answer: {answer}")
         tqdm.write("")
 
@@ -219,7 +250,7 @@ class BaseEvaluator(ABC):
 
     def _dump_response(
         self,
-        response: AnswerEvaluatorResult | RetrievalEvaluatorResult,
+        response: EvaluatorResult,
         output_columns: list[str],
         file: Optional[str] = None,
     ):
@@ -312,3 +343,203 @@ class BaseEvaluator(ABC):
             answer = AgentAnswer(agent="<no_agent>", text=answer)
         answer.add_metadata(answer_metadata)
         return answer
+
+    def _load_retrieved_documents(
+        self,
+        queries: list[Query],
+        query_id_col: str = "qid",
+        document_id_col: str = "did",
+        document_text_col: str = "document_text",
+    ) -> list[Query]:
+        # Check if we actually need to do something
+        queries_with_documents = len([q for q in queries if len(q.retrieved_docs) > 0])
+        if queries_with_documents == len(queries):
+            logger.info("All Queries already have retrieved documents. Skipping")
+            return queries
+        documents_read = 0
+        if not os.path.isfile(self.config.documents_path):
+            logger.warning(
+                f"Documents file {self.config.documents_path} not found"
+                "Will not add retrieved documents to queries"
+                f"{queries_with_documents} queries already have documents"
+            )
+            return queries
+
+        queries_idx = {q.qid: idx for idx, q in enumerate(queries)}
+        docs_per_query = {}
+        for line in csv.DictReader(open(self.config.documents_path)):
+            qid = line[query_id_col].strip()
+            did = line[document_id_col].strip()
+            text = line[document_text_col].strip()
+            extra_metadata = {
+                k: v
+                for k, v in line.items()
+                if k not in [query_id_col, document_id_col, document_text_col]
+            }
+            if qid not in queries_idx:
+                logger.info(f"Query {qid} not in the provided queries. Skipping")
+                continue
+            if qid not in docs_per_query:
+                docs_per_query[qid] = set()
+            if did in docs_per_query[qid]:
+                logger.warning(
+                    f"Document {did} already in the retrieved documents for query {qid}. Skipping"
+                )
+                continue
+            docs_per_query[qid].add(did)
+            queries[queries_idx[qid]].retrieved_docs.append(
+                Document(did=did, text=text, metadata=extra_metadata or None)
+            )
+            documents_read += 1
+        logger.info(f"Loaded {documents_read} documents")
+        return queries
+
+    def _load_agent_answers(
+        self,
+        queries: list[Query],
+        query_id_col: str = "qid",
+        agent_col: str = "agent",
+        answer_col: str = "answer",
+    ):
+        queries_with_answers = len([q for q in queries if len(q.answers) > 0])
+        if queries_with_answers == len(queries):
+            logger.info("All Queries already have answers. Skipping")
+            return queries
+        if not os.path.isfile(self.config.answers_path):
+            logger.warning(
+                f"Answers file {self.config.answers_path} not found. Will not add answers to queries"
+                f"Queries with answers: {queries_with_answers}"
+            )
+            return queries
+        queries_idx = {q.qid: idx for idx, q in enumerate(queries)}
+        answers_read = 0
+        answers_per_query = {}
+        for line in csv.DictReader(open(self.config.answers_path)):
+            qid = line[query_id_col].strip()
+            agent = line[agent_col].strip()
+            answer = line[answer_col].strip()
+            extra_metadata = {
+                k: v
+                for k, v in line.items()
+                if k not in [query_id_col, agent_col, answer_col]
+            }
+            if qid not in queries_idx:
+                logger.info(f"Query {qid} not in the provided queries. Skipping")
+                continue
+            if qid not in answers_per_query:
+                answers_per_query[qid] = set()
+            if agent in answers_per_query[qid]:
+                logger.warning(
+                    f"Answer for agent {agent} already in the answers for query {qid}. Skipping"
+                )
+                continue
+            answers_per_query[qid].add(agent)
+            ans = AgentAnswer(agent=agent, text=answer, metadata=extra_metadata or None)
+            queries[queries_idx[qid]].answers.append(ans)
+            answers_read += 1
+        logger.info(f"Loaded {answers_read} answers")
+        return queries
+
+    def _load_document_evaluations(
+        self, queries: list[Query], force: bool = False
+    ) -> list[Query]:
+        if force:
+            logger.info("Clearing existing document evaluations")
+            for q in queries:
+                for doc in q.retrieved_docs:
+                    doc.evaluation = None
+        document_evaluations = [
+            RetrievalEvaluatorResult(**x)
+            for x in self._get_existing_evaluations(
+                self.config.document_evaluations_path,
+                force,
+            )
+        ]
+        return self._add_document_evaluations(queries, document_evaluations)
+
+    def _add_document_evaluations(
+        self,
+        queries: list[Query],
+        evaluations: list[RetrievalEvaluatorResult],
+    ) -> list[Query]:
+        queries_idx = {q.qid: idx for idx, q in enumerate(queries)}
+        doc_idxs = {}
+        for q in queries:
+            doc_idxs[q.qid] = {d.did: idx for idx, d in enumerate(q.retrieved_docs)}
+
+        for evaluation in evaluations:
+            qid = evaluation.qid
+            did = evaluation.did
+            if qid not in queries_idx:
+                logger.info(f"Query {qid} not in the provided queries. Skipping")
+                continue
+            if did not in doc_idxs[qid]:
+                logger.info(
+                    f"Document {did} not in the retrieved documents for query {qid}. Skipping"
+                )
+                continue
+            queries[queries_idx[qid]].retrieved_docs[
+                doc_idxs[qid][did]
+            ].evaluation = evaluation
+        return queries
+
+    def _load_answers_evaluations(
+        self, queries: list[Query], force: bool = False
+    ) -> list[Query]:
+        if force:
+            logger.info("Clearing existing answers evaluations")
+            for q in queries:
+                for ans in q.answers:
+                    ans.evaluation = None
+                for game in q.pairwise_games:
+                    game.evaluation = None
+        evaluations = [
+            AnswerEvaluatorResult(**x)
+            for x in self._get_existing_evaluations(
+                self.config.answers_evaluations_path
+            )
+        ]
+        evaluations += [
+            AnswerEvaluatorResult(**x)
+            for x in self._get_existing_evaluations(self.config.games_evaluations_path)
+        ]
+        return self._add_answers_evaluations(queries, evaluations)
+
+    def _add_answers_evaluations(
+        self, queries, evaluations: list[AnswerEvaluatorResult]
+    ) -> list[Query]:
+        queries_idx = {q.qid: idx for idx, q in enumerate(queries)}
+        games_idxs = {}
+        answer_idxs = {}
+        for q in queries:
+            games_idxs[q.qid] = {
+                (g.agent_a_answer.agent, g.agent_b_answer.agent): idx
+                for idx, g in enumerate(q.pairwise_games)
+            }
+            answer_idxs[q.qid] = {a.agent: idx for idx, a in enumerate(q.answers)}
+
+        for evaluation in evaluations:
+            query_idx = queries_idx[evaluation.qid]
+            if evaluation.pairwise:
+                if not evaluation.agent_a or not evaluation.agent_b:
+                    # Should never happen, as the pydantic model enforces this
+                    raise ValueError("Pairwise evaluations require two agents")
+                agents = (evaluation.agent_a, evaluation.agent_b)
+                if agents not in games_idxs[evaluation.qid]:
+                    agents = (evaluation.agent_b, evaluation.agent_a)
+                    if agents not in games_idxs[evaluation.qid]:
+                        logger.warning(
+                            f"Pairwise evaluation between {evaluation.agent_a} and {evaluation.agent_b} "
+                            f"not found in query {evaluation.qid}"
+                        )
+                        continue
+
+                game_idx = games_idxs[evaluation.qid][agents]
+                queries[query_idx].pairwise_games[game_idx].evaluation = evaluation
+            else:
+                if evaluation.agent is None:
+                    # Should never happen.
+                    raise ValueError("Evaluation must have an agent")
+                answer_idx = answer_idxs[evaluation.qid][evaluation.agent]
+                queries[query_idx].answers[answer_idx].evaluation = evaluation
+        return queries

@@ -5,7 +5,6 @@ and returns a score or a label for each document."""
 import asyncio
 from typing import Any, Callable, Optional, Type, get_type_hints
 
-from tenacity import RetryError
 from tqdm.auto import tqdm
 
 from ragelo.evaluators.base_evaluator import BaseEvaluator
@@ -23,8 +22,6 @@ from ragelo.types.configurations import BaseRetrievalEvaluatorConfig
 
 class BaseRetrievalEvaluator(BaseEvaluator):
     config: BaseRetrievalEvaluatorConfig
-    output_columns: list[str] = ["qid", "did", "raw_answer", "answer"]
-    output_file: str = "retrieval_evaluations.csv"
 
     def __init__(
         self,
@@ -33,15 +30,15 @@ class BaseRetrievalEvaluator(BaseEvaluator):
     ):
         self.config = config
         self.llm_provider = llm_provider
-        if config.output_file is not None:
-            self.output_file = config.output_file
-
+        self.document_evaluations_path = config.document_evaluations_path
+        self.output_columns = config.output_columns
         if config.answer_format == AnswerFormat.MULTI_FIELD_JSON:
-            if isinstance(config.scoring_key, str):
-                scoring_keys = [config.scoring_key]
-            else:
-                scoring_keys = config.scoring_key
-            self.output_columns = ["qid", "agent", "raw_answer"] + scoring_keys
+            self.config.scoring_keys = config.scoring_keys
+            self.output_columns = [
+                "qid",
+                "did",
+                "raw_answer",
+            ] + self.config.scoring_keys
 
         if config.scoring_key and config.scoring_key not in self.output_columns:
             print(f"Adding scoring key {config.scoring_key} to output columns")
@@ -52,105 +49,100 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             ]
             self.output_columns.extend(missing_keys)
 
-    def __get_tuples_to_evaluate(
-        self, queries: list[Query], answers: list[RetrievalEvaluatorResult]
-    ) -> list[tuple[Query, Document]]:
-        skip_docs = {(x.qid, x.did) for x in answers}
-        tuples_to_eval = []
-        all_tuples = 0
-        for query in queries:
-            for document in query.retrieved_docs:
-                qid = query.qid
-                did = document.did
-                all_tuples += 1
-                if (qid, did) in skip_docs:
-                    logger.debug(f"Skipping {qid} {did}")
-                    continue
-                tuples_to_eval.append((query, document))
+    async def batch_evaluate(self, queries: list[Query]) -> list[Query]:
+        use_progress_bar = self.config.use_progress_bar
+        queries = self.__prepare_queries(queries)
+        tuples_to_eval = self.__get_tuples_to_evaluate(queries)
         if len(tuples_to_eval) == 0:
-            logger.info("All documents have been evaluated")
-            if self.config.verbose:
-                print(
-                    f"All {all_tuples} documents are already evaluated.\n"
-                    "If you want to re-evaluate documents, use the --force flag."
-                )
-
-        return tuples_to_eval
-
-    async def __fetch_chunk(
-        self, chunk: list[tuple[Query, Document]]
-    ) -> list[RetrievalEvaluatorResult]:
-        qids = []
-        dids = []
-        tasks = []
-        for query, document in chunk:
-            message = self._build_message(query, document)
-            qids.append(query.qid)
-            dids.append(document.did)
-            tasks.append(self.llm_provider.call_async(message))
-        raw_answers = await asyncio.gather(*tasks)
-        parsed_answers = []
-        for qid, did, raw_answer in zip(qids, dids, raw_answers):
-            try:
-                answer = self._process_answer(raw_answer)
-            except ValueError:
-                logger.warning(f"Failed to PARSE answer for qid: {qid} did: {did}")
-                continue
-            parsed_answers.append(
-                RetrievalEvaluatorResult(
-                    qid=qid,
-                    did=did,
-                    raw_answer=raw_answer,
-                    answer=answer,
-                )
-            )
-            self._dump_response(
-                parsed_answers[-1], self.output_columns, self.output_file
-            )
-        return parsed_answers
-
-    async def batch_evaluate_async(
-        self, queries: list[Query]
-    ) -> list[RetrievalEvaluatorResult]:
-        """Evaluate all the documents for a list of queries"""
-        use_progress_bar = self.config.verbose
-        answers = [RetrievalEvaluatorResult(**x) for x in self._get_existing_output()]
-        tuples_to_eval = self.__get_tuples_to_evaluate(queries, answers)
-        if len(tuples_to_eval) == 0:
-            return answers
-
-        chunks = [
-            tuples_to_eval[i : i + self.config.n_processes]
-            for i in range(0, len(tuples_to_eval), self.config.n_processes)
-        ]
+            return queries
         pbar = tqdm(
             total=len(tuples_to_eval),
             ncols=100,
-            desc="Evaluating documents",
+            desc="Evaluating answers",
             disable=not use_progress_bar,
             leave=False,
             position=0,
         )
+        awaitables_ended = False
+        pending: set[asyncio.Future] = set()
+        aws = map(self._async_evaluate, tuples_to_eval)
+        aws = iter(aws)
+        evaluations = []
+        while pending or not awaitables_ended:
+            while len(pending) < self.config.n_processes and not awaitables_ended:
+                try:
+                    aw = next(aws)
+                except StopIteration:
+                    awaitables_ended = True  # all tasks have been scheduled
+                else:
+                    pending.add(asyncio.ensure_future(aw))
+            if not pending:
+                break
 
-        for chunk in chunks:
-            responses = await self.__fetch_chunk(chunk)
-            answers.extend(responses)
-            pbar.update(len(chunk))
+            done, pending = await asyncio.wait(
+                pending, return_when=asyncio.FIRST_COMPLETED
+            )
+            while done:
+                evaluation = await done.pop()
+                pbar.update()
+                if evaluation.exception:
+                    continue
+                evaluations.append(evaluation)
         pbar.close()
-
+        self._add_document_evaluations(queries, evaluations)
         if self.config.verbose:
             print("✅ Done!")
-            print(f"Total evaluations: {len(answers)}")
+            print(f"Total evaluations: {len(evaluations)}")
+        return queries
 
-        return answers
+    async def _async_evaluate(
+        self, eval_sample: tuple[Query, Document]
+    ) -> RetrievalEvaluatorResult:
+        query, document = eval_sample
+        exc = None
+        prompt = self._build_message(query, document)
+        try:
+            raw_answer = await self.llm_provider.call_async(prompt)
+        except Exception as e:
+            logger.warning(f"Failed to FETCH answers for qid: {query.qid}")
+            logger.warning(f"document id: {document.did}")
+            exc = str(e)
+            raw_answer = None
+        try:
+            answer = self._process_answer(raw_answer) if raw_answer else None
+        except ValueError as e:
+            logger.warning(
+                f"Failed to PARSE answer for qid: {query.qid} "
+                "document id: {document.did}\n"
+                f"Raw answer: {raw_answer}"
+            )
+            exc = str(e)
+            answer = None
+        ans = RetrievalEvaluatorResult(
+            qid=query.qid,
+            did=document.did,
+            raw_answer=raw_answer,
+            answer=answer,
+            exception=exc,
+        )
+        self._dump_response(ans, self.output_columns, self.document_evaluations_path)
+        return ans
 
-    def batch_evaluate(self, queries: list[Query]) -> list[RetrievalEvaluatorResult]:
-        """Evaluate all the documents for a list of queries"""
-        use_progress_bar = self.config.verbose
-        answers = [RetrievalEvaluatorResult(**x) for x in self._get_existing_output()]
-        failed_evaluations = 0
-        tuples_to_eval = self.__get_tuples_to_evaluate(queries, answers)
+    def __prepare_queries(self, queries: list[Query]) -> list[Query]:
+        queries = self._load_retrieved_documents(queries)
+        queries = self._load_document_evaluations(queries, force=self.config.force)
+        return queries
+
+    def __get_tuples_to_evaluate(
+        self, queries: list[Query]
+    ) -> list[tuple[Query, Document]]:
+        tuples_to_eval = []
         all_tuples = 0
+        for q in queries:
+            for d in q.retrieved_docs:
+                if d.evaluation is None:
+                    tuples_to_eval.append((q, d))
+                all_tuples += 1
         if len(tuples_to_eval) == 0:
             logger.info("All documents have been evaluated")
             if self.config.verbose:
@@ -158,38 +150,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
                     f"All {all_tuples} documents are already evaluated.\n"
                     "If you want to re-evaluate documents, use the --force flag."
                 )
-            return answers
-        for query, document in tqdm(
-            tuples_to_eval,
-            desc="Evaluating retrieved documents",
-            disable=not use_progress_bar,
-            ncols=100,
-            # leave=False,
-            position=0,
-        ):
-            qid = query.qid
-            did = document.did
-            try:
-                raw_answer, answer = self.evaluate(query, document)
-            except (RetryError, ValueError):
-                failed_evaluations += 1
-                continue
-
-            answers.append(
-                RetrievalEvaluatorResult(
-                    qid=qid,
-                    did=did,
-                    raw_answer=raw_answer,
-                    answer=answer,
-                )
-            )
-            self._dump_response(answers[-1], self.output_columns, self.output_file)
-
-        if self.config.verbose:
-            print("✅ Done!")
-            print(f"Unparsed answers: {failed_evaluations}")
-            print(f"Total evaluations: {len(answers)}")
-        return answers
+        return tuples_to_eval
 
     def evaluate(
         self,
@@ -199,32 +160,20 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         doc_metadata: Optional[dict[str, Any]] = None,
     ) -> tuple[str, Any]:
         """Evaluates a single query-document pair. Returns the raw answer and the processed answer."""
-        if isinstance(query, str):
-            query = Query(qid="<no_qid>", query=query)
-        if isinstance(document, str):
-            document = Document(did="<no_did>", text=document)
-        query.add_metadata(query_metadata)
-        document.add_metadata(doc_metadata)
-
-        message = self._build_message(query, document)
-        try:
-            raw_answer = self.llm_provider(message)
-        except RetryError as e:
-            logger.warning(
-                f"Failed to FETCH answers for qid: {query.qid} did: {document.did}"
+        query = self._assemble_query(query, query_metadata)
+        document = self._assemble_document(document, doc_metadata)
+        result = asyncio.run(self._async_evaluate((query, document)))
+        if result.exception or result.raw_answer is None or result.answer is None:
+            raise ValueError(
+                f"Failed to evaluate qid: {query.qid} did: {document.did}",
+                f"Exception: {result.exception}",
             )
-            raise e
-        try:
-            answer = self._process_answer(raw_answer)
-        except ValueError as e:
-            logger.warning(
-                f"Failed to PARSE answer for qid: {query.qid} did: {document.did}"
-            )
-            raise e
-        return raw_answer, answer
+        return result.raw_answer, result.answer
 
     def _build_message(
-        self, query: Query, document: Document
+        self,
+        query: Query,
+        document: Document,
     ) -> str | list[dict[str, str]]:
         """Builds the prompt to send to the LLM."""
         raise NotImplementedError

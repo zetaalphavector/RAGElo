@@ -10,7 +10,6 @@ from ragelo.types.configurations import CustomPromptEvaluatorConfig
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.CUSTOM_PROMPT)
 class CustomPromptEvaluator(BaseRetrievalEvaluator):
     config: CustomPromptEvaluatorConfig
-    output_file: str = "custom_prompt_evaluations.csv"
 
     def __init__(
         self,

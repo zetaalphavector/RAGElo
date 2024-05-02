@@ -1,3 +1,5 @@
+import asyncio
+
 import typer
 
 from ragelo import get_answer_evaluator, get_llm_provider
@@ -19,7 +21,9 @@ def pairwise_reasoning(
     config = PairwiseEvaluatorConfig(**kwargs)
     config.query_path = get_path(config.data_path, config.query_path)
     config.answers_path = get_path(config.data_path, config.answers_path)
-    config.output_file = get_path(config.data_path, config.output_file)
+    config.answers_evaluations_path = get_path(
+        config.data_path, config.answers_evaluations_path
+    )
     config.documents_path = get_path(config.data_path, config.documents_path)
 
     llm_provider = get_llm_provider(config.llm_provider, **kwargs)
@@ -29,4 +33,5 @@ def pairwise_reasoning(
         llm_provider=llm_provider,
     )
     answers = load_answers_from_csv(config.answers_path, queries=config.query_path)
-    evaluator.batch_evaluate(answers)
+    with asyncio.Runner() as runner:
+        runner.run(evaluator.batch_evaluate(answers))

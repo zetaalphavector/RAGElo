@@ -1,3 +1,5 @@
+import asyncio
+
 import typer
 
 from ragelo import get_llm_provider, get_retrieval_evaluator
@@ -35,7 +37,9 @@ def domain_expert(
     config = DomainExpertEvaluatorConfig(**kwargs)
     config.query_path = get_path(config.data_path, config.query_path)
     config.documents_path = get_path(config.data_path, config.documents_path)
-    config.output_file = get_path(config.data_path, config.output_file)
+    config.answers_evaluations_path = get_path(
+        config.data_path, config.answers_evaluations_path
+    )
 
     config.verbose = True
 
@@ -47,7 +51,7 @@ def domain_expert(
         config.documents_path, queries=config.query_path
     )
 
-    evaluator.batch_evaluate(documents)
+    asyncio.run(evaluator.batch_evaluate(documents))
 
 
 @app.command()
@@ -58,10 +62,9 @@ def reasoner(config: ReasonerEvaluatorConfig = ReasonerEvaluatorConfig(), **kwar
     config = ReasonerEvaluatorConfig(**kwargs)
     config.query_path = get_path(config.data_path, config.query_path)
     config.documents_path = get_path(config.data_path, config.documents_path)
-    if not config.output_file:
-        config.output_file = get_path(config.data_path, "reasonings.csv")
-    else:
-        config.output_file = get_path(config.data_path, config.output_file)
+    config.answers_evaluations_path = get_path(
+        config.data_path, config.answers_evaluations_path
+    )
 
     config.verbose = True
     llm_provider = get_llm_provider(config.llm_provider, **kwargs)
@@ -72,7 +75,7 @@ def reasoner(config: ReasonerEvaluatorConfig = ReasonerEvaluatorConfig(), **kwar
         config.documents_path, queries=config.query_path
     )
 
-    evaluator.batch_evaluate(documents)
+    asyncio.run(evaluator.batch_evaluate(documents))
 
 
 @app.command()
@@ -81,7 +84,10 @@ def rdnam(config: RDNAMEvaluatorConfig = RDNAMEvaluatorConfig(), **kwargs):
     config = RDNAMEvaluatorConfig(**kwargs)
     config.query_path = get_path(config.data_path, config.query_path)
     config.documents_path = get_path(config.data_path, config.documents_path)
-    config.output_file = get_path(config.data_path, config.output_file)
+    config.answers_evaluations_path = get_path(
+        config.data_path, config.answers_evaluations_path
+    )
+
     config.verbose = True
     llm_provider = get_llm_provider(config.llm_provider, **kwargs)
     evaluator = get_retrieval_evaluator(
@@ -90,7 +96,7 @@ def rdnam(config: RDNAMEvaluatorConfig = RDNAMEvaluatorConfig(), **kwargs):
     documents = load_retrieved_docs_from_csv(
         config.documents_path, queries=config.query_path
     )
-    evaluator.batch_evaluate(documents)
+    asyncio.run(evaluator.batch_evaluate(documents))
 
 
 if __name__ == "__main__":
