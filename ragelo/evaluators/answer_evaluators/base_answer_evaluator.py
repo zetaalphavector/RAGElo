@@ -33,7 +33,6 @@ class BaseAnswerEvaluator(BaseEvaluator):
     ):
         self.config = config
         self.llm_provider = llm_provider
-
         self.output_columns = config.output_columns
         if config.answer_format == AnswerFormat.MULTI_FIELD_JSON:
             self.config.scoring_keys = config.scoring_keys
