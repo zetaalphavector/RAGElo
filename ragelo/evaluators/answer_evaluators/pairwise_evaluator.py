@@ -16,7 +16,7 @@ class PairwiseAnswerEvaluator(BaseAnswerEvaluator):
     config: PairwiseEvaluatorConfig
     citations_prompt = " Answers cite documents using square brackets."
     document_template_raw_only = "[{did}] {doc}"
-    document_template_annotation_only = ("[{did}] {annotation}",)
+    document_template_annotation_only = "[{did}] {annotation}"
     document_template_raw_and_annotation = (
         "[RETRIEVED DOCUMENT]\n{doc}\n[DOCUMENT RELEVANCE]\n{annotation}\n"
     )

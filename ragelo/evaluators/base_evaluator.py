@@ -39,8 +39,8 @@ class BaseEvaluator(ABC):
         # Checks if there is block of json in the answer like ```json\n{...}\n```
         json_block = answer.split("```json\n")
         if len(json_block) > 1:
-            json_block = json_block[1].split("\n```")[0]
-            return json.loads(json_block)
+            json_data = json_block[1].split("\n```")[0]
+            return json.loads(json_data)
         # Otherwise, go line by line
         if isinstance(keys, str):
             keys = [keys]
@@ -122,7 +122,7 @@ class BaseEvaluator(ABC):
         base_columns = ["qid", "did", "agent", "raw_answer", "agent_a", "agent_b"]
         with open(output_file, "r") as f:
             reader = csv.DictReader(f)
-            line: dict[str, str]
+            line: dict[str, Any]
             for line in reader:
                 line_dict = line
                 if "answer" in line and line["answer"]:
@@ -205,7 +205,7 @@ class BaseEvaluator(ABC):
 
     @staticmethod
     def __dump_response_csv(
-        answer_dict: dict[str, str], output_columns: list[str], output_file: str
+        answer_dict: dict[str, Any], output_columns: list[str], output_file: str
     ):
         if not any(k in output_columns for k in answer_dict.keys()):
             raise ValueError(
@@ -363,7 +363,7 @@ class BaseEvaluator(ABC):
             return queries
 
         queries_idx = {q.qid: idx for idx, q in enumerate(queries)}
-        docs_per_query = {}
+        docs_per_query: dict[str, set[str]] = {}
         for line in csv.DictReader(open(self.config.documents_path)):
             qid = line[query_id_col].strip()
             did = line[document_id_col].strip()
@@ -410,7 +410,7 @@ class BaseEvaluator(ABC):
             return queries
         queries_idx = {q.qid: idx for idx, q in enumerate(queries)}
         answers_read = 0
-        answers_per_query = {}
+        answers_per_query: dict[str, set[str]] = {}
         for line in csv.DictReader(open(self.config.answers_path)):
             qid = line[query_id_col].strip()
             agent = line[agent_col].strip()
