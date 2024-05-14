@@ -1,7 +1,8 @@
 """Parse arguments for the cli app"""
 
+import collections.abc
 import inspect
-from typing import Any, Callable, get_type_hints
+from typing import Any, Callable, get_args, get_origin, get_type_hints
 
 from typer.models import ArgumentInfo, OptionInfo, ParameterInfo, ParamMeta
 
@@ -19,6 +20,11 @@ arguments = {
     "answer_evaluator_name",
     "output_file",
 }
+
+
+def callable_parser(value: str):
+    print("here")
+    return str(value)
 
 
 def get_params_from_function(func: Callable[..., Any]) -> dict[str, ParamMeta]:
@@ -39,12 +45,19 @@ def get_params_from_function(func: Callable[..., Any]) -> dict[str, ParamMeta]:
             for k, v in fields.items():
                 if _PYDANTIC_MAJOR_VERSION == 2:
                     description = v.description  # type: ignore
-                    _type = v.annotation
+                    _type = v.annotation  # type: ignore
                 else:
                     description = v.field_info.description  # type: ignore
-                    _type = v.type_
+                    _type = v.type_  # type: ignore
                 if not isinstance(v, ParameterInfo):
                     # get the description from Pydantic model
+                    parser = None
+                    t_args = get_args(_type)
+                    if (
+                        len(t_args) > 0
+                        and get_origin(t_args[0]) == collections.abc.Callable
+                    ):
+                        parser = callable_parser
                     if k in arguments:
                         argument = ArgumentInfo(default=v.default, help=description)
                         params[k] = ParamMeta(
@@ -54,6 +67,7 @@ def get_params_from_function(func: Callable[..., Any]) -> dict[str, ParamMeta]:
                         option = OptionInfo(
                             default=v.default,
                             help=description,
+                            parser=parser,
                         )
                         params[k] = ParamMeta(name=k, default=option, annotation=_type)
                 else:
