@@ -22,9 +22,8 @@ arguments = {
 }
 
 
-def callable_parser(value: str):
-    print("here")
-    return str(value)
+def callable(value: str):
+    return value
 
 
 def get_params_from_function(func: Callable[..., Any]) -> dict[str, ParamMeta]:
@@ -57,7 +56,7 @@ def get_params_from_function(func: Callable[..., Any]) -> dict[str, ParamMeta]:
                         len(t_args) > 0
                         and get_origin(t_args[0]) == collections.abc.Callable
                     ):
-                        parser = callable_parser
+                        parser = callable
                     if k in arguments:
                         argument = ArgumentInfo(default=v.default, help=description)
                         params[k] = ParamMeta(
