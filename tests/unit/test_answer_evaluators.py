@@ -105,7 +105,7 @@ class TestCustomPromptEvaluator:
 
 def test_get_by_name(llm_provider_pairwise_answer_mock, pairwise_answer_eval_config):
     evaluator = get_answer_evaluator(
-        "pairwise_reasoning",
+        "pairwise",
         llm_provider_pairwise_answer_mock,
     )
     assert isinstance(evaluator, PairwiseAnswerEvaluator)
