@@ -28,10 +28,10 @@ def pairwise_reasoning(
 
     llm_provider = get_llm_provider(config.llm_provider, **kwargs)
     evaluator = get_answer_evaluator(
-        AnswerEvaluatorTypes.PAIRWISE_REASONING,
+        AnswerEvaluatorTypes.PAIRWISE,
         config=config,
         llm_provider=llm_provider,
     )
     answers = load_answers_from_csv(config.answers_path, queries=config.query_path)
     with asyncio.Runner() as runner:
-        runner.run(evaluator.batch_evaluate(answers))
+        runner.run(evaluator._async_batch_evaluate(answers))

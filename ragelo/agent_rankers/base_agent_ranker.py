@@ -3,15 +3,18 @@
 import csv
 from abc import abstractmethod
 from collections import defaultdict
-from typing import Type
+from plistlib import load
+from typing import Optional, Type, get_type_hints
 
+from ragelo.agent_rankers import *
 from ragelo.logger import logger
 from ragelo.types import AgentRankerConfig
+from ragelo.types.types import Query
+from ragelo.utils import load_answer_evaluations_from_csv
 
 
 class AgentRanker:
     config: AgentRankerConfig
-    evaluations: list[tuple[str, str, str]]
     ranking: defaultdict[str, list[str]]
     output_file: str = "agents_ranking.csv"
     name: str = "Agent Ranker"
@@ -19,42 +22,46 @@ class AgentRanker:
     def __init__(
         self,
         config: AgentRankerConfig,
-        evaluations: list[tuple[str, str, str]],
     ):
         self.config = config
-        self.evaluations = evaluations
         self.ranking = defaultdict(list)
-        if config.output_file is not None:
-            self.output_file = config.output_file
+        if self.config.output_file:
+            self.output_file = self.config.output_file
 
-    @staticmethod
-    def load_evaluations(answers_file: str) -> list[tuple[str, str, str]]:
-        evaluations = []
-        with open(answers_file, "r") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                agent_a = row["agent_a"]
-                agent_b = row["agent_b"]
-                relevant = row["answer"]
-                evaluations.append((agent_a, agent_b, relevant))
-        return evaluations
-
-    @classmethod
-    def from_config(cls, config: AgentRankerConfig):
-        evaluations = cls.load_evaluations(config.evaluations_file)
-        return cls(config, evaluations)
-
-    @abstractmethod
-    def run(self):
+    def run(
+        self,
+        queries: Optional[list[Query]] = None,
+        evaluations_file: Optional[str] = None,
+    ) -> list[Query]:
         """Compute score for each agent"""
         raise NotImplementedError
 
-    @abstractmethod
+    def _prepare_queries(
+        self,
+        queries: Optional[list[Query]] = None,
+        evaluations_file: Optional[str] = None,
+    ) -> list[Query]:
+        if queries is None:
+            if evaluations_file is None:
+                raise ValueError(
+                    "Either queries or evaluations_file should be provided"
+                )
+            queries = load_answer_evaluations_from_csv(evaluations_file)
+        return queries
+
+    @classmethod
+    def from_config(cls, config: AgentRankerConfig):
+        return cls(config)
+        # evaluations = cls.load_evaluations(config.evaluations_file)
+        # return cls(config, evaluations)
+
     def get_agents_ratings(self) -> dict[str, float]:
         """Returns the score of all players"""
         raise NotImplementedError
 
     def dump_ranking(self):
+        if not self.config.write_output:
+            return
         with open(self.output_file, "w") as f:
             writer = csv.writer(f)
             writer.writerow(["agent", "score"])
@@ -87,6 +94,23 @@ class AgentRanker:
             for agent, rating in scores:
                 print(f"{agent:<15}: {rating:.1f}")
 
+    @classmethod
+    def get_config_class(cls) -> Type[AgentRankerConfig]:
+        return get_type_hints(cls)["config"]
+
+    def _flatten_evaluations(self, queries) -> list[tuple[str, str, str]]:
+        evaluations = []
+        for q in queries:
+            for game in q.pairwise_games:
+                evaluations.append(
+                    (
+                        game.agent_a_answer.agent,
+                        game.agent_b_answer.agent,
+                        game.evaluation.answer,
+                    )
+                )
+        return evaluations
+
 
 class AgentRankerFactory:
     registry: dict[str, Type[AgentRanker]] = {}
@@ -102,7 +126,26 @@ class AgentRankerFactory:
         return inner_wrapper
 
     @classmethod
-    def create(cls, ranker_name: str, config: AgentRankerConfig) -> AgentRanker:
+    def create(
+        cls,
+        ranker_name: str,
+        config: Optional[AgentRankerConfig] = None,
+        **kwargs,
+    ) -> AgentRanker:
         if ranker_name.lower() not in cls.registry:
             raise ValueError(f"Unknown Agent Ranker {ranker_name}")
+        if config is None:
+            class_ = cls.registry[ranker_name.lower()]
+            type_config = class_.get_config_class()
+            valid_keys = [field for field in type_config.get_model_fields()]
+            valid_args = {k: v for k, v in kwargs.items() if k in valid_keys}
+            config = type_config(**valid_args)
         return cls.registry[ranker_name.lower()].from_config(config)
+
+
+def get_agent_ranker(
+    ranker_name: str,
+    config: Optional[AgentRankerConfig] = None,
+    **kwargs,
+) -> AgentRanker:
+    return AgentRankerFactory.create(ranker_name, config, **kwargs)

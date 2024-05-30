@@ -1,8 +1,10 @@
 import random
+from typing import Optional
 
 from ragelo.agent_rankers.base_agent_ranker import AgentRanker, AgentRankerFactory
 from ragelo.logger import logger
 from ragelo.types import EloAgentRankerConfig
+from ragelo.types.types import Query
 
 
 @AgentRankerFactory.register("elo")
@@ -13,9 +15,8 @@ class EloRanker(AgentRanker):
     def __init__(
         self,
         config: EloAgentRankerConfig,
-        evaluations: list[tuple[str, str, str]],
     ):
-        super().__init__(config, evaluations)
+        super().__init__(config)
         self.score_map = {"A": 1, "B": 0, "C": 0.5}
 
         self.agents: dict[str, int] = {}
@@ -24,8 +25,14 @@ class EloRanker(AgentRanker):
         self.initial_score = self.config.initial_score
         self.k = self.config.k
 
-    def run(self):
+    def run(
+        self,
+        queries: Optional[list[Query]] = None,
+        evaluations_file: Optional[str] = None,
+    ):
         """Compute score for each agent"""
+        queries = self._prepare_queries(queries, evaluations_file)
+        self.evaluations = self._flatten_evaluations(queries)
         self.games, self.agents = self.__get_elo_scores()
 
         while self.games:

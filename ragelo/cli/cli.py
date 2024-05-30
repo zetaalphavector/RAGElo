@@ -74,7 +74,7 @@ def run_all(config: AllConfig = AllConfig(), **kwargs):
         **args_clean,
     )
     with asyncio.Runner() as runner:
-        runner.run(answers_evaluator.batch_evaluate(answers))
+        runner.run(answers_evaluator._async_batch_evaluate(answers))
 
     ranker_config = EloAgentRankerConfig(
         force=config.force,

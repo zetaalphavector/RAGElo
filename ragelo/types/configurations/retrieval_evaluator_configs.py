@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Optional
 
 from pydantic import Field
 
@@ -54,7 +54,7 @@ class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         "submitted the query works for. that the domain belongs to. "
         "(e.g.: ChemCorp, CS Inc.)",
     )
-    extra_guidelines: Optional[List[str]] = Field(
+    extra_guidelines: Optional[list[str]] = Field(
         default=None,
         description="A list of extra guidelines to be used when reasoning about the "
         "relevancy of the document.",
@@ -99,7 +99,7 @@ class FewShotEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default="You are a helpful assistant.",
         description="The system prompt to be used to evaluate the documents.",
     )
-    few_shots: List[FewShotExample] = Field(
+    few_shots: list[FewShotExample] = Field(
         default=[], description="A list of few-shot examples to be used in the prompt"
     )
     few_shot_user_prompt: str = Field(

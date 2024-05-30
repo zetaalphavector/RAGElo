@@ -60,9 +60,9 @@ class LLMProviderTypes(StrEnum):
 class AnswerEvaluatorTypes(StrEnum):
     """Enum that contains the names of the available answer evaluators"""
 
-    PAIRWISE_REASONING = "pairwise_reasoning"
     PAIRWISE = "pairwise"
     CUSTOM_PROMPT = "custom_prompt"
+    DOMAIN_EXPERT = "domain_expert"
 
 
 class EvaluatorResult(BaseModel):

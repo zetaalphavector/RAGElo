@@ -7,7 +7,13 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Optional
 
-from ragelo.types.types import AgentAnswer, Document, Query
+from ragelo.types.types import (
+    AgentAnswer,
+    Document,
+    EvaluatorResult,
+    PairwiseGame,
+    Query,
+)
 
 
 def infer_query_id_column(file_path: str) -> str | None:
@@ -295,3 +301,33 @@ def load_answers_from_csv(
         queries_dict[qid].answers.append(answer)
 
     return list(queries_dict.values())
+
+
+# TODO: Replace all this loading by JSON serialization of Pydantic models
+def load_answer_evaluations_from_csv(
+    evaluations_file: str,
+) -> list[Query]:
+    """Loads all evaluations produced by an answer evaluator from a CSV file."""
+
+    queries_dict = {}
+    for row in csv.DictReader(open(evaluations_file)):
+        qid = row["qid"]
+        agent_a = row["agent_a"]
+        agent_b = row["agent_b"]
+        raw_answer = row["raw_answer"]
+        answer = row["answer"]
+
+        if qid not in queries_dict:
+            queries_dict[qid] = Query(qid=qid, query="<unknown>")
+        query = queries_dict[qid]
+        query.pairwise_games.append(
+            PairwiseGame(
+                agent_a_answer=AgentAnswer(agent=agent_a, text=""),
+                agent_b_answer=AgentAnswer(agent=agent_b, text=""),
+                evaluation=EvaluatorResult(
+                    raw_answer=raw_answer, answer=answer, qid=qid
+                ),
+            )
+        )
+    queries = list(queries_dict.values())
+    return queries

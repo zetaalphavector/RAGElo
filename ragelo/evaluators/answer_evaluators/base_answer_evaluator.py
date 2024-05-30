@@ -3,10 +3,12 @@
 import asyncio
 import itertools
 import random
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Optional, Type, get_type_hints
 
 from tqdm import tqdm
 
+from ragelo.evaluators.answer_evaluators import *
 from ragelo.evaluators.base_evaluator import BaseEvaluator
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
 from ragelo.logger import logger
@@ -52,7 +54,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
             ]
             self.output_columns.extend(missing_keys)
 
-    async def batch_evaluate(self, queries: list[Query]) -> list[Query]:
+    async def _async_batch_evaluate(self, queries: list[Query]) -> list[Query]:
         use_progress_bar = self.config.use_progress_bar
         failed_queries = 0
         queries = self.__prepare_queries(queries)
@@ -137,13 +139,29 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 agent_a_answer=answer_a,
                 agent_b_answer=answer_b,
             )
-            result = asyncio.run(self._async_evaluate((query, game)))
+            try:
+                asyncio.get_running_loop()
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(
+                        asyncio.run, self._async_evaluate((query, game))
+                    )
+                    result = future.result()
+            except RuntimeError:
+                result = asyncio.run(self._async_evaluate((query, game)))
         else:
             if not answer:
                 raise ValueError("Pointwise evaluations require an answer")
             answer = self._assemble_answer(answer, answer_metadata)
             agent = answer.agent
-            result = asyncio.run(self._async_evaluate((query, answer)))
+            try:
+                asyncio.get_running_loop()
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(
+                        asyncio.run, self._async_evaluate((query, answer))
+                    )
+                    result = future.result()
+            except RuntimeError:
+                result = asyncio.run(self._async_evaluate((query, answer)))
         if result.exception or result.raw_answer is None or result.answer is None:
             raise ValueError(
                 f"Failed to evaluate qid: {query.qid} agent(s): {agent}",
@@ -270,7 +288,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
             if self.config.bidirectional:
                 pairs += [(b, a) for a, b in pairs]
             random.shuffle(pairs)
-            games = pairs[: self.config.k]
+            games = pairs[: self.config.n_games_per_query]
             # Filter out games that already exist
             existing_games = {
                 (a.agent_a_answer.agent, a.agent_b_answer) for a in query.pairwise_games
@@ -313,6 +331,22 @@ class BaseAnswerEvaluator(BaseEvaluator):
 
         return tuples_to_eval
 
+    def batch_evaluate(self, queries: list[Query]) -> list[Query]:
+        try:
+            # Raises RuntimeError if there is no current event loop.
+            asyncio.get_running_loop()
+            # If there is a current event loop, we need to run the async code
+            # in a separate loop, in a separate thread.
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(
+                    asyncio.run, self._async_batch_evaluate(queries)
+                )
+                result = future.result()
+        except RuntimeError:
+            result = asyncio.run(self._async_batch_evaluate(queries))
+
+        return result
+
 
 class AnswerEvaluatorFactory:
     registry: dict[AnswerEvaluatorTypes | str, Type[BaseAnswerEvaluator]] = {}
@@ -353,11 +387,18 @@ class AnswerEvaluatorFactory:
 
 
 def get_answer_evaluator(
-    evaluator_name: AnswerEvaluatorTypes | str,
-    llm_provider: BaseLLMProvider | str,
+    evaluator_name: Optional[AnswerEvaluatorTypes | str] = None,
+    llm_provider: BaseLLMProvider | str = "openai",
     config: Optional[BaseAnswerEvaluatorConfig] = None,
     **kwargs,
 ) -> BaseAnswerEvaluator:
+    if evaluator_name is None:
+        # get the name from the config
+        if config is None:
+            raise ValueError(
+                "Either the evaluator_name or a config object must be provided"
+            )
+        evaluator_name = config.evaluator_name
     return AnswerEvaluatorFactory.create(
         evaluator_name,
         llm_provider=llm_provider,

@@ -1,3 +1,4 @@
+from ragelo.agent_rankers.base_agent_ranker import get_agent_ranker
 from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     BaseRetrievalEvaluator,
     RetrievalEvaluatorFactory,
