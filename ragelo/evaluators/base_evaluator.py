@@ -35,51 +35,54 @@ class BaseEvaluator(ABC):
         raise NotImplementedError
 
     @staticmethod
-    def json_answer_parser(answer: str, key: str) -> str:
-        """Parses a Json answer from the LLM and returns a specific key"""
-
-        # Finds all valid JSON objects in the answer that contain the key
-        json_objects = []
-        for line in answer.strip().split("\n"):
-            try:
-                json_object = json.loads(line)
-                if key in json_object:
-                    json_objects.append(json_object)
-            except json.JSONDecodeError:
-                pass
-
-        # Assumes the valid JSON object is the last one
-        if not json_objects:
-            raise ValueError(
-                "Answer does not contain a valid json object\n"
-                f"with the key {key}\n{answer}"
-            )
-        json_dict = json_objects[-1]
-        return json_dict[key]
-
-    @staticmethod
-    def json_answer_parser_multifields(answer: str, keys: list[str]) -> dict[str, str]:
-        """Parses a Json answer from the LLM and returns the values from multiple fields"""
-
-        # Finds all valid JSON objects in the answer that contain the key
-        parsed_answer = {}
+    def __parse_json(answer: str, keys: str | list[str]) -> dict[str, Any]:
+        # Checks if there is block of json in the answer like ```json\n{...}\n```
+        json_block = answer.split("```json\n")
+        if len(json_block) > 1:
+            json_data = json_block[1].split("\n```")[0]
+            return json.loads(json_data)
+        # Otherwise, go line by line
+        if isinstance(keys, str):
+            keys = [keys]
+        json_dict = {}
         for line in answer.strip().split("\n"):
             try:
                 json_object = json.loads(line)
                 for k in keys:
                     if k in json_object:
-                        parsed_answer[k] = json_object[k]
+                        json_dict[k] = json_object[k]
             except json.JSONDecodeError:
                 pass
+        return json_dict
 
-        valid_keys = set(parsed_answer.keys()).intersection(keys)
+    def json_answer_parser(self, answer: str, key: str) -> str:
+        """Parses a Json answer from the LLM and returns a specific key"""
+
+        # Finds all valid JSON objects in the answer that contain the key
+        json_dict = self.__parse_json(answer, key)
+        if key not in json_dict:
+            raise ValueError(
+                "Answer does not contain the necessary key\n"
+                f"Expected {key}, found {json_dict.keys()}\n{answer}"
+            )
+        return json_dict[key]
+
+    def json_answer_parser_multifields(
+        self, answer: str, keys: list[str]
+    ) -> dict[str, str]:
+        """Parses a Json answer from the LLM and returns the values from multiple fields"""
+
+        # Finds all valid JSON objects in the answer that contain the key
+        json_dict = self.__parse_json(answer, keys)
+
+        valid_keys = set(json_dict.keys()).intersection(keys)
         if len(valid_keys) != len(keys):
             raise ValueError(
                 "Answer does not contain all necessary keys\n"
                 f"Expected {keys}, found {valid_keys}.\n"
                 f"Full Answer:\n{answer}"
             )
-        return parsed_answer
+        return json_dict
 
     @staticmethod
     def _get_fields_from_string(s: str) -> list[str]:
@@ -116,23 +119,17 @@ class BaseEvaluator(ABC):
         scoring_keys: list[str] = [],
     ) -> list[dict[str, Any]]:
         existing_lines: list[dict[str, str]] = []
+        base_columns = ["qid", "did", "agent", "raw_answer", "agent_a", "agent_b"]
         with open(output_file, "r") as f:
             reader = csv.DictReader(f)
-            line: dict[str, str]
+            line: dict[str, Any]
             for line in reader:
-                if len(scoring_keys) > 0 and any(
-                    k in scoring_keys for k in line.keys()
-                ):
-                    line_dict: dict[str, Any] = {
-                        "answer": {k: line[k] for k in scoring_keys}
-                    }
-                    left_keys = set(line.keys()) - set(line_dict.keys())
-                    for k in left_keys:
-                        line_dict[k] = line[k]
+                line_dict = line
+                if "answer" in line and line["answer"]:
+                    line_dict["answer"] = line["answer"]
                 else:
-                    line_dict = line
-                # remove any keys with empty values or None
-                line_dict = {k: v for k, v in line_dict.items() if v and k}
+                    remaining_keys = {k for k in line.keys() if k not in base_columns}
+                    line_dict["answer"] = {k: line[k] for k in remaining_keys}
                 existing_lines.append(line_dict)
         return existing_lines
 
@@ -208,7 +205,7 @@ class BaseEvaluator(ABC):
 
     @staticmethod
     def __dump_response_csv(
-        answer_dict: dict[str, str], output_columns: list[str], output_file: str
+        answer_dict: dict[str, Any], output_columns: list[str], output_file: str
     ):
         if not any(k in output_columns for k in answer_dict.keys()):
             raise ValueError(
@@ -216,7 +213,7 @@ class BaseEvaluator(ABC):
                 f"Expected output columns: {output_columns}. \n"
                 f"Answer fields: {answer_dict.keys()}"
             )
-
+        answer_dict = {k: answer_dict.get(k, None) for k in output_columns}
         if not os.path.isfile(output_file):
             logger.debug(f"Creating new file {output_file}")
             with open(output_file, "w") as f:
@@ -366,7 +363,7 @@ class BaseEvaluator(ABC):
             return queries
 
         queries_idx = {q.qid: idx for idx, q in enumerate(queries)}
-        docs_per_query = {}
+        docs_per_query: dict[str, set[str]] = {}
         for line in csv.DictReader(open(self.config.documents_path)):
             qid = line[query_id_col].strip()
             did = line[document_id_col].strip()
@@ -382,7 +379,7 @@ class BaseEvaluator(ABC):
             if qid not in docs_per_query:
                 docs_per_query[qid] = set()
             if did in docs_per_query[qid]:
-                logger.warning(
+                logger.info(
                     f"Document {did} already in the retrieved documents for query {qid}. Skipping"
                 )
                 continue
@@ -413,7 +410,7 @@ class BaseEvaluator(ABC):
             return queries
         queries_idx = {q.qid: idx for idx, q in enumerate(queries)}
         answers_read = 0
-        answers_per_query = {}
+        answers_per_query: dict[str, set[str]] = {}
         for line in csv.DictReader(open(self.config.answers_path)):
             qid = line[query_id_col].strip()
             agent = line[agent_col].strip()
@@ -429,7 +426,7 @@ class BaseEvaluator(ABC):
             if qid not in answers_per_query:
                 answers_per_query[qid] = set()
             if agent in answers_per_query[qid]:
-                logger.warning(
+                logger.info(
                     f"Answer for agent {agent} already in the answers for query {qid}. Skipping"
                 )
                 continue

@@ -68,6 +68,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         aws = map(self._async_evaluate, tuples_to_eval)
         aws = iter(aws)
         evaluations = []
+        failed = 0
         while pending or not awaitables_ended:
             while len(pending) < self.config.n_processes and not awaitables_ended:
                 try:
@@ -86,12 +87,14 @@ class BaseRetrievalEvaluator(BaseEvaluator):
                 evaluation = await done.pop()
                 pbar.update()
                 if evaluation.exception:
+                    failed += 1
                     continue
                 evaluations.append(evaluation)
         pbar.close()
         self._add_document_evaluations(queries, evaluations)
         if self.config.verbose:
             print("✅ Done!")
+            print("Failed evaluations:", failed)
             print(f"Total evaluations: {len(evaluations)}")
         return queries
 

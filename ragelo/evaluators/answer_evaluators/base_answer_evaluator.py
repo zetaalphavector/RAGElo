@@ -33,7 +33,6 @@ class BaseAnswerEvaluator(BaseEvaluator):
     ):
         self.config = config
         self.llm_provider = llm_provider
-        self.answers_evaluations_path = config.answers_evaluations_path
         self.output_columns = config.output_columns
         if config.answer_format == AnswerFormat.MULTI_FIELD_JSON:
             self.config.scoring_keys = config.scoring_keys
@@ -42,6 +41,8 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 "agent",
                 "raw_answer",
             ] + self.config.scoring_keys
+        elif config.answer_format == AnswerFormat.JSON:
+            config.scoring_keys = []
         elif config.scoring_key and config.scoring_key not in self.output_columns:
             print(f"Adding scoring key {config.scoring_key} to output columns")
             self.output_columns.append(self.config.scoring_key)
@@ -53,6 +54,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
 
     async def batch_evaluate(self, queries: list[Query]) -> list[Query]:
         use_progress_bar = self.config.use_progress_bar
+        failed_queries = 0
         queries = self.__prepare_queries(queries)
         tuples_to_eval = self.__get_tuples_to_evaluate(queries)
 
@@ -92,12 +94,14 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 evaluation = await done.pop()
                 pbar.update()
                 if evaluation.exception:
+                    failed_queries += 1
                     continue
                 evaluations.append(evaluation)
         pbar.close()
         self._add_answers_evaluations(queries, evaluations)
         if self.config.verbose:
             print("✅ Done!")
+            print("Failed evaluations:", failed_queries)
             print(f"Total evaluations: {len(evaluations)}")
         return queries
 
@@ -181,6 +185,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
             exc = str(e)
             answer = None
         if isinstance(evaluable, AgentAnswer):
+            output_file = self.config.answers_evaluations_path
             ans = AnswerEvaluatorResult(
                 qid=query.qid,
                 agent=evaluable.agent,
@@ -190,6 +195,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 exception=exc,
             )
         else:
+            output_file = self.config.games_evaluations_path
             ans = AnswerEvaluatorResult(
                 qid=query.qid,
                 agent_a=evaluable.agent_a_answer.agent,
@@ -199,7 +205,8 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 pairwise=True,
                 exception=exc,
             )
-        self._dump_response(ans, self.output_columns, self.answers_evaluations_path)
+        if ans.exception is None:
+            self._dump_response(ans, self.output_columns, output_file)
         return ans
 
     def _build_message(
@@ -227,6 +234,11 @@ class BaseAnswerEvaluator(BaseEvaluator):
     def _prepare_documents(self, query: Query) -> str:
         documents = []
         for d in query.retrieved_docs:
+            if self.config.document_filter is not None:
+                if d.evaluation is None:
+                    continue
+                if not self.config.document_filter(str(d.evaluation.answer)):
+                    continue
             formatters = {
                 "did": d.did,
                 "doc": d.text,
@@ -241,8 +253,8 @@ class BaseAnswerEvaluator(BaseEvaluator):
         queries = self._load_retrieved_documents(queries)
         queries = self._load_document_evaluations(queries, force=False)
         queries = self._load_agent_answers(queries)
-        queries = self._load_answers_evaluations(queries, force=self.config.force)
         queries = self.__add_pairwise_games(queries)
+        queries = self._load_answers_evaluations(queries, force=self.config.force)
         return queries
 
     def __add_pairwise_games(self, queries: list[Query]) -> list[Query]:

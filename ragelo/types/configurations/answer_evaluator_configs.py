@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Callable, Optional
 
 from pydantic import Field
 
@@ -6,9 +6,6 @@ from ragelo.types.configurations.base_configs import AnswerFormat, BaseEvaluator
 
 
 class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
-    answers_path: str = Field(
-        default="answers.csv", description="Path to the answers file"
-    )
     answer_placeholder: str = Field(
         default="answer", description="The placeholder for the answer in the prompt"
     )
@@ -27,11 +24,33 @@ class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
         default="[{did}] {doc}",
         description="The template to format each individual document in the prompt",
     )
+    has_citations: bool = Field(
+        default=True,
+        description=(
+            "Whether or not the answers contain document citations in square brackets. "
+            "If used, the document_ids in the documents and in the answers should match."
+        ),
+    )
+    include_annotations: bool = Field(
+        default=True,
+        description="Whether or not to include the document relevance annotations in the prompt",
+    )
+    include_raw_documents: bool = Field(
+        default=False,
+        description="Whether or not to include the raw documents in the prompt",
+    )
+    document_filter: Optional[Callable[[str], bool]] = Field(
+        default=None, description="A function to filter the documents"
+    )
 
 
 class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     """Configuration for the pairwise evaluator."""
 
+    output_columns: list[str] = Field(
+        default=["qid", "agent_a", "agent_b", "raw_answer", "answer"],
+        description="The columns to output in the CSV file",
+    )
     bidirectional: bool = Field(
         default=False, description="Whether or not to run each game in both directions"
     )
@@ -54,6 +73,16 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     prompt: Optional[str] = Field(
         default=None,
         description="Prompt to use for the evaluator. If not provided, a default prompt will be used",
+    )
+    factors: str = Field(
+        default=(
+            "the correctness, helpfulness, completeness, accuracy, depth, and "
+            "level of detail of their responses"
+        ),
+        description=(
+            "A string containing the factors to be used when evaluating an answer. "
+            "If not provided, a default string will be used"
+        ),
     )
 
 
