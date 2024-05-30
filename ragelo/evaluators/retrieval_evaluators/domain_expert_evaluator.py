@@ -18,7 +18,7 @@ from ragelo.types.configurations import DomainExpertEvaluatorConfig
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.DOMAIN_EXPERT)
 class DomainExpertEvaluator(BaseRetrievalEvaluator):
     sys_prompt = """
-You are a domain expert in {domain_long}.{company_prompt_1} You are tasked \
+You are a domain expert in {expert_in}.{company_prompt_1} You are tasked \
 with evaluating the performance of a retrieval system for question \
 answering in this domain. The question answering system will be used \
 by internal users{company_prompt_2}{domain_short}. They are interested \
@@ -93,19 +93,19 @@ Please only answer with a single number.
         llm_provider: BaseLLMProvider,
     ):
         super().__init__(config, llm_provider)
-        if not self.config.domain_long:
+        if not self.config.expert_in:
             raise ValueError(
                 "You are tying to use the Domain Expert Retrieval Evaluator. "
-                "For this evaluator, you need to provide at least the name of the domain "
-                "in the domain_long field."
+                "For this evaluator, you need to provide the domain the evaluator "
+                "is an expert in the expert_in field."
             )
 
-        self.domain_long = self.config.domain_long
+        self.expert_in = self.config.expert_in
         self.domain_short = (
             f" {self.config.domain_short}" if self.config.domain_short else ""
         )
         self.sys_prompt = self.sys_prompt.format(
-            domain_long=self.domain_long,
+            expert_in=self.expert_in,
             company_prompt_1=(
                 self.COMPANY_PROMPT_1.format(company=self.config.company)
                 if self.config.company

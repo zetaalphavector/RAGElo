@@ -24,10 +24,6 @@ class BaseConfig(BaseModel):
         default=None,
         description="Path to a txt file with the credentials for the different LLM providers",
     )
-    model: str = Field(
-        default="gpt-4-turbo",
-        description="Name of the model to use for the LLM provider",
-    )
     data_path: str = Field(default="data/", description="Path to the data folder")
 
     llm_provider: str = Field(

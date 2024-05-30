@@ -51,7 +51,7 @@ def domain_expert(
         config.documents_path, queries=config.query_path
     )
 
-    asyncio.run(evaluator.batch_evaluate(documents))
+    asyncio.run(evaluator._async_batch_evaluate(documents))
 
 
 @app.command()
@@ -75,7 +75,7 @@ def reasoner(config: ReasonerEvaluatorConfig = ReasonerEvaluatorConfig(), **kwar
         config.documents_path, queries=config.query_path
     )
 
-    asyncio.run(evaluator.batch_evaluate(documents))
+    asyncio.run(evaluator._async_batch_evaluate(documents))
 
 
 @app.command()
@@ -96,7 +96,7 @@ def rdnam(config: RDNAMEvaluatorConfig = RDNAMEvaluatorConfig(), **kwargs):
     documents = load_retrieved_docs_from_csv(
         config.documents_path, queries=config.query_path
     )
-    asyncio.run(evaluator.batch_evaluate(documents))
+    asyncio.run(evaluator._async_batch_evaluate(documents))
 
 
 if __name__ == "__main__":

@@ -65,7 +65,7 @@ def run_all(config: AllConfig = AllConfig(), **kwargs):
     answers = load_answers_from_csv(
         answers_path=config.answers_path, queries=config.query_path
     )
-    asyncio.run(retrieval_evaluator.batch_evaluate(documents))
+    asyncio.run(retrieval_evaluator._async_batch_evaluate(documents))
 
     answers_evaluator = get_answer_evaluator(
         "pairwise_reasoning",

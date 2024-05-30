@@ -53,7 +53,7 @@ class TestRetrievalEvaluator:
         evaluator = RetrievalEvaluator.from_config(
             config=base_eval_config, llm_provider=llm_provider_json_mock
         )
-        queries = await evaluator.batch_evaluate(qs_with_docs)
+        queries = await evaluator._async_batch_evaluate(qs_with_docs)
         evaluations = [a.evaluation for q in queries for a in q.retrieved_docs]
         doc_ids = ["0", "1", "2", "3"]
         qids = ["0", "0", "1", "1"]
@@ -87,7 +87,7 @@ class TestRetrievalEvaluator:
             config=base_eval_config,
             llm_provider=llm_provider_json_mock,
         )
-        _ = asyncio.run(evaluator.batch_evaluate(qs_with_docs))
+        _ = asyncio.run(evaluator._async_batch_evaluate(qs_with_docs))
         captured = capsys.readouterr()
         assert "🔎" in captured.out
 

@@ -174,3 +174,29 @@ class Query(BaseModel):
                     f"New metadata: {metadata[k]}\n"
                 )
             self.metadata[k] = metadata[k]
+
+    def add_retrieved_doc(self, doc: Document | str, doc_id: Optional[str] = None):
+        if isinstance(doc, str):
+            if doc_id is None:
+                raise ValueError("doc_id must be provided if doc is a string")
+            doc = Document(did=doc_id, text=doc)
+        existing_dids = [d.did for d in self.retrieved_docs]
+        if doc.did in existing_dids:
+            logger.info(
+                f"Document with did {doc.did} already exists in query {self.qid}"
+            )
+            return
+        self.retrieved_docs.append(doc)
+
+    def add_agent_answer(self, answer: AgentAnswer | str, agent: Optional[str] = None):
+        if isinstance(answer, str):
+            if agent is None:
+                raise ValueError("agent must be provided if answer is a string")
+            answer = AgentAnswer(agent=agent, text=answer)
+        existing_agents = [a.agent for a in self.answers]
+        if answer.agent in existing_agents:
+            logger.warning(
+                f"Answer from agent {answer.agent} already exists in query {self.qid}"
+            )
+            return
+        self.answers.append(answer)

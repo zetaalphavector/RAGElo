@@ -247,10 +247,10 @@ def load_answers_from_multiple_csvs(
                 query = Query(qid=qid, query=query_text)
                 queries_dict[qid] = query
                 queries.append(query)
-                print(f'added query: "{qid}"')
+                logging.info(f'added query: "{qid}"')
             agent_answer = line[answer_text_col]
             answer = AgentAnswer(agent=agent_name, text=agent_answer)
-            queries_dict[qid].answers.append(answer)
+            queries_dict[qid].add_agent_answer(answer)
 
     return queries
 
