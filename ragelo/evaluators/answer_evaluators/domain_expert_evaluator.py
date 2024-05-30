@@ -2,14 +2,12 @@
 
 from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
     AnswerEvaluatorFactory,
-    BaseAnswerEvaluator,
 )
 from ragelo.evaluators.answer_evaluators.pairwise_evaluator import (
-    BaseAnswerEvaluator,
     PairwiseAnswerEvaluator,
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
-from ragelo.types import AgentAnswer, AnswerEvaluatorTypes, PairwiseGame, Query
+from ragelo.types import AnswerEvaluatorTypes, PairwiseGame, Query
 from ragelo.types.configurations import PairwiseDomainExpertEvaluatorConfig
 
 
@@ -20,7 +18,7 @@ class PairwiseDomainExpertEvaluator(PairwiseAnswerEvaluator):
 {company_prompt}You are a domain expert in {expert_in}. Your task is to \
 evaluate the quality of the responses provided by two AI assistants \
 tasked to answer the question shown below, based on a set \
-of documents retrieved by a search engine. 
+of documents retrieved by a search engine.
 You should choose the assistant that best answers the user question based on a set \
 of reference documents that may or not be relevant.{citations}
 {document_rel}
@@ -71,7 +69,6 @@ and "[[C]]" for a tie.
     def _build_message_pairwise(
         self, query: Query, game: PairwiseGame
     ) -> str | list[dict[str, str]]:
-
         documents = self._prepare_documents(query)
         query_metadata = self._get_usable_fields_from_metadata(
             self.prompt, query.metadata, skip_fields=[self.config.query_placeholder]

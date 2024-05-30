@@ -13,3 +13,14 @@ from ragelo.evaluators.retrieval_evaluators.domain_expert_evaluator import (
 from ragelo.evaluators.retrieval_evaluators.few_shot_evaluator import FewShotEvaluator
 from ragelo.evaluators.retrieval_evaluators.rdnam_evaluator import RDNAMEvaluator
 from ragelo.evaluators.retrieval_evaluators.reasoner_evaluator import ReasonerEvaluator
+
+__all__ = [
+    "BaseRetrievalEvaluator",
+    "CustomPromptEvaluator",
+    "DomainExpertEvaluator",
+    "FewShotEvaluator",
+    "RDNAMEvaluator",
+    "ReasonerEvaluator",
+    "RetrievalEvaluatorFactory",
+    "get_retrieval_evaluator",
+]

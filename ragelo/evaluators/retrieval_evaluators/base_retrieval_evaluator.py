@@ -9,7 +9,6 @@ from typing import Any, Callable, Optional, Type, get_type_hints
 from tqdm.auto import tqdm
 
 from ragelo.evaluators.base_evaluator import BaseEvaluator
-from ragelo.evaluators.retrieval_evaluators import *
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
 from ragelo.logger import logger
 from ragelo.types import (

@@ -79,7 +79,7 @@ class BaseEvaluatorConfig(BaseConfig):
         default=1,
         description="The number of parallel LLM calls to use for the evaluation",
     )
-    output_columns: list[str] = Field(
+    output_columns: Optional[list[str]] = Field(
         default=["qid", "did", "raw_answer", "answer"],
         description="The columns to output in the CSV file",
     )

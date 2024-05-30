@@ -15,6 +15,10 @@ class AgentRankerConfig(BaseConfig):
         default=None, description="Path to the output file"
     )
     verbose: bool = Field(default=True, description="Whether to print the ranking")
+    evaluations_file: str = Field(
+        default="pairwise_answer_evaluations.csv",
+        description="Path to the pairwise evaluations file",
+    )
 
 
 class EloAgentRankerConfig(AgentRankerConfig):
