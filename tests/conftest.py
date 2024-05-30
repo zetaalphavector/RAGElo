@@ -175,7 +175,7 @@ def expert_retrieval_eval_config(base_eval_config):
     del base_eval_config["scoring_key"]
     del base_eval_config["answer_format"]
     return DomainExpertEvaluatorConfig(
-        domain_long="Computer Science",
+        expert_in="Computer Science",
         domain_short="computer scientists",
         company="Zeta Alpha",
         extra_guidelines=["Super precise answers only!"],

@@ -95,7 +95,7 @@ class TestRetrievalEvaluator:
         domain_expert_evaluator = get_retrieval_evaluator(
             "domain_expert",
             llm_provider_mock,
-            domain_long=expert_retrieval_eval_config.domain_long,
+            expert_in=expert_retrieval_eval_config.expert_in,
         )
         assert isinstance(domain_expert_evaluator, DomainExpertEvaluator)
         reasoner_evaluator = get_retrieval_evaluator(
@@ -210,7 +210,7 @@ class TestDomainExpertEvaluator:
         evaluator = DomainExpertEvaluator.from_config(
             config=expert_retrieval_eval_config, llm_provider=llm_provider_mock
         )
-        assert expert_retrieval_eval_config.domain_long in evaluator.sys_prompt
+        assert expert_retrieval_eval_config.expert_in in evaluator.sys_prompt
         assert expert_retrieval_eval_config.domain_short in evaluator.sys_prompt
         assert (
             f"You work for {expert_retrieval_eval_config.company}"

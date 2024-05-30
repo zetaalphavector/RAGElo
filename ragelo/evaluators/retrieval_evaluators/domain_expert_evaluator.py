@@ -95,7 +95,7 @@ Please only answer with a single number.
         super().__init__(config, llm_provider)
         if not self.config.expert_in:
             raise ValueError(
-                "You are tying to use the Domain Expert Retrieval Evaluator. "
+                "You are trying to use the Domain Expert Retrieval Evaluator. "
                 "For this evaluator, you need to provide the domain the evaluator "
                 "is an expert in the expert_in field."
             )

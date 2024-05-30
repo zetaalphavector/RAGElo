@@ -285,7 +285,7 @@ def load_answers_from_csv(
     if isinstance(queries, str):
         queries = load_queries_from_csv(queries, query_text_col, query_id_col)
     queries_dict = {q.qid: q for q in queries}
-
+    query_id_col = query_id_col or infer_query_id_column(answers_path)
     for line in csv.DictReader(open(answers_path)):
         qid = line[query_id_col]
         if qid not in queries_dict:
