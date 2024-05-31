@@ -254,9 +254,15 @@ class BaseAnswerEvaluator(BaseEvaluator):
         for d in query.retrieved_docs:
             if self.config.document_relevance_threshold is not None:
                 # Skip documents with relevance below the threshold
-                if d.evaluation is None or not isinstance(d.evaluation.answer, int):
+                if d.evaluation is None:
                     continue
-                if d.evaluation.answer < self.config.document_relevance_threshold:
+                # check if evaluation.answer is an integer or a string that can be converted to an integer
+                score = d.evaluation.answer
+                if isinstance(score, str) and score.isdigit():
+                    score = int(score)
+                if not isinstance(score, int):
+                    continue
+                if score < self.config.document_relevance_threshold:
                     continue
             if self.config.document_filter is not None:
                 if d.evaluation is None:
