@@ -1,8 +1,6 @@
 import json
 from unittest.mock import AsyncMock
 
-import pytest
-
 from ragelo import get_retrieval_evaluator
 from ragelo.evaluators.retrieval_evaluators import (
     BaseRetrievalEvaluator,
