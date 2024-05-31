@@ -2,16 +2,7 @@
 
 import collections.abc
 import inspect
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    List,
-    Tuple,
-    get_args,
-    get_origin,
-    get_type_hints,
-)
+from typing import Any, Callable, Dict, get_args, get_origin, get_type_hints
 
 from typer.models import ArgumentInfo, OptionInfo, ParameterInfo, ParamMeta
 

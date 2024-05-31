@@ -3,7 +3,7 @@
 import logging
 import os
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Tuple, Type, Union, get_type_hints
+from typing import Dict, List, Optional, Type, Union, get_type_hints
 
 from ragelo.types import LLMProviderConfig, LLMProviderTypes
 

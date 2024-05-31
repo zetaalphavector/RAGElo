@@ -1,4 +1,4 @@
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Callable, List, Optional, Union
 
 from pydantic import Field
 
@@ -96,9 +96,9 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
 
 
 class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
-    evaluator_name: Union[str, AnswerEvaluatorTypes] = (
-        AnswerEvaluatorTypes.CUSTOM_PROMPT
-    )
+    evaluator_name: Union[
+        str, AnswerEvaluatorTypes
+    ] = AnswerEvaluatorTypes.CUSTOM_PROMPT
     prompt: str = Field(
         default="retrieved documents: {documents} query: {query} answer: {answer}",
         description="The prompt to be used to evaluate the documents. It should contain a {query} and a {document} placeholder",
@@ -118,9 +118,9 @@ class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
 
 
 class PairwiseDomainExpertEvaluatorConfig(PairwiseEvaluatorConfig):
-    evaluator_name: Union[str, AnswerEvaluatorTypes] = (
-        AnswerEvaluatorTypes.DOMAIN_EXPERT
-    )
+    evaluator_name: Union[
+        str, AnswerEvaluatorTypes
+    ] = AnswerEvaluatorTypes.DOMAIN_EXPERT
     expert_in: str = Field(
         default="",
         description="What the LLM should mimic being an expert in.",

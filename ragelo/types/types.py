@@ -1,6 +1,6 @@
 from enum import Enum
 from importlib import metadata
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel as PydanticBaseModel
 from pydantic import ValidationError

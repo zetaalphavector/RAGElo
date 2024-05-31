@@ -1,5 +1,5 @@
 from importlib import metadata
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Union
 
 from pydantic import Field
 
