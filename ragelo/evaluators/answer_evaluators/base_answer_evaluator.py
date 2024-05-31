@@ -291,7 +291,8 @@ class BaseAnswerEvaluator(BaseEvaluator):
             games = pairs[: self.config.n_games_per_query]
             # Filter out games that already exist
             existing_games = {
-                (a.agent_a_answer.agent, a.agent_b_answer) for a in query.pairwise_games
+                (a.agent_a_answer.agent, a.agent_b_answer.agent)
+                for a in query.pairwise_games
             }
             answer_idx = {ans.agent: idx for idx, ans in enumerate(query.answers)}
             games = [g for g in games if g not in existing_games]
