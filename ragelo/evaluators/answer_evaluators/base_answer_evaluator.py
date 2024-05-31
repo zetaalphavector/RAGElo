@@ -294,6 +294,8 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 (a.agent_a_answer.agent, a.agent_b_answer.agent)
                 for a in query.pairwise_games
             }
+            games_to_add = self.config.n_games_per_query - len(existing_games)
+            games = games[:games_to_add]
             answer_idx = {ans.agent: idx for idx, ans in enumerate(query.answers)}
             games = [g for g in games if g not in existing_games]
             for agent_a, agent_b in games:
