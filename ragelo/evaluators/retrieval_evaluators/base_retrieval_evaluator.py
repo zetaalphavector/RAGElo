@@ -4,7 +4,18 @@ and returns a score or a label for each document."""
 
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Callable, Optional, Type, get_type_hints
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    Type,
+    Union,
+    get_type_hints,
+)
 
 from tqdm.auto import tqdm
 
@@ -52,7 +63,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             ]
             self.output_columns.extend(missing_keys)
 
-    async def _async_batch_evaluate(self, queries: list[Query]) -> list[Query]:
+    async def _async_batch_evaluate(self, queries: List[Query]) -> List[Query]:
         use_progress_bar = self.config.use_progress_bar
         queries = self.__prepare_queries(queries)
         tuples_to_eval = self.__get_tuples_to_evaluate(queries)
@@ -67,7 +78,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             position=0,
         )
         awaitables_ended = False
-        pending: set[asyncio.Future] = set()
+        pending: Set[asyncio.Future] = set()
         aws = map(self._async_evaluate, tuples_to_eval)
         aws = iter(aws)
         evaluations = []
@@ -102,7 +113,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         return queries
 
     async def _async_evaluate(
-        self, eval_sample: tuple[Query, Document]
+        self, eval_sample: Tuple[Query, Document]
     ) -> RetrievalEvaluatorResult:
         query, document = eval_sample
         exc = None
@@ -137,14 +148,14 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             )
         return ans
 
-    def __prepare_queries(self, queries: list[Query]) -> list[Query]:
+    def __prepare_queries(self, queries: List[Query]) -> List[Query]:
         queries = self._load_retrieved_documents(queries)
         queries = self._load_document_evaluations(queries, force=self.config.force)
         return queries
 
     def __get_tuples_to_evaluate(
-        self, queries: list[Query]
-    ) -> list[tuple[Query, Document]]:
+        self, queries: List[Query]
+    ) -> List[Tuple[Query, Document]]:
         tuples_to_eval = []
         all_tuples = 0
         for q in queries:
@@ -163,23 +174,25 @@ class BaseRetrievalEvaluator(BaseEvaluator):
 
     def evaluate(
         self,
-        query: Query | str,
-        document: Document | str,
-        query_metadata: Optional[dict[str, Any]] = None,
-        doc_metadata: Optional[dict[str, Any]] = None,
-    ) -> tuple[str, Any]:
+        query: Union[Query, str],
+        document: Union[Document, str],
+        query_metadata: Optional[Dict[str, Any]] = None,
+        doc_metadata: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[str, Any]:
         """Evaluates a single query-document pair. Returns the raw answer and the processed answer."""
         query = self._assemble_query(query, query_metadata)
         document = self._assemble_document(document, doc_metadata)
+
+        def run(coroutine):
+            return asyncio.run(coroutine)
+
         try:
             # Raises RuntimeError if there is no current event loop.
             asyncio.get_running_loop()
             # If there is a current event loop, we need to run the async code
             # in a separate loop, in a separate thread.
             with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(
-                    asyncio.run, self._async_evaluate((query, document))
-                )
+                future = executor.submit(run, self._async_evaluate((query, document)))
                 result = future.result()
         except RuntimeError:
             result = asyncio.run(self._async_evaluate((query, document)))
@@ -190,16 +203,17 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             )
         return result.raw_answer, result.answer
 
-    def batch_evaluate(self, queries: list[Query]) -> list[Query]:
+    def batch_evaluate(self, queries: List[Query]) -> List[Query]:
+        def run(coroutine):
+            return asyncio.run(coroutine)
+
         try:
             # Raises RuntimeError if there is no current event loop.
             asyncio.get_running_loop()
             # If there is a current event loop, we need to run the async code
             # in a separate loop, in a separate thread.
             with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(
-                    asyncio.run, self._async_batch_evaluate(queries)
-                )
+                future = executor.submit(run, self._async_batch_evaluate(queries))
                 result = future.result()
         except RuntimeError:
             result = asyncio.run(self._async_batch_evaluate(queries))
@@ -210,7 +224,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         self,
         query: Query,
         document: Document,
-    ) -> str | list[dict[str, str]]:
+    ) -> Union[str, List[Dict[str, str]]]:
         """Builds the prompt to send to the LLM."""
         raise NotImplementedError
 
@@ -226,13 +240,13 @@ class BaseRetrievalEvaluator(BaseEvaluator):
 
     @staticmethod
     def _construct_list_of_answers(
-        answers: list[dict[str, str]]
-    ) -> list[RetrievalEvaluatorResult]:
+        answers: List[Dict[str, str]]
+    ) -> List[RetrievalEvaluatorResult]:
         return [RetrievalEvaluatorResult(**x) for x in answers]
 
 
 class RetrievalEvaluatorFactory:
-    registry: dict[RetrievalEvaluatorTypes | str, Type[BaseRetrievalEvaluator]] = {}
+    registry: Dict[RetrievalEvaluatorTypes, Type[BaseRetrievalEvaluator]] = {}
 
     @classmethod
     def register(cls, evaluator_name: RetrievalEvaluatorTypes) -> Callable:
@@ -249,8 +263,8 @@ class RetrievalEvaluatorFactory:
     @classmethod
     def create(
         cls,
-        evaluator_name: RetrievalEvaluatorTypes | str,
-        llm_provider: BaseLLMProvider | str,
+        evaluator_name: RetrievalEvaluatorTypes,
+        llm_provider: Union[BaseLLMProvider, str],
         config: Optional[BaseRetrievalEvaluatorConfig] = None,
         **kwargs,
     ) -> BaseRetrievalEvaluator:
@@ -273,8 +287,8 @@ class RetrievalEvaluatorFactory:
 
 
 def get_retrieval_evaluator(
-    evaluator_name: Optional[RetrievalEvaluatorTypes | str] = None,
-    llm_provider: BaseLLMProvider | str = "openai",
+    evaluator_name: Optional[Union[RetrievalEvaluatorTypes, str]] = None,
+    llm_provider: Union[BaseLLMProvider, str] = "openai",
     config: Optional[BaseRetrievalEvaluatorConfig] = None,
     **kwargs,
 ) -> BaseRetrievalEvaluator:
@@ -285,7 +299,8 @@ def get_retrieval_evaluator(
                 "Either the evaluator_name or a config object must be provided"
             )
         evaluator_name = config.evaluator_name
-
+    if isinstance(evaluator_name, str):
+        evaluator_name = RetrievalEvaluatorTypes(evaluator_name)
     return RetrievalEvaluatorFactory.create(
         evaluator_name,
         llm_provider=llm_provider,

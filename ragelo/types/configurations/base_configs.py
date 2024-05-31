@@ -1,5 +1,5 @@
 from importlib import metadata
-from typing import Optional
+from typing import List, Optional, Union
 
 from pydantic import Field
 
@@ -67,11 +67,11 @@ class BaseEvaluatorConfig(BaseConfig):
         default="relevance",
         description="When using answer_format=json, the key to extract from the answer",
     )
-    scoring_keys: list[str] = Field(
+    scoring_keys: List[str] = Field(
         default=["relevance"],
         description="When using answer_format=multi_field_json, the keys to extract from the answer",
     )
-    answer_format: str | AnswerFormat = Field(
+    answer_format: Union[str, AnswerFormat] = Field(
         default=AnswerFormat.JSON,
         description="The format of the answer returned by the LLM",
     )
@@ -79,7 +79,7 @@ class BaseEvaluatorConfig(BaseConfig):
         default=1,
         description="The number of parallel LLM calls to use for the evaluation",
     )
-    output_columns: Optional[list[str]] = Field(
+    output_columns: Optional[List[str]] = Field(
         default=["qid", "did", "raw_answer", "answer"],
         description="The columns to output in the CSV file",
     )

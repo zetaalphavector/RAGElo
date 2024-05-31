@@ -5,7 +5,7 @@ import logging
 import os
 from collections import defaultdict
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional, Union
 
 from ragelo.types.types import (
     AgentAnswer,
@@ -16,7 +16,7 @@ from ragelo.types.types import (
 )
 
 
-def infer_query_id_column(file_path: str) -> str | None:
+def infer_query_id_column(file_path: str) -> Union[str, None]:
     """Infer the column name with the query id from a CSV file."""
     possible_qid_columns = [
         "query_id",
@@ -36,7 +36,7 @@ def infer_query_id_column(file_path: str) -> str | None:
     return None
 
 
-def infer_doc_id_column(file_path: str) -> str | None:
+def infer_doc_id_column(file_path: str) -> Union[str, None]:
     """Infer the column name with the document id from a CSV file."""
     possible_did_columns = [
         "document_id",
@@ -64,8 +64,8 @@ def load_queries_from_csv(
     query_text_col: str = "query",
     query_id_col: Optional[str] = None,
     infer_metadata_fields: bool = True,
-    metadata_fields: Optional[list[str]] = None,
-) -> list[Query]:
+    metadata_fields: Optional[List[str]] = None,
+) -> List[Query]:
     """Loads the queries from a CSV file and returns a dictionary with the queries.
         The CSV file should have a header with the columns 'query_id' and 'query'.
         The key is the query id and the value is the query object.
@@ -76,10 +76,10 @@ def load_queries_from_csv(
         query_id_col (str): Name of the column with the query id. If not passed, try to infer from the csv.
             Uses the query_text_col as last resource.
         infer_metadata_fields (bool): Wether to infer the metadata fields in the csv.
-        metadata_fields (Optional[list[str]]): The list of columns to be used as metadata.
+        metadata_fields (Optional[List[str]]): The list of columns to be used as metadata.
             If infer_metadata_fields is True, will use all the fields if not explicitly set.
     Returns:
-        list[Query]: List of queries.
+        List[Query]: List of queries.
 
     """
     queries = []
@@ -129,16 +129,16 @@ def load_queries_from_csv(
 
 def load_retrieved_docs_from_csv(
     documents_path: str,
-    queries: list[Query] | str,
+    queries: Union[List[Query], str],
     query_id_col: str = "qid",
     document_id_col: str = "did",
     document_text_col: str = "document_text",
-) -> list[Query]:
+) -> List[Query]:
     """Loads a list of retrieved documents for each query.
 
     Args:
         documents_path (str): Path to the CSV file with the documents.
-        queries (Optional[dict[str, Query]]): Dictionary with the queries.
+        queries (Optional[Dict[str, Query]]): Dictionary with the queries.
             If provided, only documents for the queries in the dictionary will be
             loaded. Defaults to None.
         query_id_col (str): Name of the column with the query id. Defaults to 'query_id'.
@@ -148,7 +148,7 @@ def load_retrieved_docs_from_csv(
             Defaults to 'document_text'.
 
     Returns:
-        list[Query]: A list of queries with the retrieved documents.
+        List[Query]: A list of queries with the retrieved documents.
 
     """
     documents_read = 0
@@ -180,10 +180,10 @@ def load_retrieved_docs_from_csv(
 def load_retrieved_docs_from_run_file(
     run_file_path: str,
     documents_path: str,
-    queries: list[Query] | str,
+    queries: Union[List[Query], str],
     document_id_col: str = "document_id",
     document_text_col: str = "document_text",
-) -> list[Query]:
+) -> List[Query]:
     """Loads documents based on a TREC-formatted run file and a CSV with the documents."""
 
     documents_read = 0
@@ -217,8 +217,8 @@ def load_retrieved_docs_from_run_file(
 
 
 def load_answers_from_multiple_csvs(
-    answer_files: list[str],
-    queries: Optional[list[Query] | str] = None,
+    answer_files: List[str],
+    queries: Optional[Union[List[Query], str]] = None,
     query_text_col: str = "query",
     answer_text_col: str = "answer",
     query_id_col: Optional[str] = None,
@@ -227,8 +227,8 @@ def load_answers_from_multiple_csvs(
     We load all queries from all csvs first, and add the answers for all agents to the query objects.
     The agents will be named according to the csv file name.
     Args:
-        answer_files (list[str]): A list of CSVs files with agent answers.
-        queries (optional(dict[str, Query] | str)): Either a dictionary with
+        answer_files (List[str]): A list of CSVs files with agent answers.
+        queries (optional(Dict[str, Query] | str)): Either a dictionary with
             existing queries, a csv file with the queries or None. If none, will
             assume the queries also exist in the answers file.
         query_text_col (str): Name of the column with the query.
@@ -263,21 +263,21 @@ def load_answers_from_multiple_csvs(
 
 def load_answers_from_csv(
     answers_path: str,
-    queries: list[Query] | str,
+    queries: Union[List[Query], str],
     query_text_col: str = "query",
     agent_col: str = "agent",
     answer_col: str = "answer",
     query_id_col: Optional[str] = None,
-) -> list[Query]:
+) -> List[Query]:
     """Loads all answers and agents from an answers CSV file.
     Args:
         answers_path (str): Path to the CSV file with the answers.
-        queries (dict[str, Query]): Dictionary with the queries.
+        queries (Dict[str, Query]): Dictionary with the queries.
         query_id_col (str): Name of the column with the query id. If not defined, will try to infer it from the csv headers
         agent_col (str): Name of the column with the agent. Defaults to 'agent'.
         answer_col (str): Name of the column with the answer. Defaults to 'answer'.
     Returns:
-        list[Query]: A list of queries with the answers.
+        List[Query]: A list of queries with the answers.
     """
 
     if not os.path.isfile(answers_path):
@@ -306,7 +306,7 @@ def load_answers_from_csv(
 # TODO: Replace all this loading by JSON serialization of Pydantic models
 def load_answer_evaluations_from_csv(
     evaluations_file: str,
-) -> list[Query]:
+) -> List[Query]:
     """Loads all evaluations produced by an answer evaluator from a CSV file."""
 
     queries_dict = {}

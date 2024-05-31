@@ -4,7 +4,18 @@ import asyncio
 import itertools
 import random
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Callable, Optional, Type, get_type_hints
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    Type,
+    Union,
+    get_type_hints,
+)
 
 from tqdm import tqdm
 
@@ -53,7 +64,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
             ]
             self.output_columns.extend(missing_keys)
 
-    async def _async_batch_evaluate(self, queries: list[Query]) -> list[Query]:
+    async def _async_batch_evaluate(self, queries: List[Query]) -> List[Query]:
         use_progress_bar = self.config.use_progress_bar
         failed_queries = 0
         queries = self.__prepare_queries(queries)
@@ -71,7 +82,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
         )
 
         awaitables_ended = False
-        pending: set[asyncio.Future] = set()
+        pending: Set[asyncio.Future] = set()
         aws = map(self._async_evaluate, tuples_to_eval)
         aws = iter(aws)
         evaluations = []
@@ -108,17 +119,17 @@ class BaseAnswerEvaluator(BaseEvaluator):
 
     def evaluate(
         self,
-        query: Query | str,
-        answer: Optional[AgentAnswer | str] = None,
-        answer_a: Optional[AgentAnswer | str] = None,
-        answer_b: Optional[AgentAnswer | str] = None,
-        retrieved_documents: Optional[list[str] | list[Document]] = None,
-        document_metadata: Optional[list[dict[str, Any]]] = None,
-        query_metadata: Optional[dict[str, Any]] = None,
+        query: Union[Query, str],
+        answer: Optional[Union[AgentAnswer, str]] = None,
+        answer_a: Optional[Union[AgentAnswer, str]] = None,
+        answer_b: Optional[Union[AgentAnswer, str]] = None,
+        retrieved_documents: Optional[Union[List[str], List[Document]]] = None,
+        document_metadata: Optional[List[Dict[str, Any]]] = None,
+        query_metadata: Optional[Dict[str, Any]] = None,
         answer_metadata=None,
-        answer_a_metadata: Optional[dict[str, Any]] = None,
-        answer_b_metadata: Optional[dict[str, Any]] = None,
-    ) -> tuple[str, Any]:
+        answer_a_metadata: Optional[Dict[str, Any]] = None,
+        answer_b_metadata: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[str, Any]:
         query = self._assemble_query(query, query_metadata)
         if isinstance(retrieved_documents, str):
             retrieved_documents = [retrieved_documents]
@@ -127,7 +138,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 retrieved_documents, document_metadata
             )
             query.retrieved_docs = retrieved_and_assembled_docs
-        agent: str | tuple[str, str]
+        agent: Union[str, Tuple[str, str]]
         if self.config.pairwise:
             if not answer_a or not answer_b:
                 raise ValueError("Pairwise evaluations require two answers")
@@ -138,12 +149,14 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 agent_a_answer=answer_a,
                 agent_b_answer=answer_b,
             )
+
+            def run(coroutine):
+                return asyncio.run(coroutine)
+
             try:
                 asyncio.get_running_loop()
                 with ThreadPoolExecutor(max_workers=1) as executor:
-                    future = executor.submit(
-                        asyncio.run, self._async_evaluate((query, game))
-                    )
+                    future = executor.submit(run, self._async_evaluate((query, game)))
                     result = future.result()
             except RuntimeError:
                 result = asyncio.run(self._async_evaluate((query, game)))
@@ -152,12 +165,14 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 raise ValueError("Pointwise evaluations require an answer")
             answer = self._assemble_answer(answer, answer_metadata)
             agent = answer.agent
+
+            def run(coroutine):
+                return asyncio.run(coroutine)
+
             try:
                 asyncio.get_running_loop()
                 with ThreadPoolExecutor(max_workers=1) as executor:
-                    future = executor.submit(
-                        asyncio.run, self._async_evaluate((query, answer))
-                    )
+                    future = executor.submit(run, self._async_evaluate((query, answer)))
                     result = future.result()
             except RuntimeError:
                 result = asyncio.run(self._async_evaluate((query, answer)))
@@ -169,10 +184,10 @@ class BaseAnswerEvaluator(BaseEvaluator):
         return result.raw_answer, result.answer
 
     async def _async_evaluate(
-        self, eval_sample: tuple[Query, PairwiseGame | AgentAnswer]
+        self, eval_sample: Tuple[Query, Union[PairwiseGame, AgentAnswer]]
     ) -> AnswerEvaluatorResult:
         query, evaluable = eval_sample
-        agent: str | tuple[str, str]
+        agent: Union[str, Tuple[str, str]]
         if isinstance(evaluable, AgentAnswer):
             agent = evaluable.agent
         elif isinstance(evaluable, PairwiseGame):
@@ -228,13 +243,13 @@ class BaseAnswerEvaluator(BaseEvaluator):
 
     def _build_message(
         self, query: Query, answer: AgentAnswer
-    ) -> str | list[dict[str, str]]:
+    ) -> Union[str, List[Dict[str, str]]]:
         """Builds the message to send to the LLM evaluator"""
         raise NotImplementedError
 
     def _build_message_pairwise(
         self, query: Query, game: PairwiseGame
-    ) -> str | list[dict[str, str]]:
+    ) -> Union[str, List[Dict[str, str]]]:
         """Builds the message to send to the LLM evaluator"""
         raise NotImplementedError
 
@@ -278,7 +293,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
             return "NO DOCUMENTS WERE RETRIEVED"
         return "\n".join(documents)
 
-    def __prepare_queries(self, queries: list[Query]) -> list[Query]:
+    def __prepare_queries(self, queries: List[Query]) -> List[Query]:
         queries = self._load_retrieved_documents(queries)
         queries = self._load_document_evaluations(queries, force=False)
         queries = self._load_agent_answers(queries)
@@ -286,7 +301,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
         queries = self._load_answers_evaluations(queries, force=self.config.force)
         return queries
 
-    def __add_pairwise_games(self, queries: list[Query]) -> list[Query]:
+    def __add_pairwise_games(self, queries: List[Query]) -> List[Query]:
         if not self.config.pairwise:
             return queries
         for query in queries:
@@ -321,9 +336,9 @@ class BaseAnswerEvaluator(BaseEvaluator):
 
     def __get_tuples_to_evaluate(
         self,
-        queries: list[Query],
-    ) -> list[tuple[Query, PairwiseGame | AgentAnswer]]:
-        tuples_to_eval: list[tuple[Query, PairwiseGame | AgentAnswer]] = []
+        queries: List[Query],
+    ) -> List[Tuple[Query, Union[PairwiseGame, AgentAnswer]]]:
+        tuples_to_eval: List[Tuple[Query, Union[PairwiseGame, AgentAnswer]]] = []
         all_tuples = 0
         for q in queries:
             if self.config.pairwise:
@@ -346,16 +361,17 @@ class BaseAnswerEvaluator(BaseEvaluator):
 
         return tuples_to_eval
 
-    def batch_evaluate(self, queries: list[Query]) -> list[Query]:
+    def batch_evaluate(self, queries: List[Query]) -> List[Query]:
+        def run(coroutine):
+            return asyncio.run(coroutine)
+
         try:
             # Raises RuntimeError if there is no current event loop.
             asyncio.get_running_loop()
             # If there is a current event loop, we need to run the async code
             # in a separate loop, in a separate thread.
             with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(
-                    asyncio.run, self._async_batch_evaluate(queries)
-                )
+                future = executor.submit(run, self._async_batch_evaluate(queries))
                 result = future.result()
         except RuntimeError:
             result = asyncio.run(self._async_batch_evaluate(queries))
@@ -364,14 +380,14 @@ class BaseAnswerEvaluator(BaseEvaluator):
 
 
 class AnswerEvaluatorFactory:
-    registry: dict[AnswerEvaluatorTypes | str, Type[BaseAnswerEvaluator]] = {}
+    registry: Dict[AnswerEvaluatorTypes, Type[BaseAnswerEvaluator]] = {}
 
     @classmethod
     def register(cls, name: AnswerEvaluatorTypes) -> Callable:
         def inner_wrapper(wrapped_class: Type[BaseAnswerEvaluator]):
             if name in cls.registry:
                 logger.warning(f"Overwriting {name} in registry")
-            cls.registry[name.lower()] = wrapped_class
+            cls.registry[name] = wrapped_class
             return wrapped_class
 
         return inner_wrapper
@@ -379,8 +395,8 @@ class AnswerEvaluatorFactory:
     @classmethod
     def create(
         cls,
-        evaluator_name: str,
-        llm_provider: BaseLLMProvider | str,
+        evaluator_name: AnswerEvaluatorTypes,
+        llm_provider: Union[BaseLLMProvider, str],
         config: Optional[BaseAnswerEvaluatorConfig] = None,
         **kwargs,
     ) -> BaseAnswerEvaluator:
@@ -396,14 +412,12 @@ class AnswerEvaluatorFactory:
             valid_keys = [field for field in type_config.get_model_fields()]
             valid_args = {k: v for k, v in kwargs.items() if k in valid_keys}
             config = type_config(**valid_args)
-        return cls.registry[evaluator_name.lower()].from_config(
-            config, llm_provider_instance
-        )
+        return cls.registry[evaluator_name].from_config(config, llm_provider_instance)
 
 
 def get_answer_evaluator(
-    evaluator_name: Optional[AnswerEvaluatorTypes | str] = None,
-    llm_provider: BaseLLMProvider | str = "openai",
+    evaluator_name: Optional[Union[AnswerEvaluatorTypes, str]] = None,
+    llm_provider: Union[BaseLLMProvider, str] = "openai",
     config: Optional[BaseAnswerEvaluatorConfig] = None,
     **kwargs,
 ) -> BaseAnswerEvaluator:
@@ -414,6 +428,8 @@ def get_answer_evaluator(
                 "Either the evaluator_name or a config object must be provided"
             )
         evaluator_name = config.evaluator_name
+    if isinstance(evaluator_name, str):
+        evaluator_name = AnswerEvaluatorTypes(evaluator_name)
     return AnswerEvaluatorFactory.create(
         evaluator_name,
         llm_provider=llm_provider,

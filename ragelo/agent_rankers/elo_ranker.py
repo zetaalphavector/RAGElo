@@ -1,5 +1,5 @@
 import random
-from typing import Optional
+from typing import Dict, List, Optional, Tuple
 
 from ragelo.agent_rankers.base_agent_ranker import AgentRanker, AgentRankerFactory
 from ragelo.logger import logger
@@ -19,21 +19,21 @@ class EloRanker(AgentRanker):
         super().__init__(config)
         self.score_map = {"A": 1, "B": 0, "C": 0.5}
 
-        self.agents: dict[str, int] = {}
-        self.games: list[tuple[str, str, float]] = []
+        self.agents: Dict[str, int] = {}
+        self.games: List[Tuple[str, str, float]] = []
         self.computed = False
         self.initial_score = self.config.initial_score
         self.k = self.config.k
 
     def run(
         self,
-        queries: Optional[list[Query]] = None,
+        queries: Optional[List[Query]] = None,
         evaluations_file: Optional[str] = None,
     ):
         """Compute score for each agent"""
         queries = self._prepare_queries(queries, evaluations_file)
         self.evaluations = self._flatten_evaluations(queries)
-        agent_scores: dict[str, list[int]] = {}
+        agent_scores: Dict[str, List[int]] = {}
         for _ in range(self.config.rounds):
             self.games = self.__get_elo_scores()
             while self.games:
@@ -54,8 +54,8 @@ class EloRanker(AgentRanker):
             raise ValueError("Ranking not computed yet, Run evaluate() first")
         return self.agents
 
-    def __get_elo_scores(self) -> list[tuple[str, str, float]]:
-        games: list[tuple[str, str, float]] = []
+    def __get_elo_scores(self) -> List[Tuple[str, str, float]]:
+        games: List[Tuple[str, str, float]] = []
         for agent_a, agent_b, score in self.evaluations:
             score_val = self.score_map[score]
             games.append((agent_a, agent_b, score_val))

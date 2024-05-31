@@ -1,4 +1,5 @@
 import asyncio
+from typing import Dict, List, Union
 
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 from tenacity import retry, stop_after_attempt, wait_random_exponential
@@ -26,7 +27,7 @@ class OpenAIProvider(BaseLLMProvider):
     @retry(wait=wait_random_exponential(min=1, max=120), stop=stop_after_attempt(1))
     def __call__(
         self,
-        prompt: str | list[dict[str, str]],
+        prompt: Union[str, List[Dict[str, str]]],
     ) -> str:
         """Calls the OpenAI API.
 
@@ -55,7 +56,7 @@ class OpenAIProvider(BaseLLMProvider):
 
     async def call_async(
         self,
-        prompt: str | list[dict[str, str]],
+        prompt: Union[str, List[Dict[str, str]]],
     ) -> str:
         """Calls the OpenAI API asynchronously.
 

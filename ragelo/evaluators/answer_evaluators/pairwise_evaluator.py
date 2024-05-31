@@ -1,4 +1,5 @@
 import re
+from typing import Dict, List, Union
 
 from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
     AnswerEvaluatorFactory,
@@ -94,7 +95,7 @@ and "[[C]]" for a tie.
 
     def _build_message_pairwise(
         self, query: Query, game: PairwiseGame
-    ) -> str | list[dict[str, str]]:
+    ) -> Union[str, List[Dict[str, str]]]:
         documents = self._prepare_documents(query)
         query_metadata = self._get_usable_fields_from_metadata(
             self.prompt, query.metadata, skip_fields=[self.config.query_placeholder]

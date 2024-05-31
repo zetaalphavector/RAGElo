@@ -2,9 +2,8 @@
 
 import csv
 from collections import defaultdict
-from typing import Optional, Type, get_type_hints
+from typing import Dict, List, Optional, Tuple, Type, get_type_hints
 
-# from ragelo.agent_rankers import *
 from ragelo.logger import logger
 from ragelo.types import AgentRankerConfig
 from ragelo.types.types import Query
@@ -13,7 +12,7 @@ from ragelo.utils import load_answer_evaluations_from_csv
 
 class AgentRanker:
     config: AgentRankerConfig
-    ranking: defaultdict[str, list[str]]
+    ranking: Dict[str, List[str]]
     output_file: str = "agents_ranking.csv"
     name: str = "Agent Ranker"
 
@@ -28,17 +27,17 @@ class AgentRanker:
 
     def run(
         self,
-        queries: Optional[list[Query]] = None,
+        queries: Optional[List[Query]] = None,
         evaluations_file: Optional[str] = None,
-    ) -> list[Query]:
+    ) -> List[Query]:
         """Compute score for each agent"""
         raise NotImplementedError
 
     def _prepare_queries(
         self,
-        queries: Optional[list[Query]] = None,
+        queries: Optional[List[Query]] = None,
         evaluations_file: Optional[str] = None,
-    ) -> list[Query]:
+    ) -> List[Query]:
         if queries is None:
             if evaluations_file is None:
                 raise ValueError(
@@ -53,7 +52,7 @@ class AgentRanker:
         # evaluations = cls.load_evaluations(config.evaluations_file)
         # return cls(config, evaluations)
 
-    def get_agents_ratings(self) -> dict[str, float]:
+    def get_agents_ratings(self) -> Dict[str, float]:
         """Returns the score of all players"""
         raise NotImplementedError
 
@@ -96,7 +95,7 @@ class AgentRanker:
     def get_config_class(cls) -> Type[AgentRankerConfig]:
         return get_type_hints(cls)["config"]
 
-    def _flatten_evaluations(self, queries) -> list[tuple[str, str, str]]:
+    def _flatten_evaluations(self, queries) -> List[Tuple[str, str, str]]:
         evaluations = []
         for q in queries:
             for game in q.pairwise_games:
@@ -111,7 +110,7 @@ class AgentRanker:
 
 
 class AgentRankerFactory:
-    registry: dict[str, Type[AgentRanker]] = {}
+    registry: Dict[str, Type[AgentRanker]] = {}
 
     @classmethod
     def register(cls, name: str):

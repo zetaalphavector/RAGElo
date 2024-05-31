@@ -2,7 +2,7 @@
 
 import collections.abc
 import inspect
-from typing import Any, Callable, get_args, get_origin, get_type_hints
+from typing import Any, Callable, Dict, get_args, get_origin, get_type_hints
 
 from typer.models import ArgumentInfo, OptionInfo, ParameterInfo, ParamMeta
 
@@ -26,7 +26,7 @@ def callable(value: str):
     return value
 
 
-def get_params_from_function(func: Callable[..., Any]) -> dict[str, ParamMeta]:
+def get_params_from_function(func: Callable[..., Any]) -> Dict[str, ParamMeta]:
     signature = inspect.signature(func)
 
     type_hints = get_type_hints(func)
