@@ -24,7 +24,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: System :: Benchmark",
 ]
-dependencies = ["openai>=1.10", "tenacity", "typer", "numpy", "pydantic>=1.9"]
+dependencies = ["openai>=1.10", "tenacity", "typer", "numpy>=1.24", "pydantic>=1.9"]
 
 [project.optional-dependencies]
 cli = ["typer[all]"]
@@ -40,6 +40,7 @@ dev = [
     "types-tqdm==4.66.0",
     "pydantic==2.7.0",
     "pytest-asyncio==0.23.6",
+    "pytest-mock==3.12.0",
 ]
 
 [project.scripts]

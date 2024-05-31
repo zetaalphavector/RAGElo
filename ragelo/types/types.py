@@ -1,4 +1,4 @@
-from enum import StrEnum
+from enum import Enum
 from importlib import metadata
 from typing import Any, Optional
 
@@ -33,7 +33,7 @@ class BaseModel(PydanticBaseModel):
             return super().model_dump()  # type: ignore
 
 
-class AnswerFormat(StrEnum):
+class AnswerFormat(str, Enum):
     """Enum that contains the names of the available answer formats"""
 
     JSON = "json"
@@ -41,7 +41,7 @@ class AnswerFormat(StrEnum):
     MULTI_FIELD_JSON = "multi_field_json"
 
 
-class RetrievalEvaluatorTypes(StrEnum):
+class RetrievalEvaluatorTypes(str, Enum):
     """Enum that contains the names of the available retrieval evaluators"""
 
     CUSTOM_PROMPT = "custom_prompt"
@@ -51,13 +51,13 @@ class RetrievalEvaluatorTypes(StrEnum):
     REASONER = "reasoner"
 
 
-class LLMProviderTypes(StrEnum):
+class LLMProviderTypes(str, Enum):
     """Enum that contains the names of the available LLM providers"""
 
     OPENAI = "openai"
 
 
-class AnswerEvaluatorTypes(StrEnum):
+class AnswerEvaluatorTypes(str, Enum):
     """Enum that contains the names of the available answer evaluators"""
 
     PAIRWISE = "pairwise"

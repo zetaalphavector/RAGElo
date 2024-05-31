@@ -61,7 +61,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         pbar = tqdm(
             total=len(tuples_to_eval),
             ncols=100,
-            desc="Evaluating answers",
+            desc="Evaluating retrieved documents",
             disable=not use_progress_bar,
             leave=False,
             position=0,
@@ -131,7 +131,10 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             answer=answer,
             exception=exc,
         )
-        self._dump_response(ans, self.output_columns, self.document_evaluations_path)
+        if ans.exception is None:
+            self._dump_response(
+                ans, self.output_columns, self.document_evaluations_path
+            )
         return ans
 
     def __prepare_queries(self, queries: list[Query]) -> list[Query]:

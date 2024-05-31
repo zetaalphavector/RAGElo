@@ -7,7 +7,7 @@ from ragelo.types.types import AnswerEvaluatorTypes
 
 
 class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
-    evaluator_name: str = ""
+    evaluator_name: str | AnswerEvaluatorTypes = ""
     answer_placeholder: str = Field(
         default="answer", description="The placeholder for the answer in the prompt"
     )
@@ -53,7 +53,7 @@ class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
 class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     """Configuration for the pairwise evaluator."""
 
-    evaluator_name: str = AnswerEvaluatorTypes.PAIRWISE
+    evaluator_name: str | AnswerEvaluatorTypes = AnswerEvaluatorTypes.PAIRWISE
     output_columns: list[str] = Field(
         default=["qid", "agent_a", "agent_b", "raw_answer", "answer"],
         description="The columns to output in the CSV file",
@@ -96,7 +96,7 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
 
 
 class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
-    evaluator_name: str = AnswerEvaluatorTypes.CUSTOM_PROMPT
+    evaluator_name: str | AnswerEvaluatorTypes = AnswerEvaluatorTypes.CUSTOM_PROMPT
     prompt: str = Field(
         default="retrieved documents: {documents} query: {query} answer: {answer}",
         description="The prompt to be used to evaluate the documents. It should contain a {query} and a {document} placeholder",
@@ -109,14 +109,14 @@ class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
         default=["quality", "trustworthiness", "originality"],
         description="The fields to extract from the answer",
     )
-    answer_format: str = Field(
+    answer_format: str | AnswerFormat = Field(
         default=AnswerFormat.MULTI_FIELD_JSON,
         description="The format of the answer returned by the LLM",
     )
 
 
 class PairwiseDomainExpertEvaluatorConfig(PairwiseEvaluatorConfig):
-    evaluator_name: str = AnswerEvaluatorTypes.DOMAIN_EXPERT
+    evaluator_name: str | AnswerEvaluatorTypes = AnswerEvaluatorTypes.DOMAIN_EXPERT
     expert_in: str = Field(
         default="",
         description="What the LLM should mimic being an expert in.",

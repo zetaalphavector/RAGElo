@@ -7,7 +7,9 @@ from ragelo.types.types import FewShotExample, RetrievalEvaluatorTypes
 
 
 class BaseRetrievalEvaluatorConfig(BaseEvaluatorConfig):
-    evaluator_name: str = RetrievalEvaluatorTypes.CUSTOM_PROMPT
+    evaluator_name: str | RetrievalEvaluatorTypes = (
+        RetrievalEvaluatorTypes.CUSTOM_PROMPT
+    )
     document_placeholder: str = Field(
         default="document",
         description="The placeholder for the document in the prompt",
@@ -19,7 +21,7 @@ class BaseRetrievalEvaluatorConfig(BaseEvaluatorConfig):
 
 
 class ReasonerEvaluatorConfig(BaseRetrievalEvaluatorConfig):
-    answer_format: str = Field(
+    answer_format: str | AnswerFormat = Field(
         default=AnswerFormat.TEXT,
         description="The format of the answer returned by the LLM",
     )
@@ -35,7 +37,7 @@ class ReasonerEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default="reasonings.csv",
         description="Path to write (or read) the evaluations of the retrieved documents",
     )
-    evaluator_name: str = RetrievalEvaluatorTypes.REASONER
+    evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.REASONER
 
 
 class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
@@ -71,7 +73,9 @@ class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default="score",
         description="The field to use when parsing the llm answer",
     )
-    evaluator_name: str = RetrievalEvaluatorTypes.DOMAIN_EXPERT
+    evaluator_name: str | RetrievalEvaluatorTypes = (
+        RetrievalEvaluatorTypes.DOMAIN_EXPERT
+    )
 
 
 class CustomPromptEvaluatorConfig(BaseRetrievalEvaluatorConfig):
@@ -83,7 +87,7 @@ class CustomPromptEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default=["quality", "trustworthiness", "originality"],
         description="The fields to use when parsing the llm answer",
     )
-    answer_format: str = Field(
+    answer_format: str | AnswerFormat = Field(
         default=AnswerFormat.MULTI_FIELD_JSON,
         description="The format of the answer returned by the LLM",
     )
@@ -91,7 +95,9 @@ class CustomPromptEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default="custom_prompt_evaluations.csv",
         description="Path to write (or read) the evaluations of the retrieved documents",
     )
-    evaluator_name: str = RetrievalEvaluatorTypes.CUSTOM_PROMPT
+    evaluator_name: str | RetrievalEvaluatorTypes = (
+        RetrievalEvaluatorTypes.CUSTOM_PROMPT
+    )
 
 
 class FewShotEvaluatorConfig(BaseRetrievalEvaluatorConfig):
@@ -123,7 +129,7 @@ class FewShotEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default="relevance",
         description="The placeholder for the relevance in the prompt",
     )
-    evaluator_name: str = RetrievalEvaluatorTypes.FEW_SHOT
+    evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.FEW_SHOT
 
 
 class RDNAMEvaluatorConfig(BaseRetrievalEvaluatorConfig):
@@ -150,4 +156,4 @@ class RDNAMEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default="answer",
         description="The field to use when parsing the llm answer",
     )
-    evaluator_name: str = RetrievalEvaluatorTypes.RDNAM
+    evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.RDNAM
