@@ -199,7 +199,7 @@ class TestCustomPromptEvaluator:
             doc_metadata={"d_metadata": "d_1"},
         )
         assert (
-            llm_provider_json_mock.async_call_mocker.call_args_List[0][0][0]
+            llm_provider_json_mock.async_call_mocker.call_args_list[0][0][0]
             == "query: this is a query doc: this is a document q_metadata: q_1 d_metadata: d_1"
         )
 
