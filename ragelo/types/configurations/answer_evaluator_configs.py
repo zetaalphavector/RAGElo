@@ -44,6 +44,10 @@ class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
     document_filter: Optional[Callable[[str], bool]] = Field(
         default=None, description="A function to filter the documents"
     )
+    document_relevance_threshold: Optional[int] = Field(
+        default=None,
+        description="The minimum relevance score for a document to be included in the prompt. By default, all documents are included.",
+    )
 
 
 class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):

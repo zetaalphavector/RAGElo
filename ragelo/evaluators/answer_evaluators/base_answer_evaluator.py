@@ -252,6 +252,12 @@ class BaseAnswerEvaluator(BaseEvaluator):
     def _prepare_documents(self, query: Query) -> str:
         documents = []
         for d in query.retrieved_docs:
+            if self.config.document_relevance_threshold is not None:
+                # Skip documents with relevance below the threshold
+                if d.evaluation is None or not isinstance(d.evaluation.answer, int):
+                    continue
+                if d.evaluation.answer < self.config.document_relevance_threshold:
+                    continue
             if self.config.document_filter is not None:
                 if d.evaluation is None:
                     continue
