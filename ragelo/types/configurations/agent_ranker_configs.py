@@ -29,3 +29,4 @@ class EloAgentRankerConfig(AgentRankerConfig):
     output_file: str = Field(
         default="elo_ranking.csv", description="Path to the output file"
     )
+    rounds: int = Field(default=10, description="The number of rounds to play")
