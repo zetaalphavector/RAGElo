@@ -525,7 +525,7 @@ class BaseEvaluator(ABC):
                 if agents not in games_idxs[evaluation.qid]:
                     agents = (evaluation.agent_b, evaluation.agent_a)
                     if agents not in games_idxs[evaluation.qid]:
-                        logger.warning(
+                        logger.info(
                             f"Pairwise evaluation between {evaluation.agent_a} and {evaluation.agent_b} "
                             f"not found in query {evaluation.qid}"
                         )

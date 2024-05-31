@@ -87,7 +87,7 @@ class TestRetrievalEvaluator:
             config=base_eval_config,
             llm_provider=llm_provider_json_mock,
         )
-        _ = asyncio.run(evaluator._async_batch_evaluate(qs_with_docs))
+        _ = evaluator.batch_evaluate(qs_with_docs)
         captured = capsys.readouterr()
         assert "🔎" in captured.out
 
