@@ -1,5 +1,6 @@
 """CLI for automatically evaluating Retrieval Augmented Generation (RAG) models."""
 
+from ragelo.agent_rankers.base_agent_ranker import get_agent_ranker
 from ragelo.evaluators.answer_evaluators import (
     AnswerEvaluatorFactory,
     get_answer_evaluator,

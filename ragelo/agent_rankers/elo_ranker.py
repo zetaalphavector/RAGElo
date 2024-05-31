@@ -1,8 +1,10 @@
 import random
+from typing import Optional
 
 from ragelo.agent_rankers.base_agent_ranker import AgentRanker, AgentRankerFactory
 from ragelo.logger import logger
 from ragelo.types import EloAgentRankerConfig
+from ragelo.types.types import Query
 
 
 @AgentRankerFactory.register("elo")
@@ -13,9 +15,8 @@ class EloRanker(AgentRanker):
     def __init__(
         self,
         config: EloAgentRankerConfig,
-        evaluations: list[tuple[str, str, str]],
     ):
-        super().__init__(config, evaluations)
+        super().__init__(config)
         self.score_map = {"A": 1, "B": 0, "C": 0.5}
 
         self.agents: dict[str, int] = {}
@@ -24,12 +25,27 @@ class EloRanker(AgentRanker):
         self.initial_score = self.config.initial_score
         self.k = self.config.k
 
-    def run(self):
+    def run(
+        self,
+        queries: Optional[list[Query]] = None,
+        evaluations_file: Optional[str] = None,
+    ):
         """Compute score for each agent"""
-        self.games, self.agents = self.__get_elo_scores()
-
-        while self.games:
-            self.__play_one_game()
+        queries = self._prepare_queries(queries, evaluations_file)
+        self.evaluations = self._flatten_evaluations(queries)
+        agent_scores: dict[str, list[int]] = {}
+        for _ in range(self.config.rounds):
+            self.games = self.__get_elo_scores()
+            while self.games:
+                self.__play_one_game()
+            for a in self.agents:
+                if a not in agent_scores:
+                    agent_scores[a] = []
+                agent_scores[a].append(self.agents[a])
+                self.agents[a] = self.initial_score
+        # Average the scores over all rounds
+        for a in agent_scores:
+            self.agents[a] = sum(agent_scores[a]) // len(agent_scores[a])
         self.dump_ranking()
         self.print_ranking()
 
@@ -38,20 +54,19 @@ class EloRanker(AgentRanker):
             raise ValueError("Ranking not computed yet, Run evaluate() first")
         return self.agents
 
-    def __get_elo_scores(self) -> tuple[list[tuple[str, str, float]], dict[str, int]]:
+    def __get_elo_scores(self) -> list[tuple[str, str, float]]:
         games: list[tuple[str, str, float]] = []
-        agents = {}
         for agent_a, agent_b, score in self.evaluations:
             score_val = self.score_map[score]
             games.append((agent_a, agent_b, score_val))
             logger.info(f"Game: {agent_a} vs {agent_b} -> {score_val}")
-            if agent_a not in agents:
-                agents[agent_a] = self.initial_score
-            if agent_b not in agents:
-                agents[agent_b] = self.initial_score
+            if agent_a not in self.agents:
+                self.agents[agent_a] = self.initial_score
+            if agent_b not in self.agents:
+                self.agents[agent_b] = self.initial_score
         random.shuffle(games)
         self.computed = True
-        return games, agents
+        return games
 
     def __play_one_game(self):
         player1, player2, result = self.games.pop()

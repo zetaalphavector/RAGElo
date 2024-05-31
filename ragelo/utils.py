@@ -4,12 +4,67 @@ import csv
 import logging
 import os
 from collections import defaultdict
+from pathlib import Path
+from typing import Optional
 
-from ragelo.types.types import AgentAnswer, Document, Query
+from ragelo.types.types import (
+    AgentAnswer,
+    Document,
+    EvaluatorResult,
+    PairwiseGame,
+    Query,
+)
+
+
+def infer_query_id_column(file_path: str) -> str | None:
+    """Infer the column name with the query id from a CSV file."""
+    possible_qid_columns = [
+        "query_id",
+        "qid",
+        "question_id",
+        "q_id",
+        "queryid",
+        "questionid",
+    ]
+    with open(file_path) as f:
+        reader = csv.DictReader(f)
+        columns = reader.fieldnames
+        if columns is not None:
+            for col in possible_qid_columns:
+                if col in columns:
+                    return col
+    return None
+
+
+def infer_doc_id_column(file_path: str) -> str | None:
+    """Infer the column name with the document id from a CSV file."""
+    possible_did_columns = [
+        "document_id",
+        "doc_id",
+        "did",
+        "docid",
+        "d_id",
+        "documentid",
+        "passageid",
+        "pid",
+        "p_id",
+    ]
+    with open(file_path) as f:
+        reader = csv.DictReader(f)
+        columns = reader.fieldnames
+        if columns is not None:
+            for col in possible_did_columns:
+                if col in columns:
+                    return col
+    return None
 
 
 def load_queries_from_csv(
-    queries_path: str, query_id_col: str = "qid", query_text_col: str = "query"
+    queries_path: str,
+    query_text_col: str = "query",
+    query_id_col: Optional[str] = None,
+    infer_metadata_fields: bool = True,
+    metadata_fields: Optional[list[str]] = None,
 ) -> list[Query]:
     """Loads the queries from a CSV file and returns a dictionary with the queries.
         The CSV file should have a header with the columns 'query_id' and 'query'.
@@ -17,8 +72,12 @@ def load_queries_from_csv(
 
     Args:
         queries_path (str): Path to the CSV file with the queries.
-        query_id_col (str): Name of the column with the query id. Defaults to 'query_id'.
         query_text_col (str): Name of the column with the query text. Defaults to 'query'.
+        query_id_col (str): Name of the column with the query id. If not passed, try to infer from the csv.
+            Uses the query_text_col as last resource.
+        infer_metadata_fields (bool): Wether to infer the metadata fields in the csv.
+        metadata_fields (Optional[list[str]]): The list of columns to be used as metadata.
+            If infer_metadata_fields is True, will use all the fields if not explicitly set.
     Returns:
         list[Query]: List of queries.
 
@@ -27,20 +86,41 @@ def load_queries_from_csv(
     read_queries = set()
     if not os.path.isfile(queries_path):
         raise FileNotFoundError(f"Queries file {queries_path} not found")
+    if query_id_col is None:
+        query_id_col = infer_query_id_column(queries_path)
+    if query_id_col is None:
+        query_id_col = query_text_col
+
     with open(queries_path) as f:
         reader = csv.DictReader(f)
+        headers = reader.fieldnames
+        if headers and infer_metadata_fields:
+            if metadata_fields is None:
+                metadata_fields = [
+                    x for x in headers if x not in [query_id_col, query_text_col]
+                ]
+            else:
+                # Use only the metadata fields that actually exist
+                metadata_fields = [x for x in metadata_fields if x in headers]
+                if not metadata_fields:
+                    logging.warning(
+                        "No metadata fields found in the csv. Ignoring metadata fields"
+                    )
+                    metadata_fields = None
         for line in reader:
             qid = line[query_id_col].strip()
-            query_text = line[query_text_col].strip()
-            extra_metadata = {
-                k: v for k, v in line.items() if k not in [query_id_col, query_text_col]
-            }
             if qid in read_queries:
                 logging.warning(f"Query {qid} already read. Skipping")
                 continue
-            queries.append(
-                Query(qid=qid, query=query_text, metadata=extra_metadata or None)
-            )
+            query_text = line[query_text_col].strip()
+            if metadata_fields is not None:
+                extra_metadata = {k: v for k, v in line.items() if k in metadata_fields}
+                queries.append(
+                    Query(qid=qid, query=query_text, metadata=extra_metadata)
+                )
+            else:
+                queries.append(Query(qid=qid, query=query_text))
+
             read_queries.add(qid)
     logging.info(f"Loaded {len(queries)} queries")
 
@@ -136,18 +216,64 @@ def load_retrieved_docs_from_run_file(
     return list(queries_dict.values())
 
 
+def load_answers_from_multiple_csvs(
+    answer_files: list[str],
+    queries: Optional[list[Query] | str] = None,
+    query_text_col: str = "query",
+    answer_text_col: str = "answer",
+    query_id_col: Optional[str] = None,
+):
+    """Loads queries and answers from a list of CSVs with queries and answers generated by agents.
+    We load all queries from all csvs first, and add the answers for all agents to the query objects.
+    The agents will be named according to the csv file name.
+    Args:
+        answer_files (list[str]): A list of CSVs files with agent answers.
+        queries (optional(dict[str, Query] | str)): Either a dictionary with
+            existing queries, a csv file with the queries or None. If none, will
+            assume the queries also exist in the answers file.
+        query_text_col (str): Name of the column with the query.
+        answer_text_col (str): Name of the column with the agent's answer.
+        query_id_col (str): Name of the column with the query id. If not defined, will try to infer it from the csv headers
+    """
+    queries = []
+    queries_dict = {}
+
+    for f in answer_files:
+        if query_id_col is None:
+            query_id_col = infer_query_id_column(f)
+        if query_id_col is None:
+            query_id_col = query_text_col
+        p = Path(f)
+        agent_name = p.stem
+
+        for line in csv.DictReader(open(p)):
+            qid = line[query_id_col]
+            query_text = line[query_text_col].strip()
+            if qid not in queries_dict:
+                query = Query(qid=qid, query=query_text)
+                queries_dict[qid] = query
+                queries.append(query)
+                logging.info(f'added query: "{qid}"')
+            agent_answer = line[answer_text_col]
+            answer = AgentAnswer(agent=agent_name, text=agent_answer)
+            queries_dict[qid].add_agent_answer(answer)
+
+    return queries
+
+
 def load_answers_from_csv(
     answers_path: str,
     queries: list[Query] | str,
-    query_id_col: str = "qid",
+    query_text_col: str = "query",
     agent_col: str = "agent",
     answer_col: str = "answer",
+    query_id_col: Optional[str] = None,
 ) -> list[Query]:
     """Loads all answers and agents from an answers CSV file.
     Args:
         answers_path (str): Path to the CSV file with the answers.
         queries (dict[str, Query]): Dictionary with the queries.
-        query_id_col (str): Name of the column with the query id. Defaults to 'query_id'.
+        query_id_col (str): Name of the column with the query id. If not defined, will try to infer it from the csv headers
         agent_col (str): Name of the column with the agent. Defaults to 'agent'.
         answer_col (str): Name of the column with the answer. Defaults to 'answer'.
     Returns:
@@ -157,9 +283,9 @@ def load_answers_from_csv(
     if not os.path.isfile(answers_path):
         raise FileNotFoundError(f"Answers file {answers_path} not found")
     if isinstance(queries, str):
-        queries = load_queries_from_csv(queries)
+        queries = load_queries_from_csv(queries, query_text_col, query_id_col)
     queries_dict = {q.qid: q for q in queries}
-
+    query_id_col = query_id_col or infer_query_id_column(answers_path)
     for line in csv.DictReader(open(answers_path)):
         qid = line[query_id_col]
         if qid not in queries_dict:
@@ -175,3 +301,33 @@ def load_answers_from_csv(
         queries_dict[qid].answers.append(answer)
 
     return list(queries_dict.values())
+
+
+# TODO: Replace all this loading by JSON serialization of Pydantic models
+def load_answer_evaluations_from_csv(
+    evaluations_file: str,
+) -> list[Query]:
+    """Loads all evaluations produced by an answer evaluator from a CSV file."""
+
+    queries_dict = {}
+    for row in csv.DictReader(open(evaluations_file)):
+        qid = row["qid"]
+        agent_a = row["agent_a"]
+        agent_b = row["agent_b"]
+        raw_answer = row["raw_answer"]
+        answer = row["answer"]
+
+        if qid not in queries_dict:
+            queries_dict[qid] = Query(qid=qid, query="<unknown>")
+        query = queries_dict[qid]
+        query.pairwise_games.append(
+            PairwiseGame(
+                agent_a_answer=AgentAnswer(agent=agent_a, text=""),
+                agent_b_answer=AgentAnswer(agent=agent_b, text=""),
+                evaluation=EvaluatorResult(
+                    raw_answer=raw_answer, answer=answer, qid=qid
+                ),
+            )
+        )
+    queries = list(queries_dict.values())
+    return queries

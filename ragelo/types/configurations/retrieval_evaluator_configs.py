@@ -1,18 +1,19 @@
-from typing import List, Optional
+from typing import Optional
 
 from pydantic import Field
 
 from ragelo.types.configurations.base_configs import AnswerFormat, BaseEvaluatorConfig
-from ragelo.types.types import FewShotExample
+from ragelo.types.types import FewShotExample, RetrievalEvaluatorTypes
 
 
 class BaseRetrievalEvaluatorConfig(BaseEvaluatorConfig):
+    evaluator_name: str = RetrievalEvaluatorTypes.CUSTOM_PROMPT
     document_placeholder: str = Field(
         default="document",
         description="The placeholder for the document in the prompt",
     )
-    output_columns: list[str] = Field(
-        default=["qid", "did", "raw_answer", "answer"],
+    output_columns: Optional[list[str]] = Field(
+        default=None,
         description="The columns to output in the CSV file",
     )
 
@@ -30,17 +31,17 @@ class ReasonerEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default=[],
         description="When using answer_format=multi_field_json, the keys to extract from the answer",
     )
-
     document_evaluations_path: str = Field(
         default="reasonings.csv",
         description="Path to write (or read) the evaluations of the retrieved documents",
     )
+    evaluator_name: str = RetrievalEvaluatorTypes.REASONER
 
 
 class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
-    domain_long: str = Field(
+    expert_in: str = Field(
         default="",
-        description="The name of corpus domain. (e.g., Chemical Engineering)",
+        description="What the LLM should mimic being an expert in.",
     )
     domain_short: Optional[str] = Field(
         default=None,
@@ -53,7 +54,7 @@ class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         "submitted the query works for. that the domain belongs to. "
         "(e.g.: ChemCorp, CS Inc.)",
     )
-    extra_guidelines: Optional[List[str]] = Field(
+    extra_guidelines: Optional[list[str]] = Field(
         default=None,
         description="A list of extra guidelines to be used when reasoning about the "
         "relevancy of the document.",
@@ -70,6 +71,7 @@ class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default="score",
         description="The field to use when parsing the llm answer",
     )
+    evaluator_name: str = RetrievalEvaluatorTypes.DOMAIN_EXPERT
 
 
 class CustomPromptEvaluatorConfig(BaseRetrievalEvaluatorConfig):
@@ -89,6 +91,7 @@ class CustomPromptEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default="custom_prompt_evaluations.csv",
         description="Path to write (or read) the evaluations of the retrieved documents",
     )
+    evaluator_name: str = RetrievalEvaluatorTypes.CUSTOM_PROMPT
 
 
 class FewShotEvaluatorConfig(BaseRetrievalEvaluatorConfig):
@@ -96,7 +99,7 @@ class FewShotEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default="You are a helpful assistant.",
         description="The system prompt to be used to evaluate the documents.",
     )
-    few_shots: List[FewShotExample] = Field(
+    few_shots: list[FewShotExample] = Field(
         default=[], description="A list of few-shot examples to be used in the prompt"
     )
     few_shot_user_prompt: str = Field(
@@ -120,6 +123,7 @@ class FewShotEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default="relevance",
         description="The placeholder for the relevance in the prompt",
     )
+    evaluator_name: str = RetrievalEvaluatorTypes.FEW_SHOT
 
 
 class RDNAMEvaluatorConfig(BaseRetrievalEvaluatorConfig):
@@ -146,3 +150,4 @@ class RDNAMEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default="answer",
         description="The field to use when parsing the llm answer",
     )
+    evaluator_name: str = RetrievalEvaluatorTypes.RDNAM

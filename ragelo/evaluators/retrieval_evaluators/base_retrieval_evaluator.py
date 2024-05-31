@@ -3,6 +3,7 @@ It receives a set of queries used to retrieve a document and their respective re
 and returns a score or a label for each document."""
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Optional, Type, get_type_hints
 
 from tqdm.auto import tqdm
@@ -22,6 +23,7 @@ from ragelo.types.configurations import BaseRetrievalEvaluatorConfig
 
 class BaseRetrievalEvaluator(BaseEvaluator):
     config: BaseRetrievalEvaluatorConfig
+    output_columns = ["qid", "did", "raw_answer", "answer"]
 
     def __init__(
         self,
@@ -31,7 +33,8 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         self.config = config
         self.llm_provider = llm_provider
         self.document_evaluations_path = config.document_evaluations_path
-        self.output_columns = config.output_columns
+        if config.output_columns:
+            self.output_columns = config.output_columns
         if config.answer_format == AnswerFormat.MULTI_FIELD_JSON:
             self.config.scoring_keys = config.scoring_keys
             self.output_columns = [
@@ -49,7 +52,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             ]
             self.output_columns.extend(missing_keys)
 
-    async def batch_evaluate(self, queries: list[Query]) -> list[Query]:
+    async def _async_batch_evaluate(self, queries: list[Query]) -> list[Query]:
         use_progress_bar = self.config.use_progress_bar
         queries = self.__prepare_queries(queries)
         tuples_to_eval = self.__get_tuples_to_evaluate(queries)
@@ -165,13 +168,40 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         """Evaluates a single query-document pair. Returns the raw answer and the processed answer."""
         query = self._assemble_query(query, query_metadata)
         document = self._assemble_document(document, doc_metadata)
-        result = asyncio.run(self._async_evaluate((query, document)))
+        try:
+            # Raises RuntimeError if there is no current event loop.
+            asyncio.get_running_loop()
+            # If there is a current event loop, we need to run the async code
+            # in a separate loop, in a separate thread.
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(
+                    asyncio.run, self._async_evaluate((query, document))
+                )
+                result = future.result()
+        except RuntimeError:
+            result = asyncio.run(self._async_evaluate((query, document)))
         if result.exception or result.raw_answer is None or result.answer is None:
             raise ValueError(
                 f"Failed to evaluate qid: {query.qid} did: {document.did}",
                 f"Exception: {result.exception}",
             )
         return result.raw_answer, result.answer
+
+    def batch_evaluate(self, queries: list[Query]) -> list[Query]:
+        try:
+            # Raises RuntimeError if there is no current event loop.
+            asyncio.get_running_loop()
+            # If there is a current event loop, we need to run the async code
+            # in a separate loop, in a separate thread.
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(
+                    asyncio.run, self._async_batch_evaluate(queries)
+                )
+                result = future.result()
+        except RuntimeError:
+            result = asyncio.run(self._async_batch_evaluate(queries))
+
+        return result
 
     def _build_message(
         self,
@@ -240,11 +270,19 @@ class RetrievalEvaluatorFactory:
 
 
 def get_retrieval_evaluator(
-    evaluator_name: RetrievalEvaluatorTypes | str,
-    llm_provider: BaseLLMProvider | str,
+    evaluator_name: Optional[RetrievalEvaluatorTypes | str] = None,
+    llm_provider: BaseLLMProvider | str = "openai",
     config: Optional[BaseRetrievalEvaluatorConfig] = None,
     **kwargs,
 ) -> BaseRetrievalEvaluator:
+    if evaluator_name is None:
+        # get the name from the config
+        if config is None:
+            raise ValueError(
+                "Either the evaluator_name or a config object must be provided"
+            )
+        evaluator_name = config.evaluator_name
+
     return RetrievalEvaluatorFactory.create(
         evaluator_name,
         llm_provider=llm_provider,

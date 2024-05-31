@@ -1,4 +1,3 @@
-import asyncio
 import json
 from unittest.mock import AsyncMock
 
@@ -53,7 +52,7 @@ class TestRetrievalEvaluator:
         evaluator = RetrievalEvaluator.from_config(
             config=base_eval_config, llm_provider=llm_provider_json_mock
         )
-        queries = await evaluator.batch_evaluate(qs_with_docs)
+        queries = await evaluator._async_batch_evaluate(qs_with_docs)
         evaluations = [a.evaluation for q in queries for a in q.retrieved_docs]
         doc_ids = ["0", "1", "2", "3"]
         qids = ["0", "0", "1", "1"]
@@ -87,7 +86,7 @@ class TestRetrievalEvaluator:
             config=base_eval_config,
             llm_provider=llm_provider_json_mock,
         )
-        _ = asyncio.run(evaluator.batch_evaluate(qs_with_docs))
+        _ = evaluator.batch_evaluate(qs_with_docs)
         captured = capsys.readouterr()
         assert "🔎" in captured.out
 
@@ -95,7 +94,7 @@ class TestRetrievalEvaluator:
         domain_expert_evaluator = get_retrieval_evaluator(
             "domain_expert",
             llm_provider_mock,
-            domain_long=expert_retrieval_eval_config.domain_long,
+            expert_in=expert_retrieval_eval_config.expert_in,
         )
         assert isinstance(domain_expert_evaluator, DomainExpertEvaluator)
         reasoner_evaluator = get_retrieval_evaluator(
@@ -210,7 +209,7 @@ class TestDomainExpertEvaluator:
         evaluator = DomainExpertEvaluator.from_config(
             config=expert_retrieval_eval_config, llm_provider=llm_provider_mock
         )
-        assert expert_retrieval_eval_config.domain_long in evaluator.sys_prompt
+        assert expert_retrieval_eval_config.expert_in in evaluator.sys_prompt
         assert expert_retrieval_eval_config.domain_short in evaluator.sys_prompt
         assert (
             f"You work for {expert_retrieval_eval_config.company}"

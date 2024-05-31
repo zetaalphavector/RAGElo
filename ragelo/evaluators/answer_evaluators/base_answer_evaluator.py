@@ -3,6 +3,7 @@
 import asyncio
 import itertools
 import random
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Optional, Type, get_type_hints
 
 from tqdm import tqdm
@@ -52,7 +53,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
             ]
             self.output_columns.extend(missing_keys)
 
-    async def batch_evaluate(self, queries: list[Query]) -> list[Query]:
+    async def _async_batch_evaluate(self, queries: list[Query]) -> list[Query]:
         use_progress_bar = self.config.use_progress_bar
         failed_queries = 0
         queries = self.__prepare_queries(queries)
@@ -137,13 +138,29 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 agent_a_answer=answer_a,
                 agent_b_answer=answer_b,
             )
-            result = asyncio.run(self._async_evaluate((query, game)))
+            try:
+                asyncio.get_running_loop()
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(
+                        asyncio.run, self._async_evaluate((query, game))
+                    )
+                    result = future.result()
+            except RuntimeError:
+                result = asyncio.run(self._async_evaluate((query, game)))
         else:
             if not answer:
                 raise ValueError("Pointwise evaluations require an answer")
             answer = self._assemble_answer(answer, answer_metadata)
             agent = answer.agent
-            result = asyncio.run(self._async_evaluate((query, answer)))
+            try:
+                asyncio.get_running_loop()
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(
+                        asyncio.run, self._async_evaluate((query, answer))
+                    )
+                    result = future.result()
+            except RuntimeError:
+                result = asyncio.run(self._async_evaluate((query, answer)))
         if result.exception or result.raw_answer is None or result.answer is None:
             raise ValueError(
                 f"Failed to evaluate qid: {query.qid} agent(s): {agent}",
@@ -234,6 +251,18 @@ class BaseAnswerEvaluator(BaseEvaluator):
     def _prepare_documents(self, query: Query) -> str:
         documents = []
         for d in query.retrieved_docs:
+            if self.config.document_relevance_threshold is not None:
+                # Skip documents with relevance below the threshold
+                if d.evaluation is None:
+                    continue
+                # check if evaluation.answer is an integer or a string that can be converted to an integer
+                score = d.evaluation.answer
+                if isinstance(score, str) and score.isdigit():
+                    score = int(score)
+                if not isinstance(score, int):
+                    continue
+                if score < self.config.document_relevance_threshold:
+                    continue
             if self.config.document_filter is not None:
                 if d.evaluation is None:
                     continue
@@ -270,13 +299,17 @@ class BaseAnswerEvaluator(BaseEvaluator):
             if self.config.bidirectional:
                 pairs += [(b, a) for a, b in pairs]
             random.shuffle(pairs)
-            games = pairs[: self.config.k]
+
             # Filter out games that already exist
             existing_games = {
-                (a.agent_a_answer.agent, a.agent_b_answer) for a in query.pairwise_games
+                (a.agent_a_answer.agent, a.agent_b_answer.agent)
+                for a in query.pairwise_games
             }
             answer_idx = {ans.agent: idx for idx, ans in enumerate(query.answers)}
-            games = [g for g in games if g not in existing_games]
+            games = [g for g in pairs if g not in existing_games]
+
+            games_to_add = self.config.n_games_per_query - len(existing_games)
+            games = games[:games_to_add]
             for agent_a, agent_b in games:
                 query.pairwise_games.append(
                     PairwiseGame(
@@ -312,6 +345,22 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 )
 
         return tuples_to_eval
+
+    def batch_evaluate(self, queries: list[Query]) -> list[Query]:
+        try:
+            # Raises RuntimeError if there is no current event loop.
+            asyncio.get_running_loop()
+            # If there is a current event loop, we need to run the async code
+            # in a separate loop, in a separate thread.
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(
+                    asyncio.run, self._async_batch_evaluate(queries)
+                )
+                result = future.result()
+        except RuntimeError:
+            result = asyncio.run(self._async_batch_evaluate(queries))
+
+        return result
 
 
 class AnswerEvaluatorFactory:
@@ -353,11 +402,18 @@ class AnswerEvaluatorFactory:
 
 
 def get_answer_evaluator(
-    evaluator_name: AnswerEvaluatorTypes | str,
-    llm_provider: BaseLLMProvider | str,
+    evaluator_name: Optional[AnswerEvaluatorTypes | str] = None,
+    llm_provider: BaseLLMProvider | str = "openai",
     config: Optional[BaseAnswerEvaluatorConfig] = None,
     **kwargs,
 ) -> BaseAnswerEvaluator:
+    if evaluator_name is None:
+        # get the name from the config
+        if config is None:
+            raise ValueError(
+                "Either the evaluator_name or a config object must be provided"
+            )
+        evaluator_name = config.evaluator_name
     return AnswerEvaluatorFactory.create(
         evaluator_name,
         llm_provider=llm_provider,

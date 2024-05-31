@@ -3,9 +3,11 @@ from typing import Callable, Optional
 from pydantic import Field
 
 from ragelo.types.configurations.base_configs import AnswerFormat, BaseEvaluatorConfig
+from ragelo.types.types import AnswerEvaluatorTypes
 
 
 class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
+    evaluator_name: str = ""
     answer_placeholder: str = Field(
         default="answer", description="The placeholder for the answer in the prompt"
     )
@@ -42,11 +44,16 @@ class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
     document_filter: Optional[Callable[[str], bool]] = Field(
         default=None, description="A function to filter the documents"
     )
+    document_relevance_threshold: Optional[int] = Field(
+        default=None,
+        description="The minimum relevance score for a document to be included in the prompt. By default, all documents are included.",
+    )
 
 
 class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     """Configuration for the pairwise evaluator."""
 
+    evaluator_name: str = AnswerEvaluatorTypes.PAIRWISE
     output_columns: list[str] = Field(
         default=["qid", "agent_a", "agent_b", "raw_answer", "answer"],
         description="The columns to output in the CSV file",
@@ -54,7 +61,9 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     bidirectional: bool = Field(
         default=False, description="Whether or not to run each game in both directions"
     )
-    k: int = Field(default=100, description="Number of games to generate")
+    n_games_per_query: int = Field(
+        default=100, description="Number of games to generate for each query"
+    )
     games_evaluations_path: str = Field(
         default="pairwise_answers_evaluations.csv",
         description="Path to the output file",
@@ -87,6 +96,7 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
 
 
 class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
+    evaluator_name: str = AnswerEvaluatorTypes.CUSTOM_PROMPT
     prompt: str = Field(
         default="retrieved documents: {documents} query: {query} answer: {answer}",
         description="The prompt to be used to evaluate the documents. It should contain a {query} and a {document} placeholder",
@@ -102,4 +112,18 @@ class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
     answer_format: str = Field(
         default=AnswerFormat.MULTI_FIELD_JSON,
         description="The format of the answer returned by the LLM",
+    )
+
+
+class PairwiseDomainExpertEvaluatorConfig(PairwiseEvaluatorConfig):
+    evaluator_name: str = AnswerEvaluatorTypes.DOMAIN_EXPERT
+    expert_in: str = Field(
+        default="",
+        description="What the LLM should mimic being an expert in.",
+    )
+    company: Optional[str] = Field(
+        default=None,
+        description="Name of the company or organization that the user that "
+        "submitted the query works for. that the domain belongs to. "
+        "(e.g.: ChemCorp, CS Inc.)",
     )

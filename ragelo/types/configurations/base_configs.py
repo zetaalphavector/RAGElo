@@ -24,10 +24,6 @@ class BaseConfig(BaseModel):
         default=None,
         description="Path to a txt file with the credentials for the different LLM providers",
     )
-    model: str = Field(
-        default="gpt-4-turbo",
-        description="Name of the model to use for the LLM provider",
-    )
     data_path: str = Field(default="data/", description="Path to the data folder")
 
     llm_provider: str = Field(
@@ -83,7 +79,7 @@ class BaseEvaluatorConfig(BaseConfig):
         default=1,
         description="The number of parallel LLM calls to use for the evaluation",
     )
-    output_columns: list[str] = Field(
+    output_columns: Optional[list[str]] = Field(
         default=["qid", "did", "raw_answer", "answer"],
         description="The columns to output in the CSV file",
     )

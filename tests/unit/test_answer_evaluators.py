@@ -20,7 +20,7 @@ class TestPairwiseWithReasoningEvaluator:
             config=pairwise_answer_eval_config,
             llm_provider=llm_provider_pairwise_answer_mock,
         )
-        queries = await evaluator.batch_evaluate(answers_test)
+        queries = await evaluator._async_batch_evaluate(answers_test)
         flat_answers = [(q, a) for q in queries for a in q.pairwise_games]
         evaluations = [a.evaluation for (_, a) in flat_answers]
         assert len(evaluations) == 4
@@ -65,7 +65,7 @@ class TestCustomPromptEvaluator:
             config=custom_answer_eval_config,
             llm_provider=llm_provider_answer_mock,
         )
-        answers = await evaluator.batch_evaluate(answers_test)
+        answers = await evaluator._async_batch_evaluate(answers_test)
         flat_answers = [(q, a) for q in answers for a in q.answers]
         evaluations = [a.evaluation for (_, a) in flat_answers]
         assert len(evaluations) == 4
