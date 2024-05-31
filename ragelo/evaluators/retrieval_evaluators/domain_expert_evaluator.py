@@ -1,5 +1,7 @@
 """Evaluator with a domain expert persona"""
 
+from typing import List, Tuple
+
 from ragelo.evaluators.retrieval_evaluators import (
     BaseRetrievalEvaluator,
     RetrievalEvaluatorFactory,
@@ -84,7 +86,7 @@ Please only answer with a single number.
     COMPANY_PROMPT_2 = " of {company}"
     DOMAIN_SHORT = " but it also serves some of your external users like {domain_short}"
     config: DomainExpertEvaluatorConfig
-    output_columns: list[str] = ["qid", "did", "reasoning", "score"]
+    output_columns: List[str] = ["qid", "did", "reasoning", "score"]
     output_file: str = "domain_expert_evaluations.csv"
 
     def __init__(
@@ -140,7 +142,7 @@ Please only answer with a single number.
         return reason_prompt
 
     async def _async_evaluate(
-        self, eval_sample: tuple[Query, Document]
+        self, eval_sample: Tuple[Query, Document]
     ) -> RetrievalEvaluatorResult:
         query, document = eval_sample
         reason_message = self.__build_reason_message(query, document)

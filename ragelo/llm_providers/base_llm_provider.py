@@ -3,7 +3,7 @@
 import logging
 import os
 from abc import ABC, abstractmethod
-from typing import Optional, Type, get_type_hints
+from typing import Dict, List, Optional, Tuple, Type, Union, get_type_hints
 
 from ragelo.types import LLMProviderConfig, LLMProviderTypes
 
@@ -29,14 +29,14 @@ class BaseLLMProvider(ABC):
         self.config = config
 
     @abstractmethod
-    def __call__(self, prompt: str | list[dict[str, str]]) -> str:
+    def __call__(self, prompt: Union[str, List[Dict[str, str]]]) -> str:
         """Submits a single query-document pair to the LLM and returns the answer."""
         raise NotImplementedError
 
     @abstractmethod
     async def call_async(
         self,
-        prompt: str | list[dict[str, str]],
+        prompt: Union[str, List[Dict[str, str]]],
     ) -> str:
         """Submits a single query-document pair to the LLM and returns the answer."""
         raise NotImplementedError
@@ -55,7 +55,7 @@ class BaseLLMProvider(ABC):
 
 
 class LLMProviderFactory:
-    registry: dict[str | LLMProviderTypes, Type[BaseLLMProvider]] = {}
+    registry: Dict[LLMProviderTypes, Type[BaseLLMProvider]] = {}
 
     @classmethod
     def register(cls, name: LLMProviderTypes):
@@ -72,7 +72,7 @@ class LLMProviderFactory:
     @classmethod
     def create(
         cls,
-        name: LLMProviderTypes | str,
+        name: LLMProviderTypes,
         config: Optional[LLMProviderConfig] = None,
         credentials_file: Optional[str] = None,
         **kwargs,
@@ -99,10 +99,12 @@ class LLMProviderFactory:
 
 
 def get_llm_provider(
-    name: str | LLMProviderTypes,
+    name: Union[LLMProviderTypes, str],
     config: Optional[LLMProviderConfig] = None,
     credentials_file: Optional[str] = None,
     **kwargs,
 ) -> BaseLLMProvider:
     """Creates a new LLM provider"""
+    if isinstance(name, str):
+        name = LLMProviderTypes(name)
     return LLMProviderFactory.create(name, config, credentials_file, **kwargs)

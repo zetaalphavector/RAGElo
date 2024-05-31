@@ -1,3 +1,5 @@
+from typing import List
+
 from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     BaseRetrievalEvaluator,
     RetrievalEvaluatorFactory,
@@ -13,7 +15,7 @@ class ReasonerEvaluator(BaseRetrievalEvaluator):
     is relevant.
     """
 
-    output_columns: list[str] = ["qid", "did", "raw_answer", "answer"]
+    output_columns: List[str] = ["qid", "did", "raw_answer", "answer"]
     output_file: str = "reasonings.csv"
     config: ReasonerEvaluatorConfig
     prompt = """

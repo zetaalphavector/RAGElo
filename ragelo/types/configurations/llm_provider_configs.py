@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Dict, List, Optional, Tuple
 
 from ragelo.types.configurations import BaseModel
 

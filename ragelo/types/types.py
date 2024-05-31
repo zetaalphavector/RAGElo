@@ -1,6 +1,6 @@
 from enum import Enum
 from importlib import metadata
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from pydantic import BaseModel as PydanticBaseModel
 from pydantic import ValidationError
@@ -68,7 +68,7 @@ class AnswerEvaluatorTypes(str, Enum):
 class EvaluatorResult(BaseModel):
     qid: str
     raw_answer: Optional[str]
-    answer: Optional[str | int | dict[str, Any]]
+    answer: Optional[Union[str, int, Dict[str, Any]]]
     exception: Optional[str] = None
 
     @validator
@@ -120,9 +120,9 @@ class FewShotExample(BaseModel):
 
 class Evaluable(BaseModel):
     evaluation: Optional[EvaluatorResult] = None
-    metadata: Optional[dict[str, Any]] = None
+    metadata: Optional[Dict[str, Any]] = None
 
-    def add_metadata(self, metadata: Optional[dict[str, Any]]):
+    def add_metadata(self, metadata: Optional[Dict[str, Any]]):
         if not metadata:
             return
         if self.metadata is None:
@@ -156,12 +156,12 @@ class PairwiseGame(Evaluable):
 class Query(BaseModel):
     qid: str
     query: str
-    metadata: Optional[dict[str, Any]] = None
-    retrieved_docs: list[Document] = []
-    answers: list[AgentAnswer] = []
-    pairwise_games: list[PairwiseGame] = []
+    metadata: Optional[Dict[str, Any]] = None
+    retrieved_docs: List[Document] = []
+    answers: List[AgentAnswer] = []
+    pairwise_games: List[PairwiseGame] = []
 
-    def add_metadata(self, metadata: Optional[dict[str, Any]]):
+    def add_metadata(self, metadata: Optional[Dict[str, Any]]):
         if not metadata:
             return
         if self.metadata is None:
@@ -175,7 +175,9 @@ class Query(BaseModel):
                 )
             self.metadata[k] = metadata[k]
 
-    def add_retrieved_doc(self, doc: Document | str, doc_id: Optional[str] = None):
+    def add_retrieved_doc(
+        self, doc: Union[Document, str], doc_id: Optional[str] = None
+    ):
         if isinstance(doc, str):
             if doc_id is None:
                 raise ValueError("doc_id must be provided if doc is a string")
@@ -188,7 +190,9 @@ class Query(BaseModel):
             return
         self.retrieved_docs.append(doc)
 
-    def add_agent_answer(self, answer: AgentAnswer | str, agent: Optional[str] = None):
+    def add_agent_answer(
+        self, answer: Union[AgentAnswer, str], agent: Optional[str] = None
+    ):
         if isinstance(answer, str):
             if agent is None:
                 raise ValueError("agent must be provided if answer is a string")

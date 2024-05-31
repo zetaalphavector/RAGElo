@@ -1,4 +1,4 @@
-from typing import Callable, Optional
+from typing import Callable, List, Optional, Tuple, Union
 
 from pydantic import Field
 
@@ -7,7 +7,7 @@ from ragelo.types.types import AnswerEvaluatorTypes
 
 
 class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
-    evaluator_name: str | AnswerEvaluatorTypes = ""
+    evaluator_name: Union[str, AnswerEvaluatorTypes] = ""
     answer_placeholder: str = Field(
         default="answer", description="The placeholder for the answer in the prompt"
     )
@@ -18,7 +18,7 @@ class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
     pairwise: bool = Field(
         default=False, description="Whether or not to the evaluator is pairwise"
     )
-    output_columns: list[str] = Field(
+    output_columns: List[str] = Field(
         default=["qid", "agent", "raw_answer", "answer"],
         description="The columns to output in the CSV file",
     )
@@ -53,8 +53,8 @@ class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
 class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     """Configuration for the pairwise evaluator."""
 
-    evaluator_name: str | AnswerEvaluatorTypes = AnswerEvaluatorTypes.PAIRWISE
-    output_columns: list[str] = Field(
+    evaluator_name: Union[str, AnswerEvaluatorTypes] = AnswerEvaluatorTypes.PAIRWISE
+    output_columns: List[str] = Field(
         default=["qid", "agent_a", "agent_b", "raw_answer", "answer"],
         description="The columns to output in the CSV file",
     )
@@ -96,7 +96,9 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
 
 
 class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
-    evaluator_name: str | AnswerEvaluatorTypes = AnswerEvaluatorTypes.CUSTOM_PROMPT
+    evaluator_name: Union[str, AnswerEvaluatorTypes] = (
+        AnswerEvaluatorTypes.CUSTOM_PROMPT
+    )
     prompt: str = Field(
         default="retrieved documents: {documents} query: {query} answer: {answer}",
         description="The prompt to be used to evaluate the documents. It should contain a {query} and a {document} placeholder",
@@ -105,18 +107,20 @@ class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
         default="custom_prompt_answers_evaluations.csv",
         description="Path to the output file",
     )
-    scoring_keys: list[str] = Field(
+    scoring_keys: List[str] = Field(
         default=["quality", "trustworthiness", "originality"],
         description="The fields to extract from the answer",
     )
-    answer_format: str | AnswerFormat = Field(
+    answer_format: Union[str, AnswerFormat] = Field(
         default=AnswerFormat.MULTI_FIELD_JSON,
         description="The format of the answer returned by the LLM",
     )
 
 
 class PairwiseDomainExpertEvaluatorConfig(PairwiseEvaluatorConfig):
-    evaluator_name: str | AnswerEvaluatorTypes = AnswerEvaluatorTypes.DOMAIN_EXPERT
+    evaluator_name: Union[str, AnswerEvaluatorTypes] = (
+        AnswerEvaluatorTypes.DOMAIN_EXPERT
+    )
     expert_in: str = Field(
         default="",
         description="What the LLM should mimic being an expert in.",

@@ -3,7 +3,7 @@ import json
 import os
 import string
 from abc import ABC, abstractmethod
-from typing import Any, Optional, cast
+from typing import Any, Dict, List, Optional, Set, Tuple, Union, cast
 
 from tqdm.auto import tqdm
 
@@ -23,8 +23,8 @@ from ragelo.types.configurations import AnswerFormat, BaseEvaluatorConfig
 class BaseEvaluator(ABC):
     config: BaseEvaluatorConfig
     output_file: str
-    output_columns: list[str]
-    scoring_key: str | list[str]
+    output_columns: List[str]
+    scoring_key: Union[str, List[str]]
 
     @abstractmethod
     def __init__(
@@ -35,7 +35,7 @@ class BaseEvaluator(ABC):
         raise NotImplementedError
 
     @staticmethod
-    def __parse_json(answer: str, keys: str | list[str]) -> dict[str, Any]:
+    def __parse_json(answer: str, keys: Union[str, List[str]]) -> Dict[str, Any]:
         # Checks if there is block of json in the answer like ```json\n{...}\n```
         json_block = answer.split("```json\n")
         if len(json_block) > 1:
@@ -68,8 +68,8 @@ class BaseEvaluator(ABC):
         return json_dict[key]
 
     def json_answer_parser_multifields(
-        self, answer: str, keys: list[str]
-    ) -> dict[str, str]:
+        self, answer: str, keys: List[str]
+    ) -> Dict[str, str]:
         """Parses a Json answer from the LLM and returns the values from multiple fields"""
 
         # Finds all valid JSON objects in the answer that contain the key
@@ -85,18 +85,18 @@ class BaseEvaluator(ABC):
         return json_dict
 
     @staticmethod
-    def _get_fields_from_string(s: str) -> list[str]:
+    def _get_fields_from_string(s: str) -> List[str]:
         """Parse a formatted string and return all the fields in it"""
         field_names = [v[1] for v in string.Formatter().parse(s) if v[1] is not None]
         return field_names
 
     @staticmethod
     def _get_usable_fields_from_metadata(
-        prompt: str, metadata: Optional[dict[str, str]], skip_fields: list[str] = []
-    ) -> dict[str, str]:
+        prompt: str, metadata: Optional[Dict[str, str]], skip_fields: List[str] = []
+    ) -> Dict[str, str]:
         """Get the fields from the prompt that are in the metadata"""
         expected_fields = BaseEvaluator._get_fields_from_string(prompt)
-        valid_fields: dict[str, str] = {}
+        valid_fields: Dict[str, str] = {}
         if metadata is None:
             return valid_fields
         for field in expected_fields:
@@ -105,24 +105,24 @@ class BaseEvaluator(ABC):
         return valid_fields
 
     @staticmethod
-    def __get_existing_evaluations_from_json(output_file: str) -> list[dict[str, str]]:
+    def __get_existing_evaluations_from_json(output_file: str) -> List[Dict[str, str]]:
         return json.load(open(output_file, "r"))
 
     @staticmethod
-    def __get_existing_evaluations_from_jsonl(output_file: str) -> list[dict[str, str]]:
+    def __get_existing_evaluations_from_jsonl(output_file: str) -> List[Dict[str, str]]:
         with open(output_file, "r") as f:
             return [json.loads(line) for line in f]
 
     @staticmethod
     def __get_existing_evaluations_from_csv(
         output_file: str,
-        scoring_keys: list[str] = [],
-    ) -> list[dict[str, Any]]:
-        existing_lines: list[dict[str, str]] = []
+        scoring_keys: List[str] = [],
+    ) -> List[Dict[str, Any]]:
+        existing_lines: List[Dict[str, str]] = []
         base_columns = ["qid", "did", "agent", "raw_answer", "agent_a", "agent_b"]
         with open(output_file, "r") as f:
             reader = csv.DictReader(f)
-            line: dict[str, Any]
+            line: Dict[str, Any]
             for line in reader:
                 line_dict = line
                 if "answer" in line and line["answer"]:
@@ -135,8 +135,8 @@ class BaseEvaluator(ABC):
 
     def _get_existing_evaluations(
         self, evaluation_file: str, force: bool = False
-    ) -> list[dict[str, Any]]:
-        existing_lines: list[dict[str, str]] = []
+    ) -> List[Dict[str, Any]]:
+        existing_lines: List[Dict[str, str]] = []
         if force and os.path.exists(evaluation_file):
             logger.warning(f"Removing existing {evaluation_file}!")
             os.remove(evaluation_file)
@@ -156,7 +156,7 @@ class BaseEvaluator(ABC):
         response: EvaluatorResult,
         rich_print: bool = False,
     ):
-        answer: Optional[str | dict[str, str] | int]
+        answer: Optional[Union[str, Dict[str, str], int]]
         if isinstance(response.answer, dict):
             # Print the answer in a more readable format
             answer = json.dumps(response.answer, indent=4)
@@ -205,7 +205,7 @@ class BaseEvaluator(ABC):
 
     @staticmethod
     def __dump_response_csv(
-        answer_dict: dict[str, Any], output_columns: list[str], output_file: str
+        answer_dict: Dict[str, Any], output_columns: List[str], output_file: str
     ):
         if not any(k in output_columns for k in answer_dict.keys()):
             raise ValueError(
@@ -224,12 +224,12 @@ class BaseEvaluator(ABC):
             writer.writerow(answer_dict)
 
     @staticmethod
-    def __dump_response_jsonl(answer_dict: dict[str, str], output_file: str):
+    def __dump_response_jsonl(answer_dict: Dict[str, str], output_file: str):
         with open(output_file, "a") as f:
             f.write(json.dumps(answer_dict) + "\n")
 
     @staticmethod
-    def __dump_response_json(answer_dict: dict[str, str], output_file: str):
+    def __dump_response_json(answer_dict: Dict[str, str], output_file: str):
         """The file is a json-formatted list of dictionaries. Each dictionary is a response.
         If the file already exists, erase the final closing square bracket and add a comma before adding the new response.
         """
@@ -248,7 +248,7 @@ class BaseEvaluator(ABC):
     def _dump_response(
         self,
         response: EvaluatorResult,
-        output_columns: list[str],
+        output_columns: List[str],
         file: Optional[str] = None,
     ):
         if self.config.verbose:
@@ -291,7 +291,7 @@ class BaseEvaluator(ABC):
 
     @staticmethod
     def _assemble_query(
-        query: Query | str, query_metadata: Optional[dict[str, Any]] = None
+        query: Union[Query, str], query_metadata: Optional[Dict[str, Any]] = None
     ) -> Query:
         if isinstance(query, str):
             query = Query(qid="<no_qid>", query=query)
@@ -300,7 +300,7 @@ class BaseEvaluator(ABC):
 
     @staticmethod
     def _assemble_document(
-        document: Document | str, doc_metadata: Optional[dict[str, Any]] = None
+        document: Union[Document, str], doc_metadata: Optional[Dict[str, Any]] = None
     ) -> Document:
         if isinstance(document, str):
             did = "<no_did>"
@@ -315,10 +315,10 @@ class BaseEvaluator(ABC):
 
     def _assemble_documents(
         self,
-        documents: list[str] | list[Document],
-        doc_metadata: Optional[list[dict[str, Any]]] = None,
-    ) -> list[Document]:
-        assembled_docs: list[Document] = []
+        documents: Union[List[str], List[Document]],
+        doc_metadata: Optional[List[Dict[str, Any]]] = None,
+    ) -> List[Document]:
+        assembled_docs: List[Document] = []
         for idx, doc in enumerate(documents):
             if isinstance(doc, str):
                 doc = Document(did=f"doc_{idx}", text=doc)
@@ -334,7 +334,8 @@ class BaseEvaluator(ABC):
 
     @staticmethod
     def _assemble_answer(
-        answer: AgentAnswer | str, answer_metadata: Optional[dict[str, Any]] = None
+        answer: Union[AgentAnswer, str],
+        answer_metadata: Optional[Dict[str, Any]] = None,
     ) -> AgentAnswer:
         if isinstance(answer, str):
             answer = AgentAnswer(agent="<no_agent>", text=answer)
@@ -343,11 +344,11 @@ class BaseEvaluator(ABC):
 
     def _load_retrieved_documents(
         self,
-        queries: list[Query],
+        queries: List[Query],
         query_id_col: str = "qid",
         document_id_col: str = "did",
         document_text_col: str = "document_text",
-    ) -> list[Query]:
+    ) -> List[Query]:
         # Check if we actually need to do something
         queries_with_documents = len([q for q in queries if len(q.retrieved_docs) > 0])
         if queries_with_documents == len(queries):
@@ -363,7 +364,7 @@ class BaseEvaluator(ABC):
             return queries
 
         queries_idx = {q.qid: idx for idx, q in enumerate(queries)}
-        docs_per_query: dict[str, set[str]] = {}
+        docs_per_query: Dict[str, Set[str]] = {}
         for line in csv.DictReader(open(self.config.documents_path)):
             qid = line[query_id_col].strip()
             did = line[document_id_col].strip()
@@ -393,7 +394,7 @@ class BaseEvaluator(ABC):
 
     def _load_agent_answers(
         self,
-        queries: list[Query],
+        queries: List[Query],
         query_id_col: str = "qid",
         agent_col: str = "agent",
         answer_col: str = "answer",
@@ -410,7 +411,7 @@ class BaseEvaluator(ABC):
             return queries
         queries_idx = {q.qid: idx for idx, q in enumerate(queries)}
         answers_read = 0
-        answers_per_query: dict[str, set[str]] = {}
+        answers_per_query: Dict[str, Set[str]] = {}
         for line in csv.DictReader(open(self.config.answers_path)):
             qid = line[query_id_col].strip()
             agent = line[agent_col].strip()
@@ -438,8 +439,8 @@ class BaseEvaluator(ABC):
         return queries
 
     def _load_document_evaluations(
-        self, queries: list[Query], force: bool = False
-    ) -> list[Query]:
+        self, queries: List[Query], force: bool = False
+    ) -> List[Query]:
         if force:
             logger.info("Clearing existing document evaluations")
             for q in queries:
@@ -456,9 +457,9 @@ class BaseEvaluator(ABC):
 
     def _add_document_evaluations(
         self,
-        queries: list[Query],
-        evaluations: list[RetrievalEvaluatorResult],
-    ) -> list[Query]:
+        queries: List[Query],
+        evaluations: List[RetrievalEvaluatorResult],
+    ) -> List[Query]:
         queries_idx = {q.qid: idx for idx, q in enumerate(queries)}
         doc_idxs = {}
         for q in queries:
@@ -481,8 +482,8 @@ class BaseEvaluator(ABC):
         return queries
 
     def _load_answers_evaluations(
-        self, queries: list[Query], force: bool = False
-    ) -> list[Query]:
+        self, queries: List[Query], force: bool = False
+    ) -> List[Query]:
         if force:
             logger.info("Clearing existing answers evaluations")
             for q in queries:
@@ -503,8 +504,8 @@ class BaseEvaluator(ABC):
         return self._add_answers_evaluations(queries, evaluations)
 
     def _add_answers_evaluations(
-        self, queries, evaluations: list[AnswerEvaluatorResult]
-    ) -> list[Query]:
+        self, queries, evaluations: List[AnswerEvaluatorResult]
+    ) -> List[Query]:
         queries_idx = {q.qid: idx for idx, q in enumerate(queries)}
         games_idxs = {}
         answer_idxs = {}
