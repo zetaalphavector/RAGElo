@@ -149,12 +149,14 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 agent_a_answer=answer_a,
                 agent_b_answer=answer_b,
             )
+
+            def run(coroutine):
+                return asyncio.run(coroutine)
+
             try:
                 asyncio.get_running_loop()
                 with ThreadPoolExecutor(max_workers=1) as executor:
-                    future = executor.submit(
-                        asyncio.run, self._async_evaluate((query, game))
-                    )
+                    future = executor.submit(run, self._async_evaluate((query, game)))
                     result = future.result()
             except RuntimeError:
                 result = asyncio.run(self._async_evaluate((query, game)))
@@ -163,12 +165,14 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 raise ValueError("Pointwise evaluations require an answer")
             answer = self._assemble_answer(answer, answer_metadata)
             agent = answer.agent
+
+            def run(coroutine):
+                return asyncio.run(coroutine)
+
             try:
                 asyncio.get_running_loop()
                 with ThreadPoolExecutor(max_workers=1) as executor:
-                    future = executor.submit(
-                        asyncio.run, self._async_evaluate((query, answer))
-                    )
+                    future = executor.submit(run, self._async_evaluate((query, answer)))
                     result = future.result()
             except RuntimeError:
                 result = asyncio.run(self._async_evaluate((query, answer)))
@@ -358,15 +362,16 @@ class BaseAnswerEvaluator(BaseEvaluator):
         return tuples_to_eval
 
     def batch_evaluate(self, queries: List[Query]) -> List[Query]:
+        def run(coroutine):
+            return asyncio.run(coroutine)
+
         try:
             # Raises RuntimeError if there is no current event loop.
             asyncio.get_running_loop()
             # If there is a current event loop, we need to run the async code
             # in a separate loop, in a separate thread.
             with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(
-                    asyncio.run, self._async_batch_evaluate(queries)
-                )
+                future = executor.submit(run, self._async_batch_evaluate(queries))
                 result = future.result()
         except RuntimeError:
             result = asyncio.run(self._async_batch_evaluate(queries))

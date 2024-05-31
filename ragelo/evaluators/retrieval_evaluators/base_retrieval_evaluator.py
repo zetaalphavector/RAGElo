@@ -182,15 +182,17 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         """Evaluates a single query-document pair. Returns the raw answer and the processed answer."""
         query = self._assemble_query(query, query_metadata)
         document = self._assemble_document(document, doc_metadata)
+
+        def run(coroutine):
+            return asyncio.run(coroutine)
+
         try:
             # Raises RuntimeError if there is no current event loop.
             asyncio.get_running_loop()
             # If there is a current event loop, we need to run the async code
             # in a separate loop, in a separate thread.
             with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(
-                    asyncio.run, self._async_evaluate((query, document))
-                )
+                future = executor.submit(run, self._async_evaluate((query, document)))
                 result = future.result()
         except RuntimeError:
             result = asyncio.run(self._async_evaluate((query, document)))
@@ -202,15 +204,16 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         return result.raw_answer, result.answer
 
     def batch_evaluate(self, queries: List[Query]) -> List[Query]:
+        def run(coroutine):
+            return asyncio.run(coroutine)
+
         try:
             # Raises RuntimeError if there is no current event loop.
             asyncio.get_running_loop()
             # If there is a current event loop, we need to run the async code
             # in a separate loop, in a separate thread.
             with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(
-                    asyncio.run, self._async_batch_evaluate(queries)
-                )
+                future = executor.submit(run, self._async_batch_evaluate(queries))
                 result = future.result()
         except RuntimeError:
             result = asyncio.run(self._async_batch_evaluate(queries))
