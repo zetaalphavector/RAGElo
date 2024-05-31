@@ -8,7 +8,6 @@ from typing import Any, Callable, Optional, Type, get_type_hints
 
 from tqdm import tqdm
 
-from ragelo.evaluators.answer_evaluators import *
 from ragelo.evaluators.base_evaluator import BaseEvaluator
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
 from ragelo.logger import logger
@@ -288,7 +287,6 @@ class BaseAnswerEvaluator(BaseEvaluator):
         return queries
 
     def __add_pairwise_games(self, queries: list[Query]) -> list[Query]:
-
         if not self.config.pairwise:
             return queries
         for query in queries:

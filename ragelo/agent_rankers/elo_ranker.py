@@ -33,7 +33,7 @@ class EloRanker(AgentRanker):
         """Compute score for each agent"""
         queries = self._prepare_queries(queries, evaluations_file)
         self.evaluations = self._flatten_evaluations(queries)
-        agent_scores = {}
+        agent_scores: dict[str, list[int]] = {}
         for _ in range(self.config.rounds):
             self.games = self.__get_elo_scores()
             while self.games:

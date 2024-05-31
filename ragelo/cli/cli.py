@@ -1,5 +1,3 @@
-import asyncio
-
 import typer
 
 from ragelo import get_answer_evaluator, get_llm_provider, get_retrieval_evaluator
