@@ -61,7 +61,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         pbar = tqdm(
             total=len(tuples_to_eval),
             ncols=100,
-            desc="Evaluating answers",
+            desc="Evaluating retrieved documents",
             disable=not use_progress_bar,
             leave=False,
             position=0,
