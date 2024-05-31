@@ -1,6 +1,5 @@
 from enum import Enum
 from importlib import metadata
-from re import T
 from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel as PydanticBaseModel
@@ -70,7 +69,7 @@ class AnswerEvaluatorTypes(str, Enum):
 class EvaluatorResult(BaseModel):
     qid: str
     raw_answer: Optional[str]
-    answer: Optional[Union[str, int, Dict[str, Any]]]
+    answer: Optional[Union[int, str, Dict[str, Any]]]
     exception: Optional[str] = None
 
     @validator

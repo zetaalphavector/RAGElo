@@ -41,8 +41,7 @@ class TestRetrievalEvaluator:
         call_args = llm_provider_json_mock.async_call_mocker.call_args_list
         assert call_args[0][0][0] == expected_prompt
 
-    @pytest.mark.asyncio
-    async def test_batch_eval(
+    def test_batch_eval(
         self,
         llm_provider_json_mock,
         base_eval_config,
@@ -52,7 +51,7 @@ class TestRetrievalEvaluator:
         evaluator = RetrievalEvaluator.from_config(
             config=base_eval_config, llm_provider=llm_provider_json_mock
         )
-        queries = await evaluator._async_batch_evaluate(qs_with_docs)
+        queries = evaluator.batch_evaluate(qs_with_docs)
         evaluations = [a.evaluation for q in queries for a in q.retrieved_docs]
         doc_ids = ["0", "1", "2", "3"]
         qids = ["0", "0", "1", "1"]
