@@ -71,7 +71,7 @@ class BaseEvaluatorConfig(BaseConfig):
         default=["relevance"],
         description="When using answer_format=multi_field_json, the keys to extract from the answer",
     )
-    answer_format: str = Field(
+    answer_format: str | AnswerFormat = Field(
         default=AnswerFormat.JSON,
         description="The format of the answer returned by the LLM",
     )
