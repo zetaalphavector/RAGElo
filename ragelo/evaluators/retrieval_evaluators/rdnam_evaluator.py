@@ -55,8 +55,8 @@ Produce a JSON array of scores without providing any reasoning. Example: {exampl
     ASPECTS_NARRATIVE = """Measure how well the content matches a likely intent \
 of the query (M).
 Measure how trustworthy the web page is (T).""".strip()
-    ASPECTS_EXAMPLE = """[{{"M": 2, "T": 1, "O": 1}}, {{"M": 1..."""
-    DEFAULT_EXAMPLE = """[{{"O": 1}}, {{"O": 2}}, {{"O": 0..."""
+    ASPECTS_EXAMPLE = """[{"M": 2, "T": 1, "O": 1}, {"M": 1..."""
+    DEFAULT_EXAMPLE = """[{"O": 1}, {"O": 2}, {"O": 0..."""
     MULTIPLE_PROMPT = """We asked five search engine raters to evaluate \
 the relevance of the web page for the query.
 Each rater used their own independent judgement."""
@@ -110,15 +110,24 @@ Each rater used their own independent judgement."""
         return formatted_prompt
 
     def _process_answer(self, answer: str) -> int:
-        if self.multiple:
-            answer = "[{" + answer
+        if answer.startswith("[") or answer.startswith("{"):
+            # Sometimes the answer is a valid JSON object, even if the prompt ends if "{" or "[{"
+            try:
+                ans = json.loads(answer)
+            except json.decoder.JSONDecodeError:
+                raise ValueError(f"Failed to parse answer: {answer}")
         else:
-            answer = "{" + answer
-        try:
-            ans = json.loads(answer)
-        except json.decoder.JSONDecodeError:
-            raise ValueError(f"Failed to parse answer: {answer}")
-        if self.multiple:
+            if self.multiple:
+                answer = "[{" + answer
+            else:
+                answer = "{" + answer
+            try:
+                ans = json.loads(answer)
+            except json.decoder.JSONDecodeError:
+                raise ValueError(f"Failed to parse answer: {answer}")
+
+        if self.multiple or isinstance(ans, list):
+            # Sometimes the model returns a list of answers, even if self.multiple is False
             try:
                 scores = [int(a["O"]) for a in ans]
                 return int(np.mean(scores))
