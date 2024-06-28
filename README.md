@@ -131,7 +131,7 @@ qid,agent,answer
 
 
 ## 🧩 Components
-While **RAGElo** can be used as either an an end-to-end tool or by calling individual CLI components.
+While **RAGElo** can be used as either an end-to-end tool or by calling individual CLI components.
 
 ### 📜 `retrieval-evaluator`
 The `retrieval-evaluator` tool annotates retrieved documents based on their relevance to the user query. This is done regardless of the answers provided by any Agent. As an example, for calling the `Reasoner` retrieval evaluator (reasoner only outputs the reasoning why a document is relevant or not) we can use:
