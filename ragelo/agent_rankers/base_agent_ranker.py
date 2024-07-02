@@ -29,7 +29,7 @@ class AgentRanker:
         self,
         queries: Optional[List[Query]] = None,
         evaluations_file: Optional[str] = None,
-    ) -> List[Query]:
+    ) -> Dict[str, int]:
         """Compute score for each agent"""
         raise NotImplementedError
 
