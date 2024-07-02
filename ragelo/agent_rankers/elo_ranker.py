@@ -29,7 +29,7 @@ class EloRanker(AgentRanker):
         self,
         queries: Optional[List[Query]] = None,
         evaluations_file: Optional[str] = None,
-    ):
+    ) -> Dict[str, int]:
         """Compute score for each agent"""
         queries = self._prepare_queries(queries, evaluations_file)
         self.evaluations = self._flatten_evaluations(queries)
@@ -48,6 +48,7 @@ class EloRanker(AgentRanker):
             self.agents[a] = sum(agent_scores[a]) // len(agent_scores[a])
         self.dump_ranking()
         self.print_ranking()
+        return self.agents
 
     def get_agents_ratings(self):
         if not self.computed:
