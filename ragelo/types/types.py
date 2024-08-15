@@ -56,6 +56,7 @@ class LLMProviderTypes(str, Enum):
     """Enum that contains the names of the available LLM providers"""
 
     OPENAI = "openai"
+    OLLAMA = "ollama"
 
 
 class AnswerEvaluatorTypes(str, Enum):
