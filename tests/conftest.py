@@ -132,6 +132,7 @@ def base_eval_config():
         write_output=False,
     )
 
+
 @pytest.fixture
 def base_retrieval_eval_config(base_eval_config):
     base_config = base_eval_config.model_dump()
@@ -140,6 +141,7 @@ def base_retrieval_eval_config(base_eval_config):
         answer_format_retrieval_evaluator="json",
         **base_config,
     )
+
 
 @pytest.fixture
 def pairwise_answer_eval_config(base_eval_config):
@@ -156,7 +158,11 @@ def pairwise_answer_eval_config(base_eval_config):
 def custom_answer_eval_config(base_eval_config):
     base_config = base_eval_config.model_dump()
     base_config["answer_format_answer_evaluator"] = "multi_field_json"
-    base_config["scoring_keys_answer_evaluator"] = ["quality", "trustworthiness", "originality"]
+    base_config["scoring_keys_answer_evaluator"] = [
+        "quality",
+        "trustworthiness",
+        "originality",
+    ]
     config = CustomPromptAnswerEvaluatorConfig(
         prompt="""
 You are an useful assistant for evaluating the quality of the answers generated \

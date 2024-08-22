@@ -60,7 +60,9 @@ class TestRetrievalEvaluator:
             assert e.did == did
             assert e.qid == qid
 
-    def test_evaluate_with_text(self, llm_provider_json_mock, base_retrieval_eval_config):
+    def test_evaluate_with_text(
+        self, llm_provider_json_mock, base_retrieval_eval_config
+    ):
         evaluator = RetrievalEvaluator.from_config(
             config=base_retrieval_eval_config, llm_provider=llm_provider_json_mock
         )
@@ -324,7 +326,12 @@ WRITE YOUR ANSWER ON A SINGLE LINE AS A JSON OBJECT WITH THE FOLLOWING KEYS:
             prompt=prompt,
             query_placeholder="q",
             document_placeholder="d",
-            scoring_keys_retrieval_evaluator=["relevance", "recency", "truthfulness", "reasoning"],
+            scoring_keys_retrieval_evaluator=[
+                "relevance",
+                "recency",
+                "truthfulness",
+                "reasoning",
+            ],
             answer_format_retrieval_evaluator="multi_field_json",
             write_output=False,
         )
