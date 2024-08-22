@@ -34,7 +34,6 @@ from ragelo.types.configurations import BaseRetrievalEvaluatorConfig
 
 class BaseRetrievalEvaluator(BaseEvaluator):
     config: BaseRetrievalEvaluatorConfig
-    output_columns = ["qid", "did", "raw_answer", "answer"]
 
     def __init__(
         self,
@@ -43,25 +42,26 @@ class BaseRetrievalEvaluator(BaseEvaluator):
     ):
         self.config = config
         self.llm_provider = llm_provider
-        self.document_evaluations_path = config.document_evaluations_path
-        if config.output_columns:
-            self.output_columns = config.output_columns
-        if config.answer_format == AnswerFormat.MULTI_FIELD_JSON:
-            self.config.scoring_keys = config.scoring_keys
-            self.output_columns = [
-                "qid",
-                "did",
-                "raw_answer",
-            ] + self.config.scoring_keys
+        self.document_evaluations_file = config.document_evaluations_file
+        self.output_columns = config.output_columns_retrieval_evaluator
+        self.scoring_key = config.scoring_key_retrieval_evaluator
+        self.scoring_keys = config.scoring_keys_retrieval_evaluator
+        if isinstance(self.config.answer_format_retrieval_evaluator, str):
+            self.answer_format = AnswerFormat(
+                self.config.answer_format_retrieval_evaluator
+            )
+        else:
+            self.answer_format = self.config.answer_format_retrieval_evaluator
 
-        if config.scoring_key and config.scoring_key not in self.output_columns:
-            print(f"Adding scoring key {config.scoring_key} to output columns")
-            self.output_columns.append(self.config.scoring_key)
-        if config.scoring_keys:
+        if self.answer_format == AnswerFormat.MULTI_FIELD_JSON:
             missing_keys = [
-                key for key in config.scoring_keys if key not in self.output_columns
+                key for key in self.scoring_keys if key not in self.output_columns
             ]
             self.output_columns.extend(missing_keys)
+        else:
+            if self.scoring_key not in self.output_columns:
+                logger.info(f"Adding scoring key {self.scoring_key} to output columns")
+                self.output_columns.append(self.scoring_key)
 
     async def _async_batch_evaluate(self, queries: List[Query]) -> List[Query]:
         use_progress_bar = self.config.use_progress_bar
@@ -69,7 +69,18 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         tuples_to_eval = self.__get_tuples_to_evaluate(queries)
         if len(tuples_to_eval) == 0:
             return queries
-        pbar = tqdm(
+        if self.config.rich_print:
+            import warnings
+
+            from tqdm import TqdmExperimentalWarning
+
+            warnings.filterwarnings("ignore", category=TqdmExperimentalWarning)
+            from tqdm.rich import tqdm as rich_tqdm
+
+            pbar_fn = rich_tqdm  # type: ignore
+        else:
+            pbar_fn = tqdm  # type: ignore
+        pbar = pbar_fn(
             total=len(tuples_to_eval),
             ncols=100,
             desc="Evaluating retrieved documents",
@@ -107,9 +118,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         pbar.close()
         self._add_document_evaluations(queries, evaluations)
         if self.config.verbose:
-            print("✅ Done!")
-            print("Failed evaluations:", failed)
-            print(f"Total evaluations: {len(evaluations)}")
+            self._print_failed_evaluations(len(evaluations), failed)
         return queries
 
     async def _async_evaluate(
@@ -144,7 +153,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         )
         if ans.exception is None:
             self._dump_response(
-                ans, self.output_columns, self.document_evaluations_path
+                ans, self.output_columns, self.document_evaluations_file  # type: ignore
             )
         return ans
 

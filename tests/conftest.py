@@ -21,9 +21,9 @@ from ragelo.types.configurations import (
     RDNAMEvaluatorConfig,
 )
 from ragelo.utils import (
-    load_answers_from_csv,
+    add_answers_from_csv,
+    add_documents_from_csv,
     load_queries_from_csv,
-    load_retrieved_docs_from_csv,
 )
 
 
@@ -55,20 +55,18 @@ def queries_test():
 
 @pytest.fixture
 def qs_with_docs(queries_test):
-    return load_retrieved_docs_from_csv(
-        "tests/data/documents.csv", queries=queries_test
-    )
+    return add_documents_from_csv("tests/data/documents.csv", queries=queries_test)
 
 
 @pytest.fixture
 def rdnam_queries():
     queries = load_queries_from_csv("tests/data/rdnam_queries.csv")
-    return load_retrieved_docs_from_csv("tests/data/documents.csv", queries=queries)
+    return add_documents_from_csv("tests/data/documents.csv", queries=queries)
 
 
 @pytest.fixture
 def answers_test(queries_test):
-    return load_answers_from_csv("tests/data/answers.csv", queries=queries_test)
+    return add_answers_from_csv("tests/data/answers.csv", queries=queries_test)
 
 
 @pytest.fixture
@@ -126,8 +124,8 @@ def openai_client_mock(mocker, chat_completion_mock):
 @pytest.fixture
 def base_eval_config():
     return BaseEvaluatorConfig(
-        documents_path="tests/data/documents.csv",
-        query_path="tests/data/queries.csv",
+        documents_file="tests/data/documents.csv",
+        queries_file="tests/data/queries.csv",
         force=True,
         verbose=True,
         write_output=False,

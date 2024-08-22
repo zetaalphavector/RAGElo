@@ -9,7 +9,7 @@ from ragelo.types.configurations import (
     ReasonerEvaluatorConfig,
 )
 from ragelo.types.types import RetrievalEvaluatorTypes
-from ragelo.utils import load_retrieved_docs_from_csv
+from ragelo.utils import add_documents_from_csv, load_queries_from_csv
 
 typer.main.get_params_from_function = get_params_from_function
 
@@ -33,22 +33,21 @@ def domain_expert(
     """
 
     config = DomainExpertEvaluatorConfig(**kwargs)
-    config.query_path = get_path(config.data_path, config.query_path)
-    config.documents_path = get_path(config.data_path, config.documents_path)
-    config.answers_evaluations_path = get_path(
-        config.data_path, config.answers_evaluations_path
+    config.queries_file = get_path(config.data_dir, config.queries_file)
+    config.documents_file = get_path(config.data_dir, config.documents_file)
+    config.answers_evaluations_file = get_path(
+        config.data_dir, config.answers_evaluations_file
     )
 
     config.verbose = True
 
-    llm_provider = get_llm_provider(config.llm_provider, **kwargs)
+    llm_provider = get_llm_provider(config.llm_provider_name, **kwargs)
     evaluator = get_retrieval_evaluator(
         RetrievalEvaluatorTypes.DOMAIN_EXPERT, config=config, llm_provider=llm_provider
     )
-    documents = load_retrieved_docs_from_csv(
-        config.documents_path, queries=config.query_path
-    )
-    evaluator.batch_evaluate(documents)
+    queries = load_queries_from_csv(config.queries_file)
+    queries = add_documents_from_csv(config.documents_file, queries=queries)
+    evaluator.batch_evaluate(queries)
 
 
 @app.command()
@@ -57,42 +56,40 @@ def reasoner(config: ReasonerEvaluatorConfig = ReasonerEvaluatorConfig(), **kwar
     A document Evaluator that only outputs the reasoning for why a document is relevant.
     """
     config = ReasonerEvaluatorConfig(**kwargs)
-    config.query_path = get_path(config.data_path, config.query_path)
-    config.documents_path = get_path(config.data_path, config.documents_path)
-    config.answers_evaluations_path = get_path(
-        config.data_path, config.answers_evaluations_path
+    config.queries_file = get_path(config.data_dir, config.queries_file)
+    config.documents_file = get_path(config.data_dir, config.documents_file)
+    config.answers_evaluations_file = get_path(
+        config.data_dir, config.answers_evaluations_file
     )
 
     config.verbose = True
-    llm_provider = get_llm_provider(config.llm_provider, **kwargs)
+    llm_provider = get_llm_provider(config.llm_provider_name, **kwargs)
     evaluator = get_retrieval_evaluator(
         RetrievalEvaluatorTypes.REASONER, config=config, llm_provider=llm_provider
     )
-    documents = load_retrieved_docs_from_csv(
-        config.documents_path, queries=config.query_path
-    )
-    evaluator.batch_evaluate(documents)
+    queries = load_queries_from_csv(config.queries_file)
+    queries = add_documents_from_csv(config.documents_file, queries=queries)
+    evaluator.batch_evaluate(queries)
 
 
 @app.command()
 def rdnam(config: RDNAMEvaluatorConfig = RDNAMEvaluatorConfig(), **kwargs):
     """Evaluator based on the paper by Thomas, Spielman, Craswell and Mitra, Large language models can accurately predict searcher preferences."""
     config = RDNAMEvaluatorConfig(**kwargs)
-    config.query_path = get_path(config.data_path, config.query_path)
-    config.documents_path = get_path(config.data_path, config.documents_path)
-    config.answers_evaluations_path = get_path(
-        config.data_path, config.answers_evaluations_path
+    config.queries_file = get_path(config.data_dir, config.queries_file)
+    config.documents_file = get_path(config.data_dir, config.documents_file)
+    config.answers_evaluations_file = get_path(
+        config.data_dir, config.answers_evaluations_file
     )
 
     config.verbose = True
-    llm_provider = get_llm_provider(config.llm_provider, **kwargs)
+    llm_provider = get_llm_provider(config.llm_provider_name, **kwargs)
     evaluator = get_retrieval_evaluator(
         RetrievalEvaluatorTypes.RDNAM, config=config, llm_provider=llm_provider
     )
-    documents = load_retrieved_docs_from_csv(
-        config.documents_path, queries=config.query_path
-    )
-    evaluator.batch_evaluate(documents)
+    queries = load_queries_from_csv(config.queries_file)
+    queries = add_documents_from_csv(config.documents_file, queries=queries)
+    evaluator.batch_evaluate(queries)
 
 
 if __name__ == "__main__":

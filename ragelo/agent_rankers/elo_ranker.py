@@ -23,7 +23,7 @@ class EloRanker(AgentRanker):
         self.games: List[Tuple[str, str, float]] = []
         self.computed = False
         self.initial_score = self.config.initial_score
-        self.k = self.config.k
+        self.k = self.config.elo_k
 
     def run(
         self,
@@ -37,7 +37,8 @@ class EloRanker(AgentRanker):
         for _ in range(self.config.rounds):
             self.games = self.__get_elo_scores()
             while self.games:
-                self.__play_one_game()
+                player1, player2, result = self.games.pop()
+                self.__play_one_game(player1, player2, result)
             for a in self.agents:
                 if a not in agent_scores:
                     agent_scores[a] = []
@@ -52,7 +53,7 @@ class EloRanker(AgentRanker):
 
     def get_agents_ratings(self):
         if not self.computed:
-            raise ValueError("Ranking not computed yet, Run evaluate() first")
+            raise ValueError("Ranking not computed yet, Run run() first")
         return self.agents
 
     def __get_elo_scores(self) -> List[Tuple[str, str, float]]:
@@ -69,8 +70,7 @@ class EloRanker(AgentRanker):
         self.computed = True
         return games
 
-    def __play_one_game(self):
-        player1, player2, result = self.games.pop()
+    def __play_one_game(self, player1, player2, result):
         player1_rating = self.agents[player1]
         player2_rating = self.agents[player2]
         expected_score = self.__expected_score(player1_rating, player2_rating)

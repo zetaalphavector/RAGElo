@@ -133,7 +133,7 @@ and "[[C]]" for a tie.
         match_ans = self.pattern.search(answer)
         if not match_ans:
             raise ValueError(f"Could not find answer in {answer}")
-        answer = match_ans.group(1)
-        if answer not in ["A", "B", "C"]:
-            raise ValueError(f"Unknown answer: {answer}")
-        return answer
+        better_agent = match_ans.group(1)
+        if better_agent not in ["A", "B", "C"]:
+            raise ValueError(f"Unknown answer: {better_agent}")
+        return better_agent

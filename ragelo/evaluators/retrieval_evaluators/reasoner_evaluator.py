@@ -1,5 +1,3 @@
-from typing import List
-
 from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     BaseRetrievalEvaluator,
     RetrievalEvaluatorFactory,
@@ -15,8 +13,6 @@ class ReasonerEvaluator(BaseRetrievalEvaluator):
     is relevant.
     """
 
-    output_columns: List[str] = ["qid", "did", "raw_answer", "answer"]
-    output_file: str = "reasonings.csv"
     config: ReasonerEvaluatorConfig
     prompt = """
 You are an expert document annotator, evaluating if a document contains relevant \
@@ -24,7 +20,7 @@ information to answer a question submitted by a user. \
 Please act as an impartial relevance annotator for a search engine. \
 Your goal is to evaluate the relevancy of the documents given a user question.
 
-You should write one sentence explaining why the document is relevant or not for \
+You should write one sentence reasoning wether the document is relevant or not for \
 the user question. A document can be:
     - Not relevant: The document is not on topic.
     - Somewhat relevant: The document is on topic but does not fully answer the \
@@ -37,7 +33,11 @@ user question.
     {document}"""  # noqa: E501
 
     def _build_message(self, query: Query, document: Document) -> str:
-        return self.prompt.format(query=query.query, document=document.text)
+        formatters = {
+            self.config.query_placeholder: query.query,
+            self.config.document_placeholder: document.text,
+        }
+        return self.prompt.format(**formatters)
 
     def _process_answer(self, answer: str) -> str:
         return answer

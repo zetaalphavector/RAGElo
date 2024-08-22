@@ -1,16 +1,25 @@
 import typer
 
-from ragelo import get_answer_evaluator, get_llm_provider, get_retrieval_evaluator
-from ragelo.agent_rankers import AgentRankerFactory
+from ragelo import (
+    get_agent_ranker,
+    get_answer_evaluator,
+    get_llm_provider,
+    get_retrieval_evaluator,
+)
 from ragelo.cli.agent_rankers_cmd import app as ranker_app
 from ragelo.cli.answer_evaluators_cmd import app as answer_evaluator_app
 from ragelo.cli.args import get_params_from_function
 from ragelo.cli.retrieval_evaluator_cmd import app as retrieval_evaluator_app
 from ragelo.cli.utils import get_path
-from ragelo.types import AllConfig, EloAgentRankerConfig
-from ragelo.utils import load_answers_from_csv, load_retrieved_docs_from_csv
+from ragelo.types import AllConfig
+from ragelo.utils import (
+    add_answers_from_csv,
+    add_documents_from_csv,
+    load_queries_from_csv,
+)
 
 typer.main.get_params_from_function = get_params_from_function
+
 
 app = typer.Typer()
 
@@ -27,63 +36,63 @@ def run_all(config: AllConfig = AllConfig(), **kwargs):
     config = AllConfig(**kwargs)
     if config.retrieval_evaluator_name != "reasoner":
         raise ValueError("The retrieval evaluator must be a reasoner")
-    if config.answer_evaluator_name != "pairwise_reasoning":
-        raise ValueError("The answer evaluator must be a pairwise_reasoning")
+    if config.answer_evaluator_name != "pairwise":
+        raise ValueError("The answer evaluator must be pairwise")
     if config.answer_ranker_name != "elo":
         raise ValueError("The answer ranker must be an elo")
     config.verbose = True
 
-    llm_provider = get_llm_provider(config.llm_provider, **kwargs)
+    # Parse the LLM provider and remove it from the kwargs
+    llm_provider = get_llm_provider(config.llm_provider_name, **kwargs)
 
-    args_to_remove = {
-        "output_file",
-        "llm_provider",
-    }
+    # Get the absolute paths for the input and output files, and ensure that they exist.
+    # TODO: Make this more robust.
+    config.queries_file = get_path(
+        config.data_dir, config.queries_file, check_exists=True
+    )
+    config.documents_file = get_path(
+        config.data_dir, config.documents_file, check_exists=True
+    )
+    config.answers_file = get_path(
+        config.data_dir, config.answers_file, check_exists=True
+    )
+    config.reasoning_file = get_path(
+        config.data_dir, config.reasoning_file, check_exists=False
+    )
+    config.answers_evaluations_file = get_path(
+        config.data_dir, config.answers_evaluations_file, check_exists=False
+    )
+    config.agents_evaluations_file = get_path(
+        config.data_dir, config.agents_evaluations_file, check_exists=False
+    )
+    config.games_evaluations_file = get_path(
+        config.data_dir, config.games_evaluations_file, check_exists=False
+    )
+    config.document_evaluations_file = get_path(
+        config.data_dir, config.document_evaluations_file, check_exists=False
+    )
 
-    # Clean the data paths
-    config.query_path = get_path(config.data_path, config.query_path)
-    config.documents_path = get_path(config.data_path, config.documents_path)
-    config.answers_path = get_path(config.data_path, config.answers_path)
-    config.reasoning_path = get_path(config.data_path, config.reasoning_path)
-    config.evaluations_file = get_path(config.data_path, config.evaluations_file)
-
-    args_clean = {
-        k: v for k, v in config.model_dump().items() if k not in args_to_remove
-    }
-
+    kwargs = config.model_dump()
     retrieval_evaluator = get_retrieval_evaluator(
-        "reasoner",
-        llm_provider=llm_provider,
-        output_file=config.reasoning_path,
-        **args_clean,
+        config.retrieval_evaluator_name, llm_provider=llm_provider, **kwargs
     )
-    documents = load_retrieved_docs_from_csv(
-        documents_path=config.documents_path, queries=config.query_path
-    )
-    answers = load_answers_from_csv(
-        answers_path=config.answers_path, queries=config.query_path
-    )
-    retrieval_evaluator.batch_evaluate(documents)
 
     answers_evaluator = get_answer_evaluator(
-        "pairwise_reasoning",
-        llm_provider=llm_provider,
-        output_file=config.evaluations_file,
-        **args_clean,
+        config.answer_evaluator_name, llm_provider=llm_provider, **kwargs
     )
-    answers_evaluator.batch_evaluate(answers)
 
-    ranker_config = EloAgentRankerConfig(
-        force=config.force,
-        rich_print=config.rich_print,
-        verbose=config.verbose,
-        output_file=config.output_file,
-        evaluations_file=config.evaluations_file,
-        k=config.elo_k,
-        initial_score=config.initial_score,
+    # TODO: Instead of managing a list of queries, we should have a Dataset type that can load the queries and documents directly.
+    queries = load_queries_from_csv(config.queries_file)
+    queries = add_documents_from_csv(
+        documents_file=config.documents_file, queries=queries
     )
-    ranker = AgentRankerFactory.create("elo", ranker_config)
-    ranker.run()
+    queries = add_answers_from_csv(answers_file=config.answers_file, queries=queries)
+
+    retrieval_evaluator.batch_evaluate(queries)
+    answers_evaluator.batch_evaluate(queries)
+
+    ranker = get_agent_ranker("elo", **kwargs)
+    ranker.run(queries=queries)
 
 
 if __name__ == "__main__":
