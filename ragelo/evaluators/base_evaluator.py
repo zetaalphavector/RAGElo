@@ -71,9 +71,11 @@ class BaseEvaluator(ABC):
         self, answer: str, keys: List[str]
     ) -> Dict[str, str]:
         """Parses a Json answer from the LLM and returns the values from multiple fields"""
-
         # Finds all valid JSON objects in the answer that contain the key
-        json_dict = self.__parse_json(answer, keys)
+        try:
+            json_dict = json.loads(answer)
+        except json.JSONDecodeError:
+            json_dict = self.__parse_json(answer, keys)
 
         valid_keys = set(json_dict.keys()).intersection(keys)
         if len(valid_keys) != len(keys):
