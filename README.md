@@ -67,8 +67,8 @@ evaluator = get_retrieval_evaluator(
     prompt=prompt, # your custom prompt
     query_placeholder="q", # the placeholder for the query in the prompt
     document_placeholder="d", # the placeholder for the document in the prompt
-    answer_format="multi_field_json", # The format of the answer. In this case, a JSON object with multiple fields
-    scoring_keys=["relevance", "recency", "truthfulness", "reasoning"], # Which keys to extract from the answer
+    scoring_keys_retrieval_evaluator=["relevance", "recency", "truthfulness", "reasoning"], # Which keys to extract from the answer
+    answer_format_retrieval_evaluator="multi_field_json", # The format of the answer. In this case, a JSON object with multiple fields
 )
 
 raw_answer, answer = evaluator.evaluate(
@@ -89,7 +89,7 @@ Note that, in this example, we passed to the `evaluate` method two dictionaries 
 ## 🚀 CLI Quickstart 
 After installing RAGElo as a CLI app, you can run it with the following command:
 ```bash
-ragelo run-all tests/data/queries.csv tests/data/documents.csv tests/data/answers.csv --verbose
+ragelo run-all queries.csv documents.csv answers.csv --verbose --data-dir tests/data/
 
 ---------- Agent Scores by Elo ranking ----------
  agent1        : 1026.7

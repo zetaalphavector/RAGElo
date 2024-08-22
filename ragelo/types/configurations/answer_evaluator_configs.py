@@ -103,11 +103,11 @@ class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
         default="custom_prompt_answers_evaluations.csv",
         description="Path to the output file",
     )
-    scoring_keys: List[str] = Field(
+    scoring_keys_answer_evaluator: List[str] = Field(
         default=["quality", "trustworthiness", "originality"],
         description="The fields to extract from the answer",
     )
-    answer_format: Union[str, AnswerFormat] = Field(
+    answer_format_answer_evaluator: Union[str, AnswerFormat] = Field(
         default=AnswerFormat.MULTI_FIELD_JSON,
         description="The format of the answer returned by the LLM",
     )
