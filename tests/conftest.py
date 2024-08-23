@@ -11,6 +11,7 @@ from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.llm_providers.openai_client import OpenAIConfiguration
 from ragelo.types.configurations import (
     BaseEvaluatorConfig,
+    BaseRetrievalEvaluatorConfig,
     CustomPromptAnswerEvaluatorConfig,
     CustomPromptEvaluatorConfig,
     DomainExpertEvaluatorConfig,
@@ -21,9 +22,9 @@ from ragelo.types.configurations import (
     RDNAMEvaluatorConfig,
 )
 from ragelo.utils import (
-    load_answers_from_csv,
+    add_answers_from_csv,
+    add_documents_from_csv,
     load_queries_from_csv,
-    load_retrieved_docs_from_csv,
 )
 
 
@@ -55,20 +56,18 @@ def queries_test():
 
 @pytest.fixture
 def qs_with_docs(queries_test):
-    return load_retrieved_docs_from_csv(
-        "tests/data/documents.csv", queries=queries_test
-    )
+    return add_documents_from_csv("tests/data/documents.csv", queries=queries_test)
 
 
 @pytest.fixture
 def rdnam_queries():
     queries = load_queries_from_csv("tests/data/rdnam_queries.csv")
-    return load_retrieved_docs_from_csv("tests/data/documents.csv", queries=queries)
+    return add_documents_from_csv("tests/data/documents.csv", queries=queries)
 
 
 @pytest.fixture
 def answers_test(queries_test):
-    return load_answers_from_csv("tests/data/answers.csv", queries=queries_test)
+    return add_answers_from_csv("tests/data/answers.csv", queries=queries_test)
 
 
 @pytest.fixture
@@ -126,8 +125,8 @@ def openai_client_mock(mocker, chat_completion_mock):
 @pytest.fixture
 def base_eval_config():
     return BaseEvaluatorConfig(
-        documents_path="tests/data/documents.csv",
-        query_path="tests/data/queries.csv",
+        documents_file="tests/data/documents.csv",
+        queries_file="tests/data/queries.csv",
         force=True,
         verbose=True,
         write_output=False,
@@ -135,9 +134,19 @@ def base_eval_config():
 
 
 @pytest.fixture
+def base_retrieval_eval_config(base_eval_config):
+    base_config = base_eval_config.model_dump()
+    del base_config["answer_format_retrieval_evaluator"]
+    return BaseRetrievalEvaluatorConfig(
+        answer_format_retrieval_evaluator="json",
+        **base_config,
+    )
+
+
+@pytest.fixture
 def pairwise_answer_eval_config(base_eval_config):
     base_config = base_eval_config.model_dump()
-    base_config["document_evaluations_path"] = "tests/data/reasonings.csv"
+    base_config["document_evaluations_file"] = "tests/data/reasonings.csv"
     config = PairwiseEvaluatorConfig(
         bidirectional=True,
         **base_config,
@@ -148,8 +157,12 @@ def pairwise_answer_eval_config(base_eval_config):
 @pytest.fixture
 def custom_answer_eval_config(base_eval_config):
     base_config = base_eval_config.model_dump()
-    base_config["answer_format"] = "multi_field_json"
-    base_config["scoring_keys"] = ["quality", "trustworthiness", "originality"]
+    base_config["answer_format_answer_evaluator"] = "multi_field_json"
+    base_config["scoring_keys_answer_evaluator"] = [
+        "quality",
+        "trustworthiness",
+        "originality",
+    ]
     config = CustomPromptAnswerEvaluatorConfig(
         prompt="""
 You are an useful assistant for evaluating the quality of the answers generated \
@@ -172,8 +185,8 @@ Agent answer: {answer}
 @pytest.fixture
 def expert_retrieval_eval_config(base_eval_config):
     base_eval_config = base_eval_config.model_dump()
-    del base_eval_config["scoring_key"]
-    del base_eval_config["answer_format"]
+    del base_eval_config["scoring_keys_retrieval_evaluator"]
+    del base_eval_config["answer_format_retrieval_evaluator"]
     return DomainExpertEvaluatorConfig(
         expert_in="Computer Science",
         domain_short="computer scientists",
@@ -186,7 +199,7 @@ def expert_retrieval_eval_config(base_eval_config):
 @pytest.fixture
 def rdnam_config(base_eval_config):
     base_config = base_eval_config.model_dump()
-    base_config["query_path"] = "tests/data/rdnam_queries.csv"
+    base_config["query_file"] = "tests/data/rdnam_queries.csv"
     return RDNAMEvaluatorConfig(
         annotator_role="You are a search quality rater evaluating the relevance of web pages. ",
         use_multiple_annotators=True,
@@ -197,10 +210,11 @@ def rdnam_config(base_eval_config):
 @pytest.fixture
 def custom_prompt_retrieval_eval_config(base_eval_config):
     base_eval_config = base_eval_config.model_dump()
-    del base_eval_config["scoring_key"]
+    del base_eval_config["scoring_keys_retrieval_evaluator"]
+    del base_eval_config["answer_format_retrieval_evaluator"]
     config = CustomPromptEvaluatorConfig(
         prompt="query: {query} doc: {document}",
-        scoring_key="relevance",
+        scoring_keys_retrieval_evaluator=["relevance"],
         **base_eval_config,
     )
     return config
@@ -208,6 +222,7 @@ def custom_prompt_retrieval_eval_config(base_eval_config):
 
 @pytest.fixture
 def few_shot_retrieval_eval_config(base_eval_config):
+    base_eval_config = base_eval_config.model_dump()
     few_shot_samples = [
         FewShotExample(
             passage="Few shot example 1",
@@ -222,6 +237,7 @@ def few_shot_retrieval_eval_config(base_eval_config):
             reasoning="This is a bad document",
         ),
     ]
+    del base_eval_config["answer_format_retrieval_evaluator"]
     return FewShotEvaluatorConfig(
         system_prompt="System prompt",
         few_shot_user_prompt="query: {query} doc: {document}",
@@ -229,7 +245,8 @@ def few_shot_retrieval_eval_config(base_eval_config):
         reasoning_placeholder="reasoning",
         relevance_placeholder="relevance",
         few_shots=few_shot_samples,
-        **base_eval_config.model_dump(),
+        answer_format_retrieval_evaluator="json",
+        **base_eval_config,
     )
 
 

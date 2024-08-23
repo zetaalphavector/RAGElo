@@ -22,9 +22,9 @@ from ragelo.types.configurations import AnswerFormat, BaseEvaluatorConfig
 
 class BaseEvaluator(ABC):
     config: BaseEvaluatorConfig
-    output_file: str
-    output_columns: List[str]
-    scoring_key: Union[str, List[str]]
+    scoring_keys: List[str]
+    scoring_key: str
+    answer_format: AnswerFormat
 
     @abstractmethod
     def __init__(
@@ -71,9 +71,11 @@ class BaseEvaluator(ABC):
         self, answer: str, keys: List[str]
     ) -> Dict[str, str]:
         """Parses a Json answer from the LLM and returns the values from multiple fields"""
-
         # Finds all valid JSON objects in the answer that contain the key
-        json_dict = self.__parse_json(answer, keys)
+        try:
+            json_dict = json.loads(answer)
+        except json.JSONDecodeError:
+            json_dict = self.__parse_json(answer, keys)
 
         valid_keys = set(json_dict.keys()).intersection(keys)
         if len(valid_keys) != len(keys):
@@ -114,10 +116,7 @@ class BaseEvaluator(ABC):
             return [json.loads(line) for line in f]
 
     @staticmethod
-    def __get_existing_evaluations_from_csv(
-        output_file: str,
-        scoring_keys: List[str] = [],
-    ) -> List[Dict[str, Any]]:
+    def __get_existing_evaluations_from_csv(output_file: str) -> List[Dict[str, Any]]:
         existing_lines: List[Dict[str, str]] = []
         base_columns = ["qid", "did", "agent", "raw_answer", "agent_a", "agent_b"]
         with open(output_file, "r") as f:
@@ -147,9 +146,7 @@ class BaseEvaluator(ABC):
         if evaluation_file.endswith(".jsonl"):
             return self.__get_existing_evaluations_from_jsonl(evaluation_file)
         else:
-            return self.__get_existing_evaluations_from_csv(
-                evaluation_file, self.config.scoring_keys
-            )
+            return self.__get_existing_evaluations_from_csv(evaluation_file)
 
     @staticmethod
     def _print_response(
@@ -180,13 +177,15 @@ class BaseEvaluator(ABC):
                     rich.print(f"[bold blue]📜 Document ID[/bold blue]: {did}")
                 if agent_a and agent_b:
                     rich.print(
-                        f"[bold blue] {agent_a:<18} [/bold blue] 🆚  "
+                        f"[bold bright_cyan] {agent_a:<18} [/bold bright_cyan] 🆚  "
                         f"[bold red] {agent_b}[/bold red]"
                     )
                 elif agent:
-                    rich.print(f"[bold blue]🕵️ Agent[/bold blue]: {agent}")
-
-                rich.print(f"[bold blue]Raw Answer[/bold blue]: {raw_answer}")
+                    rich.print(
+                        f"[bold bright_cyan]🕵️ Agent[/bold bright_cyan]: {agent}"
+                    )
+                if raw_answer != answer:
+                    rich.print(f"[bold blue]Raw Answer[/bold blue]: {raw_answer}")
                 rich.print(f"[bold blue]Parsed Answer[/bold blue]: {answer}")
                 rich.print("")
                 return
@@ -249,7 +248,7 @@ class BaseEvaluator(ABC):
         self,
         response: EvaluatorResult,
         output_columns: List[str],
-        file: Optional[str] = None,
+        output_file: str,
     ):
         if self.config.verbose:
             self._print_response(response, self.config.rich_print)
@@ -266,8 +265,7 @@ class BaseEvaluator(ABC):
         unused_keys = (set(answer_dict.keys()) - set(output_columns)) & set(null_keys)
         for k in unused_keys:
             del answer_dict[k]
-            # assert at least one of the new keys is in the output columns
-        output_file = file if file else self.output_file
+
         if output_file.endswith(".csv"):
             self.__dump_response_csv(answer_dict, output_columns, output_file)
         elif output_file.endswith(".jsonl"):
@@ -282,11 +280,11 @@ class BaseEvaluator(ABC):
 
     def _process_answer(self, answer: str) -> Any:
         """Processes the LLM evaluator output into some serializable format"""
-        if self.config.answer_format == AnswerFormat.JSON:
-            return self.json_answer_parser(answer, self.config.scoring_key)
-        if self.config.answer_format == AnswerFormat.MULTI_FIELD_JSON:
-            return self.json_answer_parser_multifields(answer, self.config.scoring_keys)
-        if self.config.answer_format == AnswerFormat.TEXT:
+        if self.answer_format == AnswerFormat.JSON:
+            return self.json_answer_parser(answer, self.scoring_key)
+        if self.answer_format == AnswerFormat.MULTI_FIELD_JSON:
+            return self.json_answer_parser_multifields(answer, self.scoring_keys)
+        if self.answer_format == AnswerFormat.TEXT:
             return answer
 
     @staticmethod
@@ -352,12 +350,12 @@ class BaseEvaluator(ABC):
         # Check if we actually need to do something
         queries_with_documents = len([q for q in queries if len(q.retrieved_docs) > 0])
         if queries_with_documents == len(queries):
-            logger.info("All Queries already have retrieved documents. Skipping")
+            logger.debug("All Queries already have retrieved documents. Skipping")
             return queries
         documents_read = 0
-        if not os.path.isfile(self.config.documents_path):
+        if not os.path.isfile(self.config.documents_file):
             logger.warning(
-                f"Documents file {self.config.documents_path} not found"
+                f"Documents file {self.config.documents_file} not found"
                 "Will not add retrieved documents to queries"
                 f"{queries_with_documents} queries already have documents"
             )
@@ -365,7 +363,7 @@ class BaseEvaluator(ABC):
 
         queries_idx = {q.qid: idx for idx, q in enumerate(queries)}
         docs_per_query: Dict[str, Set[str]] = {}
-        for line in csv.DictReader(open(self.config.documents_path)):
+        for line in csv.DictReader(open(self.config.documents_file)):
             qid = line[query_id_col].strip()
             did = line[document_id_col].strip()
             text = line[document_text_col].strip()
@@ -401,18 +399,18 @@ class BaseEvaluator(ABC):
     ):
         queries_with_answers = len([q for q in queries if len(q.answers) > 0])
         if queries_with_answers == len(queries):
-            logger.info("All Queries already have answers. Skipping")
+            logger.debug("All Queries already have answers. Skipping")
             return queries
-        if not os.path.isfile(self.config.answers_path):
+        if not os.path.isfile(self.config.answers_file):
             logger.warning(
-                f"Answers file {self.config.answers_path} not found. Will not add answers to queries"
+                f"Answers file {self.config.answers_file} not found. Will not add answers to queries"
                 f"Queries with answers: {queries_with_answers}"
             )
             return queries
         queries_idx = {q.qid: idx for idx, q in enumerate(queries)}
         answers_read = 0
         answers_per_query: Dict[str, Set[str]] = {}
-        for line in csv.DictReader(open(self.config.answers_path)):
+        for line in csv.DictReader(open(self.config.answers_file)):
             qid = line[query_id_col].strip()
             agent = line[agent_col].strip()
             answer = line[answer_col].strip()
@@ -449,7 +447,7 @@ class BaseEvaluator(ABC):
         document_evaluations = [
             RetrievalEvaluatorResult(**x)
             for x in self._get_existing_evaluations(
-                self.config.document_evaluations_path,
+                self.config.document_evaluations_file,
                 force,
             )
         ]
@@ -494,12 +492,15 @@ class BaseEvaluator(ABC):
         evaluations = [
             AnswerEvaluatorResult(**x)
             for x in self._get_existing_evaluations(
-                self.config.answers_evaluations_path
+                self.config.answers_evaluations_file,
+                force,
             )
         ]
         evaluations += [
             AnswerEvaluatorResult(**x)
-            for x in self._get_existing_evaluations(self.config.games_evaluations_path)
+            for x in self._get_existing_evaluations(
+                self.config.games_evaluations_file, force
+            )
         ]
         return self._add_answers_evaluations(queries, evaluations)
 
@@ -541,3 +542,20 @@ class BaseEvaluator(ABC):
                 answer_idx = answer_idxs[evaluation.qid][evaluation.agent]
                 queries[query_idx].answers[answer_idx].evaluation = evaluation
         return queries
+
+    def _print_failed_evaluations(
+        self, total_evaluations: int, failed_evaluations: int
+    ):
+        if self.config.rich_print:
+            try:
+                import rich
+
+                rich.print("✅ Done!")
+                rich.print(f"Failed evaluations: {failed_evaluations}")
+                rich.print(f"Total evaluations: {total_evaluations}")
+                return
+            except ImportError:
+                logger.warning("Rich not installed. Using plain print")
+        print("✅ Done!")
+        print(f"Failed evaluations: {failed_evaluations}")
+        print(f"Total evaluations: {total_evaluations}")

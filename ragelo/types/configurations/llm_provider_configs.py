@@ -1,6 +1,6 @@
 from typing import Optional
 
-from ragelo.types.configurations import BaseModel
+from ragelo.types.configurations.base_configs import BaseModel
 
 
 class LLMProviderConfig(BaseModel):
@@ -16,4 +16,4 @@ class OpenAIConfiguration(LLMProviderConfig):
     api_type: Optional[str] = None
     api_base: Optional[str] = None
     api_version: Optional[str] = None
-    model: str = "gpt-4-turbo"
+    model: str = "gpt-4o-mini"

@@ -14,28 +14,28 @@ class BaseRetrievalEvaluatorConfig(BaseEvaluatorConfig):
         default="document",
         description="The placeholder for the document in the prompt",
     )
-    output_columns: Optional[List[str]] = Field(
-        default=None,
-        description="The columns to output in the CSV file",
-    )
 
 
 class ReasonerEvaluatorConfig(BaseRetrievalEvaluatorConfig):
-    answer_format: Union[str, AnswerFormat] = Field(
-        default=AnswerFormat.TEXT,
+    answer_format_retrieval_evaluator: Union[str, AnswerFormat] = Field(
+        default="text",
         description="The format of the answer returned by the LLM",
     )
-    scoring_key: str = Field(
+    scoring_key_retrieval_evaluator: str = Field(
         default="answer",
         description="When using answer_format=json, the key to extract from the answer",
     )
-    scoring_keys: List[str] = Field(
-        default=[],
+    scoring_keys_retrieval_evaluator: List[str] = Field(
+        default=["relevance"],
         description="When using answer_format=multi_field_json, the keys to extract from the answer",
     )
-    document_evaluations_path: str = Field(
+    document_evaluations_file: str = Field(
         default="reasonings.csv",
         description="Path to write (or read) the evaluations of the retrieved documents",
+    )
+    output_columns_retrieval_evaluator: List[str] = Field(
+        default=["qid", "did", "raw_answer", "answer"],
+        description="The columns to output in the CSV file",
     )
     evaluator_name: Union[
         str, RetrievalEvaluatorTypes
@@ -63,21 +63,25 @@ class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         description="A list of extra guidelines to be used when reasoning about the "
         "relevancy of the document.",
     )
-    document_evaluations_path: str = Field(
+    document_evaluations_file: str = Field(
         default="domain_expert_evaluations.csv",
         description="Path to write (or read) the evaluations of the retrieved documents",
     )
-    answer_format: str = Field(
+    answer_format_retrieval_evaluator: str = Field(
         default="text",
         description="The format of the answer returned by the LLM",
     )
-    scoring_key: str = Field(
+    scoring_key_retrieval_evaluator: str = Field(
         default="score",
         description="The field to use when parsing the llm answer",
     )
     evaluator_name: Union[
         str, RetrievalEvaluatorTypes
     ] = RetrievalEvaluatorTypes.DOMAIN_EXPERT
+    output_columns_retrieval_evaluator: List[str] = Field(
+        default=["qid", "did", "reasoning", "score"],
+        description="The columns to output in the CSV file",
+    )
 
 
 class CustomPromptEvaluatorConfig(BaseRetrievalEvaluatorConfig):
@@ -85,15 +89,15 @@ class CustomPromptEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default="query: {query} document: {document}",
         description="The prompt to be used to evaluate the documents. It should contain a {query} and a {document} placeholder",
     )
-    scoring_keys: List[str] = Field(
+    scoring_keys_retrieval_evaluator: List[str] = Field(
         default=["quality", "trustworthiness", "originality"],
         description="The fields to use when parsing the llm answer",
     )
-    answer_format: Union[str, AnswerFormat] = Field(
-        default=AnswerFormat.MULTI_FIELD_JSON,
+    answer_format_retrieval_evaluator: Union[str, AnswerFormat] = Field(
+        default="multi_field_json",
         description="The format of the answer returned by the LLM",
     )
-    document_evaluations_path: str = Field(
+    document_evaluations_file: str = Field(
         default="custom_prompt_evaluations.csv",
         description="Path to write (or read) the evaluations of the retrieved documents",
     )
@@ -119,7 +123,7 @@ class FewShotEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         description="The expected answer format from the LLM for each evaluated document "
         "It should contain a {reasoning} and a {relevance} placeholder",
     )
-    output_file: str = Field(
+    document_evaluations_file: str = Field(
         default="few_shot_evaluations.csv",
         description="Path to the output file",
     )
@@ -153,10 +157,10 @@ class RDNAMEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default=False,
         description="Should the prompt ask the LLM to mimic multiple annotators?",
     )
-    document_evaluations_path: str = Field(
+    document_evaluations_file: str = Field(
         default="rdnam_evaluations.csv", description="Path to the output file"
     )
-    scoring_key: str = Field(
+    scoring_key_retrieval_evaluator: str = Field(
         default="answer",
         description="The field to use when parsing the llm answer",
     )

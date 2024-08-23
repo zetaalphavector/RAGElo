@@ -1,6 +1,6 @@
 """Evaluator with a domain expert persona"""
 
-from typing import List, Tuple
+from typing import Tuple
 
 from ragelo.evaluators.retrieval_evaluators import (
     BaseRetrievalEvaluator,
@@ -86,8 +86,6 @@ Please only answer with a single number.
     COMPANY_PROMPT_2 = " of {company}"
     DOMAIN_SHORT = " but it also serves some of your external users like {domain_short}"
     config: DomainExpertEvaluatorConfig
-    output_columns: List[str] = ["qid", "did", "reasoning", "score"]
-    output_file: str = "domain_expert_evaluations.csv"
 
     def __init__(
         self,

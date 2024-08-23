@@ -45,24 +45,31 @@ class BaseAnswerEvaluator(BaseEvaluator):
     ):
         self.config = config
         self.llm_provider = llm_provider
-        self.output_columns = config.output_columns
-        if config.answer_format == AnswerFormat.MULTI_FIELD_JSON:
-            self.config.scoring_keys = config.scoring_keys
-            self.output_columns = [
-                "qid",
-                "agent",
-                "raw_answer",
-            ] + self.config.scoring_keys
-        elif config.answer_format == AnswerFormat.JSON:
-            config.scoring_keys = []
-        elif config.scoring_key and config.scoring_key not in self.output_columns:
-            print(f"Adding scoring key {config.scoring_key} to output columns")
-            self.output_columns.append(self.config.scoring_key)
-        if config.scoring_keys:
+        self.output_columns = (
+            config.output_columns_answer_evaluator
+            if not self.config.pairwise
+            else config.output_columns_pairwise_evaluator
+        )
+        self.scoring_keys = config.scoring_keys_answer_evaluator
+        self.scoring_key = config.scoring_key_answer_evaluator
+        if isinstance(self.config.answer_format_answer_evaluator, str):
+            self.answer_format = AnswerFormat(
+                self.config.answer_format_answer_evaluator
+            )
+        else:
+            self.answer_format = self.config.answer_format_answer_evaluator
+
+        if self.answer_format == AnswerFormat.MULTI_FIELD_JSON:
             missing_keys = [
-                key for key in config.scoring_keys if key not in self.output_columns
+                key for key in self.scoring_keys if key not in self.output_columns
             ]
             self.output_columns.extend(missing_keys)
+        else:
+            if self.scoring_key not in self.output_columns:
+                logger.info(f"Adding scoring key {self.scoring_key} to output columns")
+                self.output_columns.append(self.scoring_key)
+
+        self.pairwise = self.config.pairwise
 
     async def _async_batch_evaluate(self, queries: List[Query]) -> List[Query]:
         use_progress_bar = self.config.use_progress_bar
@@ -72,7 +79,18 @@ class BaseAnswerEvaluator(BaseEvaluator):
 
         if len(tuples_to_eval) == 0:
             return queries
-        pbar = tqdm(
+        if self.config.rich_print:
+            import warnings
+
+            from tqdm import TqdmExperimentalWarning
+
+            warnings.filterwarnings("ignore", category=TqdmExperimentalWarning)
+            from tqdm.rich import tqdm as rich_tqdm
+
+            pbar_fn = rich_tqdm  # type: ignore
+        else:
+            pbar_fn = tqdm  # type: ignore
+        pbar = pbar_fn(
             total=len(tuples_to_eval),
             ncols=100,
             desc="Evaluating answers",
@@ -112,9 +130,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
         pbar.close()
         self._add_answers_evaluations(queries, evaluations)
         if self.config.verbose:
-            print("✅ Done!")
-            print("Failed evaluations:", failed_queries)
-            print(f"Total evaluations: {len(evaluations)}")
+            self._print_failed_evaluations(len(evaluations), failed_queries)
         return queries
 
     def evaluate(
@@ -139,7 +155,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
             )
             query.retrieved_docs = retrieved_and_assembled_docs
         agent: Union[str, Tuple[str, str]]
-        if self.config.pairwise:
+        if self.pairwise:
             if not answer_a or not answer_b:
                 raise ValueError("Pairwise evaluations require two answers")
             answer_a = self._assemble_answer(answer_a, answer_a_metadata)
@@ -217,7 +233,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
             exc = str(e)
             answer = None
         if isinstance(evaluable, AgentAnswer):
-            output_file = self.config.answers_evaluations_path
+            output_file = self.config.answers_evaluations_file
             ans = AnswerEvaluatorResult(
                 qid=query.qid,
                 agent=evaluable.agent,
@@ -227,7 +243,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 exception=exc,
             )
         else:
-            output_file = self.config.games_evaluations_path
+            output_file = self.config.games_evaluations_file
             ans = AnswerEvaluatorResult(
                 qid=query.qid,
                 agent_a=evaluable.agent_a_answer.agent,
@@ -302,7 +318,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
         return queries
 
     def __add_pairwise_games(self, queries: List[Query]) -> List[Query]:
-        if not self.config.pairwise:
+        if not self.pairwise:
             return queries
         for query in queries:
             query_agents = list({x.agent for x in query.answers})
@@ -341,7 +357,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
         tuples_to_eval: List[Tuple[Query, Union[PairwiseGame, AgentAnswer]]] = []
         all_tuples = 0
         for q in queries:
-            if self.config.pairwise:
+            if self.pairwise:
                 for g in q.pairwise_games:
                     all_tuples += 1
                     if g.evaluation is None:

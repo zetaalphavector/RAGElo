@@ -23,11 +23,11 @@ class TestRetrievalEvaluator:
     def test_evaluate_single_answer(
         self,
         llm_provider_json_mock,
-        base_eval_config,
+        base_retrieval_eval_config,
         qs_with_docs,
     ):
         evaluator = RetrievalEvaluator.from_config(
-            config=base_eval_config, llm_provider=llm_provider_json_mock
+            config=base_retrieval_eval_config, llm_provider=llm_provider_json_mock
         )
         query = qs_with_docs[0]
         doc = query.retrieved_docs[0]
@@ -42,12 +42,11 @@ class TestRetrievalEvaluator:
     def test_batch_eval(
         self,
         llm_provider_json_mock,
-        base_eval_config,
+        base_retrieval_eval_config,
         qs_with_docs,
     ):
-        base_eval_config.answer_format = "json"
         evaluator = RetrievalEvaluator.from_config(
-            config=base_eval_config, llm_provider=llm_provider_json_mock
+            config=base_retrieval_eval_config, llm_provider=llm_provider_json_mock
         )
         queries = evaluator.batch_evaluate(qs_with_docs)
         evaluations = [a.evaluation for q in queries for a in q.retrieved_docs]
@@ -61,9 +60,11 @@ class TestRetrievalEvaluator:
             assert e.did == did
             assert e.qid == qid
 
-    def test_evaluate_with_text(self, llm_provider_json_mock, base_eval_config):
+    def test_evaluate_with_text(
+        self, llm_provider_json_mock, base_retrieval_eval_config
+    ):
         evaluator = RetrievalEvaluator.from_config(
-            config=base_eval_config, llm_provider=llm_provider_json_mock
+            config=base_retrieval_eval_config, llm_provider=llm_provider_json_mock
         )
         raw_answer, processed_answer = evaluator.evaluate(
             document="This is a query", query="This is a document"
@@ -132,11 +133,11 @@ class TestReasonerEvaluator:
     def test_process_single_answer(
         self,
         llm_provider_mock,
-        base_eval_config,
+        base_retrieval_eval_config,
         qs_with_docs,
     ):
         evaluator = ReasonerEvaluator.from_config(
-            config=base_eval_config,
+            config=base_retrieval_eval_config,
             llm_provider=llm_provider_mock,
         )
         query = qs_with_docs[0]
@@ -175,7 +176,7 @@ class TestCustomPromptEvaluator:
         _, answer = evaluator.evaluate(query, doc)
         call_args = llm_provider_json_mock.async_call_mocker.call_args_list
 
-        assert answer == 1
+        assert answer == {"relevance": 1}
         assert call_args[0][0][0] == formatted_prompt
 
     def test_process_with_custom_fields(
@@ -325,8 +326,13 @@ WRITE YOUR ANSWER ON A SINGLE LINE AS A JSON OBJECT WITH THE FOLLOWING KEYS:
             prompt=prompt,
             query_placeholder="q",
             document_placeholder="d",
-            scoring_keys=["relevance", "recency", "truthfulness", "reasoning"],
-            answer_format="multi_field_json",
+            scoring_keys_retrieval_evaluator=[
+                "relevance",
+                "recency",
+                "truthfulness",
+                "reasoning",
+            ],
+            answer_format_retrieval_evaluator="multi_field_json",
             write_output=False,
         )
 

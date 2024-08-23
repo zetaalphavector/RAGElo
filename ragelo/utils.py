@@ -127,14 +127,15 @@ def load_queries_from_csv(
     return queries
 
 
-def load_retrieved_docs_from_csv(
-    documents_path: str,
-    queries: Union[List[Query], str],
+def add_documents_from_csv(
+    documents_file: str,
+    queries_file: Optional[str] = None,
+    queries: Optional[List[Query]] = None,
     query_id_col: str = "qid",
     document_id_col: str = "did",
     document_text_col: str = "document_text",
 ) -> List[Query]:
-    """Loads a list of retrieved documents for each query.
+    """Loads a list of retrieved documents for each query. If queries is a string, will load the queries from the csv file.
 
     Args:
         documents_path (str): Path to the CSV file with the documents.
@@ -152,13 +153,17 @@ def load_retrieved_docs_from_csv(
 
     """
     documents_read = 0
-    if not os.path.isfile(documents_path):
-        raise FileNotFoundError(f"Documents file {documents_path} not found")
-    if isinstance(queries, str):
-        queries = load_queries_from_csv(queries)
+    if not os.path.isfile(documents_file):
+        raise FileNotFoundError(f"Documents file {documents_file} not found")
+
+    if queries is None and queries_file is None:
+        raise ValueError("Either queries or queries_file must be provided")
+    if queries is None:
+        assert queries_file is not None  # Should not happen. but mypy complains
+        queries = load_queries_from_csv(queries_file)
     queries_dict = {q.qid: q for q in queries}
 
-    for line in csv.DictReader(open(documents_path)):
+    for line in csv.DictReader(open(documents_file)):
         qid = line[query_id_col].strip()
         did = line[document_id_col].strip()
         text = line[document_text_col].strip()
@@ -177,25 +182,30 @@ def load_retrieved_docs_from_csv(
     return list(queries_dict.values())
 
 
-def load_retrieved_docs_from_run_file(
+def add_documents_from_run_file(
     run_file_path: str,
     documents_path: str,
-    queries: Union[List[Query], str],
+    queries_file: Optional[str] = None,
+    queries: Optional[List[Query]] = None,
     document_id_col: str = "document_id",
     document_text_col: str = "document_text",
 ) -> List[Query]:
     """Loads documents based on a TREC-formatted run file and a CSV with the documents."""
 
     documents_read = 0
+    if queries is None and queries_file is None:
+        raise ValueError("Either queries or queries_file must be provided")
+    if queries is None:
+        assert queries_file is not None  # Should not happen. but mypy complains
+        queries = load_queries_from_csv(queries_file)
+    queries_dict = {q.qid: q for q in queries}
+
     if not os.path.isfile(run_file_path):
         raise FileNotFoundError(f"Run file {run_file_path} not found")
     if not os.path.isfile(documents_path):
         raise FileNotFoundError(f"Documents file {documents_path} not found")
     # A dictionary with all queries associated with each document
     query_per_doc = defaultdict(set)
-    if isinstance(queries, str):
-        queries = load_queries_from_csv(queries)
-    queries_dict = {q.qid: q for q in queries}
 
     for _line in open(run_file_path, "r"):
         qid, _, did, _, _, _ = _line.strip().split()
@@ -261,10 +271,10 @@ def load_answers_from_multiple_csvs(
     return queries
 
 
-def load_answers_from_csv(
-    answers_path: str,
-    queries: Union[List[Query], str],
-    query_text_col: str = "query",
+def add_answers_from_csv(
+    answers_file: str,
+    queries_file: Optional[str] = None,
+    queries: Optional[List[Query]] = None,
     agent_col: str = "agent",
     answer_col: str = "answer",
     query_id_col: Optional[str] = None,
@@ -280,13 +290,18 @@ def load_answers_from_csv(
         List[Query]: A list of queries with the answers.
     """
 
-    if not os.path.isfile(answers_path):
-        raise FileNotFoundError(f"Answers file {answers_path} not found")
-    if isinstance(queries, str):
-        queries = load_queries_from_csv(queries, query_text_col, query_id_col)
+    if not os.path.isfile(answers_file):
+        raise FileNotFoundError(f"Answers file {answers_file} not found")
+
+    if queries is None and queries_file is None:
+        raise ValueError("Either queries or queries_file must be provided")
+    if queries is None:
+        assert queries_file is not None  # Should not happen. but mypy complains
+        queries = load_queries_from_csv(queries_file)
+
     queries_dict = {q.qid: q for q in queries}
-    query_id_col = query_id_col or infer_query_id_column(answers_path)
-    for line in csv.DictReader(open(answers_path)):
+    query_id_col = query_id_col or infer_query_id_column(answers_file)
+    for line in csv.DictReader(open(answers_file)):
         qid = line[query_id_col]
         if qid not in queries_dict:
             raise ValueError(f"Unknown query id {qid}")

@@ -18,10 +18,6 @@ class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
     pairwise: bool = Field(
         default=False, description="Whether or not to the evaluator is pairwise"
     )
-    output_columns: List[str] = Field(
-        default=["qid", "agent", "raw_answer", "answer"],
-        description="The columns to output in the CSV file",
-    )
     document_template: str = Field(
         default="[{did}] {doc}",
         description="The template to format each individual document in the prompt",
@@ -54,7 +50,7 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     """Configuration for the pairwise evaluator."""
 
     evaluator_name: Union[str, AnswerEvaluatorTypes] = AnswerEvaluatorTypes.PAIRWISE
-    output_columns: List[str] = Field(
+    output_columns_pairwise_evaluator: List[str] = Field(
         default=["qid", "agent_a", "agent_b", "raw_answer", "answer"],
         description="The columns to output in the CSV file",
     )
@@ -62,7 +58,7 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
         default=False, description="Whether or not to run each game in both directions"
     )
     n_games_per_query: int = Field(
-        default=100, description="Number of games to generate for each query"
+        default=100, description="Maximum number of games to generate for each query"
     )
     games_evaluations_path: str = Field(
         default="pairwise_answers_evaluations.csv",
@@ -107,11 +103,11 @@ class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
         default="custom_prompt_answers_evaluations.csv",
         description="Path to the output file",
     )
-    scoring_keys: List[str] = Field(
+    scoring_keys_answer_evaluator: List[str] = Field(
         default=["quality", "trustworthiness", "originality"],
         description="The fields to extract from the answer",
     )
-    answer_format: Union[str, AnswerFormat] = Field(
+    answer_format_answer_evaluator: Union[str, AnswerFormat] = Field(
         default=AnswerFormat.MULTI_FIELD_JSON,
         description="The format of the answer returned by the LLM",
     )
