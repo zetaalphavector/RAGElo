@@ -7,13 +7,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import List, Optional, Union
 
-from ragelo.types.types import (
-    AgentAnswer,
-    Document,
-    EvaluatorResult,
-    PairwiseGame,
-    Query,
-)
+from ragelo.types import AgentAnswer, Document, EvaluatorResult, PairwiseGame, Query
 
 
 def infer_query_id_column(file_path: str) -> Union[str, None]:
