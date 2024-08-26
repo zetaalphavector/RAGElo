@@ -33,8 +33,6 @@ class OpenAIProvider(BaseLLMProvider):
 
         Args:
             prompt: The prompt to use. Either a list of messages or a string.
-            temperature : The temperature to use. Defaults to 0.1.
-            max_tokens: The maximum number of tokens to retrieve. Defaults 512.
         """
         if isinstance(prompt, str):
             prompt = [{"role": "system", "content": prompt}]
@@ -62,8 +60,6 @@ class OpenAIProvider(BaseLLMProvider):
 
         Args:
             prompt: The prompt to use. Either a list of messages or a string.
-            temperature : The temperature to use. Defaults to 0.1.
-            max_tokens: The maximum number of tokens to retrieve. Defaults 512.
         """
         if isinstance(prompt, str):
             prompt = [{"role": "system", "content": prompt}]
@@ -85,7 +81,7 @@ class OpenAIProvider(BaseLLMProvider):
     def __get_openai_client(openai_config: OpenAIConfiguration) -> AsyncOpenAI:
         if openai_config.api_type == "azure":
             if openai_config.api_base is None:
-                raise ValueError("OpenAI base url not found in configuration")
+                raise ValueError("Azure-OpenAI base url not found in configuration.")
             return AsyncAzureOpenAI(
                 azure_endpoint=openai_config.api_base,
                 api_key=openai_config.api_key,

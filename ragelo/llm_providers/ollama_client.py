@@ -86,5 +86,4 @@ class OllamaProvider(BaseLLMProvider):
         return AsyncOpenAI(
             base_url=ollama_config.api_base,
             api_key=ollama_config.api_key,
-            organization=ollama_config.org,
         )
