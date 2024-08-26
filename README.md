@@ -86,6 +86,8 @@ answer
 ```
 Note that, in this example, we passed to the `evaluate` method two dictionaries with metadata for the query and the document. This metadata is injected into the prompt by matching their keys into the placeholders in the prompt.
 
+Other examples are available as notebooks in the [docs/examples/notebooks folder](https://github.com/zetaalphavector/RAGElo/tree/master/docs/examples/notebooks) of the repository.
+
 ## 🚀 CLI Quickstart 
 After installing RAGElo as a CLI app, you can run it with the following command:
 ```bash
@@ -132,7 +134,7 @@ While **RAGElo** can be used as either an end-to-end tool or by calling individu
 The `retrieval-evaluator` tool annotates retrieved documents based on their relevance to the user query. This is done regardless of the answers provided by any Agent. As an example, for calling the `Reasoner` retrieval evaluator (reasoner only outputs the reasoning why a document is relevant or not) we can use:
 
 ```bash
-ragelo retrieval-evaluator reasoner queries.csv documents.csv output.csv
+ragelo retrieval-evaluator reasoner queries.csv documents.csv output.csv --verbose --data-dir tests/data/
 ```
 The output file changes according to the evaluator used. In general it will have one row per document evaluator, with the query_id, document_id, the raw LLM answer and the parsed answer. An example of the output for the reasoner is found here: [tests/data/reasonings.csv](https://github.com/zetaalphavector/RAGElo/blob/master/tests/data/reasonings.csv).
 

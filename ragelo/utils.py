@@ -170,7 +170,7 @@ def add_documents_from_csv(
             logging.info(f"Query {qid} not in the provided queries. Skipping")
             continue
         doc = Document(did=did, text=text, metadata=extra_metadata or None)
-        queries_dict[qid].retrieved_docs.append(doc)
+        queries_dict[qid].add_retrieved_doc(doc)
         documents_read += 1
     logging.info(f"Loaded {documents_read} documents")
     return list(queries_dict.values())
@@ -214,7 +214,7 @@ def add_documents_from_run_file(
             continue
         text = line[document_text_col].strip()
         for qid in query_per_doc[did]:
-            queries_dict[qid].retrieved_docs.append(Document(did=did, text=text))
+            queries_dict[qid].add_retrieved_doc(Document(did=did, text=text))
             documents_read += 1
     logging.info(f"Loaded {documents_read} documents")
     return list(queries_dict.values())
@@ -307,7 +307,7 @@ def add_answers_from_csv(
             if k not in [query_id_col, agent_col, answer_col]
         }
         answer = AgentAnswer(agent=agent, text=answer, metadata=extra_metadata or None)
-        queries_dict[qid].answers.append(answer)
+        queries_dict[qid].add_agent_answer(answer)
 
     return list(queries_dict.values())
 

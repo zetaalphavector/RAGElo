@@ -30,7 +30,7 @@ class TestRetrievalEvaluator:
             config=base_retrieval_eval_config, llm_provider=llm_provider_json_mock
         )
         query = qs_with_docs[0]
-        doc = query.retrieved_docs[0]
+        doc = query.retrieved_docs["0"]
         raw_answer, answer = evaluator.evaluate(query, doc)
         assert raw_answer == 'Async LLM JSON response\n{"relevance": 1}'
         assert answer == 1
@@ -49,7 +49,7 @@ class TestRetrievalEvaluator:
             config=base_retrieval_eval_config, llm_provider=llm_provider_json_mock
         )
         queries = evaluator.batch_evaluate(qs_with_docs)
-        evaluations = [a.evaluation for q in queries for a in q.retrieved_docs]
+        evaluations = [d.evaluation for q in queries for d in q.retrieved_docs.values()]
         doc_ids = ["0", "1", "2", "3"]
         qids = ["0", "0", "1", "1"]
         for e, did, qid in zip(evaluations, doc_ids, qids):
@@ -118,7 +118,7 @@ class TestRDNAMEvaluator:
             config=rdnam_config, llm_provider=llm_provider_mock_rdnam
         )
         query = rdnam_queries[0]
-        doc = query.retrieved_docs[0]
+        doc = query.retrieved_docs["0"]
         raw_answer, answer = evaluator.evaluate(query, doc)
         assert raw_answer == '"M": 2, "T": 1, "O": 1}, {"M": 1, "T": 1, "O": 2}]'
         assert answer == 1
@@ -141,7 +141,7 @@ class TestReasonerEvaluator:
             llm_provider=llm_provider_mock,
         )
         query = qs_with_docs[0]
-        doc = query.retrieved_docs[0]
+        doc = query.retrieved_docs["0"]
         raw_answer, answer = evaluator.evaluate(query, doc)
         formatted_prompt = evaluator.prompt.format(query=query.query, document=doc.text)
         call_args = llm_provider_mock.async_call_mocker.call_args_list
@@ -159,7 +159,7 @@ class TestCustomPromptEvaluator:
         qs_with_docs,
     ):
         query = qs_with_docs[0]
-        doc = query.retrieved_docs[0]
+        doc = query.retrieved_docs["0"]
 
         evaluator = CustomPromptEvaluator.from_config(
             config=custom_prompt_retrieval_eval_config,
@@ -225,7 +225,7 @@ class TestDomainExpertEvaluator:
             llm_provider=llm_provider_mock,
         )
         query = qs_with_docs[0]
-        doc = query.retrieved_docs[0]
+        doc = query.retrieved_docs["0"]
         _, _ = evaluator.evaluate(query, doc)
 
         assert llm_provider_mock.async_call_mocker.call_count == 2
@@ -258,7 +258,7 @@ class TestFewShotEvaluator:
             llm_provider=llm_provider_json_mock,
         )
         query = qs_with_docs[0]
-        doc = query.retrieved_docs[0]
+        doc = query.retrieved_docs["0"]
 
         raw_answer, answer = evaluator.evaluate(query, doc)
         assert raw_answer == 'Async LLM JSON response\n{"relevance": 1}'

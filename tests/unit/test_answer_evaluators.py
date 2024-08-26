@@ -65,21 +65,9 @@ class TestCustomPromptEvaluator:
             config=custom_answer_eval_config,
             llm_provider=llm_provider_answer_mock,
         )
-        answers = await evaluator._async_batch_evaluate(answers_test)
-        flat_answers = [(q, a) for q in answers for a in q.answers]
-        evaluations = [a.evaluation for (_, a) in flat_answers]
-        assert len(evaluations) == 4
-        for a in evaluations:
-            assert isinstance(a, AnswerEvaluatorResult)
-            assert isinstance(a.answer, dict)
-            assert isinstance(a.raw_answer, str)
-            assert isinstance(a.answer["quality"], int)
-            assert isinstance(a.answer["trustworthiness"], int)
-            assert isinstance(a.answer["originality"], int)
-
-            assert a.answer["quality"] == 1
-            assert a.answer["trustworthiness"] == 0
-            assert a.answer["originality"] == 0
+        queries = await evaluator._async_batch_evaluate(answers_test)
+        flat_answers = [(q, a) for q in queries for a in q.answers.values()]
+        assert len(flat_answers) == 4
 
         llm_call_args = llm_provider_answer_mock.async_call_mocker.call_args_list
         assert (
@@ -93,6 +81,18 @@ class TestCustomPromptEvaluator:
             == 2
         )
         for (q, a), args in zip(flat_answers, llm_call_args):
+            evaluation = a.evaluation
+            assert isinstance(evaluation, AnswerEvaluatorResult)
+            assert isinstance(evaluation.answer, dict)
+            assert isinstance(evaluation.raw_answer, str)
+            assert isinstance(evaluation.answer["quality"], int)
+            assert isinstance(evaluation.answer["trustworthiness"], int)
+            assert isinstance(evaluation.answer["originality"], int)
+
+            assert evaluation.answer["quality"] == 1
+            assert evaluation.answer["trustworthiness"] == 0
+            assert evaluation.answer["originality"] == 0
+
             submitted_query = args[0][0].split("User Query: ")[1].split("\n")[0].strip()
             submitted_answer = (
                 args[0][0].split("Agent answer: ")[1].split("\n")[-1].strip()

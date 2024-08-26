@@ -281,7 +281,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
 
     def _prepare_documents(self, query: Query) -> str:
         documents = []
-        for d in query.retrieved_docs:
+        for did, d in query.retrieved_docs.items():
             if self.config.document_relevance_threshold is not None:
                 # Skip documents with relevance below the threshold
                 if d.evaluation is None:
@@ -300,7 +300,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 if not self.config.document_filter(str(d.evaluation.answer)):
                     continue
             formatters = {
-                "did": d.did,
+                "did": did,
                 "doc": d.text,
                 "annotation": d.evaluation.answer if d.evaluation else None,
             }
@@ -321,7 +321,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
         if not self.pairwise:
             return queries
         for query in queries:
-            query_agents = list({x.agent for x in query.answers})
+            query_agents = list(query.answers.keys())
             pairs = list(itertools.combinations(query_agents, 2))
             if not isinstance(self.config, PairwiseEvaluatorConfig):
                 raise ValueError(
@@ -336,7 +336,6 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 (a.agent_a_answer.agent, a.agent_b_answer.agent)
                 for a in query.pairwise_games
             }
-            answer_idx = {ans.agent: idx for idx, ans in enumerate(query.answers)}
             games = [g for g in pairs if g not in existing_games]
 
             games_to_add = self.config.n_games_per_query - len(existing_games)
@@ -344,8 +343,8 @@ class BaseAnswerEvaluator(BaseEvaluator):
             for agent_a, agent_b in games:
                 query.pairwise_games.append(
                     PairwiseGame(
-                        agent_a_answer=query.answers[answer_idx[agent_a]],
-                        agent_b_answer=query.answers[answer_idx[agent_b]],
+                        agent_a_answer=query.answers[agent_a],
+                        agent_b_answer=query.answers[agent_b],
                     )
                 )
         return queries
@@ -363,7 +362,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
                     if g.evaluation is None:
                         tuples_to_eval.append((q, g))
             else:
-                for a in q.answers:
+                for a in q.answers.values():
                     all_tuples += 1
                     if a.evaluation is None:
                         tuples_to_eval.append((q, a))

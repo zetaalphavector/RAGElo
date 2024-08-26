@@ -168,7 +168,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         tuples_to_eval = []
         all_tuples = 0
         for q in queries:
-            for d in q.retrieved_docs:
+            for d in q.retrieved_docs.values():
                 if d.evaluation is None:
                     tuples_to_eval.append((q, d))
                 all_tuples += 1

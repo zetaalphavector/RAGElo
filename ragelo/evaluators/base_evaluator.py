@@ -3,7 +3,7 @@ import json
 import os
 import string
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Set, Union, cast
+from typing import Any, Dict, List, Optional, Set, Union
 
 from tqdm.auto import tqdm
 
@@ -181,9 +181,7 @@ class BaseEvaluator(ABC):
                         f"[bold red] {agent_b}[/bold red]"
                     )
                 elif agent:
-                    rich.print(
-                        f"[bold bright_cyan]🕵️ Agent[/bold bright_cyan]: {agent}"
-                    )
+                    rich.print(f"[bold bright_cyan]🕵️ Agent[/bold bright_cyan]: {agent}")
                 if raw_answer != answer:
                     rich.print(f"[bold blue]Raw Answer[/bold blue]: {raw_answer}")
                 rich.print(f"[bold blue]Parsed Answer[/bold blue]: {answer}")
@@ -314,20 +312,22 @@ class BaseEvaluator(ABC):
     def _assemble_documents(
         self,
         documents: Union[List[str], List[Document]],
-        doc_metadata: Optional[List[Dict[str, Any]]] = None,
-    ) -> List[Document]:
-        assembled_docs: List[Document] = []
-        for idx, doc in enumerate(documents):
+        doc_metadata: Optional[List] = None,
+    ) -> Dict[str, Document]:
+        assembled_docs: Dict[str, Document] = {}
+        if doc_metadata and len(documents) != len(doc_metadata):
+            raise ValueError(
+                "The number of documents and document metadata do not match"
+            )
+        if not doc_metadata:
+            doc_metadata = [None] * len(documents)
+
+        for idx, (doc, m) in enumerate(zip(documents, doc_metadata)):
             if isinstance(doc, str):
-                doc = Document(did=f"doc_{idx}", text=doc)
-            assembled_docs.append(cast(Document, doc))
-        if doc_metadata:
-            if len(documents) != len(doc_metadata):
-                raise ValueError(
-                    "The number of documents and document metadata do not match"
-                )
-            for d, m in zip(assembled_docs, doc_metadata):
-                d.add_metadata(m)
+                doc = Document(did=f"doc_{idx}", text=doc, metadata=m)
+            else:
+                doc.add_metadata(m)  # type: ignore
+            assembled_docs[doc.did] = doc  # type: ignore
         return assembled_docs
 
     @staticmethod
@@ -383,7 +383,7 @@ class BaseEvaluator(ABC):
                 )
                 continue
             docs_per_query[qid].add(did)
-            queries[queries_idx[qid]].retrieved_docs.append(
+            queries[queries_idx[qid]].add_retrieved_doc(
                 Document(did=did, text=text, metadata=extra_metadata or None)
             )
             documents_read += 1
@@ -431,7 +431,7 @@ class BaseEvaluator(ABC):
                 continue
             answers_per_query[qid].add(agent)
             ans = AgentAnswer(agent=agent, text=answer, metadata=extra_metadata or None)
-            queries[queries_idx[qid]].answers.append(ans)
+            queries[queries_idx[qid]].add_agent_answer(ans)
             answers_read += 1
         logger.info(f"Loaded {answers_read} answers")
         return queries
@@ -442,7 +442,7 @@ class BaseEvaluator(ABC):
         if force:
             logger.info("Clearing existing document evaluations")
             for q in queries:
-                for doc in q.retrieved_docs:
+                for doc in q.retrieved_docs.values():
                     doc.evaluation = None
         document_evaluations = [
             RetrievalEvaluatorResult(**x)
@@ -459,9 +459,6 @@ class BaseEvaluator(ABC):
         evaluations: List[RetrievalEvaluatorResult],
     ) -> List[Query]:
         queries_idx = {q.qid: idx for idx, q in enumerate(queries)}
-        doc_idxs = {}
-        for q in queries:
-            doc_idxs[q.qid] = {d.did: idx for idx, d in enumerate(q.retrieved_docs)}
 
         for evaluation in evaluations:
             qid = evaluation.qid
@@ -469,14 +466,12 @@ class BaseEvaluator(ABC):
             if qid not in queries_idx:
                 logger.info(f"Query {qid} not in the provided queries. Skipping")
                 continue
-            if did not in doc_idxs[qid]:
+            if did not in queries[queries_idx[qid]].retrieved_docs:
                 logger.info(
                     f"Document {did} not in the retrieved documents for query {qid}. Skipping"
                 )
                 continue
-            queries[queries_idx[qid]].retrieved_docs[
-                doc_idxs[qid][did]
-            ].evaluation = evaluation
+            queries[queries_idx[qid]].retrieved_docs[did].evaluation = evaluation
         return queries
 
     def _load_answers_evaluations(
@@ -485,7 +480,7 @@ class BaseEvaluator(ABC):
         if force:
             logger.info("Clearing existing answers evaluations")
             for q in queries:
-                for ans in q.answers:
+                for ans in q.answers.values():
                     ans.evaluation = None
                 for game in q.pairwise_games:
                     game.evaluation = None
@@ -505,17 +500,15 @@ class BaseEvaluator(ABC):
         return self._add_answers_evaluations(queries, evaluations)
 
     def _add_answers_evaluations(
-        self, queries, evaluations: List[AnswerEvaluatorResult]
+        self, queries: List[Query], evaluations: List[AnswerEvaluatorResult]
     ) -> List[Query]:
         queries_idx = {q.qid: idx for idx, q in enumerate(queries)}
         games_idxs = {}
-        answer_idxs = {}
         for q in queries:
             games_idxs[q.qid] = {
                 (g.agent_a_answer.agent, g.agent_b_answer.agent): idx
                 for idx, g in enumerate(q.pairwise_games)
             }
-            answer_idxs[q.qid] = {a.agent: idx for idx, a in enumerate(q.answers)}
 
         for evaluation in evaluations:
             query_idx = queries_idx[evaluation.qid]
@@ -539,8 +532,7 @@ class BaseEvaluator(ABC):
                 if evaluation.agent is None:
                     # Should never happen.
                     raise ValueError("Evaluation must have an agent")
-                answer_idx = answer_idxs[evaluation.qid][evaluation.agent]
-                queries[query_idx].answers[answer_idx].evaluation = evaluation
+                queries[query_idx].answers[evaluation.agent].evaluation = evaluation
         return queries
 
     def _print_failed_evaluations(
