@@ -139,7 +139,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         except ValueError as e:
             logger.warning(
                 f"Failed to PARSE answer for qid: {query.qid} "
-                "document id: {document.did}\n"
+                f"document id: {document.did}\n"
                 f"Raw answer: {raw_answer}"
             )
             exc = str(e)
