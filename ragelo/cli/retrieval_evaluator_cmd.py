@@ -83,7 +83,6 @@ def rdnam(config: RDNAMEvaluatorConfig = RDNAMEvaluatorConfig(), **kwargs):
         config.data_dir, config.document_evaluations_file, check_exists=False
     )
     config.verbose = True
-
     llm_provider = get_llm_provider(config.llm_provider_name, **kwargs)
     evaluator = get_retrieval_evaluator(
         RetrievalEvaluatorTypes.RDNAM, config=config, llm_provider=llm_provider

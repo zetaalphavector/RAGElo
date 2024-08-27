@@ -61,7 +61,7 @@ comprehensive and accurate information.
 relevance.
 General Guidelines:
     - Context Matters: Annotators should evaluate the relevance of documents within \
-the specific{domain_short} context provided by the query. Understanding the nuances \
+the specific context provided by the query. Understanding the nuances \
 and domain-specific terminology is essential.
     - Content Overlap: Consider the extent of content overlap between the document\
 and the query. Assess whether the document covers the core aspects of the query \
