@@ -9,6 +9,7 @@ from ragelo.types.configurations import (  # ReasonerEvaluatorConfig,
 )
 from ragelo.types.types import (
     AgentAnswer,
+    AgentRankerTypes,
     AnswerEvaluatorResult,
     AnswerEvaluatorTypes,
     AnswerFormat,

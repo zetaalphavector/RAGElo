@@ -421,7 +421,7 @@ class AnswerEvaluatorFactory:
         config: Optional[BaseAnswerEvaluatorConfig] = None,
         **kwargs,
     ) -> BaseAnswerEvaluator:
-        if evaluator_name.lower() not in cls.registry:
+        if evaluator_name not in cls.registry:
             raise ValueError(f"Unknown evaluator {evaluator_name}")
         if isinstance(llm_provider, str):
             llm_provider_instance = get_llm_provider(llm_provider, **kwargs)

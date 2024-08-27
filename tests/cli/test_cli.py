@@ -1,4 +1,5 @@
 import csv
+import os
 
 from typer.testing import CliRunner
 
@@ -84,11 +85,16 @@ def test_run_answer_cli():
 
 
 def test_run_agents_ranker_cli():
+    # remove the output file if it exists
+    try:
+        os.remove("tests/data/agents_ranking.csv")
+    except FileNotFoundError:
+        pass
     result = runner.invoke(
         app,
         [
             "agents-ranker",
-            "eloranker",
+            "elo",
             "pairwise_answers_evaluations.csv",
             "--agents-evaluations-file",
             "agents_ranking.csv",
@@ -98,3 +104,13 @@ def test_run_agents_ranker_cli():
         ],
     )
     assert result.exit_code == 0
+    lines = result.stdout.split("\n")
+    assert "Agent Scores by elo" in lines[0]
+    assert "agent1" in lines[1]
+    assert "agent2" in lines[2]
+
+    # Make sure that the output file was created
+    with open("tests/data/agents_ranking.csv", "r") as f:
+        reader = csv.DictReader(f)
+        assert reader.fieldnames == ["agent", "score"]
+        assert len(list(reader)) == 2

@@ -67,6 +67,10 @@ class AnswerEvaluatorTypes(str, Enum):
     DOMAIN_EXPERT = "domain_expert"
 
 
+class AgentRankerTypes(str, Enum):
+    ELO = "elo"
+
+
 class EvaluatorResult(BaseModel):
     """Generic class with the results of an evaluator.
     Args:

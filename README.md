@@ -153,7 +153,7 @@ The `pairwise_answers_evaluations.csv` file is a CSV file with both the raw answ
 Finally, the `agents-ranker` tool ranks the agents by simulating an Elo tournament where the output of each game is given by the answers from the `answers-annotator`:
 
 ```bash
-ragelo agents-ranker eloranker pairwise_answers_evaluations.csv agents_ranking.csv
+ragelo agents-ranker elo pairwise_answers_evaluations.csv --agents-evaluations-file agents_ranking.csv --verbose --data-dir tests/data/
 ```
 The output of this step is written to the output file `agents_ranking.csv` with columns agent and score: [tests/data/agents_ranking.csv](https://github.com/zetaalphavector/RAGElo/blob/master/tests/data/agents_ranking.csv).
 
