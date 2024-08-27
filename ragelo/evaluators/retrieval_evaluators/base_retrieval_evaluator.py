@@ -67,8 +67,6 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         use_progress_bar = self.config.use_progress_bar
         queries = self.__prepare_queries(queries)
         tuples_to_eval = self.__get_tuples_to_evaluate(queries)
-        if len(tuples_to_eval) == 0:
-            return queries
         if self.config.rich_print:
             import warnings
 
@@ -122,10 +120,13 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         return queries
 
     async def _async_evaluate(
-        self, eval_sample: Tuple[Query, Document]
+        self,
+        eval_sample: Tuple[Query, Document],
     ) -> RetrievalEvaluatorResult:
         query, document = eval_sample
         exc = None
+        if document.evaluation is not None and not self.config.force:
+            return document.evaluation  # type: ignore
         prompt = self._build_message(query, document)
         try:
             raw_answer = await self.llm_provider.call_async(prompt)
@@ -167,14 +168,16 @@ class BaseRetrievalEvaluator(BaseEvaluator):
     ) -> List[Tuple[Query, Document]]:
         tuples_to_eval = []
         all_tuples = 0
+        missing_evaluations = 0
         for q in queries:
             for d in q.retrieved_docs.values():
                 if d.evaluation is None:
-                    tuples_to_eval.append((q, d))
+                    missing_evaluations += 1
+                tuples_to_eval.append((q, d))
                 all_tuples += 1
-        if len(tuples_to_eval) == 0:
-            logger.info("All documents have been evaluated")
-            if self.config.verbose:
+        if missing_evaluations == all_tuples:
+            logger.info("All documents have already been evaluated")
+            if self.config.verbose and not self.config.force:
                 print(
                     f"All {all_tuples} documents are already evaluated.\n"
                     "If you want to re-evaluate documents, use the --force flag."

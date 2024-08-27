@@ -11,7 +11,7 @@ from ragelo.types.configurations import (
 from ragelo.types.types import RetrievalEvaluatorTypes
 from ragelo.utils import add_documents_from_csv, load_queries_from_csv
 
-typer.main.get_params_from_function = get_params_from_function
+typer.main.get_params_from_function = get_params_from_function  # type: ignore
 
 
 app = typer.Typer()
@@ -35,8 +35,8 @@ def domain_expert(
     config = DomainExpertEvaluatorConfig(**kwargs)
     config.queries_file = get_path(config.data_dir, config.queries_file)
     config.documents_file = get_path(config.data_dir, config.documents_file)
-    config.answers_evaluations_file = get_path(
-        config.data_dir, config.answers_evaluations_file
+    config.document_evaluations_file = get_path(
+        config.data_dir, config.document_evaluations_file, check_exists=False
     )
 
     config.verbose = True
@@ -58,11 +58,12 @@ def reasoner(config: ReasonerEvaluatorConfig = ReasonerEvaluatorConfig(), **kwar
     config = ReasonerEvaluatorConfig(**kwargs)
     config.queries_file = get_path(config.data_dir, config.queries_file)
     config.documents_file = get_path(config.data_dir, config.documents_file)
-    config.answers_evaluations_file = get_path(
-        config.data_dir, config.answers_evaluations_file
+    config.document_evaluations_file = get_path(
+        config.data_dir, config.document_evaluations_file, check_exists=False
     )
 
     config.verbose = True
+
     llm_provider = get_llm_provider(config.llm_provider_name, **kwargs)
     evaluator = get_retrieval_evaluator(
         RetrievalEvaluatorTypes.REASONER, config=config, llm_provider=llm_provider
@@ -78,11 +79,11 @@ def rdnam(config: RDNAMEvaluatorConfig = RDNAMEvaluatorConfig(), **kwargs):
     config = RDNAMEvaluatorConfig(**kwargs)
     config.queries_file = get_path(config.data_dir, config.queries_file)
     config.documents_file = get_path(config.data_dir, config.documents_file)
-    config.answers_evaluations_file = get_path(
-        config.data_dir, config.answers_evaluations_file
+    config.document_evaluations_file = get_path(
+        config.data_dir, config.document_evaluations_file, check_exists=False
     )
-
     config.verbose = True
+
     llm_provider = get_llm_provider(config.llm_provider_name, **kwargs)
     evaluator = get_retrieval_evaluator(
         RetrievalEvaluatorTypes.RDNAM, config=config, llm_provider=llm_provider

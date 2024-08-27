@@ -181,7 +181,9 @@ class BaseEvaluator(ABC):
                         f"[bold red] {agent_b}[/bold red]"
                     )
                 elif agent:
-                    rich.print(f"[bold bright_cyan]🕵️ Agent[/bold bright_cyan]: {agent}")
+                    rich.print(
+                        f"[bold bright_cyan]🕵️ Agent[/bold bright_cyan]: {agent}"
+                    )
                 if raw_answer != answer:
                     rich.print(f"[bold blue]Raw Answer[/bold blue]: {raw_answer}")
                 rich.print(f"[bold blue]Parsed Answer[/bold blue]: {answer}")

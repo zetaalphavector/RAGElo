@@ -1,5 +1,5 @@
 qid,did,raw_answer,answer
 0,0,Very relevant: The document directly answers the user question by stating that Brasília is the capital of Brazil.,Very relevant: The document directly answers the user question by stating that Brasília is the capital of Brazil.
-0,1,"Somewhat relevant: The document mentions Rio de Janeiro as a former capital of Brazil, but it does not provide the current capital.","Somewhat relevant: The document mentions Rio de Janeiro as a former capital of Brazil, but it does not provide the current capital."
+0,1,"Somewhat relevant: The document mentions a city that was previously the capital of Brazil, but it does not provide the current capital.","Somewhat relevant: The document mentions a city that was previously the capital of Brazil, but it does not provide the current capital."
 1,2,Very relevant: The document directly answers the user question by stating that Paris is the capital of France.,Very relevant: The document directly answers the user question by stating that Paris is the capital of France.
-1,3,Not relevant: The document does not provide any information about the capital of France.,Not relevant: The document does not provide any information about the capital of France.
+1,3,Not relevant: The document does not provide information about the capital of France.,Not relevant: The document does not provide information about the capital of France.

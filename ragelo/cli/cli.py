@@ -18,7 +18,7 @@ from ragelo.utils import (
     load_queries_from_csv,
 )
 
-typer.main.get_params_from_function = get_params_from_function
+typer.main.get_params_from_function = get_params_from_function  # type: ignore
 
 
 app = typer.Typer()
@@ -47,15 +47,9 @@ def run_all(config: AllConfig = AllConfig(), **kwargs):
 
     # Get the absolute paths for the input and output files, and ensure that they exist.
     # TODO: Make this more robust.
-    config.queries_file = get_path(
-        config.data_dir, config.queries_file, check_exists=True
-    )
-    config.documents_file = get_path(
-        config.data_dir, config.documents_file, check_exists=True
-    )
-    config.answers_file = get_path(
-        config.data_dir, config.answers_file, check_exists=True
-    )
+    config.queries_file = get_path(config.data_dir, config.queries_file)
+    config.documents_file = get_path(config.data_dir, config.documents_file)
+    config.answers_file = get_path(config.data_dir, config.answers_file)
     config.reasoning_file = get_path(
         config.data_dir, config.reasoning_file, check_exists=False
     )
