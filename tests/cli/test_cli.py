@@ -1,3 +1,5 @@
+import csv
+
 from typer.testing import CliRunner
 
 from ragelo.cli.cli import app
@@ -40,6 +42,11 @@ def test_run_reasoner_cli():
     assert "✅ Done!" in result.stdout
     assert "Failed evaluations: 0" in result.stdout
     assert "Total evaluations: 4" in result.stdout
+    # Make sure that the output file was created
+    with open("tests/data/reasonings.csv", "r") as f:
+        reader = csv.DictReader(f)
+        assert reader.fieldnames == ["qid", "did", "raw_answer", "answer"]
+        assert len(list(reader)) == 4
 
 
 def test_run_answer_cli():
@@ -51,15 +58,43 @@ def test_run_answer_cli():
             "queries.csv",
             "documents.csv",
             "answers.csv",
-            "--document-evaluations-file",
-            "reasonings.csv",
+            "--games-evaluations-file",
+            "pairwise_answers_evaluations.csv",
             "--verbose",
             "--data-dir",
             "tests/data/",
         ],
     )
-    print(result.stdout)
     assert result.exit_code == 0
     assert "✅ Done!" in result.stdout
     assert "Failed evaluations: 0" in result.stdout
     assert "Total evaluations: 2" in result.stdout
+    # Make sure that the output file was created
+    with open("tests/data/pairwise_answers_evaluations.csv", "r") as f:
+        reader = csv.DictReader(f)
+        assert reader.fieldnames == [
+            "qid",
+            "agent_a",
+            "agent_b",
+            "raw_answer",
+            "answer",
+            "relevance",
+        ]
+        assert len(list(reader)) == 2
+
+
+def test_run_agents_ranker_cli():
+    result = runner.invoke(
+        app,
+        [
+            "agents-ranker",
+            "eloranker",
+            "pairwise_answers_evaluations.csv",
+            "--agents-evaluations-file",
+            "agents_ranking.csv",
+            "--verbose",
+            "--data-dir",
+            "tests/data/",
+        ],
+    )
+    assert result.exit_code == 0

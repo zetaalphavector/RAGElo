@@ -28,9 +28,9 @@ def pairwise_reasoning(
         config.data_dir, config.document_evaluations_file
     )
 
-    config.answers_evaluations_file = get_path(
+    config.games_evaluations_file = get_path(
         config.data_dir,
-        config.answers_evaluations_file,
+        config.games_evaluations_file,
         check_exists=False,
     )
 
