@@ -4,10 +4,10 @@ from typing import Dict, List, Optional, Tuple
 from ragelo.agent_rankers.base_agent_ranker import AgentRanker, AgentRankerFactory
 from ragelo.logger import logger
 from ragelo.types import EloAgentRankerConfig
-from ragelo.types.types import Query
+from ragelo.types.types import AgentRankerTypes, Query
 
 
-@AgentRankerFactory.register("elo")
+@AgentRankerFactory.register(AgentRankerTypes.ELO)
 class EloRanker(AgentRanker):
     name: str = "Elo Agent Ranker"
     config: EloAgentRankerConfig

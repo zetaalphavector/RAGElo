@@ -64,10 +64,6 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
         default="pairwise_answers_evaluations.csv",
         description="Path to the output file",
     )
-    documents_path: str = Field(
-        default="reasonings.csv",
-        description="Path with the outputs from the reasoner Retrieval Evaluator",
-    )
     pairwise: bool = Field(
         default=True, description="Whether or not to the evaluator is pairwise"
     )

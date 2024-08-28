@@ -204,6 +204,8 @@ class BaseAnswerEvaluator(BaseEvaluator):
     ) -> AnswerEvaluatorResult:
         query, evaluable = eval_sample
         agent: Union[str, Tuple[str, str]]
+        if evaluable.evaluation is not None and not self.config.force:
+            return evaluable.evaluation  # type: ignore
         if isinstance(evaluable, AgentAnswer):
             agent = evaluable.agent
         elif isinstance(evaluable, PairwiseGame):
@@ -281,7 +283,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
 
     def _prepare_documents(self, query: Query) -> str:
         documents = []
-        for d in query.retrieved_docs:
+        for did, d in query.retrieved_docs.items():
             if self.config.document_relevance_threshold is not None:
                 # Skip documents with relevance below the threshold
                 if d.evaluation is None:
@@ -300,7 +302,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 if not self.config.document_filter(str(d.evaluation.answer)):
                     continue
             formatters = {
-                "did": d.did,
+                "did": did,
                 "doc": d.text,
                 "annotation": d.evaluation.answer if d.evaluation else None,
             }
@@ -321,7 +323,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
         if not self.pairwise:
             return queries
         for query in queries:
-            query_agents = list({x.agent for x in query.answers})
+            query_agents = list(query.answers.keys())
             pairs = list(itertools.combinations(query_agents, 2))
             if not isinstance(self.config, PairwiseEvaluatorConfig):
                 raise ValueError(
@@ -336,7 +338,6 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 (a.agent_a_answer.agent, a.agent_b_answer.agent)
                 for a in query.pairwise_games
             }
-            answer_idx = {ans.agent: idx for idx, ans in enumerate(query.answers)}
             games = [g for g in pairs if g not in existing_games]
 
             games_to_add = self.config.n_games_per_query - len(existing_games)
@@ -344,32 +345,36 @@ class BaseAnswerEvaluator(BaseEvaluator):
             for agent_a, agent_b in games:
                 query.pairwise_games.append(
                     PairwiseGame(
-                        agent_a_answer=query.answers[answer_idx[agent_a]],
-                        agent_b_answer=query.answers[answer_idx[agent_b]],
+                        agent_a_answer=query.answers[agent_a],
+                        agent_b_answer=query.answers[agent_b],
                     )
                 )
         return queries
 
     def __get_tuples_to_evaluate(
-        self,
-        queries: List[Query],
+        self, queries: List[Query]
     ) -> List[Tuple[Query, Union[PairwiseGame, AgentAnswer]]]:
         tuples_to_eval: List[Tuple[Query, Union[PairwiseGame, AgentAnswer]]] = []
         all_tuples = 0
+        missing_evaluations = 0
         for q in queries:
             if self.pairwise:
                 for g in q.pairwise_games:
                     all_tuples += 1
+                    tuples_to_eval.append((q, g))
                     if g.evaluation is None:
-                        tuples_to_eval.append((q, g))
+                        missing_evaluations += 1
+
             else:
-                for a in q.answers:
+                for a in q.answers.values():
                     all_tuples += 1
+                    tuples_to_eval.append((q, a))
                     if a.evaluation is None:
-                        tuples_to_eval.append((q, a))
-        if len(tuples_to_eval) == 0:
+                        missing_evaluations += 1
+
+        if missing_evaluations == all_tuples:
             logger.info("All answers have been evaluated")
-            if self.config.verbose:
+            if self.config.verbose and not self.config.force:
                 print(
                     f"All {all_tuples} answers are already evaluated.\n"
                     "If you want to re-evaluate them, use the force flag"
@@ -416,7 +421,7 @@ class AnswerEvaluatorFactory:
         config: Optional[BaseAnswerEvaluatorConfig] = None,
         **kwargs,
     ) -> BaseAnswerEvaluator:
-        if evaluator_name.lower() not in cls.registry:
+        if evaluator_name not in cls.registry:
             raise ValueError(f"Unknown evaluator {evaluator_name}")
         if isinstance(llm_provider, str):
             llm_provider_instance = get_llm_provider(llm_provider, **kwargs)

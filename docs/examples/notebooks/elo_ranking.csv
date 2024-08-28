@@ -1,0 +1,7 @@
+agent,score
+rag_response_512_5,1017
+rag_response_512_5_reranked,1009
+rag_response_512_3,994
+rag_response_512_4,941
+rag_response_512_4_reranked,920
+rag_response_512_3_reranked,920
