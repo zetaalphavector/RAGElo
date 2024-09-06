@@ -1,4 +1,5 @@
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, List, Union
 
 from openai import AsyncAzureOpenAI, AsyncOpenAI
@@ -34,16 +35,34 @@ class OpenAIProvider(BaseLLMProvider):
         Args:
             prompt: The prompt to use. Either a list of messages or a string.
         """
+
+        def run(coroutine):
+            return asyncio.run(coroutine)
+
         if isinstance(prompt, str):
             prompt = [{"role": "system", "content": prompt}]
-        answers = asyncio.run(
-            self.__openai_client.chat.completions.create(
-                model=self.config.model,
-                messages=prompt,  # type: ignore
-                temperature=self.config.temperature,
-                max_tokens=self.config.max_tokens,
+        try:
+            asyncio.get_running_loop()
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(
+                    run,
+                    self.__openai_client.chat.completions.create(
+                        model=self.config.model,
+                        messages=prompt,  # type: ignore
+                        temperature=self.config.temperature,
+                        max_tokens=self.config.max_tokens,
+                    ),
+                )
+                answers = future.result()
+        except RuntimeError:
+            answers = asyncio.run(
+                self.__openai_client.chat.completions.create(
+                    model=self.config.model,
+                    messages=prompt,  # type: ignore
+                    temperature=self.config.temperature,
+                    max_tokens=self.config.max_tokens,
+                )
             )
-        )
         if (
             not answers.choices
             or not answers.choices[0].message
