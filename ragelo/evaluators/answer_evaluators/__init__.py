@@ -19,6 +19,5 @@ __all__ = [
     "CustomPromptEvaluator",
     "PairwiseDomainExpertEvaluator",
     "PairwiseAnswerEvaluator",
-    "CustomPromptPairwiseEvaluator",
     "get_answer_evaluator",
 ]
