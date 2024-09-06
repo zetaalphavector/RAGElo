@@ -40,6 +40,7 @@ class AnswerFormat(str, Enum):
     JSON = "json"
     TEXT = "text"
     MULTI_FIELD_JSON = "multi_field_json"
+    REASONING_LAST_LINE = "reasoning_last_line"
 
 
 class RetrievalEvaluatorTypes(str, Enum):
@@ -65,6 +66,7 @@ class AnswerEvaluatorTypes(str, Enum):
     PAIRWISE = "pairwise"
     CUSTOM_PROMPT = "custom_prompt"
     DOMAIN_EXPERT = "domain_expert"
+    CUSTOM_PROMPT_PAIRWISE = "custom_prompt_pairwise"
 
 
 class AgentRankerTypes(str, Enum):

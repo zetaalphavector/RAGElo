@@ -95,11 +95,11 @@ class LLMProviderFactory:
                     if _PYDANTIC_MAJOR_VERSION == 2:
                         is_required = api_key_field.is_required()
                     else:
-                        is_required = api_key_field.required # type: ignore
+                        is_required = api_key_field.required  # type: ignore
                     if is_required:
                         raise ValueError(
                             f"API key not found in environment variable {class_.api_key_env_var}"
-                    )
+                        )
                     else:
                         api_key = api_key_field.default
                 kwargs["api_key"] = api_key
