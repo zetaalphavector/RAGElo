@@ -66,7 +66,6 @@ class AnswerEvaluatorTypes(str, Enum):
     PAIRWISE = "pairwise"
     CUSTOM_PROMPT = "custom_prompt"
     DOMAIN_EXPERT = "domain_expert"
-    CUSTOM_PROMPT_PAIRWISE = "custom_prompt_pairwise"
 
 
 class AgentRankerTypes(str, Enum):
