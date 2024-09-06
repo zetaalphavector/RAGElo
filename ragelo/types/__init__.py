@@ -1,11 +1,14 @@
-from ragelo.types.configurations import (  # ReasonerEvaluatorConfig,
+from ragelo.types.configurations import (
     AgentRankerConfig,
     AllConfig,
     BaseAnswerEvaluatorConfig,
     BaseConfig,
     EloAgentRankerConfig,
     LLMProviderConfig,
+    OllamaConfiguration,
+    OpenAIConfiguration,
     PairwiseEvaluatorConfig,
+    ReasonerEvaluatorConfig,
 )
 from ragelo.types.types import (
     AgentAnswer,
