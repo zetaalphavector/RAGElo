@@ -40,7 +40,6 @@ class AnswerFormat(str, Enum):
     JSON = "json"
     TEXT = "text"
     MULTI_FIELD_JSON = "multi_field_json"
-    REASONING_LAST_LINE = "reasoning_last_line"
 
 
 class RetrievalEvaluatorTypes(str, Enum):
