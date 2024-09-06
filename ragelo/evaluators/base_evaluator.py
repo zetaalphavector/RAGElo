@@ -86,10 +86,6 @@ class BaseEvaluator(ABC):
             )
         return json_dict
 
-    def reasoning_last_line_answer_parser(self, answer: str, key: str) -> str:
-        """Parses a reasoning last line answer from the LLM and returns the last line"""
-        return answer.strip().split("\n")[-1]
-
     @staticmethod
     def _get_fields_from_string(s: str) -> List[str]:
         """Parse a formatted string and return all the fields in it"""
@@ -288,8 +284,6 @@ class BaseEvaluator(ABC):
             return self.json_answer_parser(answer, self.scoring_key)
         if self.answer_format == AnswerFormat.MULTI_FIELD_JSON:
             return self.json_answer_parser_multifields(answer, self.scoring_keys)
-        if self.answer_format == AnswerFormat.REASONING_LAST_LINE:
-            return self.reasoning_last_line_answer_parser(answer, self.scoring_key)
         if self.answer_format == AnswerFormat.TEXT:
             return answer
 
