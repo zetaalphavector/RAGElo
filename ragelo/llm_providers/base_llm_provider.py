@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Type, Union, get_type_hints
 
 from ragelo.types import LLMProviderConfig, LLMProviderTypes
+from ragelo.types.configurations.base_configs import _PYDANTIC_MAJOR_VERSION
 
 
 def set_credentials_from_file(credentials_file: str, split_char: str = "="):
@@ -89,9 +90,18 @@ class LLMProviderFactory:
             if "api_key" not in kwargs:
                 api_key = os.environ.get(class_.api_key_env_var)
                 if not api_key:
-                    raise ValueError(
-                        f"API key not found in environment variable {class_.api_key_env_var}"
+                    # Check if the key is actually required
+                    api_key_field = type_config.get_model_fields()["api_key"]
+                    if _PYDANTIC_MAJOR_VERSION == 2:
+                        is_required = api_key_field.is_required()
+                    else:
+                        is_required = api_key_field.required # type: ignore
+                    if is_required:
+                        raise ValueError(
+                            f"API key not found in environment variable {class_.api_key_env_var}"
                     )
+                    else:
+                        api_key = api_key_field.default
                 kwargs["api_key"] = api_key
             valid_args = {k: v for k, v in kwargs.items() if k in valid_keys}
             config = type_config(**valid_args)
