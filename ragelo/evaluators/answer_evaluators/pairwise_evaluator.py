@@ -26,7 +26,7 @@ class PairwiseAnswerEvaluator(BaseAnswerEvaluator):
         "explaining why the document is or is not relevant."
     )
     documents_prompt_raw_and_relevance = (
-        "For each reference document, you will you be provided with the text "
+        "For each reference document, you will be provided with the text "
         "of the document as well as a reasoning  why the document "
         "is or is not relevant."
     )
