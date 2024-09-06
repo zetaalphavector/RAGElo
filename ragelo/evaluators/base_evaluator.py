@@ -264,7 +264,7 @@ class BaseEvaluator(ABC):
         null_keys = {k for k in answer_dict.keys() if answer_dict[k] is None}
         unused_keys = (set(answer_dict.keys()) - set(output_columns)) & set(null_keys)
         for k in unused_keys:
-            answer_dict.pop(k, None)
+            del answer_dict[k]
 
         if output_file.endswith(".csv"):
             self.__dump_response_csv(answer_dict, output_columns, output_file)
