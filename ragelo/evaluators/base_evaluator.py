@@ -529,11 +529,17 @@ class BaseEvaluator(ABC):
                         continue
 
                 game_idx = games_idxs[evaluation.qid][agents]
+                if queries[query_idx].pairwise_games[game_idx].evaluation is not None:
+                    continue
+
                 queries[query_idx].pairwise_games[game_idx].evaluation = evaluation
             else:
                 if evaluation.agent is None:
                     # Should never happen.
                     raise ValueError("Evaluation must have an agent")
+                if queries[query_idx].answers[evaluation.agent].evaluation is not None:
+                    # Prefer object evaluations over file evaluations
+                    continue
                 queries[query_idx].answers[evaluation.agent].evaluation = evaluation
         return queries
 
