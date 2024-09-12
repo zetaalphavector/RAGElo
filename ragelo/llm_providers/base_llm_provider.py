@@ -5,8 +5,9 @@ import os
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Type, Union, get_type_hints
 
-from ragelo.types import LLMProviderConfig, LLMProviderTypes
 from ragelo.types.configurations.base_configs import _PYDANTIC_MAJOR_VERSION
+from ragelo.types.configurations.llm_provider_configs import LLMProviderConfig
+from ragelo.types.types import LLMProviderTypes
 
 
 def set_credentials_from_file(credentials_file: str, split_char: str = "="):

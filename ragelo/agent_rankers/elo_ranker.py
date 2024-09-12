@@ -3,8 +3,8 @@ from typing import Dict, List, Optional, Tuple
 
 from ragelo.agent_rankers.base_agent_ranker import AgentRanker, AgentRankerFactory
 from ragelo.logger import logger
-from ragelo.types import EloAgentRankerConfig
-from ragelo.types.types import AgentRankerTypes, Query
+from ragelo.types import AgentRankerTypes, Query
+from ragelo.types.configurations import EloAgentRankerConfig
 
 
 @AgentRankerFactory.register(AgentRankerTypes.ELO)

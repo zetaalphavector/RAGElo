@@ -4,8 +4,8 @@ import csv
 from typing import Dict, List, Optional, Tuple, Type, Union, get_type_hints
 
 from ragelo.logger import logger
+from ragelo.types import AgentRankerTypes, Query
 from ragelo.types.configurations.agent_ranker_configs import AgentRankerConfig
-from ragelo.types.types import AgentRankerTypes, Query
 from ragelo.utils import load_answer_evaluations_from_csv
 
 

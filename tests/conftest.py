@@ -9,17 +9,19 @@ from openai.types.chat.chat_completion_message import ChatCompletionMessage
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.llm_providers.openai_client import OpenAIConfiguration
+from ragelo.types import FewShotExample
 from ragelo.types.configurations import (
-    BaseEvaluatorConfig,
-    BaseRetrievalEvaluatorConfig,
     CustomPromptAnswerEvaluatorConfig,
     CustomPromptEvaluatorConfig,
     DomainExpertEvaluatorConfig,
     FewShotEvaluatorConfig,
-    FewShotExample,
     LLMProviderConfig,
     PairwiseEvaluatorConfig,
     RDNAMEvaluatorConfig,
+)
+from ragelo.types.configurations.base_configs import BaseEvaluatorConfig
+from ragelo.types.configurations.retrieval_evaluator_configs import (
+    BaseRetrievalEvaluatorConfig,
 )
 from ragelo.utils import (
     add_answers_from_csv,

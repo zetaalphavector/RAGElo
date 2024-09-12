@@ -3,7 +3,8 @@ import typer
 from ragelo import get_agent_ranker
 from ragelo.cli.args import get_params_from_function
 from ragelo.cli.utils import get_path
-from ragelo.types import AgentRankerTypes, EloAgentRankerConfig
+from ragelo.types import AgentRankerTypes
+from ragelo.types.configurations import EloAgentRankerConfig
 from ragelo.utils import load_answer_evaluations_from_csv
 
 typer.main.get_params_from_function = get_params_from_function  # type: ignore

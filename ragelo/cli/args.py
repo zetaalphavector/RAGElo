@@ -1,4 +1,5 @@
 """Parse arguments for the cli app"""
+
 import collections.abc
 import inspect
 import sys
@@ -6,8 +7,7 @@ from typing import Any, Callable, Dict, Union, get_args, get_origin, get_type_hi
 
 from typer.models import ArgumentInfo, OptionInfo, ParameterInfo, ParamMeta
 
-from ragelo.types import BaseConfig
-from ragelo.types.configurations.base_configs import _PYDANTIC_MAJOR_VERSION
+from ragelo.types.configurations.base_configs import _PYDANTIC_MAJOR_VERSION, BaseConfig
 
 arguments = {
     "queries_file",
@@ -51,10 +51,8 @@ def get_params_from_function(func: Callable[..., Any]) -> Dict[str, ParamMeta]:
                     _outer_type = v.outer_type_  # type: ignore
                     t_args = get_args(_outer_type)
                 if not isinstance(v, ParameterInfo):
-                    if get_origin(_outer_type) == list:
+                    if get_origin(_outer_type) is list:
                         _type = _outer_type
-                    # elif _outer_type == Union:
-                    # _type = t_args[0]
                     # parse the Union type, defaulting to the str type if possible
                     if len(t_args) > 1:
                         if get_origin(_outer_type) == Union:

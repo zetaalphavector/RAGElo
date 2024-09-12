@@ -11,7 +11,7 @@ from ragelo.cli.answer_evaluators_cmd import app as answer_evaluator_app
 from ragelo.cli.args import get_params_from_function
 from ragelo.cli.retrieval_evaluator_cmd import app as retrieval_evaluator_app
 from ragelo.cli.utils import get_path
-from ragelo.types import AllConfig
+from ragelo.types.configurations import AllConfig
 from ragelo.utils import (
     add_answers_from_csv,
     add_documents_from_csv,

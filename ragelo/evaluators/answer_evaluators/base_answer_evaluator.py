@@ -27,11 +27,13 @@ from ragelo.types import (
     AnswerEvaluatorResult,
     AnswerEvaluatorTypes,
     AnswerFormat,
-    BaseAnswerEvaluatorConfig,
     Document,
-    PairwiseEvaluatorConfig,
     PairwiseGame,
     Query,
+)
+from ragelo.types.configurations.answer_evaluator_configs import (
+    BaseAnswerEvaluatorConfig,
+    PairwiseEvaluatorConfig,
 )
 
 

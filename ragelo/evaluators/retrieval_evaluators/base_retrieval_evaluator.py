@@ -29,7 +29,9 @@ from ragelo.types import (
     RetrievalEvaluatorResult,
     RetrievalEvaluatorTypes,
 )
-from ragelo.types.configurations import BaseRetrievalEvaluatorConfig
+from ragelo.types.configurations.retrieval_evaluator_configs import (
+    BaseRetrievalEvaluatorConfig,
+)
 
 
 class BaseRetrievalEvaluator(BaseEvaluator):
@@ -154,7 +156,9 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         )
         if ans.exception is None:
             self._dump_response(
-                ans, self.output_columns, self.document_evaluations_file  # type: ignore
+                ans,
+                self.output_columns,
+                self.document_evaluations_file,  # type: ignore
             )
         return ans
 
@@ -252,7 +256,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
 
     @staticmethod
     def _construct_list_of_answers(
-        answers: List[Dict[str, str]]
+        answers: List[Dict[str, str]],
     ) -> List[RetrievalEvaluatorResult]:
         return [RetrievalEvaluatorResult(**x) for x in answers]
 

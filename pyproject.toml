@@ -68,5 +68,5 @@ exclude = ["build/", "dist/", "venv/"]
 enabled = true
 
 [tool.ruff]
-line-length = 119
+line-length = 88
 
