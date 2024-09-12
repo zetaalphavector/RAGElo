@@ -75,12 +75,8 @@ class EloRanker(AgentRanker):
         player2_rating = self.agents[player2]
         expected_score = self.__expected_score(player1_rating, player2_rating)
 
-        self.agents[player1] = self.__update_rating(
-            player1_rating, expected_score, result
-        )
-        self.agents[player2] = self.__update_rating(
-            player2_rating, 1 - expected_score, 1 - result
-        )
+        self.agents[player1] = self.__update_rating(player1_rating, expected_score, result)
+        self.agents[player2] = self.__update_rating(player2_rating, 1 - expected_score, 1 - result)
 
     def __expected_score(self, rating1, rating2):
         return 1 / (1 + 10 ** ((rating2 - rating1) / 400))

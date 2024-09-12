@@ -33,12 +33,8 @@ from ragelo.utils import (
 class MockLLMProvider(BaseLLMProvider):
     def __init__(self, config):
         self.config = config
-        self.call_mocker = Mock(
-            side_effect=lambda prompt: f"Received prompt: {prompt}."
-        )
-        self.async_call_mocker = AsyncMock(
-            side_effect=lambda prompt: f"Async prompt: {prompt}."
-        )
+        self.call_mocker = Mock(side_effect=lambda prompt: f"Received prompt: {prompt}.")
+        self.async_call_mocker = AsyncMock(side_effect=lambda prompt: f"Async prompt: {prompt}.")
 
     @classmethod
     def from_configuration(cls, config: LLMProviderConfig):
@@ -100,9 +96,7 @@ def chat_completion_mock():
                 finish_reason="stop",
                 index=0,
                 logprobs=None,
-                message=ChatCompletionMessage(
-                    content="fake response", role="assistant"
-                ),
+                message=ChatCompletionMessage(content="fake response", role="assistant"),
             )
         ],
         created=0,
@@ -118,9 +112,7 @@ def chat_completion_mock():
 def openai_client_mock(mocker, chat_completion_mock):
     openai_client = mocker.AsyncMock(AsyncOpenAI)
     type(openai_client).chat = mocker.AsyncMock(AsyncChat)
-    type(openai_client.chat).completions = mocker.PropertyMock(
-        return_value=chat_completion_mock
-    )
+    type(openai_client.chat).completions = mocker.PropertyMock(return_value=chat_completion_mock)
     return openai_client
 
 
@@ -260,12 +252,8 @@ def llm_provider_mock(llm_provider_config):
 @pytest.fixture
 def llm_provider_json_mock(llm_provider_config):
     provider = MockLLMProvider(llm_provider_config)
-    provider.call_mocker = Mock(
-        side_effect=lambda _: 'LLM JSON response\n{"relevance": 0}'
-    )
-    provider.async_call_mocker = AsyncMock(
-        side_effect=lambda _: 'Async LLM JSON response\n{"relevance": 1}'
-    )
+    provider.call_mocker = Mock(side_effect=lambda _: 'LLM JSON response\n{"relevance": 0}')
+    provider.async_call_mocker = AsyncMock(side_effect=lambda _: 'Async LLM JSON response\n{"relevance": 1}')
     return provider
 
 
@@ -295,8 +283,7 @@ def llm_provider_pairwise_answer_mock(llm_provider_config):
 def llm_provider_answer_mock(llm_provider_config):
     provider = MockLLMProvider(llm_provider_config)
     provider.call_mocker = Mock(
-        side_effect=lambda prompt: f"Answer for {prompt}\n"
-        '{"quality": 2, "trustworthiness": 1, "originality": 1}',
+        side_effect=lambda prompt: f"Answer for {prompt}\n" '{"quality": 2, "trustworthiness": 1, "originality": 1}',
     )
     provider.async_call_mocker = AsyncMock(
         side_effect=lambda prompt: f"Async answer for {prompt}\n"
@@ -310,7 +297,5 @@ def llm_provider_mock_rdnam(llm_provider_config):
     mocked_scores = [{"M": 2, "T": 1, "O": 1}, {"M": 1, "T": 1, "O": 2}]
     provider = MockLLMProvider(llm_provider_config)
     provider.call_mocker = Mock(side_effect=lambda _: json.dumps(mocked_scores)[2:])
-    provider.async_call_mocker = AsyncMock(
-        side_effect=lambda _: json.dumps(mocked_scores)[2:]
-    )
+    provider.async_call_mocker = AsyncMock(side_effect=lambda _: json.dumps(mocked_scores)[2:])
     return provider

@@ -55,16 +55,12 @@ class BaseAnswerEvaluator(BaseEvaluator):
         self.scoring_keys = config.scoring_keys_answer_evaluator
         self.scoring_key = config.scoring_key_answer_evaluator
         if isinstance(self.config.answer_format_answer_evaluator, str):
-            self.answer_format = AnswerFormat(
-                self.config.answer_format_answer_evaluator
-            )
+            self.answer_format = AnswerFormat(self.config.answer_format_answer_evaluator)
         else:
             self.answer_format = self.config.answer_format_answer_evaluator
 
         if self.answer_format == AnswerFormat.MULTI_FIELD_JSON:
-            missing_keys = [
-                key for key in self.scoring_keys if key not in self.output_columns
-            ]
+            missing_keys = [key for key in self.scoring_keys if key not in self.output_columns]
             self.output_columns.extend(missing_keys)
         else:
             if self.scoring_key not in self.output_columns:
@@ -119,9 +115,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
             if not pending:
                 break
 
-            done, pending = await asyncio.wait(
-                pending, return_when=asyncio.FIRST_COMPLETED
-            )
+            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
             while done:
                 evaluation = await done.pop()
                 pbar.update()
@@ -152,9 +146,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
         if isinstance(retrieved_documents, str):
             retrieved_documents = [retrieved_documents]
         if retrieved_documents:
-            retrieved_and_assembled_docs = self._assemble_documents(
-                retrieved_documents, document_metadata
-            )
+            retrieved_and_assembled_docs = self._assemble_documents(retrieved_documents, document_metadata)
             query.retrieved_docs = retrieved_and_assembled_docs
         agent: Union[str, Tuple[str, str]]
         if self.pairwise:
@@ -231,8 +223,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
             answer = self._process_answer(raw_answer) if raw_answer else None
         except ValueError as e:
             logger.warning(
-                f"Failed to PARSE answer for qid: {query.qid} agent(s): {agent}\n"
-                f"Raw answer: {raw_answer}"
+                f"Failed to PARSE answer for qid: {query.qid} agent(s): {agent}\n" f"Raw answer: {raw_answer}"
             )
             exc = str(e)
             answer = None
@@ -261,22 +252,16 @@ class BaseAnswerEvaluator(BaseEvaluator):
             self._dump_response(ans, self.output_columns, output_file)
         return ans
 
-    def _build_message(
-        self, query: Query, answer: AgentAnswer
-    ) -> Union[str, List[Dict[str, str]]]:
+    def _build_message(self, query: Query, answer: AgentAnswer) -> Union[str, List[Dict[str, str]]]:
         """Builds the message to send to the LLM evaluator"""
         raise NotImplementedError
 
-    def _build_message_pairwise(
-        self, query: Query, game: PairwiseGame
-    ) -> Union[str, List[Dict[str, str]]]:
+    def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> Union[str, List[Dict[str, str]]]:
         """Builds the message to send to the LLM evaluator"""
         raise NotImplementedError
 
     @classmethod
-    def from_config(
-        cls, config: BaseAnswerEvaluatorConfig, llm_provider: BaseLLMProvider
-    ):
+    def from_config(cls, config: BaseAnswerEvaluatorConfig, llm_provider: BaseLLMProvider):
         return cls(config, llm_provider)
 
     @classmethod
@@ -328,18 +313,13 @@ class BaseAnswerEvaluator(BaseEvaluator):
             query_agents = list(query.answers.keys())
             pairs = list(itertools.combinations(query_agents, 2))
             if not isinstance(self.config, PairwiseEvaluatorConfig):
-                raise ValueError(
-                    "You are trying to generate pairwise games for a pointwise evaluator"
-                )
+                raise ValueError("You are trying to generate pairwise games for a pointwise evaluator")
             if self.config.bidirectional:
                 pairs += [(b, a) for a, b in pairs]
             random.shuffle(pairs)
 
             # Filter out games that already exist
-            existing_games = {
-                (a.agent_a_answer.agent, a.agent_b_answer.agent)
-                for a in query.pairwise_games
-            }
+            existing_games = {(a.agent_a_answer.agent, a.agent_b_answer.agent) for a in query.pairwise_games}
             games = [g for g in pairs if g not in existing_games]
 
             games_to_add = self.config.n_games_per_query - len(existing_games)
@@ -353,9 +333,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 )
         return queries
 
-    def __get_tuples_to_evaluate(
-        self, queries: List[Query]
-    ) -> List[Tuple[Query, Union[PairwiseGame, AgentAnswer]]]:
+    def __get_tuples_to_evaluate(self, queries: List[Query]) -> List[Tuple[Query, Union[PairwiseGame, AgentAnswer]]]:
         tuples_to_eval: List[Tuple[Query, Union[PairwiseGame, AgentAnswer]]] = []
         all_tuples = 0
         missing_evaluations = 0
@@ -447,9 +425,7 @@ def get_answer_evaluator(
     if evaluator_name is None:
         # get the name from the config
         if config is None:
-            raise ValueError(
-                "Either the evaluator_name or a config object must be provided"
-            )
+            raise ValueError("Either the evaluator_name or a config object must be provided")
         evaluator_name = config.evaluator_name
     if isinstance(evaluator_name, str):
         evaluator_name = AnswerEvaluatorTypes(evaluator_name)

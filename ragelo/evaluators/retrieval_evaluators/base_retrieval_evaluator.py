@@ -49,16 +49,12 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         self.scoring_key = config.scoring_key_retrieval_evaluator
         self.scoring_keys = config.scoring_keys_retrieval_evaluator
         if isinstance(self.config.answer_format_retrieval_evaluator, str):
-            self.answer_format = AnswerFormat(
-                self.config.answer_format_retrieval_evaluator
-            )
+            self.answer_format = AnswerFormat(self.config.answer_format_retrieval_evaluator)
         else:
             self.answer_format = self.config.answer_format_retrieval_evaluator
 
         if self.answer_format == AnswerFormat.MULTI_FIELD_JSON:
-            missing_keys = [
-                key for key in self.scoring_keys if key not in self.output_columns
-            ]
+            missing_keys = [key for key in self.scoring_keys if key not in self.output_columns]
             self.output_columns.extend(missing_keys)
         else:
             if self.scoring_key not in self.output_columns:
@@ -105,9 +101,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             if not pending:
                 break
 
-            done, pending = await asyncio.wait(
-                pending, return_when=asyncio.FIRST_COMPLETED
-            )
+            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
             while done:
                 evaluation = await done.pop()
                 pbar.update()
@@ -167,9 +161,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         queries = self._load_document_evaluations(queries, force=self.config.force)
         return queries
 
-    def __get_tuples_to_evaluate(
-        self, queries: List[Query]
-    ) -> List[Tuple[Query, Document]]:
+    def __get_tuples_to_evaluate(self, queries: List[Query]) -> List[Tuple[Query, Document]]:
         tuples_to_eval = []
         all_tuples = 0
         missing_evaluations = 0
@@ -245,9 +237,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         raise NotImplementedError
 
     @classmethod
-    def from_config(
-        cls, config: BaseRetrievalEvaluatorConfig, llm_provider: BaseLLMProvider
-    ):
+    def from_config(cls, config: BaseRetrievalEvaluatorConfig, llm_provider: BaseLLMProvider):
         return cls(config, llm_provider)
 
     @classmethod
@@ -290,8 +280,7 @@ class RetrievalEvaluatorFactory:
             llm_provider_instance = llm_provider
         if evaluator_name not in cls.registry:
             raise ValueError(
-                f"Unknown retrieval evaluator {evaluator_name}\n"
-                f"Valid options are {list(cls.registry.keys())}"
+                f"Unknown retrieval evaluator {evaluator_name}\n" f"Valid options are {list(cls.registry.keys())}"
             )
         if config is None:
             class_ = cls.registry[evaluator_name]
@@ -311,9 +300,7 @@ def get_retrieval_evaluator(
     if evaluator_name is None:
         # get the name from the config
         if config is None:
-            raise ValueError(
-                "Either the evaluator_name or a config object must be provided"
-            )
+            raise ValueError("Either the evaluator_name or a config object must be provided")
         evaluator_name = config.evaluator_name
     if isinstance(evaluator_name, str):
         evaluator_name = RetrievalEvaluatorTypes(evaluator_name)

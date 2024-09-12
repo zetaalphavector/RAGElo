@@ -50,36 +50,20 @@ def run_all(config: AllConfig = AllConfig(), **kwargs):
     config.queries_file = get_path(config.data_dir, config.queries_file)
     config.documents_file = get_path(config.data_dir, config.documents_file)
     config.answers_file = get_path(config.data_dir, config.answers_file)
-    config.reasoning_file = get_path(
-        config.data_dir, config.reasoning_file, check_exists=False
-    )
-    config.answers_evaluations_file = get_path(
-        config.data_dir, config.answers_evaluations_file, check_exists=False
-    )
-    config.agents_evaluations_file = get_path(
-        config.data_dir, config.agents_evaluations_file, check_exists=False
-    )
-    config.games_evaluations_file = get_path(
-        config.data_dir, config.games_evaluations_file, check_exists=False
-    )
-    config.document_evaluations_file = get_path(
-        config.data_dir, config.document_evaluations_file, check_exists=False
-    )
+    config.reasoning_file = get_path(config.data_dir, config.reasoning_file, check_exists=False)
+    config.answers_evaluations_file = get_path(config.data_dir, config.answers_evaluations_file, check_exists=False)
+    config.agents_evaluations_file = get_path(config.data_dir, config.agents_evaluations_file, check_exists=False)
+    config.games_evaluations_file = get_path(config.data_dir, config.games_evaluations_file, check_exists=False)
+    config.document_evaluations_file = get_path(config.data_dir, config.document_evaluations_file, check_exists=False)
 
     kwargs = config.model_dump()
-    retrieval_evaluator = get_retrieval_evaluator(
-        config.retrieval_evaluator_name, llm_provider=llm_provider, **kwargs
-    )
+    retrieval_evaluator = get_retrieval_evaluator(config.retrieval_evaluator_name, llm_provider=llm_provider, **kwargs)
 
-    answers_evaluator = get_answer_evaluator(
-        config.answer_evaluator_name, llm_provider=llm_provider, **kwargs
-    )
+    answers_evaluator = get_answer_evaluator(config.answer_evaluator_name, llm_provider=llm_provider, **kwargs)
 
     # TODO: Instead of managing a list of queries, we should have a Dataset type that can load the queries and documents directly.
     queries = load_queries_from_csv(config.queries_file)
-    queries = add_documents_from_csv(
-        documents_file=config.documents_file, queries=queries
-    )
+    queries = add_documents_from_csv(documents_file=config.documents_file, queries=queries)
     queries = add_answers_from_csv(answers_file=config.answers_file, queries=queries)
 
     retrieval_evaluator.batch_evaluate(queries)

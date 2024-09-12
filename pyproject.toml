@@ -68,13 +68,12 @@ exclude = ["build/", "dist/", "venv/"]
 enabled = true
 
 [tool.ruff]
-line-length = 88
+line-length = 119
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
-ignore = [
-    # LineTooLong
-    "E501",
-]
 
+[tool.ruff.lint.per-file-ignores]
+"docs/examples/**" = ["E501"]
+"tests/**" = ["E501"]
 

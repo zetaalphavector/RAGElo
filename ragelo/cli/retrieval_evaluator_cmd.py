@@ -18,9 +18,7 @@ app = typer.Typer()
 
 
 @app.command()
-def domain_expert(
-    config: DomainExpertEvaluatorConfig = DomainExpertEvaluatorConfig(), **kwargs
-):
+def domain_expert(config: DomainExpertEvaluatorConfig = DomainExpertEvaluatorConfig(), **kwargs):
     """Evaluator with a domain expert persona.
 
     This Retrieval Evaluator evaluates the relevance of documents submitted by
@@ -35,9 +33,7 @@ def domain_expert(
     config = DomainExpertEvaluatorConfig(**kwargs)
     config.queries_file = get_path(config.data_dir, config.queries_file)
     config.documents_file = get_path(config.data_dir, config.documents_file)
-    config.document_evaluations_file = get_path(
-        config.data_dir, config.document_evaluations_file, check_exists=False
-    )
+    config.document_evaluations_file = get_path(config.data_dir, config.document_evaluations_file, check_exists=False)
 
     config.verbose = True
 
@@ -58,16 +54,12 @@ def reasoner(config: ReasonerEvaluatorConfig = ReasonerEvaluatorConfig(), **kwar
     config = ReasonerEvaluatorConfig(**kwargs)
     config.queries_file = get_path(config.data_dir, config.queries_file)
     config.documents_file = get_path(config.data_dir, config.documents_file)
-    config.document_evaluations_file = get_path(
-        config.data_dir, config.document_evaluations_file, check_exists=False
-    )
+    config.document_evaluations_file = get_path(config.data_dir, config.document_evaluations_file, check_exists=False)
 
     config.verbose = True
 
     llm_provider = get_llm_provider(config.llm_provider_name, **kwargs)
-    evaluator = get_retrieval_evaluator(
-        RetrievalEvaluatorTypes.REASONER, config=config, llm_provider=llm_provider
-    )
+    evaluator = get_retrieval_evaluator(RetrievalEvaluatorTypes.REASONER, config=config, llm_provider=llm_provider)
     queries = load_queries_from_csv(config.queries_file)
     queries = add_documents_from_csv(config.documents_file, queries=queries)
     evaluator.batch_evaluate(queries)
@@ -79,14 +71,10 @@ def rdnam(config: RDNAMEvaluatorConfig = RDNAMEvaluatorConfig(), **kwargs):
     config = RDNAMEvaluatorConfig(**kwargs)
     config.queries_file = get_path(config.data_dir, config.queries_file)
     config.documents_file = get_path(config.data_dir, config.documents_file)
-    config.document_evaluations_file = get_path(
-        config.data_dir, config.document_evaluations_file, check_exists=False
-    )
+    config.document_evaluations_file = get_path(config.data_dir, config.document_evaluations_file, check_exists=False)
     config.verbose = True
     llm_provider = get_llm_provider(config.llm_provider_name, **kwargs)
-    evaluator = get_retrieval_evaluator(
-        RetrievalEvaluatorTypes.RDNAM, config=config, llm_provider=llm_provider
-    )
+    evaluator = get_retrieval_evaluator(RetrievalEvaluatorTypes.RDNAM, config=config, llm_provider=llm_provider)
     queries = load_queries_from_csv(config.queries_file)
     queries = add_documents_from_csv(config.documents_file, queries=queries)
     evaluator.batch_evaluate(queries)

@@ -16,9 +16,7 @@ def elo(config: EloAgentRankerConfig = EloAgentRankerConfig(), **kwargs):
     """Evaluate the performance of multiple agents using an Elo ranking system."""
     config = EloAgentRankerConfig(**kwargs)
     config.evaluations_file = get_path(config.data_dir, config.evaluations_file)
-    config.agents_evaluations_file = get_path(
-        config.data_dir, config.agents_evaluations_file, check_exists=False
-    )
+    config.agents_evaluations_file = get_path(config.data_dir, config.agents_evaluations_file, check_exists=False)
     ranker = get_agent_ranker(AgentRankerTypes.ELO, config=config)
     queries = load_answer_evaluations_from_csv(config.evaluations_file)
 

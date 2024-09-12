@@ -16,17 +16,13 @@ app = typer.Typer()
 
 
 @app.command()
-def pairwise_reasoning(
-    config: PairwiseEvaluatorConfig = PairwiseEvaluatorConfig(), **kwargs
-):
+def pairwise_reasoning(config: PairwiseEvaluatorConfig = PairwiseEvaluatorConfig(), **kwargs):
     """A evaluator that evaluates RAG-based answers pairwise, with document reasoning"""
     config = PairwiseEvaluatorConfig(**kwargs)
     config.queries_file = get_path(config.data_dir, config.queries_file)
     config.answers_file = get_path(config.data_dir, config.answers_file)
     config.documents_file = get_path(config.data_dir, config.documents_file)
-    config.document_evaluations_file = get_path(
-        config.data_dir, config.document_evaluations_file
-    )
+    config.document_evaluations_file = get_path(config.data_dir, config.document_evaluations_file)
 
     config.games_evaluations_file = get_path(
         config.data_dir,

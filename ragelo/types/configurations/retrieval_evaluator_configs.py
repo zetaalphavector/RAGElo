@@ -7,9 +7,7 @@ from ragelo.types.types import FewShotExample, RetrievalEvaluatorTypes
 
 
 class BaseRetrievalEvaluatorConfig(BaseEvaluatorConfig):
-    evaluator_name: Union[str, RetrievalEvaluatorTypes] = (
-        RetrievalEvaluatorTypes.CUSTOM_PROMPT
-    )
+    evaluator_name: Union[str, RetrievalEvaluatorTypes] = RetrievalEvaluatorTypes.CUSTOM_PROMPT
     document_placeholder: str = Field(
         default="document",
         description="The placeholder for the document in the prompt",
@@ -37,9 +35,7 @@ class ReasonerEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default=["qid", "did", "raw_answer", "answer"],
         description="The columns to output in the CSV file",
     )
-    evaluator_name: Union[str, RetrievalEvaluatorTypes] = (
-        RetrievalEvaluatorTypes.REASONER
-    )
+    evaluator_name: Union[str, RetrievalEvaluatorTypes] = RetrievalEvaluatorTypes.REASONER
 
 
 class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
@@ -49,8 +45,7 @@ class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     )
     domain_short: Optional[str] = Field(
         default=None,
-        description="A short or alternative name of the domain. "
-        "(e.g., Chemistry, CS, etc.)",
+        description="A short or alternative name of the domain. " "(e.g., Chemistry, CS, etc.)",
     )
     company: Optional[str] = Field(
         default=None,
@@ -60,8 +55,7 @@ class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     )
     extra_guidelines: Optional[List[str]] = Field(
         default=None,
-        description="A list of extra guidelines to be used when reasoning about the "
-        "relevancy of the document.",
+        description="A list of extra guidelines to be used when reasoning about the " "relevancy of the document.",
     )
     document_evaluations_file: str = Field(
         default="domain_expert_evaluations.csv",
@@ -75,9 +69,7 @@ class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default="score",
         description="The field to use when parsing the llm answer",
     )
-    evaluator_name: Union[str, RetrievalEvaluatorTypes] = (
-        RetrievalEvaluatorTypes.DOMAIN_EXPERT
-    )
+    evaluator_name: Union[str, RetrievalEvaluatorTypes] = RetrievalEvaluatorTypes.DOMAIN_EXPERT
     output_columns_retrieval_evaluator: List[str] = Field(
         default=["qid", "did", "reasoning", "score"],
         description="The columns to output in the CSV file",
@@ -101,9 +93,7 @@ class CustomPromptEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default="custom_prompt_evaluations.csv",
         description="Path to write (or read) the evaluations of the retrieved documents",
     )
-    evaluator_name: Union[str, RetrievalEvaluatorTypes] = (
-        RetrievalEvaluatorTypes.CUSTOM_PROMPT
-    )
+    evaluator_name: Union[str, RetrievalEvaluatorTypes] = RetrievalEvaluatorTypes.CUSTOM_PROMPT
 
 
 class FewShotEvaluatorConfig(BaseRetrievalEvaluatorConfig):
@@ -135,9 +125,7 @@ class FewShotEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default="relevance",
         description="The placeholder for the relevance in the prompt",
     )
-    evaluator_name: Union[str, RetrievalEvaluatorTypes] = (
-        RetrievalEvaluatorTypes.FEW_SHOT
-    )
+    evaluator_name: Union[str, RetrievalEvaluatorTypes] = RetrievalEvaluatorTypes.FEW_SHOT
 
 
 class RDNAMEvaluatorConfig(BaseRetrievalEvaluatorConfig):
@@ -157,9 +145,7 @@ class RDNAMEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default=False,
         description="Should the prompt ask the LLM to mimic multiple annotators?",
     )
-    document_evaluations_file: str = Field(
-        default="rdnam_evaluations.csv", description="Path to the output file"
-    )
+    document_evaluations_file: str = Field(default="rdnam_evaluations.csv", description="Path to the output file")
     scoring_key_retrieval_evaluator: str = Field(
         default="answer",
         description="The field to use when parsing the llm answer",

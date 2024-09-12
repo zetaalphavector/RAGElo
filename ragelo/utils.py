@@ -90,16 +90,12 @@ def load_queries_from_csv(
         headers = reader.fieldnames
         if headers and infer_metadata_fields:
             if metadata_fields is None:
-                metadata_fields = [
-                    x for x in headers if x not in [query_id_col, query_text_col]
-                ]
+                metadata_fields = [x for x in headers if x not in [query_id_col, query_text_col]]
             else:
                 # Use only the metadata fields that actually exist
                 metadata_fields = [x for x in metadata_fields if x in headers]
                 if not metadata_fields:
-                    logging.warning(
-                        "No metadata fields found in the csv. Ignoring metadata fields"
-                    )
+                    logging.warning("No metadata fields found in the csv. Ignoring metadata fields")
                     metadata_fields = None
         for line in reader:
             qid = line[query_id_col].strip()
@@ -109,9 +105,7 @@ def load_queries_from_csv(
             query_text = line[query_text_col].strip()
             if metadata_fields is not None:
                 extra_metadata = {k: v for k, v in line.items() if k in metadata_fields}
-                queries.append(
-                    Query(qid=qid, query=query_text, metadata=extra_metadata)
-                )
+                queries.append(Query(qid=qid, query=query_text, metadata=extra_metadata))
             else:
                 queries.append(Query(qid=qid, query=query_text))
 
@@ -161,11 +155,7 @@ def add_documents_from_csv(
         qid = line[query_id_col].strip()
         did = line[document_id_col].strip()
         text = line[document_text_col].strip()
-        extra_metadata = {
-            k: v
-            for k, v in line.items()
-            if k not in [query_id_col, document_id_col, document_text_col]
-        }
+        extra_metadata = {k: v for k, v in line.items() if k not in [query_id_col, document_id_col, document_text_col]}
         if qid not in queries_dict:
             logging.info(f"Query {qid} not in the provided queries. Skipping")
             continue
@@ -301,11 +291,7 @@ def add_answers_from_csv(
             raise ValueError(f"Unknown query id {qid}")
         agent = line[agent_col].strip()
         answer = line[answer_col].strip()
-        extra_metadata = {
-            k: v
-            for k, v in line.items()
-            if k not in [query_id_col, agent_col, answer_col]
-        }
+        extra_metadata = {k: v for k, v in line.items() if k not in [query_id_col, agent_col, answer_col]}
         answer = AgentAnswer(agent=agent, text=answer, metadata=extra_metadata or None)
         queries_dict[qid].add_agent_answer(answer)
 
@@ -333,9 +319,7 @@ def load_answer_evaluations_from_csv(
             PairwiseGame(
                 agent_a_answer=AgentAnswer(agent=agent_a, text=""),
                 agent_b_answer=AgentAnswer(agent=agent_b, text=""),
-                evaluation=EvaluatorResult(
-                    raw_answer=raw_answer, answer=answer, qid=qid
-                ),
+                evaluation=EvaluatorResult(raw_answer=raw_answer, answer=answer, qid=qid),
             )
         )
     queries = list(queries_dict.values())

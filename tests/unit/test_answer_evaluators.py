@@ -32,9 +32,7 @@ class TestPairwiseWithReasoningEvaluator:
             assert e.answer == expected_ans
             assert f"[[{expected_ans}]]" in e.raw_answer
 
-        llm_call_args = (
-            llm_provider_pairwise_answer_mock.async_call_mocker.call_args_list
-        )
+        llm_call_args = llm_provider_pairwise_answer_mock.async_call_mocker.call_args_list
         assert len(llm_call_args) == 4
         assert isinstance(llm_call_args[0][0][0], str)
         assert llm_call_args[0][0][0] != llm_call_args[1][0][0]
@@ -71,13 +69,7 @@ class TestCustomPromptEvaluator:
 
         llm_call_args = llm_provider_answer_mock.async_call_mocker.call_args_list
         assert (
-            len(
-                llm_call_args[0][0][0]
-                .split("DOCUMENTS RETRIEVED:")[1]
-                .split("User Query")[0]
-                .strip()
-                .split("\n")
-            )
+            len(llm_call_args[0][0][0].split("DOCUMENTS RETRIEVED:")[1].split("User Query")[0].strip().split("\n"))
             == 2
         )
         for (q, a), args in zip(flat_answers, llm_call_args):
@@ -94,9 +86,7 @@ class TestCustomPromptEvaluator:
             assert evaluation.answer["originality"] == 0
 
             submitted_query = args[0][0].split("User Query: ")[1].split("\n")[0].strip()
-            submitted_answer = (
-                args[0][0].split("Agent answer: ")[1].split("\n")[-1].strip()
-            )
+            submitted_answer = args[0][0].split("Agent answer: ")[1].split("\n")[-1].strip()
             expected_query = q.query
             expected_answer = a.text
             assert submitted_query == expected_query

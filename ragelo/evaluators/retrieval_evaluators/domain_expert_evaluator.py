@@ -101,36 +101,24 @@ Please only answer with a single number.
             )
 
         self.expert_in = self.config.expert_in
-        self.domain_short = (
-            f" {self.config.domain_short}" if self.config.domain_short else ""
-        )
+        self.domain_short = f" {self.config.domain_short}" if self.config.domain_short else ""
         self.sys_prompt = self.sys_prompt.format(
             expert_in=self.expert_in,
             company_prompt_1=(
-                self.COMPANY_PROMPT_1.format(company=self.config.company)
-                if self.config.company
-                else ""
+                self.COMPANY_PROMPT_1.format(company=self.config.company) if self.config.company else ""
             ),
             company_prompt_2=(
-                self.COMPANY_PROMPT_2.format(company=self.config.company)
-                if self.config.company
-                else ""
+                self.COMPANY_PROMPT_2.format(company=self.config.company) if self.config.company else ""
             ),
             domain_short=(
-                self.DOMAIN_SHORT.format(domain_short=self.config.domain_short)
-                if self.config.domain_short
-                else ""
+                self.DOMAIN_SHORT.format(domain_short=self.config.domain_short) if self.config.domain_short else ""
             ),
         )
-        self.extra_guidelines = (
-            self.config.extra_guidelines if self.config.extra_guidelines else []
-        )
+        self.extra_guidelines = self.config.extra_guidelines if self.config.extra_guidelines else []
         # self.reasoner_eva
 
     def __build_reason_message(self, query: Query, document: Document) -> str:
-        guidelines = "\n".join(
-            [f"- {guideline}" for guideline in self.extra_guidelines]
-        )
+        guidelines = "\n".join([f"- {guideline}" for guideline in self.extra_guidelines])
         reason_prompt = self.reason_prompt.format(
             query=query.query,
             doc_content=document.text,
@@ -139,9 +127,7 @@ Please only answer with a single number.
         )
         return reason_prompt
 
-    async def _async_evaluate(
-        self, eval_sample: Tuple[Query, Document]
-    ) -> RetrievalEvaluatorResult:
+    async def _async_evaluate(self, eval_sample: Tuple[Query, Document]) -> RetrievalEvaluatorResult:
         query, document = eval_sample
         reason_message = self.__build_reason_message(query, document)
         messages_reasoning = [

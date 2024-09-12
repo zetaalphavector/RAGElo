@@ -63,11 +63,7 @@ class OpenAIProvider(BaseLLMProvider):
                     max_tokens=self.config.max_tokens,
                 )
             )
-        if (
-            not answers.choices
-            or not answers.choices[0].message
-            or not answers.choices[0].message.content
-        ):
+        if not answers.choices or not answers.choices[0].message or not answers.choices[0].message.content:
             raise ValueError("OpenAI did not return any completions.")
         return answers.choices[0].message.content
 
@@ -88,11 +84,7 @@ class OpenAIProvider(BaseLLMProvider):
             temperature=self.config.temperature,
             max_tokens=self.config.max_tokens,
         )
-        if (
-            not answers.choices
-            or not answers.choices[0].message
-            or not answers.choices[0].message.content
-        ):
+        if not answers.choices or not answers.choices[0].message or not answers.choices[0].message.content:
             raise ValueError("OpenAI did not return any completions.")
         return answers.choices[0].message.content
 

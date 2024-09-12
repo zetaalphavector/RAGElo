@@ -18,9 +18,7 @@ class TestOpenAIProvider:
         mocker.patch("openai.types.chat.chat_completion", new_callable=AsyncMock)
 
         openai_client = OpenAIProvider(config=openai_client_config)
-        monkeypatch.setattr(
-            openai_client, "_OpenAIProvider__openai_client", openai_client_mock
-        )
+        monkeypatch.setattr(openai_client, "_OpenAIProvider__openai_client", openai_client_mock)
 
         prompt = "hello world"
         prompts = [
@@ -49,9 +47,7 @@ class TestOpenAIProvider:
         mocker.patch("openai.types.chat.chat_completion", new_callable=AsyncMock)
 
         openai_client = OpenAIProvider(config=openai_client_config)
-        monkeypatch.setattr(
-            openai_client, "_OpenAIProvider__openai_client", openai_client_mock
-        )
+        monkeypatch.setattr(openai_client, "_OpenAIProvider__openai_client", openai_client_mock)
 
         prompt = "hello world"
         prompts = [

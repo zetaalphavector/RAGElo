@@ -59,7 +59,7 @@ Measure how trustworthy the web page is (T).""".strip()
     DEFAULT_EXAMPLE = """[{"O": 1}, {"O": 2}, {"O": 0..."""
     MULTIPLE_PROMPT = """We asked five search engine raters to evaluate \
 the relevance of the web page for the query.
-Each rater used their own independent judgement."""
+Each rater used their own independent judgement."""  # noqa: E501
     config: RDNAMEvaluatorConfig
 
     def __init__(
@@ -72,12 +72,8 @@ Each rater used their own independent judgement."""
 
         self.__role = self.config.annotator_role if self.config.annotator_role else ""
 
-        self.__aspects_prompt = (
-            self.ASPECTS_NARRATIVE if self.config.use_aspects else ""
-        )
-        self.__multiple_prompt = (
-            self.MULTIPLE_PROMPT if self.config.use_multiple_annotators else ""
-        )
+        self.__aspects_prompt = self.ASPECTS_NARRATIVE if self.config.use_aspects else ""
+        self.__multiple_prompt = self.MULTIPLE_PROMPT if self.config.use_multiple_annotators else ""
         if self.config.use_multiple_annotators:
             self.prompt += "\n[{{"
         else:
@@ -94,9 +90,7 @@ Each rater used their own independent judgement."""
                     narrative=narrative, description=description
                 )
 
-        example = (
-            self.ASPECTS_EXAMPLE if self.__aspects_prompt else self.DEFAULT_EXAMPLE
-        )
+        example = self.ASPECTS_EXAMPLE if self.__aspects_prompt else self.DEFAULT_EXAMPLE
 
         formatted_prompt = self.prompt.format(
             role=self.__role,

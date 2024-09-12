@@ -23,13 +23,7 @@ class AgentRankerConfig(BaseConfig):
 
 
 class EloAgentRankerConfig(AgentRankerConfig):
-    elo_k: int = Field(
-        default=32, description="The K factor for the Elo ranking algorithm"
-    )
-    initial_score: int = Field(
-        default=1000, description="The initial score for each agent"
-    )
-    agents_evaluations_file: str = Field(
-        default="elo_ranking.csv", description="Path to the output file"
-    )
+    elo_k: int = Field(default=32, description="The K factor for the Elo ranking algorithm")
+    initial_score: int = Field(default=1000, description="The initial score for each agent")
+    agents_evaluations_file: str = Field(default="elo_ranking.csv", description="Path to the output file")
     rounds: int = Field(default=10, description="The number of rounds to play")

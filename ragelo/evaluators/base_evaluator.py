@@ -63,14 +63,11 @@ class BaseEvaluator(ABC):
         json_dict = self.__parse_json(answer, key)
         if key not in json_dict:
             raise ValueError(
-                "Answer does not contain the necessary key\n"
-                f"Expected {key}, found {json_dict.keys()}\n{answer}"
+                "Answer does not contain the necessary key\n" f"Expected {key}, found {json_dict.keys()}\n{answer}"
             )
         return json_dict[key]
 
-    def json_answer_parser_multifields(
-        self, answer: str, keys: List[str]
-    ) -> Dict[str, str]:
+    def json_answer_parser_multifields(self, answer: str, keys: List[str]) -> Dict[str, str]:
         """Parses a Json answer from the LLM and returns the values from multiple fields"""
         # Finds all valid JSON objects in the answer that contain the key
         try:
@@ -133,9 +130,7 @@ class BaseEvaluator(ABC):
                 existing_lines.append(line_dict)
         return existing_lines
 
-    def _get_existing_evaluations(
-        self, evaluation_file: str, force: bool = False
-    ) -> List[Dict[str, Any]]:
+    def _get_existing_evaluations(self, evaluation_file: str, force: bool = False) -> List[Dict[str, Any]]:
         existing_lines: List[Dict[str, str]] = []
         if force and os.path.exists(evaluation_file):
             logger.warning(f"Removing existing {evaluation_file}!")
@@ -178,8 +173,7 @@ class BaseEvaluator(ABC):
                     rich.print(f"[bold blue]📜 Document ID[/bold blue]: {did}")
                 if agent_a and agent_b:
                     rich.print(
-                        f"[bold bright_cyan] {agent_a:<18} [/bold bright_cyan] 🆚  "
-                        f"[bold red] {agent_b}[/bold red]"
+                        f"[bold bright_cyan] {agent_a:<18} [/bold bright_cyan] 🆚  " f"[bold red] {agent_b}[/bold red]"
                     )
                 elif agent:
                     rich.print(f"[bold bright_cyan]🕵️ Agent[/bold bright_cyan]: {agent}")
@@ -202,9 +196,7 @@ class BaseEvaluator(ABC):
         tqdm.write("")
 
     @staticmethod
-    def __dump_response_csv(
-        answer_dict: Dict[str, Any], output_columns: List[str], output_file: str
-    ):
+    def __dump_response_csv(answer_dict: Dict[str, Any], output_columns: List[str], output_file: str):
         if not any(k in output_columns for k in answer_dict.keys()):
             raise ValueError(
                 "No parsed answer fields are in the output columns. \n"
@@ -272,9 +264,7 @@ class BaseEvaluator(ABC):
         elif output_file.endswith(".json"):
             self.__dump_response_json(answer_dict, output_file)
         else:
-            logger.info(
-                "Output file format not recognized. Dumping raw response in csv format."
-            )
+            logger.info("Output file format not recognized. Dumping raw response in csv format.")
             self.__dump_response_csv(answer_dict, output_columns, output_file)
 
     def _process_answer(self, answer: str) -> Any:
@@ -287,18 +277,14 @@ class BaseEvaluator(ABC):
             return answer
 
     @staticmethod
-    def _assemble_query(
-        query: Union[Query, str], query_metadata: Optional[Dict[str, Any]] = None
-    ) -> Query:
+    def _assemble_query(query: Union[Query, str], query_metadata: Optional[Dict[str, Any]] = None) -> Query:
         if isinstance(query, str):
             query = Query(qid="<no_qid>", query=query)
         query.add_metadata(query_metadata)
         return query
 
     @staticmethod
-    def _assemble_document(
-        document: Union[Document, str], doc_metadata: Optional[Dict[str, Any]] = None
-    ) -> Document:
+    def _assemble_document(document: Union[Document, str], doc_metadata: Optional[Dict[str, Any]] = None) -> Document:
         if isinstance(document, str):
             did = "<no_did>"
             if doc_metadata:
@@ -317,9 +303,7 @@ class BaseEvaluator(ABC):
     ) -> Dict[str, Document]:
         assembled_docs: Dict[str, Document] = {}
         if doc_metadata and len(documents) != len(doc_metadata):
-            raise ValueError(
-                "The number of documents and document metadata do not match"
-            )
+            raise ValueError("The number of documents and document metadata do not match")
         if not doc_metadata:
             doc_metadata = [None] * len(documents)
 
@@ -369,9 +353,7 @@ class BaseEvaluator(ABC):
             did = line[document_id_col].strip()
             text = line[document_text_col].strip()
             extra_metadata = {
-                k: v
-                for k, v in line.items()
-                if k not in [query_id_col, document_id_col, document_text_col]
+                k: v for k, v in line.items() if k not in [query_id_col, document_id_col, document_text_col]
             }
             if qid not in queries_idx:
                 logger.info(f"Query {qid} not in the provided queries. Skipping")
@@ -379,14 +361,10 @@ class BaseEvaluator(ABC):
             if qid not in docs_per_query:
                 docs_per_query[qid] = set()
             if did in docs_per_query[qid]:
-                logger.info(
-                    f"Document {did} already in the retrieved documents for query {qid}. Skipping"
-                )
+                logger.info(f"Document {did} already in the retrieved documents for query {qid}. Skipping")
                 continue
             docs_per_query[qid].add(did)
-            queries[queries_idx[qid]].add_retrieved_doc(
-                Document(did=did, text=text, metadata=extra_metadata or None)
-            )
+            queries[queries_idx[qid]].add_retrieved_doc(Document(did=did, text=text, metadata=extra_metadata or None))
             documents_read += 1
         logger.info(f"Loaded {documents_read} documents")
         return queries
@@ -415,20 +393,14 @@ class BaseEvaluator(ABC):
             qid = line[query_id_col].strip()
             agent = line[agent_col].strip()
             answer = line[answer_col].strip()
-            extra_metadata = {
-                k: v
-                for k, v in line.items()
-                if k not in [query_id_col, agent_col, answer_col]
-            }
+            extra_metadata = {k: v for k, v in line.items() if k not in [query_id_col, agent_col, answer_col]}
             if qid not in queries_idx:
                 logger.info(f"Query {qid} not in the provided queries. Skipping")
                 continue
             if qid not in answers_per_query:
                 answers_per_query[qid] = set()
             if agent in answers_per_query[qid]:
-                logger.info(
-                    f"Answer for agent {agent} already in the answers for query {qid}. Skipping"
-                )
+                logger.info(f"Answer for agent {agent} already in the answers for query {qid}. Skipping")
                 continue
             answers_per_query[qid].add(agent)
             ans = AgentAnswer(agent=agent, text=answer, metadata=extra_metadata or None)
@@ -437,9 +409,7 @@ class BaseEvaluator(ABC):
         logger.info(f"Loaded {answers_read} answers")
         return queries
 
-    def _load_document_evaluations(
-        self, queries: List[Query], force: bool = False
-    ) -> List[Query]:
+    def _load_document_evaluations(self, queries: List[Query], force: bool = False) -> List[Query]:
         if force:
             logger.info("Clearing existing document evaluations")
             for q in queries:
@@ -468,16 +438,12 @@ class BaseEvaluator(ABC):
                 logger.info(f"Query {qid} not in the provided queries. Skipping")
                 continue
             if did not in queries[queries_idx[qid]].retrieved_docs:
-                logger.info(
-                    f"Document {did} not in the retrieved documents for query {qid}. Skipping"
-                )
+                logger.info(f"Document {did} not in the retrieved documents for query {qid}. Skipping")
                 continue
             queries[queries_idx[qid]].retrieved_docs[did].evaluation = evaluation
         return queries
 
-    def _load_answers_evaluations(
-        self, queries: List[Query], force: bool = False
-    ) -> List[Query]:
+    def _load_answers_evaluations(self, queries: List[Query], force: bool = False) -> List[Query]:
         if force:
             logger.info("Clearing existing answers evaluations")
             for q in queries:
@@ -494,21 +460,16 @@ class BaseEvaluator(ABC):
         ]
         evaluations += [
             AnswerEvaluatorResult(**x)
-            for x in self._get_existing_evaluations(
-                self.config.games_evaluations_file, force
-            )
+            for x in self._get_existing_evaluations(self.config.games_evaluations_file, force)
         ]
         return self._add_answers_evaluations(queries, evaluations)
 
-    def _add_answers_evaluations(
-        self, queries: List[Query], evaluations: List[AnswerEvaluatorResult]
-    ) -> List[Query]:
+    def _add_answers_evaluations(self, queries: List[Query], evaluations: List[AnswerEvaluatorResult]) -> List[Query]:
         queries_idx = {q.qid: idx for idx, q in enumerate(queries)}
         games_idxs = {}
         for q in queries:
             games_idxs[q.qid] = {
-                (g.agent_a_answer.agent, g.agent_b_answer.agent): idx
-                for idx, g in enumerate(q.pairwise_games)
+                (g.agent_a_answer.agent, g.agent_b_answer.agent): idx for idx, g in enumerate(q.pairwise_games)
             }
 
         for evaluation in evaluations:
@@ -542,9 +503,7 @@ class BaseEvaluator(ABC):
                 queries[query_idx].answers[evaluation.agent].evaluation = evaluation
         return queries
 
-    def _print_failed_evaluations(
-        self, total_evaluations: int, failed_evaluations: int
-    ):
+    def _print_failed_evaluations(self, total_evaluations: int, failed_evaluations: int):
         if self.config.rich_print:
             try:
                 import rich

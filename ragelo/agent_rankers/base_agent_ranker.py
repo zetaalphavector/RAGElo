@@ -35,9 +35,7 @@ class AgentRanker:
     ) -> List[Query]:
         if queries is None:
             if evaluations_file is None:
-                raise ValueError(
-                    "Either queries or evaluations_file should be provided"
-                )
+                raise ValueError("Either queries or evaluations_file should be provided")
             queries = load_answer_evaluations_from_csv(evaluations_file)
         return queries
 
@@ -55,24 +53,18 @@ class AgentRanker:
         with open(self.agents_evaluations_file, "w") as f:
             writer = csv.writer(f)
             writer.writerow(["agent", "score"])
-            for agent, rating in sorted(
-                self.get_agents_ratings().items(), key=lambda x: x[1], reverse=True
-            ):
+            for agent, rating in sorted(self.get_agents_ratings().items(), key=lambda x: x[1], reverse=True):
                 writer.writerow([agent, rating])
 
     def print_ranking(self):
         if not self.config.verbose:
             return
-        scores = sorted(
-            self.get_agents_ratings().items(), key=lambda x: x[1], reverse=True
-        )
+        scores = sorted(self.get_agents_ratings().items(), key=lambda x: x[1], reverse=True)
         if self.config.rich_print:
             try:
                 import rich
 
-                rich.print(
-                    f"-------[bold white] Agent Scores by {self.name} [/bold white]-------"
-                )
+                rich.print(f"-------[bold white] Agent Scores by {self.name} [/bold white]-------")
 
                 for agent, rating in scores:
                     rich.print(f"[bold white]{agent:<15}[/bold white]: {rating:.1f}")

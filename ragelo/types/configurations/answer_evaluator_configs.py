@@ -8,16 +8,12 @@ from ragelo.types.types import AnswerEvaluatorTypes
 
 class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
     evaluator_name: Union[str, AnswerEvaluatorTypes] = ""
-    answer_placeholder: str = Field(
-        default="answer", description="The placeholder for the answer in the prompt"
-    )
+    answer_placeholder: str = Field(default="answer", description="The placeholder for the answer in the prompt")
     documents_placeholder: str = Field(
         default="documents",
         description="The placeholder for the documents in the prompt",
     )
-    pairwise: bool = Field(
-        default=False, description="Whether or not to the evaluator is pairwise"
-    )
+    pairwise: bool = Field(default=False, description="Whether or not to the evaluator is pairwise")
     document_template: str = Field(
         default="[{did}] {doc}",
         description="The template to format each individual document in the prompt",
@@ -54,19 +50,13 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
         default=["qid", "agent_a", "agent_b", "raw_answer", "answer"],
         description="The columns to output in the CSV file",
     )
-    bidirectional: bool = Field(
-        default=False, description="Whether or not to run each game in both directions"
-    )
-    n_games_per_query: int = Field(
-        default=100, description="Maximum number of games to generate for each query"
-    )
+    bidirectional: bool = Field(default=False, description="Whether or not to run each game in both directions")
+    n_games_per_query: int = Field(default=100, description="Maximum number of games to generate for each query")
     games_evaluations_path: str = Field(
         default="pairwise_answers_evaluations.csv",
         description="Path to the output file",
     )
-    pairwise: bool = Field(
-        default=True, description="Whether or not to the evaluator is pairwise"
-    )
+    pairwise: bool = Field(default=True, description="Whether or not to the evaluator is pairwise")
     document_template: str = Field(
         default="[{did}] {annotation}",
         description="The template to format each individual document in the prompt",
@@ -77,8 +67,7 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     )
     factors: str = Field(
         default=(
-            "the correctness, helpfulness, completeness, accuracy, depth, and "
-            "level of detail of their responses"
+            "the correctness, helpfulness, completeness, accuracy, depth, and " "level of detail of their responses"
         ),
         description=(
             "A string containing the factors to be used when evaluating an answer. "
@@ -88,9 +77,7 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
 
 
 class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
-    evaluator_name: Union[str, AnswerEvaluatorTypes] = (
-        AnswerEvaluatorTypes.CUSTOM_PROMPT
-    )
+    evaluator_name: Union[str, AnswerEvaluatorTypes] = AnswerEvaluatorTypes.CUSTOM_PROMPT
     prompt: str = Field(
         default="retrieved documents: {documents} query: {query} answer: {answer}",
         description="The prompt to be used to evaluate the documents. It should contain a {query} and a {document} placeholder",
@@ -110,9 +97,7 @@ class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
 
 
 class PairwiseDomainExpertEvaluatorConfig(PairwiseEvaluatorConfig):
-    evaluator_name: Union[str, AnswerEvaluatorTypes] = (
-        AnswerEvaluatorTypes.DOMAIN_EXPERT
-    )
+    evaluator_name: Union[str, AnswerEvaluatorTypes] = AnswerEvaluatorTypes.DOMAIN_EXPERT
     expert_in: str = Field(
         default="",
         description="What the LLM should mimic being an expert in.",
