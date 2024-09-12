@@ -66,3 +66,7 @@ exclude = ["build/", "dist/", "venv/"]
 
 [tool.setuptools-git-versioning]
 enabled = true
+
+[tool.ruff]
+line-length = 119
+
