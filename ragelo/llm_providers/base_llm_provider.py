@@ -1,12 +1,12 @@
-"""A LLM provider is a class that can be called with a string and returns with another string as an answer from an LLM model."""
+"""A LLM provider is a class that can be called with a string and returns the answer from an LLM."""
 
 import logging
 import os
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Type, Union, get_type_hints
 
-from ragelo.types.configurations.base_configs import _PYDANTIC_MAJOR_VERSION
 from ragelo.types.configurations.llm_provider_configs import LLMProviderConfig
+from ragelo.types.pydantic_version import _PYDANTIC_MAJOR_VERSION
 from ragelo.types.types import LLMProviderTypes
 
 

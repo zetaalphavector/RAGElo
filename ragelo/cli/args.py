@@ -7,7 +7,8 @@ from typing import Any, Callable, Dict, Union, get_args, get_origin, get_type_hi
 
 from typer.models import ArgumentInfo, OptionInfo, ParameterInfo, ParamMeta
 
-from ragelo.types.configurations.base_configs import _PYDANTIC_MAJOR_VERSION, BaseConfig
+from ragelo.types.configurations.base_configs import BaseConfig
+from ragelo.types.pydantic_version import _PYDANTIC_MAJOR_VERSION
 
 arguments = {
     "queries_file",

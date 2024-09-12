@@ -79,7 +79,10 @@ class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
 class CustomPromptEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     prompt: str = Field(
         default="query: {query} document: {document}",
-        description="The prompt to be used to evaluate the documents. It should contain a {query} and a {document} placeholder",
+        description=(
+            "The prompt to be used to evaluate the documents. "
+            "It should contain a {query} and a {document} placeholder"
+        ),
     )
     scoring_keys_retrieval_evaluator: List[str] = Field(
         default=["quality", "trustworthiness", "originality"],
@@ -106,7 +109,10 @@ class FewShotEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     )
     few_shot_user_prompt: str = Field(
         default="Query: {query}\n\nPassage:{passage}",
-        description="The individual prompt to be used to evaluate the documents. It should contain a {query} and a {passage} placeholder",
+        description=(
+            "The individual prompt to be used to evaluate the documents. "
+            "It should contain a {query} and a {passage} placeholder"
+        ),
     )
     few_shot_assistant_answer: str = Field(
         default='{reasoning}\n\n{{"relevance": {relevance}}}',

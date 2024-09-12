@@ -67,7 +67,9 @@ def reasoner(config: ReasonerEvaluatorConfig = ReasonerEvaluatorConfig(), **kwar
 
 @app.command()
 def rdnam(config: RDNAMEvaluatorConfig = RDNAMEvaluatorConfig(), **kwargs):
-    """Evaluator based on the paper by Thomas, Spielman, Craswell and Mitra, Large language models can accurately predict searcher preferences."""
+    """Evaluator based on the paper by Thomas, Spielman, Craswell and Mitra,
+    Large language models can accurately predict searcher preferences.
+    """
     config = RDNAMEvaluatorConfig(**kwargs)
     config.queries_file = get_path(config.data_dir, config.queries_file)
     config.documents_file = get_path(config.data_dir, config.documents_file)

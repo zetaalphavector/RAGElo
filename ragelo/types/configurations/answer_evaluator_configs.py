@@ -38,7 +38,10 @@ class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
     )
     document_relevance_threshold: Optional[int] = Field(
         default=None,
-        description="The minimum relevance score for a document to be included in the prompt. By default, all documents are included.",
+        description=(
+            "The minimum relevance score for a document to be included in the prompt."
+            "By default, all documents are included."
+        ),
     )
 
 
@@ -80,7 +83,10 @@ class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
     evaluator_name: Union[str, AnswerEvaluatorTypes] = AnswerEvaluatorTypes.CUSTOM_PROMPT
     prompt: str = Field(
         default="retrieved documents: {documents} query: {query} answer: {answer}",
-        description="The prompt to be used to evaluate the documents. It should contain a {query} and a {document} placeholder",
+        description=(
+            "The prompt to be used to evaluate the documents. "
+            "It should contain a {query} and a {document} placeholder"
+        ),
     )
     answers_evaluations_path: str = Field(
         default="custom_prompt_answers_evaluations.csv",

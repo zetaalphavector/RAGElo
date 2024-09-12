@@ -61,7 +61,8 @@ def run_all(config: AllConfig = AllConfig(), **kwargs):
 
     answers_evaluator = get_answer_evaluator(config.answer_evaluator_name, llm_provider=llm_provider, **kwargs)
 
-    # TODO: Instead of managing a list of queries, we should have a Dataset type that can load the queries and documents directly.
+    # TODO: Instead of managing a list of queries,
+    # we should have a single class that manages the queries and documents.
     queries = load_queries_from_csv(config.queries_file)
     queries = add_documents_from_csv(documents_file=config.documents_file, queries=queries)
     queries = add_answers_from_csv(answers_file=config.answers_file, queries=queries)

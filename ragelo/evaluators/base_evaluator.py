@@ -221,7 +221,8 @@ class BaseEvaluator(ABC):
     @staticmethod
     def __dump_response_json(answer_dict: Dict[str, str], output_file: str):
         """The file is a json-formatted list of dictionaries. Each dictionary is a response.
-        If the file already exists, erase the final closing square bracket and add a comma before adding the new response.
+        If the file already exists, erase the final closing square bracket and add a comma
+        before adding the new response.
         """
         if not os.path.isfile(output_file):
             logger.debug(f"Creating new file {output_file}")

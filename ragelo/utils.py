@@ -123,7 +123,8 @@ def add_documents_from_csv(
     document_id_col: str = "did",
     document_text_col: str = "document_text",
 ) -> List[Query]:
-    """Loads a list of retrieved documents for each query. If queries is a string, will load the queries from the csv file.
+    """Loads a list of retrieved documents for each query.
+        If queries is a string, will load the queries from the csv file.
 
     Args:
         documents_path (str): Path to the CSV file with the documents.
@@ -227,7 +228,8 @@ def load_answers_from_multiple_csvs(
             assume the queries also exist in the answers file.
         query_text_col (str): Name of the column with the query.
         answer_text_col (str): Name of the column with the agent's answer.
-        query_id_col (str): Name of the column with the query id. If not defined, will try to infer it from the csv headers
+        query_id_col (str): Name of the column with the query id.
+            If not defined, will try to infer it from the csv headers
     """
     queries = []
     queries_dict = {}
@@ -267,7 +269,8 @@ def add_answers_from_csv(
     Args:
         answers_path (str): Path to the CSV file with the answers.
         queries (Dict[str, Query]): Dictionary with the queries.
-        query_id_col (str): Name of the column with the query id. If not defined, will try to infer it from the csv headers
+        query_id_col (str): Name of the column with the query id.
+            If not defined, will try to infer it from the csv headers
         agent_col (str): Name of the column with the agent. Defaults to 'agent'.
         answer_col (str): Name of the column with the answer. Defaults to 'answer'.
     Returns:
