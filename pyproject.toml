@@ -70,3 +70,11 @@ enabled = true
 [tool.ruff]
 line-length = 88
 
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP"]
+ignore = [
+    # LineTooLong
+    "E501",
+]
+
+
