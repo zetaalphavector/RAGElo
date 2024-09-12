@@ -15,6 +15,9 @@ from ragelo.evaluators.answer_evaluators.domain_expert_evaluator import (
 from ragelo.evaluators.answer_evaluators.pairwise_evaluator import (
     PairwiseAnswerEvaluator,
 )
+from ragelo.evaluators.answer_evaluators.chat_pairwise_evaluator import (
+    ChatPairwiseEvaluator,
+)
 
 __all__ = [
     "AnswerEvaluatorFactory",
