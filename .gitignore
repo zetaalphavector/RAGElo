@@ -163,4 +163,3 @@ data/*
 .vscode/*
 .python-version
 .idea/*
-uv.lock

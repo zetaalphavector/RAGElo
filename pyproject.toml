@@ -1,7 +1,38 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel", "setuptools-git-versioning<2"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "ragelo"
-version = "0.1.0"
-description = "Add your description here"
+authors = [
+    { name = "Zeta Alpha", email = "support@zeta-alpha.com" },
+    { name = "Arthur Câmara", email = "camara@zeta-alpha.com" },
+]
+description = "RAGElo: A Tool for Evaluating Retrieval-Augmented Generation Models"
 readme = "README.md"
 requires-python = ">=3.8"
-dependencies = []
+license = { text = "Apache-2.0" }
+dynamic = ["version"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.10",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Benchmark",
+]
+dependencies = [
+    "numpy>=1.24.4",
+    "openai>=1.10",
+    "pydantic>=1.9",
+    "tenacity>=9.0.0",
+    "typer==0.12.4",
+]
+[project.scripts]
+ragelo = "ragelo.cli:app"
+
+[tool.setuptools.packages.find]
+exclude = ["data*"]
