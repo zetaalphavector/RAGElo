@@ -1,6 +1,6 @@
 """Answer Evaluator for conversations between two agents."""
 
-import json
+
 from typing import Dict, List, Union
 
 from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
@@ -76,10 +76,12 @@ and "[[C]]" for a tie.
             citations = self.citations_prompt
         else:
             citations = ""
-            
+
         if not game.agent_a_answer.conversation or not game.agent_b_answer.conversation:
-            raise ValueError("The conversation of the agents cannot "
-                             "be empty for the chat_pairwise evaluator")
+            raise ValueError(
+                "The conversation of the agents cannot "
+                "be empty for the chat_pairwise evaluator"
+            )
         formatters = {
             self.config.query_placeholder: query.query,
             self.config.documents_placeholder: documents,

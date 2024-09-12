@@ -1,4 +1,5 @@
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, List, Union
 
 from openai import AsyncOpenAI
@@ -33,19 +34,35 @@ class OllamaProvider(BaseLLMProvider):
 
         Args:
             prompt: The prompt to use. Either a list of messages or a string.
-            temperature : The temperature to use. Defaults to 0.1.
-            max_tokens: The maximum number of tokens to retrieve. Defaults 512.
         """
+
+        def run(coroutine):
+            return asyncio.run(coroutine)
+
         if isinstance(prompt, str):
             prompt = [{"role": "system", "content": prompt}]
-        answers = asyncio.run(
-            self.__ollama_client.chat.completions.create(
-                model=self.config.model,
-                messages=prompt,  # type: ignore
-                temperature=self.config.temperature,
-                max_tokens=self.config.max_tokens,
+        try:
+            asyncio.get_running_loop()
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(
+                    run,
+                    self.__ollama_client.chat.completions.create(
+                        model=self.config.model,
+                        messages=prompt,  # type: ignore
+                        temperature=self.config.temperature,
+                        max_tokens=self.config.max_tokens,
+                    ),
+                )
+                answers = future.result()
+        except RuntimeError:
+            answers = asyncio.run(
+                self.__ollama_client.chat.completions.create(
+                    model=self.config.model,
+                    messages=prompt,  # type: ignore
+                    temperature=self.config.temperature,
+                    max_tokens=self.config.max_tokens,
+                )
             )
-        )
         if (
             not answers.choices
             or not answers.choices[0].message
