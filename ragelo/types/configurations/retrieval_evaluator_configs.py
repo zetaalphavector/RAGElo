@@ -7,9 +7,9 @@ from ragelo.types.types import FewShotExample, RetrievalEvaluatorTypes
 
 
 class BaseRetrievalEvaluatorConfig(BaseEvaluatorConfig):
-    evaluator_name: Union[
-        str, RetrievalEvaluatorTypes
-    ] = RetrievalEvaluatorTypes.CUSTOM_PROMPT
+    evaluator_name: Union[str, RetrievalEvaluatorTypes] = (
+        RetrievalEvaluatorTypes.CUSTOM_PROMPT
+    )
     document_placeholder: str = Field(
         default="document",
         description="The placeholder for the document in the prompt",
@@ -37,9 +37,9 @@ class ReasonerEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default=["qid", "did", "raw_answer", "answer"],
         description="The columns to output in the CSV file",
     )
-    evaluator_name: Union[
-        str, RetrievalEvaluatorTypes
-    ] = RetrievalEvaluatorTypes.REASONER
+    evaluator_name: Union[str, RetrievalEvaluatorTypes] = (
+        RetrievalEvaluatorTypes.REASONER
+    )
 
 
 class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
@@ -75,9 +75,9 @@ class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default="score",
         description="The field to use when parsing the llm answer",
     )
-    evaluator_name: Union[
-        str, RetrievalEvaluatorTypes
-    ] = RetrievalEvaluatorTypes.DOMAIN_EXPERT
+    evaluator_name: Union[str, RetrievalEvaluatorTypes] = (
+        RetrievalEvaluatorTypes.DOMAIN_EXPERT
+    )
     output_columns_retrieval_evaluator: List[str] = Field(
         default=["qid", "did", "reasoning", "score"],
         description="The columns to output in the CSV file",
@@ -101,9 +101,9 @@ class CustomPromptEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default="custom_prompt_evaluations.csv",
         description="Path to write (or read) the evaluations of the retrieved documents",
     )
-    evaluator_name: Union[
-        str, RetrievalEvaluatorTypes
-    ] = RetrievalEvaluatorTypes.CUSTOM_PROMPT
+    evaluator_name: Union[str, RetrievalEvaluatorTypes] = (
+        RetrievalEvaluatorTypes.CUSTOM_PROMPT
+    )
 
 
 class FewShotEvaluatorConfig(BaseRetrievalEvaluatorConfig):
@@ -135,9 +135,9 @@ class FewShotEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default="relevance",
         description="The placeholder for the relevance in the prompt",
     )
-    evaluator_name: Union[
-        str, RetrievalEvaluatorTypes
-    ] = RetrievalEvaluatorTypes.FEW_SHOT
+    evaluator_name: Union[str, RetrievalEvaluatorTypes] = (
+        RetrievalEvaluatorTypes.FEW_SHOT
+    )
 
 
 class RDNAMEvaluatorConfig(BaseRetrievalEvaluatorConfig):

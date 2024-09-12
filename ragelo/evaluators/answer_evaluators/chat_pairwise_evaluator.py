@@ -1,6 +1,5 @@
 """Answer Evaluator for conversations between two agents."""
 
-
 from typing import Dict, List, Union
 
 from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
