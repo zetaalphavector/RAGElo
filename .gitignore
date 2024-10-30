@@ -163,3 +163,4 @@ data/*
 .vscode/*
 .python-version
 .idea/*
+ragelo/.vscode/settings.json

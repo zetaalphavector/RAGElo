@@ -10,7 +10,7 @@ from ragelo.evaluators.retrieval_evaluators import (
     get_retrieval_evaluator,
 )
 from ragelo.llm_providers.base_llm_provider import get_llm_provider
-from ragelo.types import AgentAnswer, Document, Query
+from ragelo.types import AgentAnswer, Document, Queries, Query
 
 __all__ = [
     "get_agent_ranker",
@@ -22,6 +22,7 @@ __all__ = [
     "AgentAnswer",
     "Document",
     "Query",
+    "Queries",
 ]
 
 __version__ = "0.1.0"
