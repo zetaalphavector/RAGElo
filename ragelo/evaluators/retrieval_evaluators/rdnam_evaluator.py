@@ -79,12 +79,12 @@ Each rater used their own independent judgement."""
 
         if self.config.use_aspects:
             self.__aspects_prompt = self.ASPECTS_NARRATIVE
-            self.config.llm_response_schema["M"] = (
-                "An integer between 0 and 2 representing the match of the document to the query intent."
-            )
-            self.config.llm_response_schema["T"] = (
-                "An integer between 0 and 2 representing the trustworthiness of the document."
-            )
+            self.config.llm_response_schema[
+                "M"
+            ] = "An integer between 0 and 2 representing the match of the document to the query intent."
+            self.config.llm_response_schema[
+                "T"
+            ] = "An integer between 0 and 2 representing the trustworthiness of the document."
         else:
             self.__aspects_prompt = ""
         if self.config.use_multiple_annotators:

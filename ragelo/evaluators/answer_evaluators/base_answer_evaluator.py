@@ -11,10 +11,7 @@ from typing import Any, Callable, Type, get_type_hints
 from ragelo.evaluators.base_evaluator import BaseEvaluator
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
 from ragelo.logger import logger
-from ragelo.types.configurations import (
-    BaseAnswerEvaluatorConfig,
-    PairwiseEvaluatorConfig,
-)
+from ragelo.types.configurations import BaseAnswerEvaluatorConfig
 from ragelo.types.evaluables import AgentAnswer, Document, PairwiseGame
 from ragelo.types.queries import Queries
 from ragelo.types.query import Query

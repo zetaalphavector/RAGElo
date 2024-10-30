@@ -15,6 +15,7 @@ else:
     from pydantic import model_validator  # type: ignore
 
     validator = model_validator(mode="before")  # type: ignore
+    ValidationError = ValidationError
 
 
 class BaseModel(PydanticBaseModel):

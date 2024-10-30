@@ -209,7 +209,6 @@ def add_documents_from_run_file(
         raise FileNotFoundError(f"Documents file {documents_path} not found")
     # A dictionary with all queries associated with each document
     query_per_doc = defaultdict(set)
-    all_doc_ids: set[str] = set()
 
     for _line in open(run_file_path, "r"):
         qid, _, did, _, _, agent = _line.strip().split()

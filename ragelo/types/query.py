@@ -89,7 +89,7 @@ class Query(BaseModel):
             if isinstance(doc, Document):
                 doc_id = doc.did
             else:
-                doc_id = f"doc_{len(self.retrieved_docs)+1}"
+                doc_id = f"doc_{len(self.retrieved_docs) + 1}"
                 logger.info(f"No doc_id provided. Using '{doc_id}' as doc_id")
         if isinstance(doc, str):
             doc = Document(did=doc_id, text=doc)

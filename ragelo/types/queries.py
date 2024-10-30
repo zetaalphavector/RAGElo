@@ -7,7 +7,7 @@ import json
 import os
 from datetime import datetime, timezone
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from ragelo.logger import logger
 from ragelo.types.evaluables import Document
