@@ -24,6 +24,7 @@ class AnswerEvaluatorTypes(str, Enum):
     """Enum that contains the names of the available answer evaluators"""
 
     PAIRWISE = "pairwise"
+    CUSTOM_PAIRWISE = "custom_pairwise"
     CUSTOM_PROMPT = "custom_prompt"
     DOMAIN_EXPERT = "domain_expert"
     CHAT_PAIRWISE = "chat_pairwise"

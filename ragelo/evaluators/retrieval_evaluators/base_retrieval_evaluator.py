@@ -8,14 +8,12 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Type, get_type_hints
 
-from tqdm.auto import tqdm
-
 from ragelo.evaluators.base_evaluator import BaseEvaluator
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
 from ragelo.logger import logger
 from ragelo.types.configurations import BaseRetrievalEvaluatorConfig
 from ragelo.types.evaluables import Document
-from ragelo.types.formats import AnswerFormat
+from ragelo.types.queries import Queries
 from ragelo.types.query import Query
 from ragelo.types.results import RetrievalEvaluatorResult
 from ragelo.types.types import RetrievalEvaluatorTypes
@@ -31,84 +29,8 @@ class BaseRetrievalEvaluator(BaseEvaluator):
     ):
         self.config = config
         self.llm_provider = llm_provider
-        self.document_evaluations_file = config.document_evaluations_file
-        self.output_columns = config.output_columns_retrieval_evaluator
-        self.scoring_key = config.scoring_key_retrieval_evaluator
-        self.scoring_keys = config.scoring_keys_retrieval_evaluator
-        if isinstance(self.config.answer_format_retrieval_evaluator, str):
-            self.answer_format = AnswerFormat(
-                self.config.answer_format_retrieval_evaluator
-            )
-        else:
-            self.answer_format = self.config.answer_format_retrieval_evaluator
 
-        if self.answer_format == AnswerFormat.MULTI_FIELD_JSON:
-            missing_keys = [
-                key for key in self.scoring_keys if key not in self.output_columns
-            ]
-            self.output_columns.extend(missing_keys)
-        else:
-            if self.scoring_key not in self.output_columns:
-                logger.info(f"Adding scoring key {self.scoring_key} to output columns")
-                self.output_columns.append(self.scoring_key)
-
-    async def _async_batch_evaluate(self, queries: list[Query]) -> list[Query]:
-        use_progress_bar = self.config.use_progress_bar
-        queries = self.__prepare_queries(queries)
-        tuples_to_eval = self.__get_tuples_to_evaluate(queries)
-        if self.config.rich_print:
-            import warnings
-
-            from tqdm import TqdmExperimentalWarning
-
-            warnings.filterwarnings("ignore", category=TqdmExperimentalWarning)
-            from tqdm.rich import tqdm as rich_tqdm
-
-            pbar_fn = rich_tqdm  # type: ignore
-        else:
-            pbar_fn = tqdm  # type: ignore
-        pbar = pbar_fn(
-            total=len(tuples_to_eval),
-            ncols=100,
-            desc="Evaluating retrieved documents",
-            disable=not use_progress_bar,
-            leave=False,
-            position=0,
-        )
-        awaitables_ended = False
-        pending: set[asyncio.Future] = set()
-        aws = map(self._async_evaluate, tuples_to_eval)
-        aws = iter(aws)
-        evaluations = []
-        failed = 0
-        while pending or not awaitables_ended:
-            while len(pending) < self.config.n_processes and not awaitables_ended:
-                try:
-                    aw = next(aws)
-                except StopIteration:
-                    awaitables_ended = True  # all tasks have been scheduled
-                else:
-                    pending.add(asyncio.ensure_future(aw))
-            if not pending:
-                break
-
-            done, pending = await asyncio.wait(
-                pending, return_when=asyncio.FIRST_COMPLETED
-            )
-            while done:
-                evaluation = await done.pop()
-                pbar.update()
-                if evaluation.exception:
-                    failed += 1
-                    continue
-                evaluations.append(evaluation)
-        pbar.close()
-        self._add_document_evaluations(queries, evaluations)
-        if self.config.verbose:
-            self._print_failed_evaluations(len(evaluations), failed)
-        return queries
-
-    async def _async_evaluate(
+    async def evaluate_async(
         self,
         eval_sample: tuple[Query, Document],
     ) -> RetrievalEvaluatorResult:
@@ -118,43 +40,37 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             return document.evaluation  # type: ignore
         prompt = self._build_message(query, document)
         try:
-            raw_answer = await self.llm_provider.call_async(prompt)
+            raw_answer = await self.llm_provider.call_async(
+                prompt,
+                answer_format=self.config.llm_answer_format,
+                response_schema=self.config.llm_response_schema,
+            )
         except Exception as e:
             logger.warning(f"Failed to FETCH answers for qid: {query.qid}")
             logger.warning(f"document id: {document.did}")
             exc = str(e)
             raw_answer = None
-        try:
-            answer = self._process_answer(raw_answer) if raw_answer else None
-        except ValueError as e:
-            logger.warning(
-                f"Failed to PARSE answer for qid: {query.qid} "
-                f"document id: {document.did}\n"
-                f"Raw answer: {raw_answer}"
-            )
-            exc = str(e)
             answer = None
-        ans = RetrievalEvaluatorResult(
+        if raw_answer is not None:
+            try:
+                answer = self._process_answer(raw_answer)
+            except ValueError as e:
+                logger.warning(
+                    f"Failed to PARSE answer for qid: {query.qid} "
+                    f"document id: {document.did}\n"
+                    f"Raw answer: {raw_answer}"
+                )
+                exc = str(e)
+                answer = None
+        return RetrievalEvaluatorResult(
             qid=query.qid,
             did=document.did,
             raw_answer=raw_answer,
             answer=answer,
             exception=exc,
         )
-        if ans.exception is None:
-            self._dump_response(
-                ans, self.output_columns, self.document_evaluations_file  # type: ignore
-            )
-        return ans
 
-    def __prepare_queries(self, queries: list[Query]) -> list[Query]:
-        queries = self._load_retrieved_documents(queries)
-        queries = self._load_document_evaluations(queries, force=self.config.force)
-        return queries
-
-    def __get_tuples_to_evaluate(
-        self, queries: list[Query]
-    ) -> list[tuple[Query, Document]]:
+    def _get_tuples_to_evaluate(self, queries: Queries) -> list[tuple[Query, Document]]:
         tuples_to_eval = []
         all_tuples = 0
         missing_evaluations = 0
@@ -164,7 +80,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
                     missing_evaluations += 1
                 tuples_to_eval.append((q, d))
                 all_tuples += 1
-        if missing_evaluations == all_tuples:
+        if missing_evaluations == 0:
             logger.info("All documents have already been evaluated")
             if self.config.verbose and not self.config.force:
                 print(
@@ -179,7 +95,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         document: Document | str,
         query_metadata: dict[str, Any] | None = None,
         doc_metadata: dict[str, Any] | None = None,
-    ) -> tuple[str, Any]:
+    ) -> RetrievalEvaluatorResult:
         """Evaluates a single query-document pair. Returns the raw answer and the processed answer."""
         query = self._assemble_query(query, query_metadata)
         document = self._assemble_document(document, doc_metadata)
@@ -188,37 +104,17 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             return asyncio.run(coroutine)
 
         try:
-            # Raises RuntimeError if there is no current event loop.
             asyncio.get_running_loop()
-            # If there is a current event loop, we need to run the async code
-            # in a separate loop, in a separate thread.
             with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(run, self._async_evaluate((query, document)))
+                future = executor.submit(run, self.evaluate_async((query, document)))
                 result = future.result()
         except RuntimeError:
-            result = asyncio.run(self._async_evaluate((query, document)))
+            result = asyncio.run(self.evaluate_async((query, document)))
         if result.exception or result.raw_answer is None or result.answer is None:
             raise ValueError(
                 f"Failed to evaluate qid: {query.qid} did: {document.did}",
                 f"Exception: {result.exception}",
             )
-        return result.raw_answer, result.answer
-
-    def batch_evaluate(self, queries: list[Query]) -> list[Query]:
-        def run(coroutine):
-            return asyncio.run(coroutine)
-
-        try:
-            # Raises RuntimeError if there is no current event loop.
-            asyncio.get_running_loop()
-            # If there is a current event loop, we need to run the async code
-            # in a separate loop, in a separate thread.
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(run, self._async_batch_evaluate(queries))
-                result = future.result()
-        except RuntimeError:
-            result = asyncio.run(self._async_batch_evaluate(queries))
-
         return result
 
     def _build_message(
@@ -238,12 +134,6 @@ class BaseRetrievalEvaluator(BaseEvaluator):
     @classmethod
     def get_config_class(cls) -> Type[BaseRetrievalEvaluatorConfig]:
         return get_type_hints(cls)["config"]
-
-    @staticmethod
-    def _construct_list_of_answers(
-        answers: list[dict[str, str]]
-    ) -> list[RetrievalEvaluatorResult]:
-        return [RetrievalEvaluatorResult(**x) for x in answers]
 
 
 class RetrievalEvaluatorFactory:

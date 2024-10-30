@@ -22,19 +22,19 @@ class FewShotEvaluator(BaseRetrievalEvaluator):
     ):
         super().__init__(config, llm_provider)
 
-        self.prompt = config.few_shot_user_prompt
-        self.sys_prompt = config.system_prompt
+        self.user_prompt = config.few_shot_user_prompt
+        self.system_prompt = config.system_prompt
         self.assistant_prompt = config.few_shot_assistant_answer
         self.few_shots = config.few_shots
 
     def _build_message(self, query: Query, document: Document) -> list[dict[str, str]]:
-        system_prompt_msg = {"role": "system", "content": self.sys_prompt}
+        system_prompt_msg = {"role": "system", "content": self.system_prompt}
         messages = [system_prompt_msg] + self.__build_few_shot_samples()
         formatters = {
             self.config.query_placeholder: query.query,
             self.config.document_placeholder: document.text,
         }
-        user_message = self.prompt.format(**formatters)
+        user_message = self.user_prompt.format(**formatters)
 
         messages.append({"role": "user", "content": user_message})
         return messages
@@ -48,7 +48,7 @@ class FewShotEvaluator(BaseRetrievalEvaluator):
             }
             user_message = {
                 "role": "user",
-                "content": self.prompt.format(**formatters),
+                "content": self.user_prompt.format(**formatters),
             }
             formatters = {
                 self.config.reasoning_placeholder: few_shot.reasoning,

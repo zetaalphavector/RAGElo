@@ -1,25 +1,23 @@
 from __future__ import annotations
 
-import csv
+import asyncio
 import json
-import os
 import string
 from abc import ABC, abstractmethod
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
+from pydantic import BaseModel as PydanticBaseModel
 from tqdm.auto import tqdm
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.logger import logger
 from ragelo.types.configurations import BaseEvaluatorConfig
-from ragelo.types.evaluables import AgentAnswer, Document
+from ragelo.types.evaluables import AgentAnswer, Document, Evaluable
 from ragelo.types.formats import AnswerFormat
+from ragelo.types.queries import Queries
 from ragelo.types.query import Query
-from ragelo.types.results import (
-    AnswerEvaluatorResult,
-    EvaluatorResult,
-    RetrievalEvaluatorResult,
-)
+from ragelo.types.results import EvaluatorResult
 
 
 class BaseEvaluator(ABC):
@@ -36,57 +34,119 @@ class BaseEvaluator(ABC):
     ):
         raise NotImplementedError
 
-    @staticmethod
-    def __parse_json(answer: str, keys: str | list[str]) -> dict[str, Any]:
-        # Checks if there is block of json in the answer like ```json\n{...}\n```
-        json_block = answer.split("```json\n")
-        if len(json_block) > 1:
-            json_data = json_block[1].split("\n```")[0]
-            return json.loads(json_data)
-        # Otherwise, go line by line
-        if isinstance(keys, str):
-            keys = [keys]
-        json_dict = {}
-        for line in answer.strip().split("\n"):
-            try:
-                json_object = json.loads(line)
-                for k in keys:
-                    if k in json_object:
-                        json_dict[k] = json_object[k]
-            except json.JSONDecodeError:
-                pass
-        return json_dict
+    async def _async_batch_evaluate(self, queries: Queries):
+        tuples_to_eval = self._get_tuples_to_evaluate(queries)
+        if self.config.rich_print:
+            import warnings
 
-    def json_answer_parser(self, answer: str, key: str) -> str:
-        """Parses a Json answer from the LLM and returns a specific key"""
+            from tqdm import TqdmExperimentalWarning
 
-        # Finds all valid JSON objects in the answer that contain the key
-        json_dict = self.__parse_json(answer, key)
-        if key not in json_dict:
-            raise ValueError(
-                "Answer does not contain the necessary key\n"
-                f"Expected {key}, found {json_dict.keys()}\n{answer}"
+            warnings.filterwarnings("ignore", category=TqdmExperimentalWarning)
+            from tqdm.rich import tqdm as rich_tqdm
+
+            pbar_fn = rich_tqdm  # type: ignore
+        else:
+            pbar_fn = tqdm  # type: ignore
+
+        pbar = pbar_fn(
+            total=len(tuples_to_eval),
+            ncols=100,
+            desc="Evaluating retrieved documents",
+            disable=not self.config.use_progress_bar,
+            leave=False,
+            position=0,
+        )
+        awaitables_ended = False
+        pending: set[asyncio.Future] = set()
+        aws = map(self.evaluate_async, tuples_to_eval)
+        aws = iter(aws)
+        failed = 0
+        evaluations = 0
+        while pending or not awaitables_ended:
+            while len(pending) < self.config.n_processes and not awaitables_ended:
+                try:
+                    aw = next(aws)
+                except StopIteration:
+                    awaitables_ended = True
+                else:
+                    pending.add(asyncio.ensure_future(aw))
+            if not pending:
+                break
+            done, pending = await asyncio.wait(
+                pending, return_when=asyncio.FIRST_COMPLETED
             )
-        return json_dict[key]
+            while done:
+                evaluation = await done.pop()
+                evaluations += 1
+                pbar.update()
+                if evaluation.exception:
+                    failed += 1
+                    continue
+                queries.add_evaluation(evaluation)
+        pbar.close()
+        if self.config.verbose:
+            self._print_failed_evaluations(evaluations, failed)
 
-    def json_answer_parser_multifields(
-        self, answer: str, keys: list[str]
-    ) -> dict[str, str]:
-        """Parses a Json answer from the LLM and returns the values from multiple fields"""
-        # Finds all valid JSON objects in the answer that contain the key
+    def batch_evaluate(self, queries: Queries):
+        def run(coroutine):
+            return asyncio.run(coroutine)
+
         try:
-            json_dict = json.loads(answer)
-        except json.JSONDecodeError:
-            json_dict = self.__parse_json(answer, keys)
+            asyncio.get_running_loop()
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(run, self._async_batch_evaluate(queries))
+                _ = future.result()
+        except RuntimeError:
+            _ = asyncio.run(self._async_batch_evaluate(queries))
 
-        valid_keys = set(json_dict.keys()).intersection(keys)
-        if len(valid_keys) != len(keys):
-            raise ValueError(
-                "Answer does not contain all necessary keys\n"
-                f"Expected {keys}, found {valid_keys}.\n"
-                f"Full Answer:\n{answer}"
-            )
-        return json_dict
+    @abstractmethod
+    def _get_tuples_to_evaluate(
+        self, queries: Queries
+    ) -> list[tuple[Query, Evaluable]]:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def evaluate_async(
+        self,
+        eval_sample: tuple[Query, Evaluable],
+    ) -> EvaluatorResult:
+        raise NotImplementedError
+
+    def _validate_answer(
+        self,
+        answer: dict[str, Any] | PydanticBaseModel | str,
+    ):
+        """Ensures that the LLM output is properly formatted."""
+
+        if self.config.llm_answer_format == AnswerFormat.JSON:
+            if not isinstance(answer, dict):
+                raise ValueError(
+                    f"Expected LLM answer as a JSON dictionary, got {type(answer)}: {answer}"
+                )
+            if self.config.llm_response_schema is not None:
+                if isinstance(self.config.llm_response_schema, dict):
+                    schema = self.config.llm_response_schema
+                    if not all(k in answer for k in schema.keys()):
+                        raise ValueError(
+                            f"Expected LLM answer to have keys {schema.keys()}, got {answer.keys()}"
+                        )
+        elif self.config.llm_answer_format == AnswerFormat.STRUCTURED:
+            if not isinstance(answer, PydanticBaseModel):
+                raise ValueError(
+                    f"Expected LLM answer as a PydanticBaseModel, got {type(answer)}: {answer}"
+                )
+        elif self.config.llm_answer_format == AnswerFormat.TEXT:
+            if not isinstance(answer, str):
+                raise ValueError(
+                    f"Expected LLM answer as a string, got {type(answer)}: {answer}"
+                )
+
+    def _process_answer(
+        self, raw_answer: str | dict[str, Any] | PydanticBaseModel
+    ) -> int | str | dict[str, Any] | PydanticBaseModel:
+        """Processes the raw answer returned by the LLM. Should be implemented by the subclass if needed."""
+        self._validate_answer(raw_answer)
+        return raw_answer
 
     @staticmethod
     def _get_fields_from_string(s: str) -> list[str]:
@@ -109,48 +169,6 @@ class BaseEvaluator(ABC):
         return valid_fields
 
     @staticmethod
-    def __get_existing_evaluations_from_json(output_file: str) -> list[dict[str, str]]:
-        return json.load(open(output_file, "r"))
-
-    @staticmethod
-    def __get_existing_evaluations_from_jsonl(output_file: str) -> list[dict[str, str]]:
-        with open(output_file, "r") as f:
-            return [json.loads(line) for line in f]
-
-    @staticmethod
-    def __get_existing_evaluations_from_csv(output_file: str) -> list[dict[str, Any]]:
-        existing_lines: list[dict[str, str]] = []
-        base_columns = ["qid", "did", "agent", "raw_answer", "agent_a", "agent_b"]
-        with open(output_file, "r") as f:
-            reader = csv.DictReader(f)
-            line: dict[str, Any]
-            for line in reader:
-                line_dict = line
-                if "answer" in line and line["answer"]:
-                    line_dict["answer"] = line["answer"]
-                else:
-                    remaining_keys = {k for k in line.keys() if k not in base_columns}
-                    line_dict["answer"] = {k: line[k] for k in remaining_keys}
-                existing_lines.append(line_dict)
-        return existing_lines
-
-    def _get_existing_evaluations(
-        self, evaluation_file: str, force: bool = False
-    ) -> list[dict[str, Any]]:
-        existing_lines: list[dict[str, str]] = []
-        if force and os.path.exists(evaluation_file):
-            logger.warning(f"Removing existing {evaluation_file}!")
-            os.remove(evaluation_file)
-        if not os.path.isfile(evaluation_file):
-            return existing_lines
-        if evaluation_file.endswith(".json"):
-            return self.__get_existing_evaluations_from_json(evaluation_file)
-        if evaluation_file.endswith(".jsonl"):
-            return self.__get_existing_evaluations_from_jsonl(evaluation_file)
-        else:
-            return self.__get_existing_evaluations_from_csv(evaluation_file)
-
-    @staticmethod
     def _print_response(
         response: EvaluatorResult,
         rich_print: bool = False,
@@ -159,6 +177,8 @@ class BaseEvaluator(ABC):
         if isinstance(response.answer, dict):
             # Print the answer in a more readable format
             answer = json.dumps(response.answer, indent=4)
+        elif isinstance(response.answer, PydanticBaseModel):
+            answer = response.answer.model_dump_json(indent=4)
         else:
             answer = response.answer
         response_dict = response.model_dump()
@@ -201,91 +221,6 @@ class BaseEvaluator(ABC):
         tqdm.write(f"Raw Answer: {raw_answer}")
         tqdm.write(f"Parsed Answer: {answer}")
         tqdm.write("")
-
-    @staticmethod
-    def __dump_response_csv(
-        answer_dict: dict[str, Any], output_columns: list[str], output_file: str
-    ):
-        if not any(k in output_columns for k in answer_dict.keys()):
-            raise ValueError(
-                "No parsed answer fields are in the output columns. \n"
-                f"Expected output columns: {output_columns}. \n"
-                f"Answer fields: {answer_dict.keys()}"
-            )
-        answer_dict = {k: answer_dict.get(k, None) for k in output_columns}
-        if not os.path.isfile(output_file):
-            logger.debug(f"Creating new file {output_file}")
-            with open(output_file, "w") as f:
-                writer = csv.DictWriter(f, fieldnames=output_columns)
-                writer.writeheader()
-        with open(output_file, "a") as f:
-            writer = csv.DictWriter(f, fieldnames=output_columns)
-            writer.writerow(answer_dict)
-
-    @staticmethod
-    def __dump_response_jsonl(answer_dict: dict[str, str], output_file: str):
-        with open(output_file, "a") as f:
-            f.write(json.dumps(answer_dict) + "\n")
-
-    @staticmethod
-    def __dump_response_json(answer_dict: dict[str, str], output_file: str):
-        """The file is a json-formatted list of dictionaries. Each dictionary is a response.
-        If the file already exists, erase the final closing square bracket and add a comma before adding the new response.
-        """
-        if not os.path.isfile(output_file):
-            logger.debug(f"Creating new file {output_file}")
-            with open(output_file, "w") as f:
-                f.write("[")
-        with open(output_file, "r+") as f:
-            f.seek(0, os.SEEK_END)
-            if f.tell() > 1:
-                f.seek(f.tell() - 1)
-                f.truncate()
-                f.write(",")
-            f.write(json.dumps(answer_dict) + "]")
-
-    def _dump_response(
-        self,
-        response: EvaluatorResult,
-        output_columns: list[str],
-        output_file: str,
-    ):
-        if self.config.verbose:
-            self._print_response(response, self.config.rich_print)
-        if not self.config.write_output:
-            return
-        answer_dict = response.model_dump()
-        if isinstance(answer_dict["answer"], dict):
-            # flatten the dict into the main dict
-            for k, v in answer_dict["answer"].items():
-                answer_dict[k] = v
-            del answer_dict["answer"]
-
-        null_keys = {k for k in answer_dict.keys() if answer_dict[k] is None}
-        unused_keys = (set(answer_dict.keys()) - set(output_columns)) & set(null_keys)
-        for k in unused_keys:
-            del answer_dict[k]
-
-        if output_file.endswith(".csv"):
-            self.__dump_response_csv(answer_dict, output_columns, output_file)
-        elif output_file.endswith(".jsonl"):
-            self.__dump_response_jsonl(answer_dict, output_file)
-        elif output_file.endswith(".json"):
-            self.__dump_response_json(answer_dict, output_file)
-        else:
-            logger.info(
-                "Output file format not recognized. Dumping raw response in csv format."
-            )
-            self.__dump_response_csv(answer_dict, output_columns, output_file)
-
-    def _process_answer(self, answer: str) -> Any:
-        """Processes the LLM evaluator output into some serializable format"""
-        if self.answer_format == AnswerFormat.JSON:
-            return self.json_answer_parser(answer, self.scoring_key)
-        if self.answer_format == AnswerFormat.MULTI_FIELD_JSON:
-            return self.json_answer_parser_multifields(answer, self.scoring_keys)
-        if self.answer_format == AnswerFormat.TEXT:
-            return answer
 
     @staticmethod
     def _assemble_query(
@@ -341,207 +276,6 @@ class BaseEvaluator(ABC):
             answer = AgentAnswer(agent="<no_agent>", text=answer)
         answer.add_metadata(answer_metadata)
         return answer
-
-    def _load_retrieved_documents(
-        self,
-        queries: list[Query],
-        query_id_col: str = "qid",
-        document_id_col: str = "did",
-        document_text_col: str = "document_text",
-    ) -> list[Query]:
-        # Check if we actually need to do something
-        queries_with_documents = len([q for q in queries if len(q.retrieved_docs) > 0])
-        if queries_with_documents == len(queries):
-            logger.debug("All Queries already have retrieved documents. Skipping")
-            return queries
-        documents_read = 0
-        if not os.path.isfile(self.config.documents_file):
-            logger.warning(
-                f"Documents file {self.config.documents_file} not found"
-                "Will not add retrieved documents to queries"
-                f"{queries_with_documents} queries already have documents"
-            )
-            return queries
-
-        queries_idx = {q.qid: idx for idx, q in enumerate(queries)}
-        docs_per_query: dict[str, set[str]] = {}
-        for line in csv.DictReader(open(self.config.documents_file)):
-            qid = line[query_id_col].strip()
-            did = line[document_id_col].strip()
-            text = line[document_text_col].strip()
-            extra_metadata = {
-                k: v
-                for k, v in line.items()
-                if k not in [query_id_col, document_id_col, document_text_col]
-            }
-            if qid not in queries_idx:
-                logger.info(f"Query {qid} not in the provided queries. Skipping")
-                continue
-            if qid not in docs_per_query:
-                docs_per_query[qid] = set()
-            if did in docs_per_query[qid]:
-                logger.info(
-                    f"Document {did} already in the retrieved documents for query {qid}. Skipping"
-                )
-                continue
-            docs_per_query[qid].add(did)
-            queries[queries_idx[qid]].add_retrieved_doc(
-                Document(did=did, text=text, metadata=extra_metadata or None)
-            )
-            documents_read += 1
-        logger.info(f"Loaded {documents_read} documents")
-        return queries
-
-    def _load_agent_answers(
-        self,
-        queries: list[Query],
-        query_id_col: str = "qid",
-        agent_col: str = "agent",
-        answer_col: str = "answer",
-    ):
-        queries_with_answers = len([q for q in queries if len(q.answers) > 0])
-        if queries_with_answers == len(queries):
-            logger.debug("All Queries already have answers. Skipping")
-            return queries
-        if not os.path.isfile(self.config.answers_file):
-            logger.warning(
-                f"Answers file {self.config.answers_file} not found. Will not add answers to queries"
-                f"Queries with answers: {queries_with_answers}"
-            )
-            return queries
-        queries_idx = {q.qid: idx for idx, q in enumerate(queries)}
-        answers_read = 0
-        answers_per_query: dict[str, set[str]] = {}
-        for line in csv.DictReader(open(self.config.answers_file)):
-            qid = line[query_id_col].strip()
-            agent = line[agent_col].strip()
-            answer = line[answer_col].strip()
-            extra_metadata = {
-                k: v
-                for k, v in line.items()
-                if k not in [query_id_col, agent_col, answer_col]
-            }
-            if qid not in queries_idx:
-                logger.info(f"Query {qid} not in the provided queries. Skipping")
-                continue
-            if qid not in answers_per_query:
-                answers_per_query[qid] = set()
-            if agent in answers_per_query[qid]:
-                logger.info(
-                    f"Answer for agent {agent} already in the answers for query {qid}. Skipping"
-                )
-                continue
-            answers_per_query[qid].add(agent)
-            ans = AgentAnswer(agent=agent, text=answer, metadata=extra_metadata or None)
-            queries[queries_idx[qid]].add_agent_answer(ans)
-            answers_read += 1
-        logger.info(f"Loaded {answers_read} answers")
-        return queries
-
-    def _load_document_evaluations(
-        self, queries: list[Query], force: bool = False
-    ) -> list[Query]:
-        if force:
-            logger.info("Clearing existing document evaluations")
-            for q in queries:
-                for doc in q.retrieved_docs.values():
-                    doc.evaluation = None
-        document_evaluations = [
-            RetrievalEvaluatorResult(**x)
-            for x in self._get_existing_evaluations(
-                self.config.document_evaluations_file,
-                force,
-            )
-        ]
-        return self._add_document_evaluations(queries, document_evaluations)
-
-    def _add_document_evaluations(
-        self,
-        queries: list[Query],
-        evaluations: list[RetrievalEvaluatorResult],
-    ) -> list[Query]:
-        queries_idx = {q.qid: idx for idx, q in enumerate(queries)}
-
-        for evaluation in evaluations:
-            qid = evaluation.qid
-            did = evaluation.did
-            if qid not in queries_idx:
-                logger.info(f"Query {qid} not in the provided queries. Skipping")
-                continue
-            if did not in queries[queries_idx[qid]].retrieved_docs:
-                logger.info(
-                    f"Document {did} not in the retrieved documents for query {qid}. Skipping"
-                )
-                continue
-            queries[queries_idx[qid]].retrieved_docs[did].evaluation = evaluation
-        return queries
-
-    def _load_answers_evaluations(
-        self, queries: list[Query], force: bool = False
-    ) -> list[Query]:
-        if force:
-            logger.info("Clearing existing answers evaluations")
-            for q in queries:
-                for ans in q.answers.values():
-                    ans.evaluation = None
-                for game in q.pairwise_games:
-                    game.evaluation = None
-        evaluations = [
-            AnswerEvaluatorResult(**x)
-            for x in self._get_existing_evaluations(
-                self.config.answers_evaluations_file,
-                force,
-            )
-        ]
-        evaluations += [
-            AnswerEvaluatorResult(**x)
-            for x in self._get_existing_evaluations(
-                self.config.games_evaluations_file, force
-            )
-        ]
-        return self._add_answers_evaluations(queries, evaluations)
-
-    def _add_answers_evaluations(
-        self, queries: list[Query], evaluations: list[AnswerEvaluatorResult]
-    ) -> list[Query]:
-        queries_idx = {q.qid: idx for idx, q in enumerate(queries)}
-        games_idxs = {}
-        for q in queries:
-            games_idxs[q.qid] = {
-                (g.agent_a_answer.agent, g.agent_b_answer.agent): idx
-                for idx, g in enumerate(q.pairwise_games)
-            }
-
-        for evaluation in evaluations:
-            query_idx = queries_idx[evaluation.qid]
-            if evaluation.pairwise:
-                if not evaluation.agent_a or not evaluation.agent_b:
-                    # Should never happen, as the pydantic model enforces this
-                    raise ValueError("Pairwise evaluations require two agents")
-                agents = (evaluation.agent_a, evaluation.agent_b)
-                if agents not in games_idxs[evaluation.qid]:
-                    agents = (evaluation.agent_b, evaluation.agent_a)
-                    if agents not in games_idxs[evaluation.qid]:
-                        logger.info(
-                            f"Pairwise evaluation between {evaluation.agent_a} and {evaluation.agent_b} "
-                            f"not found in query {evaluation.qid}"
-                        )
-                        continue
-
-                game_idx = games_idxs[evaluation.qid][agents]
-                if queries[query_idx].pairwise_games[game_idx].evaluation is not None:
-                    continue
-
-                queries[query_idx].pairwise_games[game_idx].evaluation = evaluation
-            else:
-                if evaluation.agent is None:
-                    # Should never happen.
-                    raise ValueError("Evaluation must have an agent")
-                if queries[query_idx].answers[evaluation.agent].evaluation is not None:
-                    # Prefer object evaluations over file evaluations
-                    continue
-                queries[query_idx].answers[evaluation.agent].evaluation = evaluation
-        return queries
 
     def _print_failed_evaluations(
         self, total_evaluations: int, failed_evaluations: int

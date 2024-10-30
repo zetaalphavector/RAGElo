@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from pydantic import BaseModel as PydanticBaseModel
+
 from ragelo.types.pydantic_models import BaseModel, ValidationError, validator
 
 
@@ -17,8 +19,8 @@ class EvaluatorResult(BaseModel):
 
     qid: str
     agent: str | None = None
-    raw_answer: str | None
-    answer: int | str | dict[str, Any] | None = None
+    raw_answer: str | dict[str, Any] | None = None
+    answer: int | str | dict[str, Any] | PydanticBaseModel | None = None
     exception: str | None = None
 
     @validator
@@ -37,7 +39,6 @@ class EvaluatorResult(BaseModel):
 class AnswerEvaluatorResult(EvaluatorResult):
     """The results of an answer evaluator.
     Args:
-        did str: The document ID to which the result corresponds.
         agent str | None: The agent that provided the answer. Only used if pairwise=False.
         agent_a str | None: The first agent that provided the answer. Only used if the evaluator is pairwise.
         agent_b str | None: The second agent that provided the answer. Only used if the evaluator is pairwise.

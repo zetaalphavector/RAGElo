@@ -10,6 +10,7 @@ from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.logger import logger
 from ragelo.types.configurations import DomainExpertEvaluatorConfig
 from ragelo.types.evaluables import Document
+from ragelo.types.formats import AnswerFormat
 from ragelo.types.query import Query
 from ragelo.types.results import RetrievalEvaluatorResult
 from ragelo.types.types import RetrievalEvaluatorTypes
@@ -17,7 +18,7 @@ from ragelo.types.types import RetrievalEvaluatorTypes
 
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.DOMAIN_EXPERT)
 class DomainExpertEvaluator(BaseRetrievalEvaluator):
-    sys_prompt = """
+    system_prompt = """
 You are a domain expert in {expert_in}.{company_prompt_1} You are tasked \
 with evaluating the performance of a retrieval system for question \
 answering in this domain. The question answering system will be used \
@@ -77,7 +78,6 @@ document given the particular query. The score meaning is as follows:
 - 0: indicates that the retrieved document is not relevant to the query
 - 1: the document is somewhat relevant to the query
 - 2: the document is highly relevant to the query
-Please only answer with a single number.
 """.strip()
 
     COMPANY_PROMPT_1 = " You work for {company}."
@@ -102,7 +102,7 @@ Please only answer with a single number.
         self.domain_short = (
             f" {self.config.domain_short}" if self.config.domain_short else ""
         )
-        self.sys_prompt = self.sys_prompt.format(
+        self.system_prompt = self.system_prompt.format(
             expert_in=self.expert_in,
             company_prompt_1=(
                 self.COMPANY_PROMPT_1.format(company=self.config.company)
@@ -123,7 +123,6 @@ Please only answer with a single number.
         self.extra_guidelines = (
             self.config.extra_guidelines if self.config.extra_guidelines else []
         )
-        # self.reasoner_eva
 
     def __build_reason_message(self, query: Query, document: Document) -> str:
         guidelines = "\n".join(
@@ -137,18 +136,22 @@ Please only answer with a single number.
         )
         return reason_prompt
 
-    async def _async_evaluate(
+    async def evaluate_async(
         self, eval_sample: tuple[Query, Document]
     ) -> RetrievalEvaluatorResult:
         query, document = eval_sample
         reason_message = self.__build_reason_message(query, document)
-        messages_reasoning = [
-            {"role": "system", "content": self.sys_prompt},
+        exc = None
+        if document.evaluation is not None and not self.config.force:
+            return document.evaluation  # type: ignore
+        messages = [
+            {"role": "system", "content": self.system_prompt},
             {"role": "user", "content": reason_message},
         ]
-        exc = None
         try:
-            reasoning_answer = await self.llm_provider.call_async(messages_reasoning)
+            reasoning_answer = await self.llm_provider.call_async(
+                messages, answer_format=AnswerFormat.TEXT
+            )
         except Exception as e:
             logger.warning(f"Failed to FETCH reasonings for qid: {query.qid}")
             logger.warning(f"document id: {document.did}")
@@ -160,26 +163,35 @@ Please only answer with a single number.
                 answer=None,
                 exception=exc,
             )
-        messages_score = messages_reasoning.copy()
-        messages_score.append({"role": "assistant", "content": reasoning_answer})
-        messages_score.append({"role": "user", "content": self.score_prompt})
+        messages.append({"role": "assistant", "content": reasoning_answer})
+        messages.append({"role": "user", "content": self.score_prompt})
         try:
-            score_answer = await self.llm_provider.call_async(messages_score)
-            score_answer = self._process_answer(score_answer)
+            score_answer = await self.llm_provider.call_async(
+                messages,
+                answer_format=AnswerFormat.JSON,
+                response_schema=self.config.llm_response_schema,
+            )
+            assert isinstance(score_answer, dict)
+            answer = score_answer["score"]  # type: ignore
         except ValueError as e:
             logger.warning(f"Failed to parse scores for qid: {query.qid}")
             logger.warning(f"document id: {document.did}")
             score_answer = None
             exc = str(e)
+            answer = None
         except Exception as e:
             logger.warning(f"Failed to FETCH scores for qid: {query.qid}")
             logger.warning(f"document id: {document.did}")
             score_answer = None
             exc = str(e)
+            answer = None
         return RetrievalEvaluatorResult(
             qid=query.qid,
             did=document.did,
-            raw_answer=reasoning_answer,
-            answer=score_answer,
+            raw_answer={
+                "reasoning_answer": reasoning_answer,
+                "score_answer": score_answer,
+            },
+            answer=answer,
             exception=exc,
         )

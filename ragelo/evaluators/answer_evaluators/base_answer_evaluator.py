@@ -8,8 +8,6 @@ import random
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Type, get_type_hints
 
-from tqdm import tqdm
-
 from ragelo.evaluators.base_evaluator import BaseEvaluator
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
 from ragelo.logger import logger
@@ -18,7 +16,7 @@ from ragelo.types.configurations import (
     PairwiseEvaluatorConfig,
 )
 from ragelo.types.evaluables import AgentAnswer, Document, PairwiseGame
-from ragelo.types.formats import AnswerFormat
+from ragelo.types.queries import Queries
 from ragelo.types.query import Query
 from ragelo.types.results import AnswerEvaluatorResult
 from ragelo.types.types import AnswerEvaluatorTypes
@@ -34,93 +32,95 @@ class BaseAnswerEvaluator(BaseEvaluator):
     ):
         self.config = config
         self.llm_provider = llm_provider
-        self.output_columns = (
-            config.output_columns_answer_evaluator
-            if not self.config.pairwise
-            else config.output_columns_pairwise_evaluator
-        )
-        self.scoring_keys = config.scoring_keys_answer_evaluator
-        self.scoring_key = config.scoring_key_answer_evaluator
-        if isinstance(self.config.answer_format_answer_evaluator, str):
-            self.answer_format = AnswerFormat(
-                self.config.answer_format_answer_evaluator
+
+    async def evaluate_async(
+        self, eval_sample: tuple[Query, PairwiseGame | AgentAnswer]
+    ) -> AnswerEvaluatorResult:
+        query, evaluable = eval_sample
+        agent: str | tuple[str, str]
+        if evaluable.evaluation is not None and not self.config.force:
+            return evaluable.evaluation  # type: ignore
+        if isinstance(evaluable, AgentAnswer):
+            agent = evaluable.agent
+            prompt = self._build_message(query, evaluable)
+        elif isinstance(evaluable, PairwiseGame):
+            agent = (evaluable.agent_a_answer.agent, evaluable.agent_b_answer.agent)
+            prompt = self._build_message_pairwise(query, evaluable)
+        else:
+            raise ValueError(f"Unknown evaluable type {type(evaluable)}")
+
+        exc = None
+        try:
+            raw_answer = await self.llm_provider.call_async(
+                prompt,
+                answer_format=self.config.llm_answer_format,
+                response_schema=self.config.llm_response_schema,
             )
-        else:
-            self.answer_format = self.config.answer_format_answer_evaluator
-
-        if self.answer_format == AnswerFormat.MULTI_FIELD_JSON:
-            missing_keys = [
-                key for key in self.scoring_keys if key not in self.output_columns
-            ]
-            self.output_columns.extend(missing_keys)
-        else:
-            if self.scoring_key not in self.output_columns:
-                logger.info(f"Adding scoring key {self.scoring_key} to output columns")
-                self.output_columns.append(self.scoring_key)
-
-        self.pairwise = self.config.pairwise
-
-    async def _async_batch_evaluate(self, queries: list[Query]) -> list[Query]:
-        use_progress_bar = self.config.use_progress_bar
-        failed_queries = 0
-        queries = self.__prepare_queries(queries)
-        tuples_to_eval = self.__get_tuples_to_evaluate(queries)
-
-        if len(tuples_to_eval) == 0:
-            return queries
-        if self.config.rich_print:
-            import warnings
-
-            from tqdm import TqdmExperimentalWarning
-
-            warnings.filterwarnings("ignore", category=TqdmExperimentalWarning)
-            from tqdm.rich import tqdm as rich_tqdm
-
-            pbar_fn = rich_tqdm  # type: ignore
-        else:
-            pbar_fn = tqdm  # type: ignore
-        pbar = pbar_fn(
-            total=len(tuples_to_eval),
-            ncols=100,
-            desc="Evaluating answers",
-            disable=not use_progress_bar,
-            leave=False,
-            position=0,
+        except Exception as e:
+            logger.warning(f"Failed to FETCH answers for qid: {query.qid}")
+            logger.warning(f"agent(s): {agent}")
+            exc = str(e)
+            raw_answer = None
+            answer = None
+        if raw_answer is not None:
+            try:
+                answer = self._process_answer(raw_answer)
+            except ValueError as e:
+                logger.warning(
+                    f"Failed to PARSE answer for qid: {query.qid} agent(s): {agent}\n"
+                    f"Raw answer: {raw_answer}"
+                )
+                exc = str(e)
+                answer = None
+        if isinstance(evaluable, AgentAnswer):
+            return AnswerEvaluatorResult(
+                qid=query.qid,
+                agent=evaluable.agent,
+                raw_answer=raw_answer,
+                answer=answer,
+                pairwise=False,
+                exception=exc,
+            )
+        return AnswerEvaluatorResult(
+            qid=query.qid,
+            agent_a=evaluable.agent_a_answer.agent,
+            agent_b=evaluable.agent_b_answer.agent,
+            raw_answer=raw_answer,
+            answer=answer,
+            pairwise=True,
+            exception=exc,
         )
 
-        awaitables_ended = False
-        pending: set[asyncio.Future] = set()
-        aws = map(self._async_evaluate, tuples_to_eval)
-        aws = iter(aws)
-        evaluations = []
-        # while there are pending tasks or not all tasks are done
-        while pending or not awaitables_ended:
-            # while there are less than n_processes pending tasks
-            while len(pending) < self.config.n_processes and not awaitables_ended:
-                try:
-                    aw = next(aws)
-                except StopIteration:
-                    awaitables_ended = True  # all tasks have been scheduled
-                else:
-                    pending.add(asyncio.ensure_future(aw))
-            if not pending:
-                break
+    def _get_tuples_to_evaluate(
+        self, queries: Queries
+    ) -> list[tuple[Query, PairwiseGame | AgentAnswer]]:
+        tuples_to_eval: list[tuple[Query, PairwiseGame | AgentAnswer]] = []
+        all_tuples = 0
+        missing_evaluations = 0
+        for q in queries:
+            if self.config.pairwise:
+                for g in q.pairwise_games:
+                    all_tuples += 1
+                    tuples_to_eval.append((q, g))
+                    if g.evaluation is None:
+                        missing_evaluations += 1
 
-            done, pending = await asyncio.wait(
-                pending, return_when=asyncio.FIRST_COMPLETED
-            )
-            while done:
-                evaluation = await done.pop()
-                pbar.update()
-                if evaluation.exception:
-                    failed_queries += 1
-                    continue
-                evaluations.append(evaluation)
-        pbar.close()
-        self._add_answers_evaluations(queries, evaluations)
-        if self.config.verbose:
-            self._print_failed_evaluations(len(evaluations), failed_queries)
-        return queries
+            else:
+                for a in q.answers.values():
+                    all_tuples += 1
+                    tuples_to_eval.append((q, a))
+                    if a.evaluation is None:
+                        missing_evaluations += 1
+
+        if missing_evaluations == 0:
+            logger.info("All answers have been evaluated")
+            if self.config.verbose and not self.config.force:
+                print(
+                    f"All {all_tuples} answers are already evaluated.\n"
+                    "If you want to re-evaluate them, use the --force flag"
+                )
+
+        return tuples_to_eval
 
     def evaluate(
         self,
@@ -134,119 +134,58 @@ class BaseAnswerEvaluator(BaseEvaluator):
         answer_metadata=None,
         answer_a_metadata: dict[str, Any] | None = None,
         answer_b_metadata: dict[str, Any] | None = None,
-    ) -> tuple[str, Any]:
+    ) -> AnswerEvaluatorResult:
         query = self._assemble_query(query, query_metadata)
+
         if isinstance(retrieved_documents, str):
             retrieved_documents = [retrieved_documents]
+
         if retrieved_documents:
             retrieved_and_assembled_docs = self._assemble_documents(
                 retrieved_documents, document_metadata
             )
             query.retrieved_docs = retrieved_and_assembled_docs
+
         agent: str | tuple[str, str]
-        if self.pairwise:
+
+        def run(coroutine):
+            return asyncio.run(coroutine)
+
+        if self.config.pairwise:
             if not answer_a or not answer_b:
                 raise ValueError("Pairwise evaluations require two answers")
             answer_a = self._assemble_answer(answer_a, answer_a_metadata)
             answer_b = self._assemble_answer(answer_b, answer_b_metadata)
             agent = (answer_a.agent, answer_b.agent)
-            game = PairwiseGame(
+            evaluable = PairwiseGame(
                 agent_a_answer=answer_a,
                 agent_b_answer=answer_b,
             )
-
-            def run(coroutine):
-                return asyncio.run(coroutine)
-
-            try:
-                asyncio.get_running_loop()
-                with ThreadPoolExecutor(max_workers=1) as executor:
-                    future = executor.submit(run, self._async_evaluate((query, game)))
-                    result = future.result()
-            except RuntimeError:
-                result = asyncio.run(self._async_evaluate((query, game)))
         else:
             if not answer:
                 raise ValueError("Pointwise evaluations require an answer")
-            answer = self._assemble_answer(answer, answer_metadata)
-            agent = answer.agent
+            evaluable = self._assemble_answer(answer, answer_metadata)
+            agent = evaluable.agent
 
-            def run(coroutine):
-                return asyncio.run(coroutine)
+        try:
+            asyncio.get_running_loop()
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(run, self.evaluate_async((query, evaluable)))
+                result = future.result()
+        except RuntimeError:
+            result = asyncio.run(self.evaluate_async((query, evaluable)))
 
-            try:
-                asyncio.get_running_loop()
-                with ThreadPoolExecutor(max_workers=1) as executor:
-                    future = executor.submit(run, self._async_evaluate((query, answer)))
-                    result = future.result()
-            except RuntimeError:
-                result = asyncio.run(self._async_evaluate((query, answer)))
         if result.exception or result.raw_answer is None or result.answer is None:
             raise ValueError(
                 f"Failed to evaluate qid: {query.qid} agent(s): {agent}",
                 f"Exception: {result.exception}",
             )
-        return result.raw_answer, result.answer
+        return result
 
-    async def _async_evaluate(
-        self, eval_sample: tuple[Query, PairwiseGame | AgentAnswer]
-    ) -> AnswerEvaluatorResult:
-        query, evaluable = eval_sample
-        agent: str | tuple[str, str]
-        if evaluable.evaluation is not None and not self.config.force:
-            return evaluable.evaluation  # type: ignore
-        if isinstance(evaluable, AgentAnswer):
-            agent = evaluable.agent
-        elif isinstance(evaluable, PairwiseGame):
-            agent = (evaluable.agent_a_answer.agent, evaluable.agent_b_answer.agent)
-        else:
-            raise ValueError(f"Unknown evaluable type {type(evaluable)}")
-
-        exc = None
-        if isinstance(evaluable, AgentAnswer):
-            prompt = self._build_message(query, evaluable)
-        else:
-            prompt = self._build_message_pairwise(query, evaluable)
-        try:
-            raw_answer = await self.llm_provider.call_async(prompt)
-        except Exception as e:
-            logger.warning(f"Failed to FETCH answers for qid: {query.qid}")
-            logger.warning(f"agent(s): {agent}")
-            exc = str(e)
-            raw_answer = None
-        try:
-            answer = self._process_answer(raw_answer) if raw_answer else None
-        except ValueError as e:
-            logger.warning(
-                f"Failed to PARSE answer for qid: {query.qid} agent(s): {agent}\n"
-                f"Raw answer: {raw_answer}"
-            )
-            exc = str(e)
-            answer = None
-        if isinstance(evaluable, AgentAnswer):
-            output_file = self.config.answers_evaluations_file
-            ans = AnswerEvaluatorResult(
-                qid=query.qid,
-                agent=evaluable.agent,
-                raw_answer=raw_answer,
-                answer=answer,
-                pairwise=False,
-                exception=exc,
-            )
-        else:
-            output_file = self.config.games_evaluations_file
-            ans = AnswerEvaluatorResult(
-                qid=query.qid,
-                agent_a=evaluable.agent_a_answer.agent,
-                agent_b=evaluable.agent_b_answer.agent,
-                raw_answer=raw_answer,
-                answer=answer,
-                pairwise=True,
-                exception=exc,
-            )
-        if ans.exception is None:
-            self._dump_response(ans, self.output_columns, output_file)
-        return ans
+    def batch_evaluate(self, queries: Queries):
+        if self.config.pairwise:
+            self.__add_pairwise_games(queries)
+        super().batch_evaluate(queries)
 
     def _build_message(
         self, query: Query, answer: AgentAnswer
@@ -269,6 +208,33 @@ class BaseAnswerEvaluator(BaseEvaluator):
     @classmethod
     def get_config_class(cls) -> Type[BaseAnswerEvaluatorConfig]:
         return get_type_hints(cls)["config"]
+
+    def __add_pairwise_games(self, queries: Queries):
+        if not self.config.pairwise:
+            return
+        for query in queries:
+            query_agents = list(query.answers.keys())
+            pairs = list(itertools.combinations(query_agents, 2))
+            if self.config.bidirectional:
+                pairs += [(b, a) for a, b in pairs]
+            random.shuffle(pairs)
+
+            # Filter out games that already exist
+            existing_games = {
+                (a.agent_a_answer.agent, a.agent_b_answer.agent)
+                for a in query.pairwise_games
+            }
+            games = [g for g in pairs if g not in existing_games]
+
+            games_to_add = self.config.n_games_per_query - len(existing_games)
+            games = games[:games_to_add]
+            for agent_a, agent_b in games:
+                query.pairwise_games.append(
+                    PairwiseGame(
+                        agent_a_answer=query.answers[agent_a],
+                        agent_b_answer=query.answers[agent_b],
+                    )
+                )
 
     def _prepare_documents(self, query: Query) -> str:
         documents = []
@@ -299,94 +265,6 @@ class BaseAnswerEvaluator(BaseEvaluator):
         if len(documents) == 0:
             return "NO DOCUMENTS WERE RETRIEVED"
         return "\n".join(documents)
-
-    def __prepare_queries(self, queries: list[Query]) -> list[Query]:
-        queries = self._load_retrieved_documents(queries)
-        queries = self._load_document_evaluations(queries, force=False)
-        queries = self._load_agent_answers(queries)
-        queries = self.__add_pairwise_games(queries)
-        queries = self._load_answers_evaluations(queries, force=self.config.force)
-        return queries
-
-    def __add_pairwise_games(self, queries: list[Query]) -> list[Query]:
-        if not self.pairwise:
-            return queries
-        for query in queries:
-            query_agents = list(query.answers.keys())
-            pairs = list(itertools.combinations(query_agents, 2))
-            if not isinstance(self.config, PairwiseEvaluatorConfig):
-                raise ValueError(
-                    "You are trying to generate pairwise games for a pointwise evaluator"
-                )
-            if self.config.bidirectional:
-                pairs += [(b, a) for a, b in pairs]
-            random.shuffle(pairs)
-
-            # Filter out games that already exist
-            existing_games = {
-                (a.agent_a_answer.agent, a.agent_b_answer.agent)
-                for a in query.pairwise_games
-            }
-            games = [g for g in pairs if g not in existing_games]
-
-            games_to_add = self.config.n_games_per_query - len(existing_games)
-            games = games[:games_to_add]
-            for agent_a, agent_b in games:
-                query.pairwise_games.append(
-                    PairwiseGame(
-                        agent_a_answer=query.answers[agent_a],
-                        agent_b_answer=query.answers[agent_b],
-                    )
-                )
-        return queries
-
-    def __get_tuples_to_evaluate(
-        self, queries: list[Query]
-    ) -> list[tuple[Query, PairwiseGame | AgentAnswer]]:
-        tuples_to_eval: list[tuple[Query, PairwiseGame | AgentAnswer]] = []
-        all_tuples = 0
-        missing_evaluations = 0
-        for q in queries:
-            if self.pairwise:
-                for g in q.pairwise_games:
-                    all_tuples += 1
-                    tuples_to_eval.append((q, g))
-                    if g.evaluation is None:
-                        missing_evaluations += 1
-
-            else:
-                for a in q.answers.values():
-                    all_tuples += 1
-                    tuples_to_eval.append((q, a))
-                    if a.evaluation is None:
-                        missing_evaluations += 1
-
-        if missing_evaluations == all_tuples:
-            logger.info("All answers have been evaluated")
-            if self.config.verbose and not self.config.force:
-                print(
-                    f"All {all_tuples} answers are already evaluated.\n"
-                    "If you want to re-evaluate them, use the force flag"
-                )
-
-        return tuples_to_eval
-
-    def batch_evaluate(self, queries: list[Query]) -> list[Query]:
-        def run(coroutine):
-            return asyncio.run(coroutine)
-
-        try:
-            # Raises RuntimeError if there is no current event loop.
-            asyncio.get_running_loop()
-            # If there is a current event loop, we need to run the async code
-            # in a separate loop, in a separate thread.
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(run, self._async_batch_evaluate(queries))
-                result = future.result()
-        except RuntimeError:
-            result = asyncio.run(self._async_batch_evaluate(queries))
-
-        return result
 
 
 class AnswerEvaluatorFactory:

@@ -2,27 +2,16 @@
 
 from __future__ import annotations
 
-import logging
 import os
 from abc import ABC, abstractmethod
-from typing import Type, get_type_hints
+from typing import Any, Type, get_type_hints
+
+from pydantic import BaseModel as PydanticBaseModel
 
 from ragelo.types.configurations import LLMProviderConfig
+from ragelo.types.formats import AnswerFormat
 from ragelo.types.pydantic_models import _PYDANTIC_MAJOR_VERSION
 from ragelo.types.types import LLMProviderTypes
-
-
-def set_credentials_from_file(credentials_file: str, split_char: str = "="):
-    """Read credentials from a file and add them to the environment"""
-    logging.info(f"Loading credentials from {credentials_file}")
-    if not os.path.isfile(credentials_file):
-        raise FileNotFoundError(f"Credentials file {credentials_file} not found")
-    with open(credentials_file) as f:
-        for line in f:
-            key, value = line.strip().split(split_char, 1)
-            logging.debug(f"Setting {key} from file")
-            os.environ[key] = value
-            os.environ[key] = value
 
 
 class BaseLLMProvider(ABC):
@@ -33,7 +22,12 @@ class BaseLLMProvider(ABC):
         self.config = config
 
     @abstractmethod
-    def __call__(self, prompt: str | list[dict[str, str]]) -> str:
+    def __call__(
+        self,
+        prompt: str | list[dict[str, str]],
+        answer_format: AnswerFormat | str = AnswerFormat.TEXT,
+        response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = None,
+    ) -> str:
         """Submits a single query-document pair to the LLM and returns the answer."""
         raise NotImplementedError
 
@@ -41,6 +35,8 @@ class BaseLLMProvider(ABC):
     async def call_async(
         self,
         prompt: str | list[dict[str, str]],
+        answer_format: AnswerFormat | str = AnswerFormat.TEXT,
+        response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = None,
     ) -> str:
         """Submits a single query-document pair to the LLM and returns the answer."""
         raise NotImplementedError
@@ -78,14 +74,11 @@ class LLMProviderFactory:
         cls,
         name: LLMProviderTypes,
         config: LLMProviderConfig | None = None,
-        credentials_file: str | None = None,
         **kwargs,
     ) -> BaseLLMProvider:
         """Creates a new LLM provider"""
         if name not in cls.registry:
             raise ValueError(f"LLM provider {name} not found")
-        if credentials_file and os.path.isfile(credentials_file):
-            set_credentials_from_file(credentials_file)
         if config is None:
             class_ = cls.registry[name]
             type_config = class_.get_config_class()
@@ -114,10 +107,9 @@ class LLMProviderFactory:
 def get_llm_provider(
     name: LLMProviderTypes | str,
     config: LLMProviderConfig | None = None,
-    credentials_file: str | None = None,
     **kwargs,
 ) -> BaseLLMProvider:
     """Creates a new LLM provider"""
     if isinstance(name, str):
         name = LLMProviderTypes(name)
-    return LLMProviderFactory.create(name, config, credentials_file, **kwargs)
+    return LLMProviderFactory.create(name, config, **kwargs)

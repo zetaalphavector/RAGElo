@@ -1,17 +1,20 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from concurrent.futures import ThreadPoolExecutor
+from typing import Any, Type
 
 from openai import AsyncAzureOpenAI, AsyncOpenAI
+from pydantic import BaseModel as PydanticBaseModel
 from tenacity import retry, stop_after_attempt, wait_random_exponential
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, LLMProviderFactory
 from ragelo.types.configurations import OpenAIConfiguration
+from ragelo.types.formats import AnswerFormat
 from ragelo.types.types import LLMProviderTypes
 
 
-# TODO: Change client to use tools instead of processing the raw files
 @LLMProviderFactory.register(LLMProviderTypes.OPENAI)
 class OpenAIProvider(BaseLLMProvider):
     """A Wrapper over the OpenAI client."""
@@ -30,7 +33,9 @@ class OpenAIProvider(BaseLLMProvider):
     def __call__(
         self,
         prompt: str | list[dict[str, str]],
-    ) -> str:
+        answer_format: AnswerFormat = AnswerFormat.TEXT,
+        response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = None,
+    ) -> str | PydanticBaseModel | dict[str, Any]:
         """Calls the OpenAI API.
 
         Args:
@@ -46,36 +51,19 @@ class OpenAIProvider(BaseLLMProvider):
             asyncio.get_running_loop()
             with ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(
-                    run,
-                    self.__openai_client.chat.completions.create(
-                        model=self.config.model,
-                        messages=prompt,  # type: ignore
-                        temperature=self.config.temperature,
-                        max_tokens=self.config.max_tokens,
-                    ),
+                    run, self.call_async(prompt, answer_format, response_schema)
                 )
                 answers = future.result()
         except RuntimeError:
-            answers = asyncio.run(
-                self.__openai_client.chat.completions.create(
-                    model=self.config.model,
-                    messages=prompt,  # type: ignore
-                    temperature=self.config.temperature,
-                    max_tokens=self.config.max_tokens,
-                )
-            )
-        if (
-            not answers.choices
-            or not answers.choices[0].message
-            or not answers.choices[0].message.content
-        ):
-            raise ValueError("OpenAI did not return any completions.")
-        return answers.choices[0].message.content
+            answers = asyncio.run(self.call_async(prompt))
+        return answers
 
     async def call_async(
         self,
         prompt: str | list[dict[str, str]],
-    ) -> str:
+        answer_format: AnswerFormat = AnswerFormat.TEXT,
+        response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = None,
+    ) -> str | PydanticBaseModel | dict[str, Any]:
         """Calls the OpenAI API asynchronously.
 
         Args:
@@ -83,25 +71,59 @@ class OpenAIProvider(BaseLLMProvider):
         """
         if isinstance(prompt, str):
             prompt = [{"role": "system", "content": prompt}]
-        answers = await self.__openai_client.chat.completions.create(
-            model=self.config.model,
-            messages=prompt,  # type: ignore
-            temperature=self.config.temperature,
-            max_tokens=self.config.max_tokens,
-        )
+        if answer_format == AnswerFormat.STRUCTURED:
+            if not isinstance(response_schema, type(PydanticBaseModel)):
+                raise ValueError(
+                    "response_schema must be a PydanticBaseModel Class when using structured output."
+                )
+            answers = await self.__openai_client.beta.chat.completions.parse(
+                model=self.config.model,
+                messages=prompt,  # type: ignore
+                temperature=self.config.temperature,
+                max_tokens=self.config.max_tokens,
+                response_format=response_schema,
+            )
+        elif answer_format == AnswerFormat.JSON:
+            if isinstance(response_schema, dict):
+                schema = json.dumps(response_schema, indent=4)
+                prompt[0]["content"] += (
+                    "\n\nYour output should be a JSON string that STRICTLY "
+                    f"adheres to the following schema:\n{schema}"
+                )
+            answers = await self.__openai_client.chat.completions.create(
+                model=self.config.model,
+                messages=prompt,  # type: ignore
+                temperature=self.config.temperature,
+                max_tokens=self.config.max_tokens,
+                response_format={"type": "json_object"},
+            )
+
+        else:
+            answers = await self.__openai_client.chat.completions.create(
+                model=self.config.model,
+                messages=prompt,  # type: ignore
+                temperature=self.config.temperature,
+                max_tokens=self.config.max_tokens,
+            )
         if (
             not answers.choices
             or not answers.choices[0].message
             or not answers.choices[0].message.content
         ):
             raise ValueError("OpenAI did not return any completions.")
+        if answer_format == AnswerFormat.STRUCTURED:
+            return answers.choices[0].message.parsed  # type: ignore
+        if answer_format == AnswerFormat.JSON:
+            return json.loads(answers.choices[0].message.content)
         return answers.choices[0].message.content
 
     @staticmethod
     def __get_openai_client(openai_config: OpenAIConfiguration) -> AsyncOpenAI:
         if openai_config.api_type == "azure":
             if openai_config.api_base is None:
-                raise ValueError("Azure-OpenAI base url not found in configuration.")
+                raise ValueError(
+                    "Azure-OpenAI base url (api_base) not found in configuration."
+                )
             return AsyncAzureOpenAI(
                 azure_endpoint=openai_config.api_base,
                 api_key=openai_config.api_key,

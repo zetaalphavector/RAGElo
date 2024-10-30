@@ -9,11 +9,11 @@ from datetime import datetime, timezone
 
 from pydantic import BaseModel, Field
 
-from ragelo.evaluators.retrieval_evaluators import BaseRetrievalEvaluator
 from ragelo.logger import logger
 from ragelo.types.evaluables import Document
 from ragelo.types.pydantic_models import BaseModel, validator
 from ragelo.types.query import Query
+from ragelo.types.results import AnswerEvaluatorResult, RetrievalEvaluatorResult
 
 
 class Queries(BaseModel):
@@ -23,8 +23,9 @@ class Queries(BaseModel):
     """
 
     queries: dict[str, Query] = Field(default_factory=dict)
-    experiment_id: str | None = None
-    cache_path: str | None = None
+    experiment_id: str
+    cache_path: str
+    save_cache: bool = True
 
     @validator
     @classmethod
@@ -49,6 +50,7 @@ class Queries(BaseModel):
         metadata_fields: list[str] | None = None,
         experiment_id: str | None = None,
         cache_path: str | None = None,
+        save_cache: bool = True,
     ):
         """Loads a list of queries from a CSV file.
             The CSV file should have a header and at least one column (specified by query_text_col) with the query text.
@@ -99,18 +101,37 @@ class Queries(BaseModel):
                 queries[qid] = Query(qid=qid, query=query_text, metadata=metadata)
                 read_queries.add(qid)
         logger.info(f"Loaded {len(queries)} queries")
-        return cls(queries=queries, experiment_id=experiment_id, cache_path=cache_path)
+        if experiment_id is None:
+            experiment_id = str(int(datetime.now(timezone.utc).timestamp()))
+        if cache_path is None:
+            os.makedirs("cache", exist_ok=True)
+            cache_path = f"cache/{experiment_id}.json"
+        return cls(
+            queries=queries,
+            experiment_id=experiment_id,
+            cache_path=cache_path,
+            save_cache=save_cache,
+        )
 
     @classmethod
-    def from_cache(cls, cache_path: str):
-        with open(cache_path) as f:
-            return cls(**json.load(f))
-
-    def evaluate_with_retrieval_evaluator(
-        self, retrieval_evaluator: BaseRetrievalEvaluator
+    def from_cache(
+        cls,
+        experiment_id: str | None = None,
+        cache_path: str | None = None,
+        save_cache: bool = True,
     ):
-        retrieval_evaluator.batch_evaluate(list(self.queries.values()))
-        self.dump()
+        if experiment_id is None:
+            experiment_id = str(int(datetime.now(timezone.utc).timestamp()))
+        if cache_path is None:
+            os.makedirs("cache", exist_ok=True)
+            cache_path = f"cache/{experiment_id}.json"
+        q = cls(
+            experiment_id=experiment_id, cache_path=cache_path, save_cache=save_cache
+        )
+        with open(q.cache_path) as f:
+            queries = {k: Query(**v) for k, v in json.load(f)["queries"].items()}
+        q.queries = queries
+        return q
 
     def add_retrieved_docs_from_runfile(
         self,
@@ -163,6 +184,69 @@ class Queries(BaseModel):
             f"Loaded {len(documents_read)} documents. {len(missing_docs)} missing docs"
         )
 
+    def add_evaluation(
+        self, evaluation: RetrievalEvaluatorResult | AnswerEvaluatorResult
+    ):
+        if isinstance(evaluation, RetrievalEvaluatorResult):
+            self.add_retrieval_evaluation(evaluation)
+        elif isinstance(evaluation, AnswerEvaluatorResult):
+            self.add_answer_evaluation(evaluation)
+        else:
+            raise ValueError(
+                f"Cannot add evaluation of type {type(evaluation)} to queries"
+            )
+
+    def add_retrieval_evaluation(self, evaluation: RetrievalEvaluatorResult):
+        qid = evaluation.qid
+        if qid not in self.queries:
+            raise ValueError(
+                f"Trying to add retrieval evaluation for non-existing query {qid}"
+            )
+        did = evaluation.did
+        if did not in self.queries[qid].retrieved_docs:
+            raise ValueError(
+                f"Trying to add evaluation for non-retrieved document {did} in query {qid}"
+            )
+        if self.queries[qid].retrieved_docs[did].evaluation is not None:
+            logger.warning(
+                f"Query {qid} already has an evaluation for document {did}. Overwriting."
+            )
+        self.queries[qid].retrieved_docs[did].evaluation = evaluation
+        self.dump()
+
+    def add_answer_evaluation(self, evaluation: AnswerEvaluatorResult):
+        qid = evaluation.qid
+        if qid not in self.queries:
+            raise ValueError(
+                f"Trying to add ANswer evaluation for non-existing query {qid}"
+            )
+        if evaluation.pairwise:
+            agent_a = evaluation.agent_a
+            agent_b = evaluation.agent_b
+            for game in self.queries[qid].pairwise_games:
+                if (
+                    game.agent_a_answer.agent == agent_a
+                    and game.agent_b_answer.agent == agent_b
+                ):
+                    if game.evaluation is not None:
+                        logger.warning(
+                            f"Query {qid} already has an evaluation for agents {agent_a} and {agent_b}. Overwriting."
+                        )
+                    game.evaluation = evaluation
+                    self.dump()
+                    return
+        agent = evaluation.agent
+        if agent not in self.queries[qid].answers:
+            raise ValueError(
+                f"Trying to add evaluation for non-existing agent {agent} in query {qid}"
+            )
+        if self.queries[qid].answers[agent].evaluation is not None:
+            logger.warning(
+                f"Query {qid} already has an evaluation for agent {agent}. Overwriting."
+            )
+        self.queries[qid].answers[agent].evaluation = evaluation
+        self.dump()
+
     def get_qrels(
         self, relevance_key: str | None = "answer", relevance_threshold: int = 0
     ) -> dict[str, dict[str, int]]:
@@ -182,6 +266,8 @@ class Queries(BaseModel):
         return runs_by_agent
 
     def dump(self):
+        if not self.save_cache:
+            return
         if self.cache_path is None:
             raise ValueError("Cache path not set. Cannot dump queries")
         with open(self.cache_path, "w") as f:
@@ -254,9 +340,6 @@ class Queries(BaseModel):
             print(results)
         return results
 
-    def keys(self):
-        return self.queries.keys()
-
     @staticmethod
     def _infer_query_id_column(file_path: str) -> str | None:
         """Infer the column name with the query id from a CSV file."""
@@ -276,3 +359,6 @@ class Queries(BaseModel):
                     if col in columns:
                         return col
         return None
+
+    def keys(self):
+        return self.queries.keys()

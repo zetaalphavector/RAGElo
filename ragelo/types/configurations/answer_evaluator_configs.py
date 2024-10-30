@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from typing import Callable
+from typing import Any, Callable, Type
 
+from pydantic import BaseModel as PydanticBaseModel
 from pydantic import Field
 
 from ragelo.types.configurations.base_configs import BaseEvaluatorConfig
@@ -53,10 +54,6 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     """Configuration for the pairwise evaluator."""
 
     evaluator_name: str | AnswerEvaluatorTypes = AnswerEvaluatorTypes.PAIRWISE
-    output_columns_pairwise_evaluator: list[str] = Field(
-        default=["qid", "agent_a", "agent_b", "raw_answer", "answer"],
-        description="The columns to output in the CSV file",
-    )
     bidirectional: bool = Field(
         default=False, description="Whether or not to run each game in both directions"
     )
@@ -88,6 +85,53 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
             "If not provided, a default string will be used"
         ),
     )
+    llm_answer_format: str | AnswerFormat = Field(
+        default=AnswerFormat.JSON,
+        description="The format of the answer returned by the LLM",
+    )
+    llm_response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = Field(
+        default={
+            "analysis_assistant_a": "A string with your analysis of assistant A's answer",
+            "analysis_assistant_b": "A string with your analysis of assistant B's answer",
+            "differences": "A string with your comparison between the two answers and their differences",
+            "winner": "The winner of the comparison. 'A' if assistant A is better, 'B' if assistant B is better, and 'C' for a tie",
+        },
+        description="The response schema for the LLM. Required if the llm_answer_format is structured and recommended for JSON.",
+    )
+
+
+class CustomPairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
+    """Configuration for a custom pairwise evaluator."""
+
+    evaluator_name: str | AnswerEvaluatorTypes = AnswerEvaluatorTypes.CUSTOM_PAIRWISE
+    system_prompt: str = Field(
+        default=None, description="System prompt to use for the evaluator"
+    )
+    user_prompt: str = Field(
+        default=None, description="User prompt to use for the evaluator."
+    )
+    bidirectional: bool = Field(
+        default=False, description="Whether or not to run each game in both directions"
+    )
+    n_games_per_query: int = Field(
+        default=100, description="Maximum number of games to generate for each query"
+    )
+    pairwise: bool = Field(
+        default=True, description="Whether or not to the evaluator is pairwise"
+    )
+    llm_answer_format: str | AnswerFormat = Field(
+        default=AnswerFormat.JSON,
+        description="The format of the answer returned by the LLM",
+    )
+    llm_response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = Field(
+        default={
+            "analysis_assistant_a": "A string with your analysis of assistant A's answer",
+            "analysis_assistant_b": "A string with your analysis of assistant B's answer",
+            "differences": "A string with your comparison between the two answers and their differences",
+            "winner": "The winner of the comparison. 'A' if assistant A is better, 'B' if assistant B is better, and 'C' for a tie",
+        },
+        description="The response schema for the LLM. Required if the llm_answer_format is structured and recommended for JSON.",
+    )
 
 
 class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
@@ -104,8 +148,8 @@ class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
         default=["quality", "trustworthiness", "originality"],
         description="The fields to extract from the answer",
     )
-    answer_format_answer_evaluator: str | AnswerFormat = Field(
-        default=AnswerFormat.MULTI_FIELD_JSON,
+    llm_answer_format: str | AnswerFormat = Field(
+        default=AnswerFormat.JSON,
         description="The format of the answer returned by the LLM",
     )
 

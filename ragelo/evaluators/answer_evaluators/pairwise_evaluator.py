@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import re
-
 from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
     AnswerEvaluatorFactory,
     BaseAnswerEvaluator,
@@ -15,7 +13,7 @@ from ragelo.types.types import AnswerEvaluatorTypes
 
 @AnswerEvaluatorFactory.register(AnswerEvaluatorTypes.PAIRWISE)
 class PairwiseAnswerEvaluator(BaseAnswerEvaluator):
-    """A evaluator that evaluates RAG-based answers pairwise, with document reasoning and citations."""
+    """An evaluator that evaluates RAG-based answers pairwise, with document reasoning and citations."""
 
     config: PairwiseEvaluatorConfig
     citations_prompt = " Answers cite documents using square brackets."
@@ -48,14 +46,14 @@ Your evaluation should consider factors such as {factors}.
 Details are only useful if they answer the user question. If an answer \
 contains non-relevant details, it should not be preferred over one that only \
 use relevant information.
-Begin your evaluation by explaining why each answer correctly answers the user \
+Begin your evaluation by explaining whether or nor each answer correctly answers the user \
 question. Then, you should compare the two responses and provide a short explanation \
 on their differences. Avoid any position biases and ensure that the order in which \
 the responses were presented does not influence your decision. Do not allow the \
 length of the responses to influence your evaluation. Be as objective as possible.
 After providing your explanation, output your final verdict by strictly following \
-this format: "[[A]]" if assistant A is better, "[[B]]" if assistant B is better, \
-and "[[C]]" for a tie.
+this format: "A" if assistant A is better, "B" if assistant B is better, \
+and "C" for a tie.
 
 [User Question]
 {query}
@@ -78,7 +76,6 @@ and "[[C]]" for a tie.
         llm_provider: BaseLLMProvider,
     ):
         super().__init__(config, llm_provider)
-        self.pattern = re.compile(r"\[\[([^]]+)]].*$(?:(?!\[\[).)*", re.DOTALL)
         self.factors = config.factors
         if config.include_annotations and config.include_raw_documents:
             config.document_template = self.document_template_raw_and_annotation
@@ -131,12 +128,12 @@ and "[[C]]" for a tie.
         }
         return self.prompt.format(**formatters)
 
-    def _process_answer(self, answer: str) -> str:
+    def _process_answer(self, raw_answer: dict[str, str]) -> str:
         """Extracts the relevant part of an answer."""
-        match_ans = self.pattern.search(answer)
-        if not match_ans:
-            raise ValueError(f"Could not find answer in {answer}")
-        better_agent = match_ans.group(1)
-        if better_agent not in ["A", "B", "C"]:
-            raise ValueError(f"Unknown answer: {better_agent}")
-        return better_agent
+        try:
+            answer = raw_answer["winner"]
+        except KeyError as e:
+            raise ValueError(f"Could not find 'winner' in answer: {raw_answer}") from e
+        if answer not in ["A", "B", "C"]:
+            raise ValueError(f"Unknown answer: {answer}")
+        return answer

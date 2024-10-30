@@ -35,8 +35,8 @@ on their differences. Avoid any position biases and ensure that the order in whi
 the conversations were presented does not influence your decision. Do not allow the \
 length of the responses to influence your evaluation. Be as objective as possible.
 After providing your explanation, output your final verdict by strictly following \
-this format: "[[A]]" if assistant A is better, "[[B]]" if assistant B is better, \
-and "[[C]]" for a tie.
+this format: 'A' if assistant A is better, 'B' if assistant B is better, \
+and 'C' for a tie.
 
 [User Intent]
 {query}

@@ -3,7 +3,7 @@ Bhaskar Mitra. Large language models can accurately predict searcher preferences
 https://arxiv.org/abs/2309.10621
 """
 
-import json
+from typing import Any
 
 import numpy as np
 
@@ -71,20 +71,35 @@ Each rater used their own independent judgement."""
     ):
         """Initializes an evaluator based on RDNAM framework."""
         super().__init__(config, llm_provider)
+        self.config.llm_response_schema = {
+            "O": "An integer between 0 and 2 representing the score of the document."
+        }
 
         self.__role = self.config.annotator_role if self.config.annotator_role else ""
 
-        self.__aspects_prompt = (
-            self.ASPECTS_NARRATIVE if self.config.use_aspects else ""
-        )
-        self.__multiple_prompt = (
-            self.MULTIPLE_PROMPT if self.config.use_multiple_annotators else ""
-        )
-        if self.config.use_multiple_annotators:
-            self.prompt += "\n[{{"
+        if self.config.use_aspects:
+            self.__aspects_prompt = self.ASPECTS_NARRATIVE
+            self.config.llm_response_schema["M"] = (
+                "An integer between 0 and 2 representing the match of the document to the query intent."
+            )
+            self.config.llm_response_schema["T"] = (
+                "An integer between 0 and 2 representing the trustworthiness of the document."
+            )
         else:
-            self.prompt += "\n{{"
-        self.multiple = self.config.use_multiple_annotators
+            self.__aspects_prompt = ""
+        if self.config.use_multiple_annotators:
+            self.__multiple_prompt = self.MULTIPLE_PROMPT
+            self.config.llm_response_schema = {
+                "annotator_1": self.config.llm_response_schema,
+                "annotator_2": self.config.llm_response_schema,
+                "annotator_3": self.config.llm_response_schema,
+                "annotator_4": self.config.llm_response_schema,
+                "annotator_5": self.config.llm_response_schema,
+            }
+            self.multiple = True
+        else:
+            self.__multiple_prompt = ""
+            self.multiple = False
 
     def _build_message(self, query: Query, document: Document) -> str:
         narrative_description_str = ""
@@ -111,35 +126,25 @@ Each rater used their own independent judgement."""
         )
         return formatted_prompt
 
-    def _process_answer(self, answer: str) -> int:
-        if answer.startswith("[") or answer.startswith("{"):
-            # Sometimes the answer is a valid JSON object, even if the prompt ends if "{" or "[{"
-            try:
-                ans = json.loads(answer)
-            except json.decoder.JSONDecodeError:
-                raise ValueError(f"Failed to parse answer: {answer}")
-        else:
-            if self.multiple:
-                answer = "[{" + answer
-            else:
-                answer = "{" + answer
-            try:
-                ans = json.loads(answer)
-            except json.decoder.JSONDecodeError:
-                raise ValueError(f"Failed to parse answer: {answer}")
-
-        if self.multiple or isinstance(ans, list):
-            # Sometimes the model returns a list of answers, even if self.multiple is False
-            try:
-                scores = [int(a["O"]) for a in ans]
-                return int(np.mean(scores))
-            except (KeyError, ValueError):
-                raise ValueError(f"Failed to parse answer: {answer}")
-        try:
-            return int(ans["O"])
-        except KeyError:
-            # As a last try, try to simply get whatever is after "O"
-            try:
-                return int(answer.split('"O":')[1].split(",")[0])
-            except IndexError:
-                raise ValueError(f"Failed to parse answer: {answer}")
+    def _process_answer(
+        self, answer: dict[str, Any]
+    ) -> int | float | dict[str, int | float]:
+        scores = {"intent_match": [], "trustworthiness": [], "overall": []}
+        if self.multiple:
+            for v in answer.values():
+                if self.config.use_aspects:
+                    scores["intent_match"].append(int(v["M"]))
+                    scores["trustworthiness"].append(int(v["T"]))
+                    scores["overall"].append(int(v["O"]))
+                else:
+                    scores["overall"].append(int(v["O"]))
+            if self.config.use_aspects:
+                return {k: float(np.mean(v)) for k, v in scores.items()}
+            return float(np.mean(scores["overall"]))
+        if self.config.use_aspects:
+            return {
+                "intent_match": int(answer["M"]),
+                "trustworthiness": int(answer["T"]),
+                "overall": int(answer["O"]),
+            }
+        return int(answer["O"])
