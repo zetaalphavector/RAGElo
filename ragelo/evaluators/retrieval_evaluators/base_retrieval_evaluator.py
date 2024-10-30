@@ -83,7 +83,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         if missing_evaluations == 0:
             logger.info("All documents have already been evaluated")
             if self.config.verbose and not self.config.force:
-                print(
+                logger.warning(
                     f"All {all_tuples} documents are already evaluated.\n"
                     "If you want to re-evaluate documents, use the --force flag."
                 )

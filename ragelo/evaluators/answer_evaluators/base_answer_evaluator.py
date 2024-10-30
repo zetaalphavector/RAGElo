@@ -115,7 +115,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
         if missing_evaluations == 0:
             logger.info("All answers have been evaluated")
             if self.config.verbose and not self.config.force:
-                print(
+                logger.warning(
                     f"All {all_tuples} answers are already evaluated.\n"
                     "If you want to re-evaluate them, use the --force flag"
                 )
