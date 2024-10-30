@@ -1,4 +1,5 @@
 """Parse arguments for the cli app"""
+
 import collections.abc
 import inspect
 import sys
@@ -7,7 +8,7 @@ from typing import Any, Callable, Dict, Union, get_args, get_origin, get_type_hi
 from typer.models import ArgumentInfo, OptionInfo, ParameterInfo, ParamMeta
 
 from ragelo.types import BaseConfig
-from ragelo.types.configurations.base_configs import _PYDANTIC_MAJOR_VERSION
+from ragelo.types.pydantic_models import _PYDANTIC_MAJOR_VERSION
 
 arguments = {
     "queries_file",

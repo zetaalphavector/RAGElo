@@ -2,8 +2,10 @@ from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     BaseRetrievalEvaluator,
     RetrievalEvaluatorFactory,
 )
-from ragelo.types import Document, Query, RetrievalEvaluatorTypes
 from ragelo.types.configurations import ReasonerEvaluatorConfig
+from ragelo.types.evaluables import Document
+from ragelo.types.query import Query
+from ragelo.types.types import RetrievalEvaluatorTypes
 
 
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.REASONER)

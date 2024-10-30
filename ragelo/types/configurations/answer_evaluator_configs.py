@@ -1,13 +1,16 @@
-from typing import Callable, List, Optional, Union
+from __future__ import annotations
+
+from typing import Callable
 
 from pydantic import Field
 
-from ragelo.types.configurations.base_configs import AnswerFormat, BaseEvaluatorConfig
+from ragelo.types.configurations.base_configs import BaseEvaluatorConfig
+from ragelo.types.formats import AnswerFormat
 from ragelo.types.types import AnswerEvaluatorTypes
 
 
 class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
-    evaluator_name: Union[str, AnswerEvaluatorTypes] = ""
+    evaluator_name: str | AnswerEvaluatorTypes = ""
     answer_placeholder: str = Field(
         default="answer", description="The placeholder for the answer in the prompt"
     )
@@ -37,10 +40,10 @@ class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
         default=False,
         description="Whether or not to include the raw documents in the prompt",
     )
-    document_filter: Optional[Callable[[str], bool]] = Field(
+    document_filter: Callable[[str], bool] | None = Field(
         default=None, description="A function to filter the documents"
     )
-    document_relevance_threshold: Optional[int] = Field(
+    document_relevance_threshold: int | None = Field(
         default=None,
         description="The minimum relevance score for a document to be included in the prompt. By default, all documents are included.",
     )
@@ -49,8 +52,8 @@ class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
 class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     """Configuration for the pairwise evaluator."""
 
-    evaluator_name: Union[str, AnswerEvaluatorTypes] = AnswerEvaluatorTypes.PAIRWISE
-    output_columns_pairwise_evaluator: List[str] = Field(
+    evaluator_name: str | AnswerEvaluatorTypes = AnswerEvaluatorTypes.PAIRWISE
+    output_columns_pairwise_evaluator: list[str] = Field(
         default=["qid", "agent_a", "agent_b", "raw_answer", "answer"],
         description="The columns to output in the CSV file",
     )
@@ -71,7 +74,7 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
         default="[{did}] {annotation}",
         description="The template to format each individual document in the prompt",
     )
-    prompt: Optional[str] = Field(
+    prompt: str | None = Field(
         default=None,
         description="Prompt to use for the evaluator. If not provided, a default prompt will be used",
     )
@@ -88,9 +91,7 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
 
 
 class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
-    evaluator_name: Union[
-        str, AnswerEvaluatorTypes
-    ] = AnswerEvaluatorTypes.CUSTOM_PROMPT
+    evaluator_name: str | AnswerEvaluatorTypes = AnswerEvaluatorTypes.CUSTOM_PROMPT
     prompt: str = Field(
         default="retrieved documents: {documents} query: {query} answer: {answer}",
         description="The prompt to be used to evaluate the documents. It should contain a {query} and a {document} placeholder",
@@ -99,25 +100,23 @@ class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
         default="custom_prompt_answers_evaluations.csv",
         description="Path to the output file",
     )
-    scoring_keys_answer_evaluator: List[str] = Field(
+    scoring_keys_answer_evaluator: list[str] = Field(
         default=["quality", "trustworthiness", "originality"],
         description="The fields to extract from the answer",
     )
-    answer_format_answer_evaluator: Union[str, AnswerFormat] = Field(
+    answer_format_answer_evaluator: str | AnswerFormat = Field(
         default=AnswerFormat.MULTI_FIELD_JSON,
         description="The format of the answer returned by the LLM",
     )
 
 
 class PairwiseDomainExpertEvaluatorConfig(PairwiseEvaluatorConfig):
-    evaluator_name: Union[
-        str, AnswerEvaluatorTypes
-    ] = AnswerEvaluatorTypes.DOMAIN_EXPERT
+    evaluator_name: str | AnswerEvaluatorTypes = AnswerEvaluatorTypes.DOMAIN_EXPERT
     expert_in: str = Field(
         default="",
         description="What the LLM should mimic being an expert in.",
     )
-    company: Optional[str] = Field(
+    company: str | None = Field(
         default=None,
         description="Name of the company or organization that the user that "
         "submitted the query works for. that the domain belongs to. "

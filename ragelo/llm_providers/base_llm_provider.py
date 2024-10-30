@@ -1,12 +1,15 @@
 """A LLM provider is a class that can be called with a string and returns with another string as an answer from an LLM model."""
 
+from __future__ import annotations
+
 import logging
 import os
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Type, Union, get_type_hints
+from typing import Type, get_type_hints
 
-from ragelo.types import LLMProviderConfig, LLMProviderTypes
-from ragelo.types.configurations.base_configs import _PYDANTIC_MAJOR_VERSION
+from ragelo.types.configurations import LLMProviderConfig
+from ragelo.types.pydantic_models import _PYDANTIC_MAJOR_VERSION
+from ragelo.types.types import LLMProviderTypes
 
 
 def set_credentials_from_file(credentials_file: str, split_char: str = "="):
@@ -30,14 +33,14 @@ class BaseLLMProvider(ABC):
         self.config = config
 
     @abstractmethod
-    def __call__(self, prompt: Union[str, List[Dict[str, str]]]) -> str:
+    def __call__(self, prompt: str | list[dict[str, str]]) -> str:
         """Submits a single query-document pair to the LLM and returns the answer."""
         raise NotImplementedError
 
     @abstractmethod
     async def call_async(
         self,
-        prompt: Union[str, List[Dict[str, str]]],
+        prompt: str | list[dict[str, str]],
     ) -> str:
         """Submits a single query-document pair to the LLM and returns the answer."""
         raise NotImplementedError
@@ -56,7 +59,7 @@ class BaseLLMProvider(ABC):
 
 
 class LLMProviderFactory:
-    registry: Dict[LLMProviderTypes, Type[BaseLLMProvider]] = {}
+    registry: dict[LLMProviderTypes, Type[BaseLLMProvider]] = {}
 
     @classmethod
     def register(cls, name: LLMProviderTypes):
@@ -74,8 +77,8 @@ class LLMProviderFactory:
     def create(
         cls,
         name: LLMProviderTypes,
-        config: Optional[LLMProviderConfig] = None,
-        credentials_file: Optional[str] = None,
+        config: LLMProviderConfig | None = None,
+        credentials_file: str | None = None,
         **kwargs,
     ) -> BaseLLMProvider:
         """Creates a new LLM provider"""
@@ -109,9 +112,9 @@ class LLMProviderFactory:
 
 
 def get_llm_provider(
-    name: Union[LLMProviderTypes, str],
-    config: Optional[LLMProviderConfig] = None,
-    credentials_file: Optional[str] = None,
+    name: LLMProviderTypes | str,
+    config: LLMProviderConfig | None = None,
+    credentials_file: str | None = None,
     **kwargs,
 ) -> BaseLLMProvider:
     """Creates a new LLM provider"""

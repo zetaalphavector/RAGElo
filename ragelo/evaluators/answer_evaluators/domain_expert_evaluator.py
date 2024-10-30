@@ -1,6 +1,6 @@
 """Answer Evaluator with a domain expert persona"""
 
-from typing import Dict, List, Union
+from __future__ import annotations
 
 from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
     AnswerEvaluatorFactory,
@@ -9,8 +9,10 @@ from ragelo.evaluators.answer_evaluators.pairwise_evaluator import (
     PairwiseAnswerEvaluator,
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
-from ragelo.types import AnswerEvaluatorTypes, PairwiseGame, Query
 from ragelo.types.configurations import PairwiseDomainExpertEvaluatorConfig
+from ragelo.types.evaluables import PairwiseGame
+from ragelo.types.query import Query
+from ragelo.types.types import AnswerEvaluatorTypes
 
 
 @AnswerEvaluatorFactory.register(AnswerEvaluatorTypes.DOMAIN_EXPERT)
@@ -70,7 +72,7 @@ and "[[C]]" for a tie.
 
     def _build_message_pairwise(
         self, query: Query, game: PairwiseGame
-    ) -> Union[str, List[Dict[str, str]]]:
+    ) -> str | list[dict[str, str]]:
         documents = self._prepare_documents(query)
         query_metadata = self._get_usable_fields_from_metadata(
             self.prompt, query.metadata, skip_fields=[self.config.query_placeholder]

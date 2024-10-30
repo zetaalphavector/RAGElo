@@ -1,11 +1,9 @@
-from importlib import metadata
-from typing import List, Optional, Union
+from __future__ import annotations
 
 from pydantic import Field
 
-from ragelo.types.types import AnswerFormat, BaseModel
-
-_PYDANTIC_MAJOR_VERSION: int = int(metadata.version("pydantic").split(".")[0])
+from ragelo.types.formats import AnswerFormat
+from ragelo.types.pydantic_models import BaseModel
 
 
 class BaseConfig(BaseModel):
@@ -20,11 +18,11 @@ class BaseConfig(BaseModel):
         default=False,
         description="Whether or not to be verbose and print all intermediate steps.",
     )
-    credentials_file: Optional[str] = Field(
+    credentials_file: str | None = Field(
         default=None,
         description="Path to a txt file with the credentials for the different LLM providers.",
     )
-    data_dir: Optional[str] = Field(
+    data_dir: str | None = Field(
         default=None,
         description="Path to the data folder. Defaults to the root folder where the script is being executed. Every file path in the configuration will be relative to this path.",
     )
@@ -77,31 +75,31 @@ class BaseEvaluatorConfig(BaseConfig):
         default="relevance",
         description="When using answer_format=json, the key to extract from the answer for the answer evaluator.",
     )
-    scoring_keys_answer_evaluator: List[str] = Field(
+    scoring_keys_answer_evaluator: list[str] = Field(
         default=["relevance"],
         description="When using answer_format=multi_field_json, the keys to extract from the answer for the answer evaluator.",
     )
-    scoring_keys_retrieval_evaluator: List[str] = Field(
+    scoring_keys_retrieval_evaluator: list[str] = Field(
         default=["relevance"],
         description="When using answer_format=multi_field_json, the keys to extract from the answer for the retrieval evaluator.",
     )
-    answer_format_retrieval_evaluator: Union[str, AnswerFormat] = Field(
+    answer_format_retrieval_evaluator: str | AnswerFormat = Field(
         default="text",
         description="The format of the answer returned by the LLM for the retrieval evaluator.",
     )
-    answer_format_answer_evaluator: Union[str, AnswerFormat] = Field(
+    answer_format_answer_evaluator: str | AnswerFormat = Field(
         default="json",
         description="The format of the answer returned by the LLM for the answer evaluator.",
     )
-    output_columns_retrieval_evaluator: List[str] = Field(
+    output_columns_retrieval_evaluator: list[str] = Field(
         default=["qid", "did", "raw_answer", "answer"],
         description="The columns to write in the --document_evaluations_file csv.",
     )
-    output_columns_answer_evaluator: List[str] = Field(
+    output_columns_answer_evaluator: list[str] = Field(
         default=["qid", "agent", "raw_answer", "answer"],
         description="The columns to write in the --answers_evaluations_file csv.",
     )
-    output_columns_pairwise_evaluator: List[str] = Field(
+    output_columns_pairwise_evaluator: list[str] = Field(
         default=["qid", "agent_a", "agent_b", "raw_answer", "answer"],
         description="The columns to write in the --games_evaluations_file csv.",
     )

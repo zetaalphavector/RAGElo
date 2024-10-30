@@ -2,34 +2,23 @@
 It receives a set of queries used to retrieve a document and their respective retrieved documents,
 and returns a score or a label for each document."""
 
+from __future__ import annotations
+
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    List,
-    Optional,
-    Set,
-    Tuple,
-    Type,
-    Union,
-    get_type_hints,
-)
+from typing import Any, Callable, Type, get_type_hints
 
 from tqdm.auto import tqdm
 
 from ragelo.evaluators.base_evaluator import BaseEvaluator
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
 from ragelo.logger import logger
-from ragelo.types import (
-    AnswerFormat,
-    Document,
-    Query,
-    RetrievalEvaluatorResult,
-    RetrievalEvaluatorTypes,
-)
 from ragelo.types.configurations import BaseRetrievalEvaluatorConfig
+from ragelo.types.evaluables import Document
+from ragelo.types.formats import AnswerFormat
+from ragelo.types.query import Query
+from ragelo.types.results import RetrievalEvaluatorResult
+from ragelo.types.types import RetrievalEvaluatorTypes
 
 
 class BaseRetrievalEvaluator(BaseEvaluator):
@@ -63,7 +52,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
                 logger.info(f"Adding scoring key {self.scoring_key} to output columns")
                 self.output_columns.append(self.scoring_key)
 
-    async def _async_batch_evaluate(self, queries: List[Query]) -> List[Query]:
+    async def _async_batch_evaluate(self, queries: list[Query]) -> list[Query]:
         use_progress_bar = self.config.use_progress_bar
         queries = self.__prepare_queries(queries)
         tuples_to_eval = self.__get_tuples_to_evaluate(queries)
@@ -87,7 +76,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             position=0,
         )
         awaitables_ended = False
-        pending: Set[asyncio.Future] = set()
+        pending: set[asyncio.Future] = set()
         aws = map(self._async_evaluate, tuples_to_eval)
         aws = iter(aws)
         evaluations = []
@@ -121,7 +110,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
 
     async def _async_evaluate(
         self,
-        eval_sample: Tuple[Query, Document],
+        eval_sample: tuple[Query, Document],
     ) -> RetrievalEvaluatorResult:
         query, document = eval_sample
         exc = None
@@ -158,14 +147,14 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             )
         return ans
 
-    def __prepare_queries(self, queries: List[Query]) -> List[Query]:
+    def __prepare_queries(self, queries: list[Query]) -> list[Query]:
         queries = self._load_retrieved_documents(queries)
         queries = self._load_document_evaluations(queries, force=self.config.force)
         return queries
 
     def __get_tuples_to_evaluate(
-        self, queries: List[Query]
-    ) -> List[Tuple[Query, Document]]:
+        self, queries: list[Query]
+    ) -> list[tuple[Query, Document]]:
         tuples_to_eval = []
         all_tuples = 0
         missing_evaluations = 0
@@ -186,11 +175,11 @@ class BaseRetrievalEvaluator(BaseEvaluator):
 
     def evaluate(
         self,
-        query: Union[Query, str],
-        document: Union[Document, str],
-        query_metadata: Optional[Dict[str, Any]] = None,
-        doc_metadata: Optional[Dict[str, Any]] = None,
-    ) -> Tuple[str, Any]:
+        query: Query | str,
+        document: Document | str,
+        query_metadata: dict[str, Any] | None = None,
+        doc_metadata: dict[str, Any] | None = None,
+    ) -> tuple[str, Any]:
         """Evaluates a single query-document pair. Returns the raw answer and the processed answer."""
         query = self._assemble_query(query, query_metadata)
         document = self._assemble_document(document, doc_metadata)
@@ -215,7 +204,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             )
         return result.raw_answer, result.answer
 
-    def batch_evaluate(self, queries: List[Query]) -> List[Query]:
+    def batch_evaluate(self, queries: list[Query]) -> list[Query]:
         def run(coroutine):
             return asyncio.run(coroutine)
 
@@ -236,7 +225,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         self,
         query: Query,
         document: Document,
-    ) -> Union[str, List[Dict[str, str]]]:
+    ) -> str | list[dict[str, str]]:
         """Builds the prompt to send to the LLM."""
         raise NotImplementedError
 
@@ -252,13 +241,13 @@ class BaseRetrievalEvaluator(BaseEvaluator):
 
     @staticmethod
     def _construct_list_of_answers(
-        answers: List[Dict[str, str]]
-    ) -> List[RetrievalEvaluatorResult]:
+        answers: list[dict[str, str]]
+    ) -> list[RetrievalEvaluatorResult]:
         return [RetrievalEvaluatorResult(**x) for x in answers]
 
 
 class RetrievalEvaluatorFactory:
-    registry: Dict[RetrievalEvaluatorTypes, Type[BaseRetrievalEvaluator]] = {}
+    registry: dict[RetrievalEvaluatorTypes, Type[BaseRetrievalEvaluator]] = {}
 
     @classmethod
     def register(cls, evaluator_name: RetrievalEvaluatorTypes) -> Callable:
@@ -276,8 +265,8 @@ class RetrievalEvaluatorFactory:
     def create(
         cls,
         evaluator_name: RetrievalEvaluatorTypes,
-        llm_provider: Union[BaseLLMProvider, str],
-        config: Optional[BaseRetrievalEvaluatorConfig] = None,
+        llm_provider: BaseLLMProvider | str,
+        config: BaseRetrievalEvaluatorConfig | None = None,
         **kwargs,
     ) -> BaseRetrievalEvaluator:
         if isinstance(llm_provider, str):
@@ -299,9 +288,9 @@ class RetrievalEvaluatorFactory:
 
 
 def get_retrieval_evaluator(
-    evaluator_name: Optional[Union[RetrievalEvaluatorTypes, str]] = None,
-    llm_provider: Union[BaseLLMProvider, str] = "openai",
-    config: Optional[BaseRetrievalEvaluatorConfig] = None,
+    evaluator_name: RetrievalEvaluatorTypes | str | None = None,
+    llm_provider: BaseLLMProvider | str = "openai",
+    config: BaseRetrievalEvaluatorConfig | None = None,
     **kwargs,
 ) -> BaseRetrievalEvaluator:
     if evaluator_name is None:

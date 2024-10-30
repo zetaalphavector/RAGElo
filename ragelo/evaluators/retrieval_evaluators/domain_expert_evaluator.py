@@ -1,6 +1,6 @@
 """Evaluator with a domain expert persona"""
 
-from typing import Tuple
+from __future__ import annotations
 
 from ragelo.evaluators.retrieval_evaluators import (
     BaseRetrievalEvaluator,
@@ -8,13 +8,11 @@ from ragelo.evaluators.retrieval_evaluators import (
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.logger import logger
-from ragelo.types import (
-    Document,
-    Query,
-    RetrievalEvaluatorResult,
-    RetrievalEvaluatorTypes,
-)
 from ragelo.types.configurations import DomainExpertEvaluatorConfig
+from ragelo.types.evaluables import Document
+from ragelo.types.query import Query
+from ragelo.types.results import RetrievalEvaluatorResult
+from ragelo.types.types import RetrievalEvaluatorTypes
 
 
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.DOMAIN_EXPERT)
@@ -140,7 +138,7 @@ Please only answer with a single number.
         return reason_prompt
 
     async def _async_evaluate(
-        self, eval_sample: Tuple[Query, Document]
+        self, eval_sample: tuple[Query, Document]
     ) -> RetrievalEvaluatorResult:
         query, document = eval_sample
         reason_message = self.__build_reason_message(query, document)

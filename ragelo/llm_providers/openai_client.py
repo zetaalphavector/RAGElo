@@ -1,13 +1,14 @@
+from __future__ import annotations
+
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-from typing import Dict, List, Union
 
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 from tenacity import retry, stop_after_attempt, wait_random_exponential
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, LLMProviderFactory
-from ragelo.types import LLMProviderTypes
 from ragelo.types.configurations import OpenAIConfiguration
+from ragelo.types.types import LLMProviderTypes
 
 
 # TODO: Change client to use tools instead of processing the raw files
@@ -25,10 +26,10 @@ class OpenAIProvider(BaseLLMProvider):
         super().__init__(config)
         self.__openai_client = self.__get_openai_client(config)
 
-    @retry(wait=wait_random_exponential(min=1, max=120), stop=stop_after_attempt(1))
+    @retry(wait=wait_random_exponential(min=1, max=120), stop=stop_after_attempt(5))
     def __call__(
         self,
-        prompt: Union[str, List[Dict[str, str]]],
+        prompt: str | list[dict[str, str]],
     ) -> str:
         """Calls the OpenAI API.
 
@@ -73,7 +74,7 @@ class OpenAIProvider(BaseLLMProvider):
 
     async def call_async(
         self,
-        prompt: Union[str, List[Dict[str, str]]],
+        prompt: str | list[dict[str, str]],
     ) -> str:
         """Calls the OpenAI API asynchronously.
 

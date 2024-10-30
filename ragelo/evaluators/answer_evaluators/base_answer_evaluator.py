@@ -1,38 +1,27 @@
 """Base model for dealing with answer evaluators"""
 
+from __future__ import annotations
+
 import asyncio
 import itertools
 import random
 from concurrent.futures import ThreadPoolExecutor
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    List,
-    Optional,
-    Set,
-    Tuple,
-    Type,
-    Union,
-    get_type_hints,
-)
+from typing import Any, Callable, Type, get_type_hints
 
 from tqdm import tqdm
 
 from ragelo.evaluators.base_evaluator import BaseEvaluator
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
 from ragelo.logger import logger
-from ragelo.types import (
-    AgentAnswer,
-    AnswerEvaluatorResult,
-    AnswerEvaluatorTypes,
-    AnswerFormat,
+from ragelo.types.configurations import (
     BaseAnswerEvaluatorConfig,
-    Document,
     PairwiseEvaluatorConfig,
-    PairwiseGame,
-    Query,
 )
+from ragelo.types.evaluables import AgentAnswer, Document, PairwiseGame
+from ragelo.types.formats import AnswerFormat
+from ragelo.types.query import Query
+from ragelo.types.results import AnswerEvaluatorResult
+from ragelo.types.types import AnswerEvaluatorTypes
 
 
 class BaseAnswerEvaluator(BaseEvaluator):
@@ -71,7 +60,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
 
         self.pairwise = self.config.pairwise
 
-    async def _async_batch_evaluate(self, queries: List[Query]) -> List[Query]:
+    async def _async_batch_evaluate(self, queries: list[Query]) -> list[Query]:
         use_progress_bar = self.config.use_progress_bar
         failed_queries = 0
         queries = self.__prepare_queries(queries)
@@ -100,7 +89,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
         )
 
         awaitables_ended = False
-        pending: Set[asyncio.Future] = set()
+        pending: set[asyncio.Future] = set()
         aws = map(self._async_evaluate, tuples_to_eval)
         aws = iter(aws)
         evaluations = []
@@ -135,17 +124,17 @@ class BaseAnswerEvaluator(BaseEvaluator):
 
     def evaluate(
         self,
-        query: Union[Query, str],
-        answer: Optional[Union[AgentAnswer, str]] = None,
-        answer_a: Optional[Union[AgentAnswer, str]] = None,
-        answer_b: Optional[Union[AgentAnswer, str]] = None,
-        retrieved_documents: Optional[Union[List[str], List[Document]]] = None,
-        document_metadata: Optional[List[Dict[str, Any]]] = None,
-        query_metadata: Optional[Dict[str, Any]] = None,
+        query: Query | str,
+        answer: AgentAnswer | str | None = None,
+        answer_a: AgentAnswer | str | None = None,
+        answer_b: AgentAnswer | str | None = None,
+        retrieved_documents: list[str] | list[Document] | None = None,
+        document_metadata: list[dict[str, Any]] | None = None,
+        query_metadata: dict[str, Any] | None = None,
         answer_metadata=None,
-        answer_a_metadata: Optional[Dict[str, Any]] = None,
-        answer_b_metadata: Optional[Dict[str, Any]] = None,
-    ) -> Tuple[str, Any]:
+        answer_a_metadata: dict[str, Any] | None = None,
+        answer_b_metadata: dict[str, Any] | None = None,
+    ) -> tuple[str, Any]:
         query = self._assemble_query(query, query_metadata)
         if isinstance(retrieved_documents, str):
             retrieved_documents = [retrieved_documents]
@@ -154,7 +143,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 retrieved_documents, document_metadata
             )
             query.retrieved_docs = retrieved_and_assembled_docs
-        agent: Union[str, Tuple[str, str]]
+        agent: str | tuple[str, str]
         if self.pairwise:
             if not answer_a or not answer_b:
                 raise ValueError("Pairwise evaluations require two answers")
@@ -200,10 +189,10 @@ class BaseAnswerEvaluator(BaseEvaluator):
         return result.raw_answer, result.answer
 
     async def _async_evaluate(
-        self, eval_sample: Tuple[Query, Union[PairwiseGame, AgentAnswer]]
+        self, eval_sample: tuple[Query, PairwiseGame | AgentAnswer]
     ) -> AnswerEvaluatorResult:
         query, evaluable = eval_sample
-        agent: Union[str, Tuple[str, str]]
+        agent: str | tuple[str, str]
         if evaluable.evaluation is not None and not self.config.force:
             return evaluable.evaluation  # type: ignore
         if isinstance(evaluable, AgentAnswer):
@@ -261,13 +250,13 @@ class BaseAnswerEvaluator(BaseEvaluator):
 
     def _build_message(
         self, query: Query, answer: AgentAnswer
-    ) -> Union[str, List[Dict[str, str]]]:
+    ) -> str | list[dict[str, str]]:
         """Builds the message to send to the LLM evaluator"""
         raise NotImplementedError
 
     def _build_message_pairwise(
         self, query: Query, game: PairwiseGame
-    ) -> Union[str, List[Dict[str, str]]]:
+    ) -> str | list[dict[str, str]]:
         """Builds the message to send to the LLM evaluator"""
         raise NotImplementedError
 
@@ -311,7 +300,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
             return "NO DOCUMENTS WERE RETRIEVED"
         return "\n".join(documents)
 
-    def __prepare_queries(self, queries: List[Query]) -> List[Query]:
+    def __prepare_queries(self, queries: list[Query]) -> list[Query]:
         queries = self._load_retrieved_documents(queries)
         queries = self._load_document_evaluations(queries, force=False)
         queries = self._load_agent_answers(queries)
@@ -319,7 +308,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
         queries = self._load_answers_evaluations(queries, force=self.config.force)
         return queries
 
-    def __add_pairwise_games(self, queries: List[Query]) -> List[Query]:
+    def __add_pairwise_games(self, queries: list[Query]) -> list[Query]:
         if not self.pairwise:
             return queries
         for query in queries:
@@ -352,9 +341,9 @@ class BaseAnswerEvaluator(BaseEvaluator):
         return queries
 
     def __get_tuples_to_evaluate(
-        self, queries: List[Query]
-    ) -> List[Tuple[Query, Union[PairwiseGame, AgentAnswer]]]:
-        tuples_to_eval: List[Tuple[Query, Union[PairwiseGame, AgentAnswer]]] = []
+        self, queries: list[Query]
+    ) -> list[tuple[Query, PairwiseGame | AgentAnswer]]:
+        tuples_to_eval: list[tuple[Query, PairwiseGame | AgentAnswer]] = []
         all_tuples = 0
         missing_evaluations = 0
         for q in queries:
@@ -382,7 +371,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
 
         return tuples_to_eval
 
-    def batch_evaluate(self, queries: List[Query]) -> List[Query]:
+    def batch_evaluate(self, queries: list[Query]) -> list[Query]:
         def run(coroutine):
             return asyncio.run(coroutine)
 
@@ -401,7 +390,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
 
 
 class AnswerEvaluatorFactory:
-    registry: Dict[AnswerEvaluatorTypes, Type[BaseAnswerEvaluator]] = {}
+    registry: dict[AnswerEvaluatorTypes, Type[BaseAnswerEvaluator]] = {}
 
     @classmethod
     def register(cls, name: AnswerEvaluatorTypes) -> Callable:
@@ -417,8 +406,8 @@ class AnswerEvaluatorFactory:
     def create(
         cls,
         evaluator_name: AnswerEvaluatorTypes,
-        llm_provider: Union[BaseLLMProvider, str],
-        config: Optional[BaseAnswerEvaluatorConfig] = None,
+        llm_provider: BaseLLMProvider | str,
+        config: BaseAnswerEvaluatorConfig | None = None,
         **kwargs,
     ) -> BaseAnswerEvaluator:
         if evaluator_name not in cls.registry:
@@ -437,9 +426,9 @@ class AnswerEvaluatorFactory:
 
 
 def get_answer_evaluator(
-    evaluator_name: Optional[Union[AnswerEvaluatorTypes, str]] = None,
-    llm_provider: Union[BaseLLMProvider, str] = "openai",
-    config: Optional[BaseAnswerEvaluatorConfig] = None,
+    evaluator_name: AnswerEvaluatorTypes | str | None = None,
+    llm_provider: BaseLLMProvider | str = "openai",
+    config: BaseAnswerEvaluatorConfig | None = None,
     **kwargs,
 ) -> BaseAnswerEvaluator:
     if evaluator_name is None:
