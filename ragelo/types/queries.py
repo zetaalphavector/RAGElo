@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pydantic import Field
 
 from ragelo.logger import logger
-from ragelo.types.evaluables import Document, Evaluable
+from ragelo.types.evaluables import Document
 from ragelo.types.pydantic_models import BaseModel, validator
 from ragelo.types.query import Query
 from ragelo.types.results import AnswerEvaluatorResult, RetrievalEvaluatorResult
@@ -25,7 +25,7 @@ class Queries(BaseModel):
     queries: dict[str, Query] = Field(default_factory=dict)
     experiment_id: str | None = None
     cache_path: str | None = None
-    evaluables_cache_path: str | None = None
+    results_cache_path: str | None = None
     save_cache: bool = True
     csv_path: str | None = None
     clear_evaluations: bool = False
@@ -41,10 +41,8 @@ class Queries(BaseModel):
         if self.cache_path is None:
             os.makedirs("cache", exist_ok=True)
             self.cache_path = f"cache/{self.experiment_id}.json"
-        if self.evaluables_cache_path is None:
-            self.evaluables_cache_path = self.cache_path.replace(
-                ".json", "_evaluables.json"
-            )
+        if self.results_cache_path is None:
+            self.results_cache_path = self.cache_path.replace(".json", "_results.jsonl")
         # Check where to load the data from. If the cache file exists or the csv_file exists, load from there. If the queries was also set, make sure they match.
         if self.csv_path:
             csv_queries = self.load_from_csv()
@@ -64,6 +62,8 @@ class Queries(BaseModel):
                     "Queries loaded from the cache file do not match the queries passed"
                 )
             self.queries = cache_queries
+        if os.path.isfile(self.results_cache_path):
+            self.load_results_from_cache()
         if self.clear_evaluations:
             self.clear_all_evaluations()
 
@@ -88,10 +88,9 @@ class Queries(BaseModel):
         logger.info(
             f"Cleared {doc_eval_count} document evaluations, {game_eval_count} game evaluations, and {answer_eval_count} answer evaluations"
         )
-        # clear the evaluables cache file
 
-        if self.evaluables_cache_path and os.path.isfile(self.evaluables_cache_path):
-            with open(self.evaluables_cache_path, "w") as f:
+        if self.results_cache_path and os.path.isfile(self.results_cache_path):
+            with open(self.results_cache_path, "w") as f:
                 pass
         self.dump()
 
@@ -162,32 +161,28 @@ class Queries(BaseModel):
             raise FileNotFoundError(f"Cache file {self.cache_path} not found")
         with open(self.cache_path) as f:
             queries = {k: Query(**v) for k, v in json.load(f)["queries"].items()}
-        if self.evaluables_cache_path is None:
-            self.evaluables_cache_path = self.cache_path.replace(
-                ".json", "_evaluables.json"
-            )
-            with open(self.evaluables_cache_path, "w") as f:
+        return queries
+
+    def load_results_from_cache(self):
+        if not self.cache_path:
+            raise ValueError("Cache path not set. Cannot load queries")
+        if self.results_cache_path is None:
+            self.results_cache_path = self.cache_path.replace(".json", "_results.jsonl")
+            with open(self.results_cache_path, "w") as f:
                 pass
-        for line in open(self.evaluables_cache_path):
+        for line in open(self.results_cache_path):
             evaluable = json.loads(line)
             evaluable_type = list(evaluable.keys())[0]
             if evaluable_type == "answer":
                 result = AnswerEvaluatorResult(**evaluable["answer"])
-                if (
-                    result.qid not in queries
-                    or result.agent not in queries[result.qid].answers
-                ):
+                if result.qid not in self.queries:
                     continue
-                queries[result.qid].answers[result.agent].evaluation = result
+                self.add_answer_evaluation(result)
             elif evaluable_type == "retrieval":
                 result = RetrievalEvaluatorResult(**evaluable["retrieval"])
-                if (
-                    result.qid not in queries
-                    or result.did not in queries[result.qid].retrieved_docs
-                ):
+                if result.qid not in self.queries:
                     continue
-                queries[result.qid].retrieved_docs[result.did].evaluation = result
-        return queries
+                self.add_retrieval_evaluation(result)
 
     def add_retrieved_docs_from_runfile(
         self,
@@ -329,23 +324,21 @@ class Queries(BaseModel):
         with open(self.cache_path, "w") as f:
             json.dump(self.model_dump(), f)
 
-    def save_result(self, evaluable: AnswerEvaluatorResult | RetrievalEvaluatorResult):
+    def save_result(self, result: AnswerEvaluatorResult | RetrievalEvaluatorResult):
         if not self.save_cache:
             return
-        if self.evaluables_cache_path is None:
-            raise ValueError("Evaluables cache path not set. Cannot dump evaluables")
-        with open(self.evaluables_cache_path, "a+") as f:
-            if isinstance(evaluable, AnswerEvaluatorResult):
-                evaluable_type = "answer"
-            elif isinstance(evaluable, RetrievalEvaluatorResult):
-                evaluable_type = "retrieval"
+        if self.results_cache_path is None:
+            raise ValueError("Results cache path not set. Cannot dump result")
+        with open(self.results_cache_path, "a+") as f:
+            if isinstance(result, AnswerEvaluatorResult):
+                result_type = "answer"
+            elif isinstance(result, RetrievalEvaluatorResult):
+                result_type = "retrieval"
             else:
                 raise ValueError(
-                    f"Cannot save evaluation of type {type(evaluable)} to cache"
+                    f"Cannot save evaluation of type {type(result)} to cache"
                 )
-            f.write(
-                json.dumps({evaluable_type: evaluable.model_dump()}, indent=2) + "\n"
-            )
+            f.write(json.dumps({result_type: result.model_dump()}) + "\n")
 
     def __len__(self):
         return len(self.queries)
