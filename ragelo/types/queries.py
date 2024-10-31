@@ -17,9 +17,36 @@ from ragelo.types.results import AnswerEvaluatorResult, RetrievalEvaluatorResult
 
 
 class Queries(BaseModel):
-    """A collection of queries and their retrieved documents and agent answers.
+    """
+    A class to manage and evaluate a collection of queries.
     Attributes:
-        queries: A dictionary of Query objects, where the key is the query id.
+        queries (dict[str, Query]): A dictionary of queries.
+        experiment_id (str | None): The ID of the experiment.
+        cache_path (str | None): The path to the cache file.
+        results_cache_path (str | None): The path to the results cache file.
+        save_cache (bool): Whether to save the cache to disk.
+        csv_path (str | None): The path to the CSV file containing queries.
+        clear_evaluations (bool): Whether to clear all evaluations.
+        csv_query_text_col (str): The column name for query text in the CSV file.
+        csv_query_id_col (str | None): The column name for query ID in the CSV file.
+        csv_infer_metadata_fields (bool): Whether to infer metadata fields from the CSV file.
+        csv_metadata_fields (list[str] | None): The list of metadata fields in the CSV file.
+    Methods:
+        __init__(**data): Initializes the Queries object.
+        add_retrieved_docs_from_runfile(run_file_path: str, corpus: dict[str, Document] | dict[str, str], top_k: int | None = None): Adds retrieved documents from a run file to the queries.
+        add_evaluation(evaluation: RetrievalEvaluatorResult | AnswerEvaluatorResult, should_save: bool = True): Adds an evaluation to the queries.
+        add_retrieval_evaluation(evaluation: RetrievalEvaluatorResult): Adds a retrieval evaluation to the queries.
+        add_answer_evaluation(evaluation: AnswerEvaluatorResult): Adds an answer evaluation to the queries.
+        get_qrels(relevance_key: str | None = "answer", relevance_threshold: int = 0) -> dict[str, dict[str, int]]: Gets the qrels for the queries.
+        get_runs(agents: list[str] | None = None) -> dict[str, dict[str, dict[str, float]]]: Gets the runs for the queries.
+        persist_on_disk(): Saves the queries to disk.
+        save_result(result: AnswerEvaluatorResult | RetrievalEvaluatorResult): Saves an evaluation result to disk.
+        __len__(): Returns the number of queries.
+        __iter__(): Returns an iterator over the queries.
+        __getitem__(key: str) -> Query: Gets a query by its key.
+        evaluate_retrieval(metrics: list[str] = ["Precision@10", "nDCG@10", "Judged@10"], relevance_threshold: int = 0): Evaluates the retrieval performance of the queries.
+        _infer_query_id_column(file_path: str) -> str | None: Infers the column name for query ID from a CSV file.
+        keys(): Returns the keys of the queries.
     """
 
     queries: dict[str, Query] = Field(default_factory=dict)
@@ -35,6 +62,30 @@ class Queries(BaseModel):
     csv_metadata_fields: list[str] | None = None
 
     def __init__(self, **data):
+        """
+        Initialize the query object with optional data and set up paths and caches.
+
+        The initialization process involves setting up paths and loading queries from different sources:
+        1. If `csv_path` is provided, queries are loaded from the specified CSV file.
+        2. If `csv_path` is not provided but `cache_path` exists and points to a valid file, queries are loaded from the cache file.
+        3. If both `csv_path` and `cache_path` are provided, the method ensures that the queries loaded from the CSV file match those in the cache file.
+        The method prioritizes loading queries from the CSV file over the cache file. If neither source is available, it relies on the `queries` attribute if it has been set.
+        Additionally, if `results_cache_path` points to an existing file, results are loaded from the cache. If `clear_evaluations` is set to True, all evaluations are cleared.
+        Finally, the state is persisted on disk.
+
+        Keyword Args:
+            **data: Arbitrary keyword arguments containing initialization data.
+        Raises:
+            ValueError: If the queries loaded from the CSV file or cache file do not match the queries passed.
+        Attributes:
+            experiment_id (str): Unique identifier for the experiment. Defaults to the current UTC timestamp if not provided.
+            cache_path (str): Path to the cache file. Defaults to "cache/{experiment_id}.json" if not provided.
+            results_cache_path (str): Path to the results cache file. Defaults to "cache/{experiment_id}_results.jsonl" if not provided.
+            csv_path (str): Path to the CSV file containing queries. Optional.
+            queries (dict): Dictionary of queries. Loaded from CSV or cache file if not provided.
+            clear_evaluations (bool): Flag to clear evaluations. Optional.
+        """
+
         super().__init__(**data)
         if not self.experiment_id:
             self.experiment_id = str(int(datetime.now(timezone.utc).timestamp()))
@@ -45,7 +96,7 @@ class Queries(BaseModel):
             self.results_cache_path = self.cache_path.replace(".json", "_results.jsonl")
         # Check where to load the data from. If the cache file exists or the csv_file exists, load from there. If the queries was also set, make sure they match.
         if self.csv_path:
-            csv_queries = self.load_from_csv()
+            csv_queries = self._read_queries_csv()
             if len(self.queries) > 0 and set(csv_queries.keys()) != set(
                 self.queries.keys()
             ):
@@ -54,7 +105,7 @@ class Queries(BaseModel):
                 )
             self.queries = csv_queries
         elif self.cache_path and os.path.isfile(self.cache_path):
-            cache_queries = self.load_from_cache()
+            cache_queries = self._load_cached_queries()
             if len(self.queries) > 0 and set(cache_queries.keys()) != set(
                 self.queries.keys()
             ):
@@ -63,12 +114,12 @@ class Queries(BaseModel):
                 )
             self.queries = cache_queries
         if os.path.isfile(self.results_cache_path):
-            self.load_results_from_cache()
+            self._load_results_from_cache()
         if self.clear_evaluations:
-            self.clear_all_evaluations()
+            self._clear_all_evaluations()
         self.persist_on_disk()
 
-    def clear_all_evaluations(self):
+    def _clear_all_evaluations(self):
         logger.warning(f"Clearing all evaluations for {len(self)} queries")
         doc_eval_count = 0
         game_eval_count = 0
@@ -95,22 +146,7 @@ class Queries(BaseModel):
                 pass
         self.persist_on_disk()
 
-    def load_from_csv(self) -> dict[str, Query]:
-        """Loads a list of queries from a CSV file.
-            The CSV file should have a header and at least one column (specified by query_text_col) with the query text.
-            If no query_id_col is defined, we will first try to infer what column should be used as id from a list of pre-set values. If it fails, the queries will have ids assigned to them according to their order in the csv file.
-
-        Args:
-            queries_path (str): Path to the CSV file with the queries.
-            query_text_col (str): Name of the column with the query text. Defaults to 'query'.
-            query_id_col (str): Name of the column with the query id. If not passed, try to infer from the csv.
-                Uses the query_text_col as last resource.
-            infer_metadata_fields (bool): Wether to infer the metadata fields in the csv.
-            metadata_fields (Optional[List[str]]): The list of columns to be used as metadata.
-                If infer_metadata_fields is True, will use all the fields if not explicitly set.
-            experiment_id (str): The id of the experiment. If not passed, a new one will be created with the current timestamp.
-            cache_path (str): The path to the cache file. If not passed, a new one will be created with the experiment_id.
-        """
+    def _read_queries_csv(self) -> dict[str, Query]:
         queries: dict[str, Query] = {}
         read_queries = set()
         if self.csv_path is None:
@@ -154,7 +190,7 @@ class Queries(BaseModel):
                 read_queries.add(qid)
         return queries
 
-    def load_from_cache(self):
+    def _load_cached_queries(self):
         queries: dict[str, Query] = {}
         if not self.cache_path:
             raise ValueError("Cache path not set. Cannot load queries")
@@ -164,7 +200,7 @@ class Queries(BaseModel):
             queries = {k: Query(**v) for k, v in json.load(f)["queries"].items()}
         return queries
 
-    def load_results_from_cache(self):
+    def _load_results_from_cache(self):
         if not self.cache_path:
             raise ValueError("Cache path not set. Cannot load queries")
         if self.results_cache_path is None:
@@ -178,12 +214,12 @@ class Queries(BaseModel):
                 result = AnswerEvaluatorResult(**result["answer"])
                 if result.qid not in self.queries:
                     continue
-                self.add_answer_evaluation(result)
+                self._add_answer_evaluation(result)
             elif result_type == "retrieval":
                 result = RetrievalEvaluatorResult(**result["retrieval"])
                 if result.qid not in self.queries:
                     continue
-                self.add_retrieval_evaluation(result)
+                self._add_retrieval_evaluation(result)
 
     def add_retrieved_docs_from_runfile(
         self,
@@ -191,7 +227,9 @@ class Queries(BaseModel):
         corpus: dict[str, Document] | dict[str, str],
         top_k: int | None = None,
     ):
-        """Adds the retrieved documents from a run file to the queries.
+        """
+        Adds the retrieved documents from a run file to the queries.
+
         A run file has, traditionally, the following format:
             qid, Q0, docid, rank, score, run_name
         The run name will be considered as the agent that retrieved the documents. The second column is usually ignored.
@@ -241,18 +279,27 @@ class Queries(BaseModel):
         evaluation: RetrievalEvaluatorResult | AnswerEvaluatorResult,
         should_save: bool = True,
     ):
+        """
+        Adds an evaluation to the queries and optionally saves the result.
+
+        Args:
+            evaluation (RetrievalEvaluatorResult | AnswerEvaluatorResult): The evaluation result to be added.
+            should_save (bool): Flag indicating whether the result should be persist to disk. Defaults to True.
+        Raises:
+            ValueError: If the evaluation type is not supported.
+        """
         if isinstance(evaluation, RetrievalEvaluatorResult):
-            self.add_retrieval_evaluation(evaluation)
+            self._add_retrieval_evaluation(evaluation)
         elif isinstance(evaluation, AnswerEvaluatorResult):
-            self.add_answer_evaluation(evaluation)
+            self._add_answer_evaluation(evaluation)
         else:
             raise ValueError(
                 f"Cannot add evaluation of type {type(evaluation)} to queries"
             )
         if should_save:
-            self.save_result(evaluation)
+            self.persist_result_to_cache(evaluation)
 
-    def add_retrieval_evaluation(self, evaluation: RetrievalEvaluatorResult):
+    def _add_retrieval_evaluation(self, evaluation: RetrievalEvaluatorResult):
         qid = evaluation.qid
         if qid not in self.queries:
             raise ValueError(
@@ -270,7 +317,7 @@ class Queries(BaseModel):
             )
         self.queries[qid].retrieved_docs[did].evaluation = evaluation
 
-    def add_answer_evaluation(self, evaluation: AnswerEvaluatorResult):
+    def _add_answer_evaluation(self, evaluation: AnswerEvaluatorResult):
         qid = evaluation.qid
         if qid not in self.queries:
             raise ValueError(
@@ -289,7 +336,7 @@ class Queries(BaseModel):
                             f"Query {qid} already has an evaluation for agents {agent_a} and {agent_b}. Overwriting."
                         )
                     game.evaluation = evaluation
-                    self.save_result(evaluation)
+                    self.persist_result_to_cache(evaluation)
                     return
         agent = evaluation.agent
         if agent not in self.queries[qid].answers:
@@ -301,11 +348,21 @@ class Queries(BaseModel):
                 f"Query {qid} already has an evaluation for agent {agent}. Overwriting."
             )
         self.queries[qid].answers[agent].evaluation = evaluation
-        self.save_result(evaluation)
+        self.persist_result_to_cache(evaluation)
 
     def get_qrels(
         self, relevance_key: str | None = "answer", relevance_threshold: int = 0
     ) -> dict[str, dict[str, int]]:
+        """
+        Retrieve the qrels (query relevance judgments) for the queries.
+        Args:
+            relevance_key (str | None): The key to use for determining relevance. Defaults to "answer".
+            relevance_threshold (int): The threshold value for relevance. Defaults to 0.
+        Returns:
+            dict[str, dict[str, int]]: A dictionary where each key is a query ID and the value is another dictionary
+                                       mapping document IDs to their relevance scores.
+        """
+
         qrels = {}
         for qid, query in self.queries.items():
             qrels[qid] = query.get_qrels(relevance_key, relevance_threshold)
@@ -314,6 +371,16 @@ class Queries(BaseModel):
     def get_runs(
         self, agents: list[str] | None = None
     ) -> dict[str, dict[str, dict[str, float]]]:
+        """
+        Retrieve runs for specified agents.
+        This method aggregates runs from all queries and organizes them by agent.
+        Args:
+            agents (list[str] | None): A list of agent names to filter the runs. If None, runs for all agents are retrieved.
+        Returns:
+            dict[str, dict[str, dict[str, float]]]: A nested dictionary where the first level keys are agent names,
+            the second level keys are run identifiers, and the third level keys are metric names with their corresponding float values.
+        """
+
         runs_by_agent = {}
         for query in self.queries.values():
             runs = query.get_runs(agents)
@@ -321,44 +388,41 @@ class Queries(BaseModel):
                 runs_by_agent[agent] = runs_by_agent.get(agent, {}) | runs
         return runs_by_agent
 
-    def persist_on_disk(self):
-        if not self.save_cache:
-            return
-        if self.cache_path is None:
-            raise ValueError("Cache path not set. Cannot dump queries")
-        with open(self.cache_path, "w") as f:
-            json.dump(self.model_dump(), f)
-
-    def save_result(self, result: AnswerEvaluatorResult | RetrievalEvaluatorResult):
-        if not self.save_cache:
-            return
-        if self.results_cache_path is None:
-            raise ValueError("Results cache path not set. Cannot dump result")
-        with open(self.results_cache_path, "a+") as f:
-            if isinstance(result, AnswerEvaluatorResult):
-                result_type = "answer"
-            elif isinstance(result, RetrievalEvaluatorResult):
-                result_type = "retrieval"
-            else:
-                raise ValueError(
-                    f"Cannot save evaluation of type {type(result)} to cache"
-                )
-            f.write(json.dumps({result_type: result.model_dump()}) + "\n")
-
-    def __len__(self):
-        return len(self.queries)
-
-    def __iter__(self):
-        return iter(self.queries.values())
-
-    def __getitem__(self, key: str) -> Query:
-        return self.queries[key]
-
     def evaluate_retrieval(
         self,
         metrics: list[str] = ["Precision@10", "nDCG@10", "Judged@10"],
         relevance_threshold: int = 0,
-    ):
+    ) -> dict[str, dict[str, float]]:
+        """
+        Evaluate the retrieval performance of agents using specified metrics.
+        Args:
+            metrics (list[str]): A list of metric names to evaluate (default is ["Precision@10", "nDCG@10", "Judged@10"]).
+        relevance_threshold (int): The threshold above which a document is considered relevant (default is 0).
+        Returns:
+            dict[str, dict[str, float]]: A dictionary where keys are agent names and values are dictionaries of metric scores.
+        Raises:
+            ImportError: If the `ir_measures` package is not installed.
+            ValueError: If a specified metric is not found in the `ir_measures` registry.
+        Notes:
+        - The function uses the `ir_measures` package to calculate the metrics.
+        - If the `rich` package is installed, the results are printed in a formatted table.
+        - If the `rich` package is not installed, the results are printed using plain `print`.
+
+        Example:
+        >>> results = evaluate_retrieval(metrics=["Precision@10", "nDCG@10"], relevance_threshold=1)
+        >>> print(results)
+        {
+            "agent1": {
+                "Precision@10": 0.5,
+                "nDCG@10": 0.6
+            },
+            "agent2": {
+                "Precision@10": 0.4,
+                "nDCG@10": 0.5
+            }
+        }
+        """
+
         try:
             import ir_measures
             from ir_measures import parse_measure
@@ -416,6 +480,64 @@ class Queries(BaseModel):
             logger.warning("Rich not installed. Using plain print")
             print(results)
         return results
+
+    def persist_on_disk(self):
+        """
+        Persist the current state of the model to disk if caching is enabled.
+        This method checks if caching is enabled by evaluating the `save_cache` attribute.
+        If caching is enabled, it attempts to write the model's current state to the file
+        specified by `cache_path`. If `cache_path` is not set, a ValueError is raised.
+        Raises:
+            ValueError: If `cache_path` is None and caching is enabled.
+        """
+
+        if not self.save_cache:
+            return
+        if self.cache_path is None:
+            raise ValueError("Cache path not set. Cannot dump queries")
+        with open(self.cache_path, "w") as f:
+            json.dump(self.model_dump(), f)
+
+    def persist_result_to_cache(
+        self, result: AnswerEvaluatorResult | RetrievalEvaluatorResult
+    ):
+        """
+        Persist the evaluation result to a cache file.
+        This method writes the given evaluation result to a cache file specified by
+        `self.results_cache_path`. The result is serialized to JSON format and appended
+        to the file. The type of the result (either "answer" or "retrieval") is included
+        in the serialized data.
+        Args:
+            result (AnswerEvaluatorResult | RetrievalEvaluatorResult): The evaluation result
+                to be persisted to the cache.
+        Raises:
+            ValueError: If `self.results_cache_path` is not set or if the type of `result`
+                is not recognized.
+        """
+
+        if not self.save_cache:
+            return
+        if self.results_cache_path is None:
+            raise ValueError("Results cache path not set. Cannot dump result")
+        with open(self.results_cache_path, "a+") as f:
+            if isinstance(result, AnswerEvaluatorResult):
+                result_type = "answer"
+            elif isinstance(result, RetrievalEvaluatorResult):
+                result_type = "retrieval"
+            else:
+                raise ValueError(
+                    f"Cannot save evaluation of type {type(result)} to cache"
+                )
+            f.write(json.dumps({result_type: result.model_dump()}) + "\n")
+
+    def __len__(self):
+        return len(self.queries)
+
+    def __iter__(self):
+        return iter(self.queries.values())
+
+    def __getitem__(self, key: str) -> Query:
+        return self.queries[key]
 
     @staticmethod
     def _infer_query_id_column(file_path: str) -> str | None:
