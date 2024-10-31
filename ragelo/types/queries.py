@@ -66,6 +66,7 @@ class Queries(BaseModel):
             self.load_results_from_cache()
         if self.clear_evaluations:
             self.clear_all_evaluations()
+        self.persist_on_disk()
 
     def clear_all_evaluations(self):
         logger.warning(f"Clearing all evaluations for {len(self)} queries")
@@ -92,7 +93,7 @@ class Queries(BaseModel):
         if self.results_cache_path and os.path.isfile(self.results_cache_path):
             with open(self.results_cache_path, "w") as f:
                 pass
-        self.dump()
+        self.persist_on_disk()
 
     def load_from_csv(self) -> dict[str, Query]:
         """Loads a list of queries from a CSV file.
@@ -171,15 +172,15 @@ class Queries(BaseModel):
             with open(self.results_cache_path, "w") as f:
                 pass
         for line in open(self.results_cache_path):
-            evaluable = json.loads(line)
-            evaluable_type = list(evaluable.keys())[0]
-            if evaluable_type == "answer":
-                result = AnswerEvaluatorResult(**evaluable["answer"])
+            result = json.loads(line)
+            result_type = list(result.keys())[0]
+            if result_type == "answer":
+                result = AnswerEvaluatorResult(**result["answer"])
                 if result.qid not in self.queries:
                     continue
                 self.add_answer_evaluation(result)
-            elif evaluable_type == "retrieval":
-                result = RetrievalEvaluatorResult(**evaluable["retrieval"])
+            elif result_type == "retrieval":
+                result = RetrievalEvaluatorResult(**result["retrieval"])
                 if result.qid not in self.queries:
                     continue
                 self.add_retrieval_evaluation(result)
@@ -236,7 +237,9 @@ class Queries(BaseModel):
         )
 
     def add_evaluation(
-        self, evaluation: RetrievalEvaluatorResult | AnswerEvaluatorResult
+        self,
+        evaluation: RetrievalEvaluatorResult | AnswerEvaluatorResult,
+        should_save: bool = True,
     ):
         if isinstance(evaluation, RetrievalEvaluatorResult):
             self.add_retrieval_evaluation(evaluation)
@@ -246,6 +249,8 @@ class Queries(BaseModel):
             raise ValueError(
                 f"Cannot add evaluation of type {type(evaluation)} to queries"
             )
+        if should_save:
+            self.save_result(evaluation)
 
     def add_retrieval_evaluation(self, evaluation: RetrievalEvaluatorResult):
         qid = evaluation.qid
@@ -255,15 +260,15 @@ class Queries(BaseModel):
             )
         did = evaluation.did
         if did not in self.queries[qid].retrieved_docs:
-            raise ValueError(
+            logger.warning(
                 f"Trying to add evaluation for non-retrieved document {did} in query {qid}"
             )
+            return
         if self.queries[qid].retrieved_docs[did].evaluation is not None:
-            logger.warning(
+            logger.info(
                 f"Query {qid} already has an evaluation for document {did}. Overwriting."
             )
         self.queries[qid].retrieved_docs[did].evaluation = evaluation
-        self.save_result(evaluation)
 
     def add_answer_evaluation(self, evaluation: AnswerEvaluatorResult):
         qid = evaluation.qid
@@ -280,7 +285,7 @@ class Queries(BaseModel):
                     and game.agent_b_answer.agent == agent_b
                 ):
                     if game.evaluation is not None:
-                        logger.warning(
+                        logger.info(
                             f"Query {qid} already has an evaluation for agents {agent_a} and {agent_b}. Overwriting."
                         )
                     game.evaluation = evaluation
@@ -316,7 +321,7 @@ class Queries(BaseModel):
                 runs_by_agent[agent] = runs_by_agent.get(agent, {}) | runs
         return runs_by_agent
 
-    def dump(self):
+    def persist_on_disk(self):
         if not self.save_cache:
             return
         if self.cache_path is None:
