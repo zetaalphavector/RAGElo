@@ -357,6 +357,7 @@ class Queries(BaseModel):
     def evaluate_retrieval(
         self,
         metrics: list[str] = ["Precision@10", "nDCG@10", "Judged@10"],
+        relevance_threshold: int = 0,
     ):
         try:
             import ir_measures
@@ -365,7 +366,7 @@ class Queries(BaseModel):
             raise ImportError(
                 "ir_measures is not installed. Please install it with `pip install ir-measures`"
             )
-        qrels = self.get_qrels()
+        qrels = self.get_qrels(relevance_threshold=relevance_threshold)
         runs = self.get_runs()
         measures = []
         for metric in metrics:
@@ -395,7 +396,11 @@ class Queries(BaseModel):
         try:
             import rich
 
-            rich.print("---[bold cyan] Retrieval Scores [/bold cyan]---")
+            rich.print(f"---[bold cyan] Retrieval Scores [/bold cyan] ---")
+            if relevance_threshold > 0:
+                rich.print(
+                    f"[bold yellow]Relevance threshold: {relevance_threshold}[/bold yellow]"
+                )
             header = f"[bold magenta]{'Agent Name':<{max_agent_len}}"
             header += "\t".join([f"{m:<{max_metric_len}}" for m in metrics])
             header += "[/bold magenta]"

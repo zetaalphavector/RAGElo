@@ -146,10 +146,10 @@ class Query(BaseModel):
                 docs_without_relevance += 1
                 continue
             if isinstance(document.evaluation.answer, int):
-                qrels[did] = document.evaluation.answer
+                relevance = document.evaluation.answer
             elif isinstance(document.evaluation.answer, str):
                 try:
-                    qrels[did] = int(document.evaluation.answer)
+                    relevance = int(document.evaluation.answer)
                 except ValueError:
                     logger.warning(
                         f"Document {did} has a relevance key ({relevance_key})"
@@ -179,7 +179,7 @@ class Query(BaseModel):
                         )
                         continue
                 relevance = int(document.evaluation.answer[relevance_key])
-                qrels[did] = 0 if relevance < relevance_threshold else relevance
+            qrels[did] = 0 if relevance < relevance_threshold else relevance
         if docs_without_relevance > 0:
             logger.warning(
                 f"Query {self.qid} has {docs_without_relevance} documents without relevance."
