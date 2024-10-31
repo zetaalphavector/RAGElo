@@ -58,6 +58,7 @@ class OpenAIProvider(BaseLLMProvider):
             answers = asyncio.run(self.call_async(prompt))
         return answers
 
+    @retry(wait=wait_random_exponential(min=1, max=120), stop=stop_after_attempt(5))
     async def call_async(
         self,
         prompt: str | list[dict[str, str]],
