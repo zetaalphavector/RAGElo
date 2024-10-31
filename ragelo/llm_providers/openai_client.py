@@ -29,7 +29,6 @@ class OpenAIProvider(BaseLLMProvider):
         super().__init__(config)
         self.__openai_client = self.__get_openai_client(config)
 
-    @retry(wait=wait_random_exponential(min=1, max=120), stop=stop_after_attempt(5))
     def __call__(
         self,
         prompt: str | list[dict[str, str]],
@@ -55,7 +54,9 @@ class OpenAIProvider(BaseLLMProvider):
                 )
                 answers = future.result()
         except RuntimeError:
-            answers = asyncio.run(self.call_async(prompt))
+            answers = asyncio.run(
+                self.call_async(prompt, answer_format, response_schema)
+            )
         return answers
 
     @retry(wait=wait_random_exponential(min=1, max=120), stop=stop_after_attempt(5))
