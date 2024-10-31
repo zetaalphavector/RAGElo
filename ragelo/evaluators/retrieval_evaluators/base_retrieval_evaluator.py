@@ -8,6 +8,8 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Type, get_type_hints
 
+from tenacity import RetryError
+
 from ragelo.evaluators.base_evaluator import BaseEvaluator
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
 from ragelo.logger import logger
@@ -48,7 +50,11 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         except Exception as e:
             logger.warning(f"Failed to FETCH answers for qid: {query.qid}")
             logger.warning(f"document id: {document.did}")
-            exc = str(e)
+            if isinstance(e, RetryError):
+                exc = str(e.last_attempt.exception())
+            else:
+                exc = str(e)
+
             raw_answer = None
             answer = None
         if raw_answer is not None:

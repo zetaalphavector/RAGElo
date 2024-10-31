@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tenacity import RetryError
+
 from ragelo.evaluators.retrieval_evaluators import (
     BaseRetrievalEvaluator,
     RetrievalEvaluatorFactory,
@@ -155,7 +157,10 @@ document given the particular query. The score meaning is as follows:
         except Exception as e:
             logger.warning(f"Failed to FETCH reasonings for qid: {query.qid}")
             logger.warning(f"document id: {document.did}")
-            exc = str(e)
+            if isinstance(e, RetryError):
+                exc = str(e.last_attempt.exception())
+            else:
+                exc = str(e)
             return RetrievalEvaluatorResult(
                 qid=query.qid,
                 did=document.did,

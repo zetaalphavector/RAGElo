@@ -8,6 +8,8 @@ import random
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Type, get_type_hints
 
+from tenacity import RetryError
+
 from ragelo.evaluators.base_evaluator import BaseEvaluator
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
 from ragelo.logger import logger
@@ -35,6 +37,8 @@ class BaseAnswerEvaluator(BaseEvaluator):
     ) -> AnswerEvaluatorResult:
         query, evaluable = eval_sample
         agent: str | tuple[str, str]
+        if evaluable.evaluation is not None and not self.config.force:
+            return evaluable.evaluation  # type: ignore
         if isinstance(evaluable, AgentAnswer):
             agent = evaluable.agent
             prompt = self._build_message(query, evaluable)
@@ -43,25 +47,6 @@ class BaseAnswerEvaluator(BaseEvaluator):
             prompt = self._build_message_pairwise(query, evaluable)
         else:
             raise ValueError(f"Unknown evaluable type {type(evaluable)}")
-        if evaluable.evaluation is not None and not self.config.force:
-            if isinstance(evaluable, PairwiseGame):
-                return AnswerEvaluatorResult(
-                    qid=query.qid,
-                    agent_a=evaluable.agent_a_answer.agent,
-                    agent_b=evaluable.agent_b_answer.agent,
-                    raw_answer=evaluable.evaluation.raw_answer,
-                    answer=evaluable.evaluation.answer,
-                    pairwise=True,
-                    exception=evaluable.evaluation.exception,
-                )
-            return AnswerEvaluatorResult(
-                qid=query.qid,
-                agent=agent,
-                raw_answer=evaluable.evaluation.raw_answer,
-                answer=evaluable.evaluation.answer,
-                pairwise=False,
-                exception=evaluable.evaluation.exception,
-            )
 
         exc = None
         try:
@@ -73,7 +58,10 @@ class BaseAnswerEvaluator(BaseEvaluator):
         except Exception as e:
             logger.warning(f"Failed to FETCH answers for qid: {query.qid}")
             logger.warning(f"agent(s): {agent}")
-            exc = str(e)
+            if isinstance(e, RetryError):
+                exc = str(e.last_attempt.exception())
+            else:
+                exc = str(e)
             raw_answer = None
             answer = None
         if raw_answer is not None:
