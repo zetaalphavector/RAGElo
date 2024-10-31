@@ -73,7 +73,7 @@ class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     )
     llm_response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = Field(
         default={
-            "score": "An integer between 0 and 1 representing the score of the document."
+            "score": "An integer between 0 and 2 representing the score of the document, where 0 means the document is not relevant to the query, 1 means the document is somewhat relevant, and 2 means the document is highly relevant."
         },
     )
 

@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pydantic import Field
 
 from ragelo.logger import logger
-from ragelo.types.evaluables import Document
+from ragelo.types.evaluables import Document, Evaluable
 from ragelo.types.pydantic_models import BaseModel, validator
 from ragelo.types.query import Query
 from ragelo.types.results import AnswerEvaluatorResult, RetrievalEvaluatorResult
@@ -23,35 +23,79 @@ class Queries(BaseModel):
     """
 
     queries: dict[str, Query] = Field(default_factory=dict)
-    experiment_id: str
-    cache_path: str
+    experiment_id: str | None = None
+    cache_path: str | None = None
+    evaluables_cache_path: str | None = None
     save_cache: bool = True
+    csv_path: str | None = None
+    clear_evaluations: bool = False
+    csv_query_text_col: str = "query"
+    csv_query_id_col: str | None = None
+    csv_infer_metadata_fields: bool = True
+    csv_metadata_fields: list[str] | None = None
 
-    @validator
-    @classmethod
-    def add_cache_path(cls, v):
-        experiment_id = v.get("experiment_id")
-        if experiment_id is None:
-            experiment_id = str(int(datetime.now(timezone.utc).timestamp()))
-        cache_path = v.get("cache_path")
-        if cache_path is None:
+    def __init__(self, **data):
+        super().__init__(**data)
+        if not self.experiment_id:
+            self.experiment_id = str(int(datetime.now(timezone.utc).timestamp()))
+        if self.cache_path is None:
             os.makedirs("cache", exist_ok=True)
-            cache_path = f"cache/{experiment_id}.json"
-        v["cache_path"] = cache_path
-        return v
+            self.cache_path = f"cache/{self.experiment_id}.json"
+        if self.evaluables_cache_path is None:
+            self.evaluables_cache_path = self.cache_path.replace(
+                ".json", "_evaluables.json"
+            )
+        # Check where to load the data from. If the cache file exists or the csv_file exists, load from there. If the queries was also set, make sure they match.
+        if self.csv_path:
+            csv_queries = self.load_from_csv()
+            if len(self.queries) > 0 and set(csv_queries.keys()) != set(
+                self.queries.keys()
+            ):
+                raise ValueError(
+                    "Queries loaded from the CSV file do not match the queries passed"
+                )
+            self.queries = csv_queries
+        elif self.cache_path and os.path.isfile(self.cache_path):
+            cache_queries = self.load_from_cache()
+            if len(self.queries) > 0 and set(cache_queries.keys()) != set(
+                self.queries.keys()
+            ):
+                raise ValueError(
+                    "Queries loaded from the cache file do not match the queries passed"
+                )
+            self.queries = cache_queries
+        if self.clear_evaluations:
+            self.clear_all_evaluations()
 
-    @classmethod
-    def from_csv(
-        cls,
-        csv_path: str,
-        query_text_col: str = "query",
-        query_id_col: str | None = None,
-        infer_metadata_fields: bool = True,
-        metadata_fields: list[str] | None = None,
-        experiment_id: str | None = None,
-        cache_path: str | None = None,
-        save_cache: bool = True,
-    ):
+    def clear_all_evaluations(self):
+        logger.warning(f"Clearing all evaluations for {len(self)} queries")
+        doc_eval_count = 0
+        game_eval_count = 0
+        answer_eval_count = 0
+        for query in self.queries.values():
+            for doc in query.retrieved_docs.values():
+                if doc.evaluation is not None:
+                    doc_eval_count += 1
+                doc.evaluation = None
+            for game in query.pairwise_games:
+                if game.evaluation is not None:
+                    game_eval_count += 1
+                game.evaluation = None
+            for answer in query.answers.values():
+                if answer.evaluation is not None:
+                    answer_eval_count += 1
+                answer.evaluation = None
+        logger.info(
+            f"Cleared {doc_eval_count} document evaluations, {game_eval_count} game evaluations, and {answer_eval_count} answer evaluations"
+        )
+        # clear the evaluables cache file
+
+        if self.evaluables_cache_path and os.path.isfile(self.evaluables_cache_path):
+            with open(self.evaluables_cache_path, "w") as f:
+                pass
+        self.dump()
+
+    def load_from_csv(self) -> dict[str, Query]:
         """Loads a list of queries from a CSV file.
             The CSV file should have a header and at least one column (specified by query_text_col) with the query text.
             If no query_id_col is defined, we will first try to infer what column should be used as id from a list of pre-set values. If it fails, the queries will have ids assigned to them according to their order in the csv file.
@@ -69,69 +113,81 @@ class Queries(BaseModel):
         """
         queries: dict[str, Query] = {}
         read_queries = set()
-        if not os.path.isfile(csv_path):
-            raise FileNotFoundError(f"Queries file {csv_path} not found")
-        if query_id_col is None:
-            query_id_col = cls._infer_query_id_column(csv_path)
-        with open(csv_path) as f:
+        if self.csv_path is None:
+            raise ValueError("csv_path not set. Cannot load queries")
+        if not os.path.isfile(self.csv_path):
+            raise FileNotFoundError(f"CSV file {self.csv_path} not found")
+        if self.csv_query_id_col is None:
+            self.csv_query_id_col = self._infer_query_id_column(self.csv_path)
+        with open(self.csv_path) as f:
             reader = csv.DictReader(f)
             headers = reader.fieldnames
-            if headers and infer_metadata_fields:
-                if metadata_fields is None:
-                    metadata_fields = [
-                        x for x in headers if x not in [query_id_col, query_text_col]
+            if headers and self.csv_infer_metadata_fields:
+                if self.csv_metadata_fields is None:
+                    self.csv_metadata_fields = [
+                        x
+                        for x in headers
+                        if x not in [self.csv_query_id_col, self.csv_query_text_col]
                     ]
                 else:
                     # Use only the metadata fields that actually exist
-                    metadata_fields = [x for x in metadata_fields if x in headers]
-                    if not metadata_fields:
+                    self.csv_metadata_fields = [
+                        x for x in self.csv_metadata_fields if x in headers
+                    ]
+                    if not self.csv_metadata_fields:
                         logger.warning(
                             "No metadata fields found in the csv. Ignoring metadata fields"
                         )
-                        metadata_fields = None
+                        self.csv_metadata_fields = None
             for idx, row in enumerate(reader):
-                qid = row.get(query_id_col) or f"query_{idx}"
+                qid = row.get(self.csv_query_id_col) or f"query_{idx}"
                 if qid in read_queries:
                     logger.warning(f"Query with ID {qid} already read. Skipping")
                     continue
-                query_text = row[query_text_col].strip()
+                query_text = row[self.csv_query_text_col].strip()
                 metadata = None
-                if metadata_fields is not None:
-                    metadata = {k: v for k, v in row.items() if k in metadata_fields}
+                if self.csv_metadata_fields is not None:
+                    metadata = {
+                        k: v for k, v in row.items() if k in self.csv_metadata_fields
+                    }
                 queries[qid] = Query(qid=qid, query=query_text, metadata=metadata)
                 read_queries.add(qid)
-        logger.info(f"Loaded {len(queries)} queries")
-        if experiment_id is None:
-            experiment_id = str(int(datetime.now(timezone.utc).timestamp()))
-        if cache_path is None:
-            os.makedirs("cache", exist_ok=True)
-            cache_path = f"cache/{experiment_id}.json"
-        return cls(
-            queries=queries,
-            experiment_id=experiment_id,
-            cache_path=cache_path,
-            save_cache=save_cache,
-        )
+        return queries
 
-    @classmethod
-    def from_cache(
-        cls,
-        experiment_id: str | None = None,
-        cache_path: str | None = None,
-        save_cache: bool = True,
-    ):
-        if experiment_id is None:
-            experiment_id = str(int(datetime.now(timezone.utc).timestamp()))
-        if cache_path is None:
-            os.makedirs("cache", exist_ok=True)
-            cache_path = f"cache/{experiment_id}.json"
-        q = cls(
-            experiment_id=experiment_id, cache_path=cache_path, save_cache=save_cache
-        )
-        with open(q.cache_path) as f:
+    def load_from_cache(self):
+        queries: dict[str, Query] = {}
+        if not self.cache_path:
+            raise ValueError("Cache path not set. Cannot load queries")
+        if not os.path.isfile(self.cache_path):
+            raise FileNotFoundError(f"Cache file {self.cache_path} not found")
+        with open(self.cache_path) as f:
             queries = {k: Query(**v) for k, v in json.load(f)["queries"].items()}
-        q.queries = queries
-        return q
+        if self.evaluables_cache_path is None:
+            self.evaluables_cache_path = self.cache_path.replace(
+                ".json", "_evaluables.json"
+            )
+            with open(self.evaluables_cache_path, "w") as f:
+                pass
+        for line in open(self.evaluables_cache_path):
+            evaluable = json.loads(line)
+            evaluable_type = list(evaluable.keys())[0]
+            if evaluable_type == "answer":
+                result = AnswerEvaluatorResult(**evaluable["answer"])
+                if (
+                    result.qid not in queries
+                    or result.agent not in queries[result.qid].answers
+                ):
+                    continue
+                queries[result.qid].answers[result.agent].evaluation = result
+            elif evaluable_type == "retrieval":
+                result = RetrievalEvaluatorResult(**evaluable["retrieval"])
+                if (
+                    result.qid not in queries
+                    or result.did not in queries[result.qid].retrieved_docs
+                ):
+                    continue
+                queries[result.qid].retrieved_docs[result.did].evaluation = result
+        return queries
 
     def add_retrieved_docs_from_runfile(
         self,
@@ -212,7 +268,7 @@ class Queries(BaseModel):
                 f"Query {qid} already has an evaluation for document {did}. Overwriting."
             )
         self.queries[qid].retrieved_docs[did].evaluation = evaluation
-        self.dump()
+        self.save_result(evaluation)
 
     def add_answer_evaluation(self, evaluation: AnswerEvaluatorResult):
         qid = evaluation.qid
@@ -233,7 +289,7 @@ class Queries(BaseModel):
                             f"Query {qid} already has an evaluation for agents {agent_a} and {agent_b}. Overwriting."
                         )
                     game.evaluation = evaluation
-                    self.dump()
+                    self.save_result(evaluation)
                     return
         agent = evaluation.agent
         if agent not in self.queries[qid].answers:
@@ -245,7 +301,7 @@ class Queries(BaseModel):
                 f"Query {qid} already has an evaluation for agent {agent}. Overwriting."
             )
         self.queries[qid].answers[agent].evaluation = evaluation
-        self.dump()
+        self.save_result(evaluation)
 
     def get_qrels(
         self, relevance_key: str | None = "answer", relevance_threshold: int = 0
@@ -272,6 +328,24 @@ class Queries(BaseModel):
             raise ValueError("Cache path not set. Cannot dump queries")
         with open(self.cache_path, "w") as f:
             json.dump(self.model_dump(), f)
+
+    def save_result(self, evaluable: AnswerEvaluatorResult | RetrievalEvaluatorResult):
+        if not self.save_cache:
+            return
+        if self.evaluables_cache_path is None:
+            raise ValueError("Evaluables cache path not set. Cannot dump evaluables")
+        with open(self.evaluables_cache_path, "a+") as f:
+            if isinstance(evaluable, AnswerEvaluatorResult):
+                evaluable_type = "answer"
+            elif isinstance(evaluable, RetrievalEvaluatorResult):
+                evaluable_type = "retrieval"
+            else:
+                raise ValueError(
+                    f"Cannot save evaluation of type {type(evaluable)} to cache"
+                )
+            f.write(
+                json.dumps({evaluable_type: evaluable.model_dump()}, indent=2) + "\n"
+            )
 
     def __len__(self):
         return len(self.queries)
