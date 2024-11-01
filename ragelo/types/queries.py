@@ -13,7 +13,11 @@ from ragelo.logger import logger
 from ragelo.types.evaluables import Document
 from ragelo.types.pydantic_models import BaseModel, validator
 from ragelo.types.query import Query
-from ragelo.types.results import AnswerEvaluatorResult, RetrievalEvaluatorResult
+from ragelo.types.results import (
+    AnswerEvaluatorResult,
+    EloTournamentResult,
+    RetrievalEvaluatorResult,
+)
 
 
 class Queries(BaseModel):
@@ -60,6 +64,7 @@ class Queries(BaseModel):
     csv_query_id_col: str | None = None
     csv_infer_metadata_fields: bool = True
     csv_metadata_fields: list[str] | None = None
+    elo_tournaments: list[EloTournamentResult] = Field(default_factory=list)
 
     def __init__(self, **data):
         """
@@ -119,108 +124,6 @@ class Queries(BaseModel):
             self._clear_all_evaluations()
         self.persist_on_disk()
 
-    def _clear_all_evaluations(self):
-        logger.warning(f"Clearing all evaluations for {len(self)} queries")
-        doc_eval_count = 0
-        game_eval_count = 0
-        answer_eval_count = 0
-        for query in self.queries.values():
-            for doc in query.retrieved_docs.values():
-                if doc.evaluation is not None:
-                    doc_eval_count += 1
-                doc.evaluation = None
-            for game in query.pairwise_games:
-                if game.evaluation is not None:
-                    game_eval_count += 1
-                game.evaluation = None
-            for answer in query.answers.values():
-                if answer.evaluation is not None:
-                    answer_eval_count += 1
-                answer.evaluation = None
-        logger.info(
-            f"Cleared {doc_eval_count} document evaluations, {game_eval_count} game evaluations, and {answer_eval_count} answer evaluations"
-        )
-
-        if self.results_cache_path and os.path.isfile(self.results_cache_path):
-            with open(self.results_cache_path, "w") as f:
-                pass
-        self.persist_on_disk()
-
-    def _read_queries_csv(self) -> dict[str, Query]:
-        queries: dict[str, Query] = {}
-        read_queries = set()
-        if self.csv_path is None:
-            raise ValueError("csv_path not set. Cannot load queries")
-        if not os.path.isfile(self.csv_path):
-            raise FileNotFoundError(f"CSV file {self.csv_path} not found")
-        if self.csv_query_id_col is None:
-            self.csv_query_id_col = self._infer_query_id_column(self.csv_path)
-        with open(self.csv_path) as f:
-            reader = csv.DictReader(f)
-            headers = reader.fieldnames
-            if headers and self.csv_infer_metadata_fields:
-                if self.csv_metadata_fields is None:
-                    self.csv_metadata_fields = [
-                        x
-                        for x in headers
-                        if x not in [self.csv_query_id_col, self.csv_query_text_col]
-                    ]
-                else:
-                    # Use only the metadata fields that actually exist
-                    self.csv_metadata_fields = [
-                        x for x in self.csv_metadata_fields if x in headers
-                    ]
-                    if not self.csv_metadata_fields:
-                        logger.warning(
-                            "No metadata fields found in the csv. Ignoring metadata fields"
-                        )
-                        self.csv_metadata_fields = None
-            for idx, row in enumerate(reader):
-                qid = row.get(self.csv_query_id_col) or f"query_{idx}"
-                if qid in read_queries:
-                    logger.warning(f"Query with ID {qid} already read. Skipping")
-                    continue
-                query_text = row[self.csv_query_text_col].strip()
-                metadata = None
-                if self.csv_metadata_fields is not None:
-                    metadata = {
-                        k: v for k, v in row.items() if k in self.csv_metadata_fields
-                    }
-                queries[qid] = Query(qid=qid, query=query_text, metadata=metadata)
-                read_queries.add(qid)
-        return queries
-
-    def _load_cached_queries(self):
-        queries: dict[str, Query] = {}
-        if not self.cache_path:
-            raise ValueError("Cache path not set. Cannot load queries")
-        if not os.path.isfile(self.cache_path):
-            raise FileNotFoundError(f"Cache file {self.cache_path} not found")
-        with open(self.cache_path) as f:
-            queries = {k: Query(**v) for k, v in json.load(f)["queries"].items()}
-        return queries
-
-    def _load_results_from_cache(self):
-        if not self.cache_path:
-            raise ValueError("Cache path not set. Cannot load queries")
-        if self.results_cache_path is None:
-            self.results_cache_path = self.cache_path.replace(".json", "_results.jsonl")
-            with open(self.results_cache_path, "w") as f:
-                pass
-        for line in open(self.results_cache_path):
-            result = json.loads(line)
-            result_type = list(result.keys())[0]
-            if result_type == "answer":
-                result = AnswerEvaluatorResult(**result["answer"])
-                if result.qid not in self.queries:
-                    continue
-                self._add_answer_evaluation(result)
-            elif result_type == "retrieval":
-                result = RetrievalEvaluatorResult(**result["retrieval"])
-                if result.qid not in self.queries:
-                    continue
-                self._add_retrieval_evaluation(result)
-
     def add_retrieved_docs_from_runfile(
         self,
         run_file_path: str,
@@ -276,7 +179,9 @@ class Queries(BaseModel):
 
     def add_evaluation(
         self,
-        evaluation: RetrievalEvaluatorResult | AnswerEvaluatorResult,
+        evaluation: (
+            RetrievalEvaluatorResult | AnswerEvaluatorResult | EloTournamentResult
+        ),
         should_save: bool = True,
     ):
         """
@@ -292,63 +197,14 @@ class Queries(BaseModel):
             self._add_retrieval_evaluation(evaluation)
         elif isinstance(evaluation, AnswerEvaluatorResult):
             self._add_answer_evaluation(evaluation)
+        elif isinstance(evaluation, EloTournamentResult):
+            self.elo_tournaments.append(evaluation)
         else:
             raise ValueError(
                 f"Cannot add evaluation of type {type(evaluation)} to queries"
             )
         if should_save:
             self.persist_result_to_cache(evaluation)
-
-    def _add_retrieval_evaluation(self, evaluation: RetrievalEvaluatorResult):
-        qid = evaluation.qid
-        if qid not in self.queries:
-            raise ValueError(
-                f"Trying to add retrieval evaluation for non-existing query {qid}"
-            )
-        did = evaluation.did
-        if did not in self.queries[qid].retrieved_docs:
-            logger.warning(
-                f"Trying to add evaluation for non-retrieved document {did} in query {qid}"
-            )
-            return
-        if self.queries[qid].retrieved_docs[did].evaluation is not None:
-            logger.info(
-                f"Query {qid} already has an evaluation for document {did}. Overwriting."
-            )
-        self.queries[qid].retrieved_docs[did].evaluation = evaluation
-
-    def _add_answer_evaluation(self, evaluation: AnswerEvaluatorResult):
-        qid = evaluation.qid
-        if qid not in self.queries:
-            raise ValueError(
-                f"Trying to add ANswer evaluation for non-existing query {qid}"
-            )
-        if evaluation.pairwise:
-            agent_a = evaluation.agent_a
-            agent_b = evaluation.agent_b
-            for game in self.queries[qid].pairwise_games:
-                if (
-                    game.agent_a_answer.agent == agent_a
-                    and game.agent_b_answer.agent == agent_b
-                ):
-                    if game.evaluation is not None:
-                        logger.info(
-                            f"Query {qid} already has an evaluation for agents {agent_a} and {agent_b}. Overwriting."
-                        )
-                    game.evaluation = evaluation
-                    self.persist_result_to_cache(evaluation)
-                    return
-        agent = evaluation.agent
-        if agent not in self.queries[qid].answers:
-            raise ValueError(
-                f"Trying to add evaluation for non-existing agent {agent} in query {qid}"
-            )
-        if self.queries[qid].answers[agent].evaluation is not None:
-            logger.warning(
-                f"Query {qid} already has an evaluation for agent {agent}. Overwriting."
-            )
-        self.queries[qid].answers[agent].evaluation = evaluation
-        self.persist_result_to_cache(evaluation)
 
     def get_qrels(
         self, relevance_key: str | None = "answer", relevance_threshold: int = 0
@@ -524,11 +380,165 @@ class Queries(BaseModel):
                 result_type = "answer"
             elif isinstance(result, RetrievalEvaluatorResult):
                 result_type = "retrieval"
+            elif isinstance(result, EloTournamentResult):
+                result_type = "elo_tournament"
             else:
                 raise ValueError(
                     f"Cannot save evaluation of type {type(result)} to cache"
                 )
             f.write(json.dumps({result_type: result.model_dump()}) + "\n")
+
+    def _add_retrieval_evaluation(self, evaluation: RetrievalEvaluatorResult):
+        qid = evaluation.qid
+        if qid not in self.queries:
+            raise ValueError(
+                f"Trying to add retrieval evaluation for non-existing query {qid}"
+            )
+        did = evaluation.did
+        if did not in self.queries[qid].retrieved_docs:
+            logger.warning(
+                f"Trying to add evaluation for non-retrieved document {did} in query {qid}"
+            )
+            return
+        if self.queries[qid].retrieved_docs[did].evaluation is not None:
+            logger.info(
+                f"Query {qid} already has an evaluation for document {did}. Overwriting."
+            )
+        self.queries[qid].retrieved_docs[did].evaluation = evaluation
+
+    def _add_answer_evaluation(self, evaluation: AnswerEvaluatorResult):
+        qid = evaluation.qid
+        if qid not in self.queries:
+            raise ValueError(
+                f"Trying to add ANswer evaluation for non-existing query {qid}"
+            )
+        if evaluation.pairwise:
+            agent_a = evaluation.agent_a
+            agent_b = evaluation.agent_b
+            for game in self.queries[qid].pairwise_games:
+                if (
+                    game.agent_a_answer.agent == agent_a
+                    and game.agent_b_answer.agent == agent_b
+                ):
+                    if game.evaluation is not None:
+                        logger.info(
+                            f"Query {qid} already has an evaluation for agents {agent_a} and {agent_b}. Overwriting."
+                        )
+                    game.evaluation = evaluation
+                    return
+        agent = evaluation.agent
+        if agent not in self.queries[qid].answers:
+            raise ValueError(
+                f"Trying to add evaluation for non-existing agent {agent} in query {qid}"
+            )
+        if self.queries[qid].answers[agent].evaluation is not None:
+            logger.warning(
+                f"Query {qid} already has an evaluation for agent {agent}. Overwriting."
+            )
+        self.queries[qid].answers[agent].evaluation = evaluation
+
+    def _clear_all_evaluations(self):
+        logger.warning(f"Clearing all evaluations for {len(self)} queries")
+        doc_eval_count = 0
+        game_eval_count = 0
+        answer_eval_count = 0
+        for query in self.queries.values():
+            for doc in query.retrieved_docs.values():
+                if doc.evaluation is not None:
+                    doc_eval_count += 1
+                doc.evaluation = None
+            for game in query.pairwise_games:
+                if game.evaluation is not None:
+                    game_eval_count += 1
+                game.evaluation = None
+            for answer in query.answers.values():
+                if answer.evaluation is not None:
+                    answer_eval_count += 1
+                answer.evaluation = None
+        logger.info(
+            f"Cleared {doc_eval_count} document evaluations, {game_eval_count} game evaluations, and {answer_eval_count} answer evaluations"
+        )
+
+        if self.results_cache_path and os.path.isfile(self.results_cache_path):
+            with open(self.results_cache_path, "w") as f:
+                pass
+        self.persist_on_disk()
+
+    def _read_queries_csv(self) -> dict[str, Query]:
+        queries: dict[str, Query] = {}
+        read_queries = set()
+        if self.csv_path is None:
+            raise ValueError("csv_path not set. Cannot load queries")
+        if not os.path.isfile(self.csv_path):
+            raise FileNotFoundError(f"CSV file {self.csv_path} not found")
+        if self.csv_query_id_col is None:
+            self.csv_query_id_col = self._infer_query_id_column(self.csv_path)
+        with open(self.csv_path) as f:
+            reader = csv.DictReader(f)
+            headers = reader.fieldnames
+            if headers and self.csv_infer_metadata_fields:
+                if self.csv_metadata_fields is None:
+                    self.csv_metadata_fields = [
+                        x
+                        for x in headers
+                        if x not in [self.csv_query_id_col, self.csv_query_text_col]
+                    ]
+                else:
+                    # Use only the metadata fields that actually exist
+                    self.csv_metadata_fields = [
+                        x for x in self.csv_metadata_fields if x in headers
+                    ]
+                    if not self.csv_metadata_fields:
+                        logger.warning(
+                            "No metadata fields found in the csv. Ignoring metadata fields"
+                        )
+                        self.csv_metadata_fields = None
+            for idx, row in enumerate(reader):
+                qid = row.get(self.csv_query_id_col) or f"query_{idx}"
+                if qid in read_queries:
+                    logger.warning(f"Query with ID {qid} already read. Skipping")
+                    continue
+                query_text = row[self.csv_query_text_col].strip()
+                metadata = None
+                if self.csv_metadata_fields is not None:
+                    metadata = {
+                        k: v for k, v in row.items() if k in self.csv_metadata_fields
+                    }
+                queries[qid] = Query(qid=qid, query=query_text, metadata=metadata)
+                read_queries.add(qid)
+        return queries
+
+    def _load_cached_queries(self):
+        queries: dict[str, Query] = {}
+        if not self.cache_path:
+            raise ValueError("Cache path not set. Cannot load queries")
+        if not os.path.isfile(self.cache_path):
+            raise FileNotFoundError(f"Cache file {self.cache_path} not found")
+        with open(self.cache_path) as f:
+            queries = {k: Query(**v) for k, v in json.load(f)["queries"].items()}
+        return queries
+
+    def _load_results_from_cache(self):
+        if not self.cache_path:
+            raise ValueError("Cache path not set. Cannot load queries")
+        if self.results_cache_path is None:
+            self.results_cache_path = self.cache_path.replace(".json", "_results.jsonl")
+            with open(self.results_cache_path, "w") as f:
+                pass
+        for line in open(self.results_cache_path):
+            result = json.loads(line)
+            result_type = list(result.keys())[0]
+            if result_type == "answer":
+                result = AnswerEvaluatorResult(**result["answer"])
+                if result.qid not in self.queries:
+                    continue
+            elif result_type == "retrieval":
+                result = RetrievalEvaluatorResult(**result["retrieval"])
+                if result.qid not in self.queries:
+                    continue
+            elif result_type == "elo_tournament":
+                result = EloTournamentResult(**result["elo_tournament"])
+            self.add_evaluation(result, should_save=False)
 
     def __len__(self):
         return len(self.queries)

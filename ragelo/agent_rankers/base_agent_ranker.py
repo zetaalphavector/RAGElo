@@ -5,9 +5,8 @@ from typing import Type, get_type_hints
 
 from ragelo.logger import logger
 from ragelo.types.configurations.agent_ranker_configs import AgentRankerConfig
-from ragelo.types.query import Query
+from ragelo.types.queries import Queries
 from ragelo.types.types import AgentRankerTypes
-from ragelo.utils import load_answer_evaluations_from_csv
 
 
 class AgentRanker:
@@ -21,26 +20,9 @@ class AgentRanker:
         self.name = self.config.ranker_name
         self.agents_evaluations_file = self.config.agents_evaluations_file
 
-    def run(
-        self,
-        queries: list[Query] | None = None,
-        evaluations_file: str | None = None,
-    ) -> dict[str, int]:
+    def run(self, queries: Queries) -> dict[str, int]:
         """Compute score for each agent"""
         raise NotImplementedError
-
-    def _prepare_queries(
-        self,
-        queries: list[Query] | None = None,
-        evaluations_file: str | None = None,
-    ) -> list[Query]:
-        if queries is None:
-            if evaluations_file is None:
-                raise ValueError(
-                    "Either queries or evaluations_file should be provided"
-                )
-            queries = load_answer_evaluations_from_csv(evaluations_file)
-        return queries
 
     @classmethod
     def from_config(cls, config: AgentRankerConfig):
@@ -50,46 +32,11 @@ class AgentRanker:
         """Returns the score of all players"""
         raise NotImplementedError
 
-    def dump_ranking(self):
-        if not self.config.write_output:
-            return
-        with open(self.agents_evaluations_file, "w") as f:
-            writer = csv.writer(f)
-            writer.writerow(["agent", "score"])
-            for agent, rating in sorted(
-                self.get_agents_ratings().items(), key=lambda x: x[1], reverse=True
-            ):
-                writer.writerow([agent, rating])
-
-    def print_ranking(self):
-        if not self.config.verbose:
-            return
-        scores = sorted(
-            self.get_agents_ratings().items(), key=lambda x: x[1], reverse=True
-        )
-        if self.config.rich_print:
-            try:
-                import rich
-
-                rich.print(
-                    f"-------[bold white] Agent Scores by {self.name} [/bold white]-------"
-                )
-
-                for agent, rating in scores:
-                    rich.print(f"[bold white]{agent:<15}[/bold white]: {rating:.1f}")
-            except ImportError:
-                logger.warning("Rich not installed. Using plain print")
-                self.config.rich_print = False
-        if not self.config.rich_print:
-            print(f"------- Agent Scores by {self.name} -------")
-            for agent, rating in scores:
-                print(f"{agent:<15}: {rating:.1f}")
-
     @classmethod
     def get_config_class(cls) -> Type[AgentRankerConfig]:
         return get_type_hints(cls)["config"]
 
-    def _flatten_evaluations(self, queries) -> list[tuple[str, str, str]]:
+    def _flatten_evaluations(self, queries: Queries) -> list[tuple[str, str, str]]:
         evaluations = []
         for q in queries:
             for game in q.pairwise_games:

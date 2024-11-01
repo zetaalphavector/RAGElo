@@ -32,4 +32,6 @@ class EloAgentRankerConfig(AgentRankerConfig):
     agents_evaluations_file: str = Field(
         default="elo_ranking.csv", description="Path to the output file"
     )
-    rounds: int = Field(default=10, description="The number of rounds to play")
+    tournaments: int = Field(
+        default=10, description="The number of Elo tournaments to play"
+    )

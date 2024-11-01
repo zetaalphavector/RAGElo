@@ -72,3 +72,17 @@ class RetrievalEvaluatorResult(EvaluatorResult):
     """
 
     did: str
+
+
+class EloTournamentResult(BaseModel):
+    """A class to store the results of an Elo tournament between multiple agents."""
+
+    agents: list[str]
+    scores: dict[str, float]
+    std_dev: dict[str, float]
+    games_played: dict[str, int]
+    wins: dict[str, int]
+    loses: dict[str, int]
+    ties: dict[str, int]
+    total_games: int
+    total_tournaments: int
