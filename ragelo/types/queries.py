@@ -207,7 +207,11 @@ class Queries(BaseModel):
             self.persist_result_to_cache(evaluation)
 
     def get_qrels(
-        self, relevance_key: str | None = "answer", relevance_threshold: int = 0
+        self,
+        relevance_key: str | None = "answer",
+        relevance_threshold: int = 0,
+        output_path: str | None = None,
+        output_format: str = "trec",
     ) -> dict[str, dict[str, int]]:
         """
         Retrieve the qrels (query relevance judgments) for the queries.
@@ -222,6 +226,19 @@ class Queries(BaseModel):
         qrels = {}
         for qid, query in self.queries.items():
             qrels[qid] = query.get_qrels(relevance_key, relevance_threshold)
+        if output_path:
+            with open(output_path, "w") as f:
+                if output_format.lower() == "trec":
+                    for qid, qrel in qrels.items():
+                        for did, rel in qrel.items():
+                            f.write(f"{qid} Q0 {did} {rel}\n")
+                elif output_format.lower() == "json":
+                    json.dump(qrels, f)
+                else:
+                    raise ValueError(
+                        f"Invalid output format for QRELS: {output_format}"
+                        "Valid options are 'trec' and 'json'"
+                    )
         return qrels
 
     def get_runs(
@@ -355,7 +372,8 @@ class Queries(BaseModel):
             json.dump(self.model_dump(), f)
 
     def persist_result_to_cache(
-        self, result: AnswerEvaluatorResult | RetrievalEvaluatorResult
+        self,
+        result: AnswerEvaluatorResult | RetrievalEvaluatorResult | EloTournamentResult,
     ):
         """
         Persist the evaluation result to a cache file.
@@ -421,6 +439,7 @@ class Queries(BaseModel):
                     and game.agent_b_answer.agent == agent_b
                 ):
                     if game.evaluation is not None:
+
                         logger.info(
                             f"Query {qid} already has an evaluation for agents {agent_a} and {agent_b}. Overwriting."
                         )
@@ -437,7 +456,7 @@ class Queries(BaseModel):
             )
         self.queries[qid].answers[agent].evaluation = evaluation
 
-    def _clear_all_evaluations(self):
+    def _clear_all_evaluations(self, should_save: bool = False):
         logger.warning(f"Clearing all evaluations for {len(self)} queries")
         doc_eval_count = 0
         game_eval_count = 0
@@ -458,11 +477,11 @@ class Queries(BaseModel):
         logger.info(
             f"Cleared {doc_eval_count} document evaluations, {game_eval_count} game evaluations, and {answer_eval_count} answer evaluations"
         )
-
-        if self.results_cache_path and os.path.isfile(self.results_cache_path):
-            with open(self.results_cache_path, "w") as f:
-                pass
-        self.persist_on_disk()
+        if should_save:
+            if self.results_cache_path and os.path.isfile(self.results_cache_path):
+                with open(self.results_cache_path, "w") as f:
+                    pass
+            self.persist_on_disk()
 
     def _read_queries_csv(self) -> dict[str, Query]:
         queries: dict[str, Query] = {}
