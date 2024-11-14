@@ -13,18 +13,21 @@ from tqdm.auto import tqdm
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.logger import logger
 from ragelo.types.configurations import BaseEvaluatorConfig
-from ragelo.types.evaluables import AgentAnswer, Document, Evaluable
+from ragelo.types.evaluables import Evaluable
+from ragelo.types.experiment import Experiment
 from ragelo.types.formats import AnswerFormat
-from ragelo.types.queries import Queries
 from ragelo.types.query import Query
 from ragelo.types.results import EvaluatorResult
 
 
 class BaseEvaluator(ABC):
+    """
+    An abstract class for all evaluators. An evaluator is responsible for evaluating a query and an evaluable
+    """
+
     config: BaseEvaluatorConfig
-    scoring_keys: list[str]
-    scoring_key: str
     answer_format: AnswerFormat
+    evaluable_name: str = "Evaluable"
 
     @abstractmethod
     def __init__(
@@ -34,8 +37,43 @@ class BaseEvaluator(ABC):
     ):
         raise NotImplementedError
 
-    async def _async_batch_evaluate(self, queries: Queries):
-        tuples_to_eval = self._get_tuples_to_evaluate(queries)
+    def evaluate_experiment(self, experiment: Experiment, n_threads: int | None = None):
+        """
+        Trigger the evaluator for all the supported evaluables in the experiment.
+        The evaluation is done in asynchronously with the number of threads defined in the config.n_processes parameter.
+        This can be overwritten by the n_threads parameter.
+
+        Args:
+            experiment(Experiment): The experiment to evaluate.
+            n_threads(int): The number of threads to use for the evaluation. If None, the number of threads defined in the config will be used.
+        """
+        n_threads = n_threads or self.config.n_processes
+
+        def run(coroutine):
+            return asyncio.run(coroutine)
+
+        try:
+            asyncio.get_running_loop()
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(
+                    run, self._evaluate_experiment_async(experiment, n_threads)
+                )
+                _ = future.result()
+        except RuntimeError:
+            _ = asyncio.run(self._evaluate_experiment_async(experiment, n_threads))
+
+    @abstractmethod
+    async def evaluate_async(
+        self,
+        eval_sample: tuple[Query, Evaluable],
+    ) -> EvaluatorResult:
+        """Evaluate a single query and evaluable asynchronously."""
+        raise NotImplementedError
+
+    async def _evaluate_experiment_async(
+        self, experiment: Experiment, n_threads: int = 1
+    ):
+        tuples_to_eval = self._get_tuples_to_evaluate(experiment)
         if self.config.rich_print:
             import warnings
 
@@ -51,10 +89,8 @@ class BaseEvaluator(ABC):
         pbar = pbar_fn(
             total=len(tuples_to_eval),
             ncols=100,
-            desc="Evaluating retrieved documents",
+            desc=f"Evaluating {self.evaluable_name}s",
             disable=not self.config.use_progress_bar,
-            leave=False,
-            position=0,
         )
         awaitables_ended = False
         pending: set[asyncio.Future] = set()
@@ -63,7 +99,7 @@ class BaseEvaluator(ABC):
         failed = 0
         evaluations = 0
         while pending or not awaitables_ended:
-            while len(pending) < self.config.n_processes and not awaitables_ended:
+            while len(pending) < n_threads and not awaitables_ended:
                 try:
                     aw = next(aws)
                 except StopIteration:
@@ -82,34 +118,15 @@ class BaseEvaluator(ABC):
                 if evaluation.exception:
                     failed += 1
                     continue
-                queries.add_evaluation(evaluation)
+                experiment.add_evaluation(evaluation)
         pbar.close()
         if self.config.verbose:
             self._print_failed_evaluations(evaluations, failed)
 
-    def batch_evaluate(self, queries: Queries):
-        def run(coroutine):
-            return asyncio.run(coroutine)
-
-        try:
-            asyncio.get_running_loop()
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(run, self._async_batch_evaluate(queries))
-                _ = future.result()
-        except RuntimeError:
-            _ = asyncio.run(self._async_batch_evaluate(queries))
-
     @abstractmethod
     def _get_tuples_to_evaluate(
-        self, queries: Queries
+        self, queries: Experiment
     ) -> list[tuple[Query, Evaluable]]:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def evaluate_async(
-        self,
-        eval_sample: tuple[Query, Evaluable],
-    ) -> EvaluatorResult:
         raise NotImplementedError
 
     def _validate_answer(
@@ -167,117 +184,6 @@ class BaseEvaluator(ABC):
             if field in metadata and field not in skip_fields:
                 valid_fields[field] = metadata[field]
         return valid_fields
-
-    @staticmethod
-    def _print_response(
-        response: EvaluatorResult,
-        rich_print: bool = False,
-    ):
-        answer: str | dict[str, str] | int | None
-        if isinstance(response.answer, dict):
-            # Print the answer in a more readable format
-            answer = json.dumps(response.answer, indent=4)
-        elif isinstance(response.answer, PydanticBaseModel):
-            answer = response.answer.model_dump_json(indent=4)
-        else:
-            answer = response.answer
-        response_dict = response.model_dump()
-        agent_a = response_dict.get("agent_a")
-        agent_b = response_dict.get("agent_b")
-        agent = response_dict.get("agent")
-        qid = response_dict.get("qid")
-        did = response_dict.get("did")
-        raw_answer = response_dict.get("raw_answer")
-
-        if rich_print:
-            try:
-                import rich
-
-                rich.print(f"[bold blue]🔎 Query ID[/bold blue]: {qid}")
-                did = response_dict.get("did")
-                if did:
-                    rich.print(f"[bold blue]📜 Document ID[/bold blue]: {did}")
-                if agent_a and agent_b:
-                    rich.print(
-                        f"[bold bright_cyan] {agent_a:<18} [/bold bright_cyan] 🆚  "
-                        f"[bold red] {agent_b}[/bold red]"
-                    )
-                elif agent:
-                    rich.print(
-                        f"[bold bright_cyan]🕵️ Agent[/bold bright_cyan]: {agent}"
-                    )
-                if raw_answer != answer:
-                    rich.print(f"[bold blue]Raw Answer[/bold blue]: {raw_answer}")
-                rich.print(f"[bold blue]Parsed Answer[/bold blue]: {answer}")
-                rich.print("")
-                return
-            except ImportError:
-                logger.warning("Rich not installed. Using plain print")
-        tqdm.write(f"Query ID: {qid}")
-        if did:
-            tqdm.write(f"Document ID: {did}")
-        if agent_a and agent_b:
-            tqdm.write(f"{agent_a} vs {agent_b}")
-        elif agent:
-            tqdm.write(f"Agent: {agent}")
-        tqdm.write(f"Raw Answer: {raw_answer}")
-        tqdm.write(f"Parsed Answer: {answer}")
-        tqdm.write("")
-
-    @staticmethod
-    def _assemble_query(
-        query: Query | str, query_metadata: dict[str, Any] | None = None
-    ) -> Query:
-        if isinstance(query, str):
-            query = Query(qid="<no_qid>", query=query)
-        query.add_metadata(query_metadata)
-        return query
-
-    @staticmethod
-    def _assemble_document(
-        document: Document | str, doc_metadata: dict[str, Any] | None = None
-    ) -> Document:
-        if isinstance(document, str):
-            did = "<no_did>"
-            if doc_metadata:
-                valid_id_fields = ["did", "doc_id", "document_id", "id", "_id"]
-                valid_id_fields = [f for f in valid_id_fields if f in doc_metadata]
-                if valid_id_fields:
-                    did = doc_metadata[valid_id_fields[0]]
-            document = Document(did=did, text=document)
-        document.add_metadata(doc_metadata)
-        return document
-
-    def _assemble_documents(
-        self,
-        documents: list[str] | list[Document],
-        doc_metadata: list[dict[str, Any]] | list[None] | None = None,
-    ) -> dict[str, Document]:
-        assembled_docs: dict[str, Document] = {}
-        if doc_metadata and len(documents) != len(doc_metadata):
-            raise ValueError(
-                "The number of documents and document metadata do not match"
-            )
-        if not doc_metadata:
-            doc_metadata = [None] * len(documents)
-
-        for idx, (doc, m) in enumerate(zip(documents, doc_metadata)):
-            if isinstance(doc, str):
-                doc = Document(did=f"doc_{idx}", text=doc, metadata=m)
-            else:
-                doc.add_metadata(m)  # type: ignore
-            assembled_docs[doc.did] = doc  # type: ignore
-        return assembled_docs
-
-    @staticmethod
-    def _assemble_answer(
-        answer: AgentAnswer | str,
-        answer_metadata: dict[str, Any] | None = None,
-    ) -> AgentAnswer:
-        if isinstance(answer, str):
-            answer = AgentAnswer(agent="<no_agent>", text=answer)
-        answer.add_metadata(answer_metadata)
-        return answer
 
     def _print_failed_evaluations(
         self, total_evaluations: int, failed_evaluations: int

@@ -19,6 +19,7 @@ class Evaluable(BaseModel):
         metadata Optional[dict[str, Any]]: Metadata that can be templated in the prompt.
     """
 
+    qid: str
     evaluation: EvaluatorResult | None = None
     metadata: dict[str, Any] | None = None
 
@@ -51,10 +52,10 @@ class Document(Evaluable):
     retrieved_by: dict[str, float] = {}
 
     def add_retrieved_by(
-        self, agent: str, score: float | None = None, overwrite: bool = False
+        self, agent: str, score: float | None = None, force: bool = False
     ):
         """Adds the score of an agent that retrieved the document."""
-        if agent in self.retrieved_by and not overwrite:
+        if agent in self.retrieved_by and not force:
             logger.info(
                 f"Document with did {self.did} already retrieved by agent {agent}"
             )
@@ -65,6 +66,49 @@ class Document(Evaluable):
 
     def __str__(self) -> str:
         return self.text
+
+    @classmethod
+    def assemble_document(
+        cls,
+        document: Document | str,
+        qid: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> Document:
+        """Assembles a Document object from a string or a Document object."""
+        if isinstance(document, str):
+            if qid is None:
+                raise ValueError("qid must be provided if document is a string")
+            did = "<no_did>"
+            if metadata:
+                valid_id_fields = ["did", "doc_id", "document_id", "id", "_id"]
+                valid_id_fields = [f for f in valid_id_fields if f in metadata]
+                if valid_id_fields:
+                    did = metadata[valid_id_fields[0]]
+            document = cls(qid=qid, did=did, text=document)
+        document.add_metadata(metadata)
+        return document
+
+    @staticmethod
+    def assemble_documents(
+        documents: list[Document | str],
+        qid: str,
+        metadata: list[dict[str, Any]] | list[None] | None = None,
+    ) -> dict[str, Document]:
+        """Assembles a list of Document objects from a list of strings or Document objects."""
+        assembled_docs: dict[str, Document] = {}
+        if metadata and len(documents) != len(metadata):
+            raise ValueError(
+                "The number of documents and document metadata do not match"
+            )
+        if not metadata:
+            metadata = [None] * len(documents)
+
+        for idx, (doc, m) in enumerate(zip(documents, metadata)):
+            doc_obj = Document.assemble_document(doc, qid, m)
+            if doc_obj.did == "<no_did>":
+                doc_obj.did = f"doc_{idx}"
+            assembled_docs[doc_obj.did] = doc_obj
+        return assembled_docs
 
 
 class AgentAnswer(Evaluable):
@@ -90,6 +134,22 @@ class AgentAnswer(Evaluable):
         if text is not None and conversation is not None:
             raise ValueError("Only one of text or conversation must be provided")
         return values
+
+    @classmethod
+    def assemble_answer(
+        cls,
+        answer: AgentAnswer | str,
+        qid: str,
+        agent: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> AgentAnswer:
+        """Assembles an AgentAnswer object from a string or an AgentAnswer object."""
+        if isinstance(answer, str):
+            if agent is None:
+                raise ValueError("agent must be provided if answer is a string")
+            answer = cls(agent=agent, qid=qid, text=answer)
+        answer.add_metadata(metadata)
+        return answer
 
 
 class PairwiseGame(Evaluable):

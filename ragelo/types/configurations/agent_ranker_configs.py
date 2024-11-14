@@ -35,3 +35,7 @@ class EloAgentRankerConfig(AgentRankerConfig):
     tournaments: int = Field(
         default=10, description="The number of Elo tournaments to play"
     )
+    score_mapping: dict[str, float] = Field(
+        default={"A": 1, "B": 0, "C": 0.5},
+        description="The mapping of the evaluation answers to scores",
+    )

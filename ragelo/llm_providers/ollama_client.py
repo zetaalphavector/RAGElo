@@ -20,7 +20,6 @@ class OllamaProvider(BaseLLMProvider):
     """A Wrapper over the Ollama client."""
 
     config: OllamaConfiguration
-    api_key_env_var: str = "OPENAI_API_KEY"
 
     def __init__(
         self,
@@ -33,7 +32,7 @@ class OllamaProvider(BaseLLMProvider):
     def __call__(
         self,
         prompt: str | list[dict[str, str]],
-        answer_format: AnswerFormat.TEXT,
+        answer_format: AnswerFormat = AnswerFormat.TEXT,
         response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = None,
     ) -> str | PydanticBaseModel | dict[str, Any]:
         """Calls the Ollama using the OpenAI API interface.
@@ -55,13 +54,15 @@ class OllamaProvider(BaseLLMProvider):
                 )
                 answers = future.result()
         except RuntimeError:
-            answers = asyncio.run(self.call_async(prompt))
+            answers = asyncio.run(
+                self.call_async(prompt, answer_format, response_schema)
+            )
         return answers
 
     async def call_async(
         self,
         prompt: str | list[dict[str, str]],
-        answer_format: AnswerFormat.TEXT,
+        answer_format: AnswerFormat = AnswerFormat.TEXT,
         response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = None,
     ) -> str | PydanticBaseModel | dict[str, Any]:
         """Calls the Ollama Local API asynchronously.

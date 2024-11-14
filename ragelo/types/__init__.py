@@ -11,8 +11,8 @@ from ragelo.types.configurations import (
     ReasonerEvaluatorConfig,
 )
 from ragelo.types.evaluables import AgentAnswer, Document, PairwiseGame
+from ragelo.types.experiment import Experiment
 from ragelo.types.formats import AnswerFormat
-from ragelo.types.queries import Queries
 from ragelo.types.query import Query
 from ragelo.types.results import (
     AnswerEvaluatorResult,
@@ -49,5 +49,5 @@ __all__ = [
     "Document",
     "AnswerFormat",
     "LLMProviderTypes",
-    "Queries",
+    "Experiment",
 ]

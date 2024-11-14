@@ -79,7 +79,6 @@ class EloTournamentResult(BaseModel):
 
     agents: list[str]
     scores: dict[str, float]
-    std_dev: dict[str, float]
     games_played: dict[str, int]
     wins: dict[str, int]
     loses: dict[str, int]

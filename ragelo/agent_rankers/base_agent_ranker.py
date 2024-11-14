@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import csv
-from typing import Type, get_type_hints
+from typing import Any, Type, get_type_hints
 
 from ragelo.logger import logger
 from ragelo.types.configurations.agent_ranker_configs import AgentRankerConfig
-from ragelo.types.queries import Queries
+from ragelo.types.experiment import Experiment
 from ragelo.types.types import AgentRankerTypes
 
 
@@ -20,8 +19,8 @@ class AgentRanker:
         self.name = self.config.ranker_name
         self.agents_evaluations_file = self.config.agents_evaluations_file
 
-    def run(self, queries: Queries) -> dict[str, int]:
-        """Compute score for each agent"""
+    def run(self, experiment: Experiment) -> Any:
+        """Computes a score for each agent in the experiment"""
         raise NotImplementedError
 
     @classmethod
@@ -36,17 +35,20 @@ class AgentRanker:
     def get_config_class(cls) -> Type[AgentRankerConfig]:
         return get_type_hints(cls)["config"]
 
-    def _flatten_evaluations(self, queries: Queries) -> list[tuple[str, str, str]]:
+    def _flatten_evaluations(
+        self, experiment: Experiment
+    ) -> list[tuple[str, str, str]]:
         evaluations = []
-        for q in queries:
-            for game in q.pairwise_games:
-                evaluations.append(
-                    (
-                        game.agent_a_answer.agent,
-                        game.agent_b_answer.agent,
-                        game.evaluation.answer,
+        for query in experiment:
+            for game in query.pairwise_games:
+                if game.evaluation is not None:
+                    evaluations.append(
+                        (
+                            game.agent_a_answer.agent,
+                            game.agent_b_answer.agent,
+                            game.evaluation.answer,
+                        )
                     )
-                )
         return evaluations
 
 

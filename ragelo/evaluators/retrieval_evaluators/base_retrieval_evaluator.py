@@ -15,7 +15,7 @@ from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_prov
 from ragelo.logger import logger
 from ragelo.types.configurations import BaseRetrievalEvaluatorConfig
 from ragelo.types.evaluables import Document
-from ragelo.types.queries import Queries
+from ragelo.types.experiment import Experiment
 from ragelo.types.query import Query
 from ragelo.types.results import RetrievalEvaluatorResult
 from ragelo.types.types import RetrievalEvaluatorTypes
@@ -23,6 +23,7 @@ from ragelo.types.types import RetrievalEvaluatorTypes
 
 class BaseRetrievalEvaluator(BaseEvaluator):
     config: BaseRetrievalEvaluatorConfig
+    evaluable_name: str = "Retrieved document"
 
     def __init__(
         self,
@@ -31,6 +32,34 @@ class BaseRetrievalEvaluator(BaseEvaluator):
     ):
         self.config = config
         self.llm_provider = llm_provider
+
+    def evaluate(
+        self,
+        query: Query | str,
+        document: Document | str,
+        query_metadata: dict[str, Any] | None = None,
+        doc_metadata: dict[str, Any] | None = None,
+    ) -> RetrievalEvaluatorResult:
+        """Evaluates a single query-document pair. Returns the raw answer and the processed answer."""
+        query = Query.assemble_query(query, query_metadata)
+        document = Document.assemble_document(document, query.qid, doc_metadata)
+
+        def run(coroutine):
+            return asyncio.run(coroutine)
+
+        try:
+            asyncio.get_running_loop()
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(run, self.evaluate_async((query, document)))
+                result = future.result()
+        except RuntimeError:
+            result = asyncio.run(self.evaluate_async((query, document)))
+        if result.exception or result.raw_answer is None or result.answer is None:
+            raise ValueError(
+                f"Failed to evaluate qid: {query.qid} did: {document.did}",
+                f"Exception: {result.exception}",
+            )
+        return result
 
     async def evaluate_async(
         self,
@@ -76,11 +105,13 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             exception=exc,
         )
 
-    def _get_tuples_to_evaluate(self, queries: Queries) -> list[tuple[Query, Document]]:
+    def _get_tuples_to_evaluate(
+        self, experiment: Experiment
+    ) -> list[tuple[Query, Document]]:
         tuples_to_eval = []
         all_tuples = 0
         missing_evaluations = 0
-        for q in queries:
+        for q in experiment:
             for d in q.retrieved_docs.values():
                 if d.evaluation is None:
                     missing_evaluations += 1
@@ -94,34 +125,6 @@ class BaseRetrievalEvaluator(BaseEvaluator):
                     "If you want to re-evaluate documents, use the --force flag."
                 )
         return tuples_to_eval
-
-    def evaluate(
-        self,
-        query: Query | str,
-        document: Document | str,
-        query_metadata: dict[str, Any] | None = None,
-        doc_metadata: dict[str, Any] | None = None,
-    ) -> RetrievalEvaluatorResult:
-        """Evaluates a single query-document pair. Returns the raw answer and the processed answer."""
-        query = self._assemble_query(query, query_metadata)
-        document = self._assemble_document(document, doc_metadata)
-
-        def run(coroutine):
-            return asyncio.run(coroutine)
-
-        try:
-            asyncio.get_running_loop()
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(run, self.evaluate_async((query, document)))
-                result = future.result()
-        except RuntimeError:
-            result = asyncio.run(self.evaluate_async((query, document)))
-        if result.exception or result.raw_answer is None or result.answer is None:
-            raise ValueError(
-                f"Failed to evaluate qid: {query.qid} did: {document.did}",
-                f"Exception: {result.exception}",
-            )
-        return result
 
     def _build_message(
         self,

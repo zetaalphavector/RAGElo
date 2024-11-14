@@ -14,7 +14,6 @@ from ragelo.types.types import AnswerEvaluatorTypes
 @AnswerEvaluatorFactory.register(AnswerEvaluatorTypes.CUSTOM_PROMPT)
 class CustomPromptEvaluator(BaseAnswerEvaluator):
     config: CustomPromptAnswerEvaluatorConfig
-    output_file: str = "custom_prompt_evaluations.csv"
 
     def __init__(
         self,

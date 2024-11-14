@@ -8,10 +8,12 @@ from __future__ import annotations
 import csv
 import json
 import os
-from typing import Literal
+from pathlib import Path
+from typing import Any, Literal
 
 from pydantic import Field
 
+from ragelo.cli.agent_rankers_cmd import elo
 from ragelo.logger import logger
 from ragelo.types.evaluables import AgentAnswer, Document
 from ragelo.types.pydantic_models import BaseModel
@@ -24,7 +26,7 @@ from ragelo.types.results import (
 )
 
 
-class Experiment(BaseModel):
+class Experiment:
     """
     A class to manage and evaluate an experiment. An experiment is composed of multiple queries and their evaluations.
     This is the main class for interacting with RAGElo, and manages all the queries to which agents retrieve documents and answer questions.
@@ -68,10 +70,11 @@ class Experiment(BaseModel):
         **data,
     ):
         """
-        Initialize the query object with optional data and set up paths and caches.
+        Initialize the experiment object with optional data and set up paths and caches.
 
         Args:
-            save_path (Optional[str]): A JSON file path to persist the queries object on disk. If not set, will create one based on experiment_name. If it already exists, we will try to load the state from that file.
+            save_path (Optional[str]): A JSON file path to persist the experiment on disk. If not set, will create one based on experiment_name. If it already exists, we will try to load the state from that file.
+
             results_save_path (Optional[str]): A JSON Lines file path to persist the evaluators result on disk, to avoid re-computing evaluations. If not set, will create one based on experiment_name.
             persist_on_disk (bool, defaults to True): Whether or not to use save_path and results_save_path to persist results on disk.
             clear_evaluations (bool, defaults to False): If set to True, will clear all existing evaluations and re-compute as needed.
@@ -104,7 +107,7 @@ class Experiment(BaseModel):
 
         # Check where to load the data from. If the cache file exists or the csv_file exists, load from there. If the queries was also set, make sure they match.
         if csv_path:
-            csv_queries = self._read_queries_csv(
+            csv_queries = self._read_queries_from_csv(
                 csv_path,
                 csv_query_text_col,
                 csv_query_id_col,
@@ -118,8 +121,8 @@ class Experiment(BaseModel):
                     "Queries loaded from the CSV file do not match the queries passed"
                 )
             self.queries = csv_queries
-        elif os.path.isfile(self.cache_path):
-            cache_queries = self._load_cached_queries()
+        if os.path.isfile(self.cache_path):
+            cache_queries = self._load_from_cache(self.cache_path)
             if len(self.queries) > 0 and set(cache_queries.keys()) != set(
                 self.queries.keys()
             ):
@@ -459,8 +462,16 @@ class Experiment(BaseModel):
             return
         if self.cache_path is None:
             raise ValueError("Cache path not set. Cannot dump queries")
+        output_dict: dict[str, Any] = {
+            qid: query.model_dump() for qid, query in self.queries.items()
+        }
+        output_dict["experiment_name"] = self.experiment_name
+        output_dict["elo_tournaments"] = [
+            tournament.model_dump() for tournament in self.elo_tournaments
+        ]
+
         with open(self.cache_path, "w") as f:
-            json.dump(self.model_dump(), f)
+            json.dump(output_dict, f)
 
     def save_results(
         self,
@@ -496,6 +507,50 @@ class Experiment(BaseModel):
                     f"Cannot save evaluation of type {type(result)} to cache"
                 )
             f.write(json.dumps({result_type: result.model_dump()}) + "\n")
+
+    def add_retrieved_docs_from_csv(
+        self,
+        csv_path: str,
+        query_id_col: str = "qid",
+        document_id_col: str = "did",
+        document_text_col: str = "document_text",
+        agent_col: str | None = None,
+    ):
+        """
+        Loads a list of retrieved documents from a csv file. The csv file should have the following columns:
+        query_id, document_id, document_text, [agent], [metadata columns]
+        Args:
+            csv_path (str): Path to the CSV file with the retrieved documents.
+            query_id_col (str): Name of the column with the query id to which the document was retrieved. Defaults to 'qid'.
+            document_id_col (str): Name of the column with the document id. Defaults to 'did'.
+            document_text_col (str): Name of the column with the document text. Defaults to 'document_text'.
+            agent (str): Name of the column with the agent name. If None, will not add the agent name. Defaults to None.
+        """
+        documents_read = 0
+        if not os.path.isfile(csv_path):
+            raise FileNotFoundError(f"CSV file {csv_path} not found")
+        for line in csv.DictReader(open(csv_path)):
+            qid = line[query_id_col].strip()
+            did = line[document_id_col].strip()
+            text = line[document_text_col].strip()
+            agent = line.get(agent_col)
+            metadata = {
+                k: v
+                for k, v in line.items()
+                if k not in [query_id_col, document_id_col, document_text_col]
+            }
+            if qid not in self.queries:
+                logger.warning(
+                    f"Query {qid} found in {csv_path} but not found in queries. Skipping"
+                )
+                continue
+            doc_obj = Document(qid=qid, did=did, text=text)
+            doc_obj.add_metadata(metadata)
+            if agent is not None:
+                doc_obj.add_retrieved_by(agent)
+            self.add_retrieved_doc(doc_obj)
+            documents_read += 1
+        logger.info(f"Loaded {documents_read} documents from {csv_path}")
 
     def add_retrieved_docs_from_runfile(
         self,
@@ -551,6 +606,79 @@ class Experiment(BaseModel):
                 f"Loaded {len(documents_read)} documents. {len(missing_docs)} missing docs"
             )
 
+    def add_answers_from_csv(
+        self,
+        csv_path: str,
+        agent_col: str = "agent",
+        answer_col: str = "answer",
+        query_id_col: str | None = None,
+    ):
+        """
+        Adds agent answers from a CSV file to the queries.
+        The CSV file should have the following columns:
+        query_id, agent, answer, [metadata columns]
+        Args:
+            csv_path (str): Path to the CSV file with the agent answers.
+            agent_col (str): Name of the column with the agent name. Defaults to 'agent'.
+            answer_col (str): Name of the column with the answer text. Defaults to 'answer'.
+            query_id_col (str): Name of the column with the query id. If None, will try to infer the query id column. Defaults to None.
+        """
+        if not os.path.isfile(csv_path):
+            raise FileNotFoundError(f"Answers file {csv_path} not found")
+        answers_read = 0
+        query_id_col = query_id_col or self.__infer_query_id_column(csv_path)
+        if query_id_col is None:
+            raise ValueError(f"Could not identify Query ID column for file {csv_path}")
+        for line in csv.DictReader(open(csv_path)):
+            qid = line[query_id_col].strip()
+            agent = line[agent_col].strip()
+            answer = line[answer_col].strip()
+            metadata = {
+                k: v
+                for k, v in line.items()
+                if k not in [query_id_col, agent_col, answer_col]
+            }
+            if qid not in self.queries:
+                logger.warning(
+                    f"Query {qid} found in {csv_path} but not found in queries. Skipping"
+                )
+                continue
+            answer_obj = AgentAnswer(qid=qid, agent=agent, text=answer)
+            answer_obj.add_metadata(metadata)
+            self.add_agent_answer(answer_obj)
+            answers_read += 1
+
+    def add_answers_from_multiple_csv(
+        self,
+        answers_files: list[str],
+        query_id_col: str | None = None,
+        query_text_col: str = "query",
+        answer_text_col: str = "answer",
+    ):
+        """Loads queries and answers from a list of CSVs with queries and answers generated by agents.
+        We assume that each csv was generated by a single agent, and name each agent according to the file name.
+        Args:
+            answers_files (list[str]): List of paths to the CSV files with the answers.
+            query_id_col (str): The column name with the query ID. If None, will try to infer the query ID column. Defaults to None.
+            query_text_col (str): The column name with the query text. Defaults to 'query'.
+            answer_text_col (str): The column name with the answer text. Defaults to 'answer'.
+        """
+        for f in answers_files:
+            if query_id_col is None:
+                query_id_col = self.__infer_query_id_column(f)
+            if query_id_col is None:
+                query_id_col = query_text_col
+            p = Path(f)
+            agent_name = p.stem
+
+            for line in csv.DictReader(open(p)):
+                qid = line[query_id_col].strip()
+                query = line[query_text_col].strip()
+                answer = line[answer_text_col].strip()
+                if qid not in self.queries:
+                    self.add_query(query, qid)
+                self.add_agent_answer(answer, agent_name, qid)
+
     def __clear_all_evaluations(self, should_save: bool = False):
         logger.warning(f"Clearing all evaluations for {len(self)} queries")
         doc_eval_count = 0
@@ -578,7 +706,7 @@ class Experiment(BaseModel):
                     pass
             self.save()
 
-    def _read_queries_csv(
+    def _read_queries_from_csv(
         self,
         csv_path: str,
         csv_query_text_col: str = "query",
@@ -627,14 +755,21 @@ class Experiment(BaseModel):
                 read_queries.add(qid)
         return queries
 
-    def _load_cached_queries(self):
-        queries: dict[str, Query] = {}
-        if not self.cache_path:
-            raise ValueError("Cache path not set. Cannot load queries")
-        if not os.path.isfile(self.cache_path):
-            raise FileNotFoundError(f"Cache file {self.cache_path} not found")
-        with open(self.cache_path) as f:
-            queries = {k: Query(**v) for k, v in json.load(f)["queries"].items()}
+    def _load_from_cache(self, cache_path: str) -> dict[str, Query]:
+        if not os.path.isfile(cache_path):
+            raise FileNotFoundError(f"Cache file {cache_path} not found")
+        with open(cache_path) as f:
+            data = json.load(f)
+        read_experiment_name = data.get("experiment_name")
+        if read_experiment_name and read_experiment_name != self.experiment_name:
+            logger.warning(
+                f"Experiment name mismatch. Expected {self.experiment_name}. Found {read_experiment_name}"
+            )
+        queries = {k: Query(**v) for k, v in json.load(f)["queries"].items()}
+        if "elo_tournaments" in data:
+            self.elo_tournaments = [
+                EloTournamentResult(**t) for t in data["elo_tournaments"]
+            ]
         return queries
 
     def _load_results_from_cache(self):

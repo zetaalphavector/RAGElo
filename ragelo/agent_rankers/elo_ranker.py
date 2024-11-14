@@ -7,7 +7,7 @@ import numpy as np
 from ragelo.agent_rankers.base_agent_ranker import AgentRanker, AgentRankerFactory
 from ragelo.logger import logger
 from ragelo.types.configurations import EloAgentRankerConfig
-from ragelo.types.queries import Queries
+from ragelo.types.experiment import Experiment
 from ragelo.types.results import EloTournamentResult
 from ragelo.types.types import AgentRankerTypes
 
@@ -22,7 +22,7 @@ class EloRanker(AgentRanker):
         config: EloAgentRankerConfig,
     ):
         super().__init__(config)
-        self.score_map = {"A": 1, "B": 0, "C": 0.5}
+        self.score_map = config.score_mapping
 
         self.agents_scores: dict[str, float] = {}
         self.wins: dict[str, int] = {}
@@ -35,9 +35,9 @@ class EloRanker(AgentRanker):
         self.k: int = self.config.elo_k
         self.std_dev: dict[str, float] = {}
 
-    def run(self, queries: Queries) -> EloTournamentResult:
+    def run(self, experiment: Experiment) -> EloTournamentResult:
         """Compute score for each agent"""
-        self.evaluations = self._flatten_evaluations(queries)
+        self.evaluations = self._flatten_evaluations(experiment)
         agent_scores: dict[str, list[int]] = {}
         for _ in range(self.config.tournaments):
             results = self.run_tournament()
@@ -57,15 +57,18 @@ class EloRanker(AgentRanker):
             ties=self.ties,
             total_games=self.total_games,
             total_tournaments=self.config.tournaments,
-            std_dev={},
         )
-        queries.add_evaluation(result, False)
+        experiment.add_evaluation(result, False)
         return result
 
     def get_agents_ratings(self):
-        if not self.computed:
-            raise ValueError("Ranking not computed yet, Run run() first")
         return self.agents_scores
+
+    def get_ranked_agents(self) -> list[tuple[str, float]]:
+        ranking = sorted(
+            self.get_agents_ratings().items(), key=lambda x: x[1], reverse=True
+        )
+        return [(agent, rating) for agent, rating in ranking]
 
     def run_tournament(self) -> dict[str, int]:
         agents_scores: dict[str, int] = {}
