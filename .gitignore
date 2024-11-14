@@ -164,3 +164,4 @@ data/*
 .python-version
 .idea/*
 ragelo/.vscode/settings.json
+uv.lock
