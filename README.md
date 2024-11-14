@@ -91,15 +91,16 @@ Other examples are available as notebooks in the [docs/examples/notebooks folder
 ## 🚀 CLI Quickstart 
 After installing RAGElo as a CLI app, you can run it with the following command:
 ```bash
-ragelo run-all queries.csv documents.csv answers.csv --verbose --data-dir tests/data/
+ragelo run-all queries.csv documents.csv answers.csv --data-dir tests/data/
 
 ---------- Agent Scores by Elo ranking ----------
  agent1        : 1026.7
  agent2        : 973.3
 ```
 
-When running as a CLI, RAGElo expects the input files as CSV files. Specifically, it needs a csv file with the user queries, one with the documents retrieved by the retrieval system and one of the answers each agent produced. Here are some examples of the expected format:
+When running as a CLI, RAGElo expects the input files as CSV files. Specifically, it needs a csv file with the user queries, one with the documents retrieved by the retrieval system and one of the answers each agent produced. These files can be passed with the parameters `--queries_csv_file`, `--documents_csv_file` and `--answers_csv_file`, respectively.
 
+Here are some examples of their expected formats:
 `queries.csv`: 
 ```csv
 qid,query
@@ -110,7 +111,7 @@ qid,query
 
 `documents.csv`:
 ```csv
-qid,did,document_text
+qid,did,document
 0,0, Brasília is the capital of Brazil.
 0,1, Rio de Janeiro used to be the capital of Brazil.
 1,2, Paris is the capital of France.
