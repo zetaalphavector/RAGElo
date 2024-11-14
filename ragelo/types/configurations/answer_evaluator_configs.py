@@ -42,7 +42,10 @@ class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
     )
     document_relevance_threshold: int | None = Field(
         default=None,
-        description="The minimum relevance score for a document to be included in the prompt. By default, all documents are included.",
+        description=(
+            "The minimum relevance score for a document to be included in the prompt. "
+            "By default, all documents are included."
+        ),
     )
 
 
@@ -83,9 +86,15 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
             "analysis_assistant_a": "A string with your analysis of assistant A's answer",
             "analysis_assistant_b": "A string with your analysis of assistant B's answer",
             "differences": "A string with your comparison between the two answers and their differences",
-            "winner": "The winner of the comparison. 'A' if assistant A is better, 'B' if assistant B is better, and 'C' for a tie",
+            "winner": (
+                "The winner of the comparison. "
+                "'A' if assistant A is better, 'B' if assistant B is better, and 'C' for a tie"
+            ),
         },
-        description="The response schema for the LLM. Required if the llm_answer_format is structured and recommended for JSON.",
+        description=(
+            "The response schema for the LLM. "
+            "Required if the llm_answer_format is structured and recommended for JSON."
+        ),
     )
 
 
@@ -107,9 +116,15 @@ class CustomPairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
             "analysis_assistant_a": "A string with your analysis of assistant A's answer",
             "analysis_assistant_b": "A string with your analysis of assistant B's answer",
             "differences": "A string with your comparison between the two answers and their differences",
-            "winner": "The winner of the comparison. 'A' if assistant A is better, 'B' if assistant B is better, and 'C' for a tie",
+            "winner": (
+                "The winner of the comparison. "
+                "'A' if assistant A is better, 'B' if assistant B is better, and 'C' for a tie"
+            ),
         },
-        description="The response schema for the LLM. Required if the llm_answer_format is structured and recommended for JSON.",
+        description=(
+            "The response schema for the LLM. "
+            "Required if the llm_answer_format is structured and recommended for JSON."
+        ),
     )
 
 
@@ -117,7 +132,10 @@ class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
     evaluator_name: str | AnswerEvaluatorTypes = AnswerEvaluatorTypes.CUSTOM_PROMPT
     prompt: str = Field(
         default="retrieved documents: {documents} query: {query} answer: {answer}",
-        description="The prompt to be used to evaluate the documents. It should contain a {query} and a {document} placeholder",
+        description=(
+            "The prompt to be used to evaluate the documents. "
+            "It should contain a {query} and a {document} placeholder"
+        ),
     )
     answers_evaluations_path: str = Field(
         default="custom_prompt_answers_evaluations.csv",

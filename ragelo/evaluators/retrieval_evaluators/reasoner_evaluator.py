@@ -35,7 +35,6 @@ user question.
     {document}
 """.strip()
 
-    # response_schema_retrieval_evaluator={"reasoning" : "A string with your reasoning wether the document is relevant or not."},
     def _build_message(self, query: Query, document: Document) -> str:
         formatters = {
             self.config.query_placeholder: query.query,

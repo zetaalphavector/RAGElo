@@ -1,5 +1,4 @@
 import logging
-import re
 
 from rich import print as rich_print
 

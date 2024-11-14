@@ -1,5 +1,3 @@
-"""A LLM provider is a class that can be called with a string and returns with another string as an answer from an LLM model."""
-
 from __future__ import annotations
 
 import os

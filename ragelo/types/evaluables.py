@@ -44,7 +44,8 @@ class Document(Evaluable):
     Args:
         did str: The document ID.
         text str: The text of the document.
-        retrieved_by dict[str, float]: If a document was retrieved by multiple agents, the score attributed by each agent for this document.
+        retrieved_by dict[str, float]: If a document was retrieved by multiple agents,
+            the score attributed by each agent for this document.
     """
 
     did: str

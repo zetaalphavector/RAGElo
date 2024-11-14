@@ -29,6 +29,4 @@ __version__ = "0.1.0"
 __app_name__ = "ragelo"
 __author__ = "Zeta Alpha"
 __email__ = "camara@zeta-alpha.com"
-__description__ = (
-    "CLI for automatically evaluating Retrieval Augmented Generation (RAG) models."
-)
+__description__ = "CLI for automatically evaluating Retrieval Augmented Generation (RAG) models."

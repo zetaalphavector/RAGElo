@@ -37,7 +37,10 @@ class BaseEvaluatorConfig(BaseConfig):
     )
     llm_response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = Field(
         default=None,
-        description="The response schema for the LLM. Required if the llm_answer_format is structured and recommended for JSON.",
+        description=(
+            "The response schema for the LLM. "
+            "Required if the llm_answer_format is structured and recommended for JSON."
+        ),
     )
     n_processes: int = Field(
         default=1,
@@ -61,7 +64,10 @@ class AllConfig(BaseEvaluatorConfig):
     )
     llm_response_schema_retrieval_evaluator: Type[PydanticBaseModel] | dict[str, Any] | None = Field(
         default=None,
-        description="The response schema for the LLM for the retrieval evaluator. Required if the llm_answer_format is structured and recommended for JSON.",
+        description=(
+            "The response schema for the LLM for the retrieval evaluator. "
+            "Required if the llm_answer_format is structured and recommended for JSON."
+        ),
     )
     llm_answer_format_answer_evaluator: str | AnswerFormat = Field(
         default=AnswerFormat.JSON,
@@ -69,7 +75,10 @@ class AllConfig(BaseEvaluatorConfig):
     )
     llm_response_schema_answer_evaluator: Type[PydanticBaseModel] | dict[str, Any] | None = Field(
         default=None,
-        description="The response schema for the LLM for the answer evaluator. Required if the llm_answer_format is structured and recommended for JSON.",
+        description=(
+            "The response schema for the LLM for the answer evaluator. "
+            "Required if the llm_answer_format is structured and recommended for JSON."
+        ),
     )
     scoring_key_retrieval_evaluator: str = Field(
         default="answer",

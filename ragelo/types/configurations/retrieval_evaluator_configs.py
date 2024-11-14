@@ -67,7 +67,11 @@ class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     )
     llm_response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = Field(
         default={
-            "score": "An integer between 0 and 2 representing the score of the document, where 0 means the document is not relevant to the query, 1 means the document is somewhat relevant, and 2 means the document is highly relevant."
+            "score": (
+                "An integer between 0 and 2 representing the score of the document, "
+                "where 0 means the document is not relevant to the query, 1 means the document is somewhat relevant, "
+                "and 2 means the document is highly relevant."
+            )
         },
     )
 
@@ -76,7 +80,10 @@ class CustomPromptEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.CUSTOM_PROMPT
     prompt: str = Field(
         default="query: {query} document: {document}",
-        description="The prompt to be used to evaluate the documents. It should contain a {query} and a {document} placeholder",
+        description=(
+            "The prompt to be used to evaluate the documents. "
+            "It should contain a {query} and a {document} placeholder"
+        ),
     )
 
 
@@ -91,7 +98,10 @@ class FewShotEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     )
     few_shot_user_prompt: str = Field(
         default="Query: {query}\n\nPassage:{passage}",
-        description="The individual prompt to be used to evaluate the documents. It should contain a {query} and a {passage} placeholder",
+        description=(
+            "The individual prompt to be used to evaluate the documents. "
+            "It should contain a {query} and a {passage} placeholder"
+        ),
     )
     few_shot_assistant_answer: str = Field(
         default='{reasoning}\n\n{{"relevance": {relevance}}}',
@@ -134,6 +144,3 @@ class RDNAMEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default="answer",
         description="The field to use when parsing the llm answer",
     )
-    # llm_response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = Field(
-    #     default={"O": "An integer representing the final score of the document."},
-    # )

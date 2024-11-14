@@ -39,12 +39,13 @@ class BaseEvaluator(ABC):
     def evaluate_experiment(self, experiment: Experiment, n_threads: int | None = None):
         """
         Trigger the evaluator for all the supported evaluables in the experiment.
-        The evaluation is done in asynchronously with the number of threads defined in the config.n_processes parameter.
+        The evaluation is done in asynchronously with the number of threads defined in config.n_processes parameter.
         This can be overwritten by the n_threads parameter.
 
         Args:
             experiment(Experiment): The experiment to evaluate.
-            n_threads(int): The number of threads to use for the evaluation. If None, the number of threads defined in the config will be used.
+            n_threads(int): The number of threads to use for the evaluation.
+                If None, the number of threads defined in the config will be used.
         """
         n_threads = n_threads or self.config.n_processes
 
