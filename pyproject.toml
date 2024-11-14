@@ -60,7 +60,7 @@ profile = "black"
 
 [tool.mypy]
 plugins = ["pydantic.mypy"]
-python_version = "3.8"
+python_version = "3.12"
 show_column_numbers = true
 namespace_packages = true
 follow_imports = "silent"
@@ -71,7 +71,8 @@ exclude = ["build/", "dist/", "venv/"]
 
 
 [tool.flake8]
-ignore = ['E501', "W503", "E203"]
+max-line-length = 119
+ignore = ["W503", "E203"]
 per-file-ignores = ['__init__.py:F401,F403']
 exclude = ["build/", "dist/", "venv/"]
 
