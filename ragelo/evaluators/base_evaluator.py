@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import string
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
@@ -55,9 +54,7 @@ class BaseEvaluator(ABC):
         try:
             asyncio.get_running_loop()
             with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(
-                    run, self._evaluate_experiment_async(experiment, n_threads)
-                )
+                future = executor.submit(run, self._evaluate_experiment_async(experiment, n_threads))
                 _ = future.result()
         except RuntimeError:
             _ = asyncio.run(self._evaluate_experiment_async(experiment, n_threads))
@@ -70,9 +67,7 @@ class BaseEvaluator(ABC):
         """Evaluate a single query and evaluable asynchronously."""
         raise NotImplementedError
 
-    async def _evaluate_experiment_async(
-        self, experiment: Experiment, n_threads: int = 1
-    ):
+    async def _evaluate_experiment_async(self, experiment: Experiment, n_threads: int = 1):
         tuples_to_eval = self._get_tuples_to_evaluate(experiment)
         if self.config.rich_print:
             import warnings
@@ -108,9 +103,7 @@ class BaseEvaluator(ABC):
                     pending.add(asyncio.ensure_future(aw))
             if not pending:
                 break
-            done, pending = await asyncio.wait(
-                pending, return_when=asyncio.FIRST_COMPLETED
-            )
+            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
             while done:
                 evaluation = await done.pop()
                 evaluations += 1
@@ -124,9 +117,7 @@ class BaseEvaluator(ABC):
             self._print_failed_evaluations(evaluations, failed)
 
     @abstractmethod
-    def _get_tuples_to_evaluate(
-        self, queries: Experiment
-    ) -> list[tuple[Query, Evaluable]]:
+    def _get_tuples_to_evaluate(self, queries: Experiment) -> list[tuple[Query, Evaluable]]:
         raise NotImplementedError
 
     def _validate_answer(
@@ -137,26 +128,18 @@ class BaseEvaluator(ABC):
 
         if self.config.llm_answer_format == AnswerFormat.JSON:
             if not isinstance(answer, dict):
-                raise ValueError(
-                    f"Expected LLM answer as a JSON dictionary, got {type(answer)}: {answer}"
-                )
+                raise ValueError(f"Expected LLM answer as a JSON dictionary, got {type(answer)}: {answer}")
             if self.config.llm_response_schema is not None:
                 if isinstance(self.config.llm_response_schema, dict):
                     schema = self.config.llm_response_schema
                     if not all(k in answer for k in schema.keys()):
-                        raise ValueError(
-                            f"Expected LLM answer to have keys {schema.keys()}, got {answer.keys()}"
-                        )
+                        raise ValueError(f"Expected LLM answer to have keys {schema.keys()}, got {answer.keys()}")
         elif self.config.llm_answer_format == AnswerFormat.STRUCTURED:
             if not isinstance(answer, PydanticBaseModel):
-                raise ValueError(
-                    f"Expected LLM answer as a PydanticBaseModel, got {type(answer)}: {answer}"
-                )
+                raise ValueError(f"Expected LLM answer as a PydanticBaseModel, got {type(answer)}: {answer}")
         elif self.config.llm_answer_format == AnswerFormat.TEXT:
             if not isinstance(answer, str):
-                raise ValueError(
-                    f"Expected LLM answer as a string, got {type(answer)}: {answer}"
-                )
+                raise ValueError(f"Expected LLM answer as a string, got {type(answer)}: {answer}")
 
     def _process_answer(
         self, raw_answer: str | dict[str, Any] | PydanticBaseModel
@@ -185,9 +168,7 @@ class BaseEvaluator(ABC):
                 valid_fields[field] = metadata[field]
         return valid_fields
 
-    def _print_failed_evaluations(
-        self, total_evaluations: int, failed_evaluations: int
-    ):
+    def _print_failed_evaluations(self, total_evaluations: int, failed_evaluations: int):
         if self.config.rich_print:
             try:
                 import rich

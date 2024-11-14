@@ -19,9 +19,7 @@ class PairwiseAnswerEvaluator(BaseAnswerEvaluator):
     citations_prompt = " Answers cite documents using square brackets."
     document_template_raw_only = "[{did}] {doc}"
     document_template_annotation_only = "[{did}] {annotation}"
-    document_template_raw_and_annotation = (
-        "[RETRIEVED DOCUMENT]\n{doc}\n[DOCUMENT RELEVANCE]\n{annotation}\n"
-    )
+    document_template_raw_and_annotation = "[RETRIEVED DOCUMENT]\n{doc}\n[DOCUMENT RELEVANCE]\n{annotation}\n"
     documents_prompt_relevance_only = (
         "For each reference document, you will be provided with a reasoning "
         "explaining why the document is or is not relevant."
@@ -31,9 +29,7 @@ class PairwiseAnswerEvaluator(BaseAnswerEvaluator):
         "of the document as well as a reasoning  why the document "
         "is or is not relevant."
     )
-    documents_prompt_raw_only = (
-        "You will be provided with the text of each reference document."
-    )
+    documents_prompt_raw_only = "You will be provided with the text of each reference document."
 
     prompt = """
 Please act as an impartial judge and evaluate the quality of the responses provided \
@@ -87,15 +83,11 @@ and "C" for a tie.
             config.document_template = self.document_template_raw_only
             self.documents_prompt = self.documents_prompt_raw_only
         else:
-            raise ValueError(
-                "At least one of include_annotations or include_raw_documents must be True"
-            )
+            raise ValueError("At least one of include_annotations or include_raw_documents must be True")
         if config.prompt:
             self.prompt = config.prompt
 
-    def _build_message_pairwise(
-        self, query: Query, game: PairwiseGame
-    ) -> str | list[dict[str, str]]:
+    def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> str | list[dict[str, str]]:
         documents = self._prepare_documents(query)
         query_metadata = self._get_usable_fields_from_metadata(
             self.prompt, query.metadata, skip_fields=[self.config.query_placeholder]

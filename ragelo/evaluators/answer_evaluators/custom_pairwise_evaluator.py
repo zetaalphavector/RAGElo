@@ -28,9 +28,7 @@ class CustomPairwiseEvaluator(BaseAnswerEvaluator):
         self.system_prompt = config.system_prompt
         self.user_prompt = config.user_prompt
 
-    def _build_message_pairwise(
-        self, query: Query, game: PairwiseGame
-    ) -> str | list[dict[str, str]]:
+    def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> str | list[dict[str, str]]:
         system_prompt_msg = {"role": "system", "content": self.system_prompt}
         messages = [system_prompt_msg]
         documents = self._prepare_documents(query)

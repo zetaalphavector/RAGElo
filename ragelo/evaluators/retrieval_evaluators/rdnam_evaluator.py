@@ -71,20 +71,18 @@ Each rater used their own independent judgement."""
     ):
         """Initializes an evaluator based on RDNAM framework."""
         super().__init__(config, llm_provider)
-        self.config.llm_response_schema = {
-            "O": "An integer between 0 and 2 representing the score of the document."
-        }
+        self.config.llm_response_schema = {"O": "An integer between 0 and 2 representing the score of the document."}
 
         self.__role = self.config.annotator_role if self.config.annotator_role else ""
 
         if self.config.use_aspects:
             self.__aspects_prompt = self.ASPECTS_NARRATIVE
-            self.config.llm_response_schema[
-                "M"
-            ] = "An integer between 0 and 2 representing the match of the document to the query intent."
-            self.config.llm_response_schema[
-                "T"
-            ] = "An integer between 0 and 2 representing the trustworthiness of the document."
+            self.config.llm_response_schema["M"] = (
+                "An integer between 0 and 2 representing the match of the document to the query intent."
+            )
+            self.config.llm_response_schema["T"] = (
+                "An integer between 0 and 2 representing the trustworthiness of the document."
+            )
         else:
             self.__aspects_prompt = ""
         if self.config.use_multiple_annotators:
@@ -111,9 +109,7 @@ Each rater used their own independent judgement."""
                     narrative=narrative, description=description
                 )
 
-        example = (
-            self.ASPECTS_EXAMPLE if self.__aspects_prompt else self.DEFAULT_EXAMPLE
-        )
+        example = self.ASPECTS_EXAMPLE if self.__aspects_prompt else self.DEFAULT_EXAMPLE
 
         formatted_prompt = self.prompt.format(
             role=self.__role,
@@ -126,9 +122,7 @@ Each rater used their own independent judgement."""
         )
         return formatted_prompt
 
-    def _process_answer(
-        self, answer: dict[str, Any]
-    ) -> int | float | dict[str, int | float]:
+    def _process_answer(self, answer: dict[str, Any]) -> int | float | dict[str, int | float]:
         scores = {"intent_match": [], "trustworthiness": [], "overall": []}
         if self.multiple:
             for v in answer.values():

@@ -56,9 +56,7 @@ and 'C' for a tie.
 [The End of Conversation with Assistant B]
 """.strip()
 
-    def _build_message_pairwise(
-        self, query: Query, game: PairwiseGame
-    ) -> str | list[dict[str, str]]:
+    def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> str | list[dict[str, str]]:
         documents = self._prepare_documents(query)
         query_metadata = self._get_usable_fields_from_metadata(
             self.prompt, query.metadata, skip_fields=[self.config.query_placeholder]
@@ -79,10 +77,7 @@ and 'C' for a tie.
             citations = ""
 
         if not game.agent_a_answer.conversation or not game.agent_b_answer.conversation:
-            raise ValueError(
-                "The conversation of the agents cannot "
-                "be empty for the chat_pairwise evaluator"
-            )
+            raise ValueError("The conversation of the agents cannot " "be empty for the chat_pairwise evaluator")
         formatters = {
             self.config.query_placeholder: query.query,
             self.config.documents_placeholder: documents,

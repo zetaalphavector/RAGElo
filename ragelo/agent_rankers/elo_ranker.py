@@ -65,9 +65,7 @@ class EloRanker(AgentRanker):
         return self.agents_scores
 
     def get_ranked_agents(self) -> list[tuple[str, float]]:
-        ranking = sorted(
-            self.get_agents_ratings().items(), key=lambda x: x[1], reverse=True
-        )
+        ranking = sorted(self.get_agents_ratings().items(), key=lambda x: x[1], reverse=True)
         return [(agent, rating) for agent, rating in ranking]
 
     def run_tournament(self) -> dict[str, int]:
@@ -92,12 +90,8 @@ class EloRanker(AgentRanker):
             agent_b_rating = agents_scores.get(agent_b, self.initial_score)
 
             expected_score = 1 / (1 + 10 ** ((agent_a_rating - agent_b_rating) / 400))
-            agents_scores[agent_a] = int(
-                agent_a_rating + self.k * (score_val - expected_score)
-            )
-            agents_scores[agent_b] = int(
-                agent_b_rating + self.k * ((1 - score_val) - (1 - expected_score))
-            )
+            agents_scores[agent_a] = int(agent_a_rating + self.k * (score_val - expected_score))
+            agents_scores[agent_b] = int(agent_b_rating + self.k * ((1 - score_val) - (1 - expected_score)))
             self.total_games += 1
             self.games_played[agent_a] = self.games_played.get(agent_a, 0) + 1
             self.games_played[agent_b] = self.games_played.get(agent_b, 0) + 1
@@ -108,22 +102,16 @@ class EloRanker(AgentRanker):
     def print_ranking(self):
         if not self.config.verbose:
             return
-        scores = sorted(
-            self.get_agents_ratings().items(), key=lambda x: x[1], reverse=True
-        )
+        scores = sorted(self.get_agents_ratings().items(), key=lambda x: x[1], reverse=True)
         if self.config.rich_print:
             try:
                 import rich
 
-                rich.print(
-                    f"-------[bold white] Agent Scores by {self.name} [/bold white]-------"
-                )
+                rich.print(f"-------[bold white] Agent Scores by {self.name} [/bold white]-------")
 
                 for agent, rating in scores:
                     std_dev = self.std_dev.get(agent, 0)
-                    rich.print(
-                        f"[bold white]{agent:<15}[/bold white]: {rating:.1f}(±{std_dev:.1f})"
-                    )
+                    rich.print(f"[bold white]{agent:<15}[/bold white]: {rating:.1f}(±{std_dev:.1f})")
             except ImportError:
                 logger.warning("Rich not installed. Using plain print")
                 self.config.rich_print = False

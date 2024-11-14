@@ -26,9 +26,7 @@ class FewShotExample(BaseModel):
 
 
 class BaseRetrievalEvaluatorConfig(BaseEvaluatorConfig):
-    evaluator_name: str | RetrievalEvaluatorTypes = (
-        RetrievalEvaluatorTypes.CUSTOM_PROMPT
-    )
+    evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.CUSTOM_PROMPT
     document_placeholder: str = Field(
         default="document",
         description="The placeholder for the document in the prompt",
@@ -44,17 +42,14 @@ class ReasonerEvaluatorConfig(BaseRetrievalEvaluatorConfig):
 
 
 class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
-    evaluator_name: str | RetrievalEvaluatorTypes = (
-        RetrievalEvaluatorTypes.DOMAIN_EXPERT
-    )
+    evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.DOMAIN_EXPERT
     expert_in: str = Field(
         default="",
         description="What the LLM should mimic being an expert in.",
     )
     domain_short: str | None = Field(
         default=None,
-        description="A short or alternative name of the domain. "
-        "(e.g., Chemistry, CS, etc.)",
+        description="A short or alternative name of the domain. " "(e.g., Chemistry, CS, etc.)",
     )
     company: str | None = Field(
         default=None,
@@ -64,8 +59,7 @@ class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     )
     extra_guidelines: list[str] | None = Field(
         default=None,
-        description="A list of extra guidelines to be used when reasoning about the "
-        "relevancy of the document.",
+        description="A list of extra guidelines to be used when reasoning about the " "relevancy of the document.",
     )
     llm_answer_format: str | AnswerFormat = Field(
         default=AnswerFormat.JSON,
@@ -79,9 +73,7 @@ class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
 
 
 class CustomPromptEvaluatorConfig(BaseRetrievalEvaluatorConfig):
-    evaluator_name: str | RetrievalEvaluatorTypes = (
-        RetrievalEvaluatorTypes.CUSTOM_PROMPT
-    )
+    evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.CUSTOM_PROMPT
     prompt: str = Field(
         default="query: {query} document: {document}",
         description="The prompt to be used to evaluate the documents. It should contain a {query} and a {document} placeholder",

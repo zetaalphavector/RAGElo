@@ -4,7 +4,7 @@ from typing import Any
 
 from ragelo.logger import logger
 from ragelo.types.evaluables import AgentAnswer, Document, PairwiseGame
-from ragelo.types.pydantic_models import BaseModel, validator
+from ragelo.types.pydantic_models import BaseModel
 from ragelo.types.results import AnswerEvaluatorResult, RetrievalEvaluatorResult
 
 
@@ -88,9 +88,7 @@ class Query(BaseModel):
         if agent is not None:
             doc.add_retrieved_by(agent, score, force)
         if doc.did in self.retrieved_docs and not force:
-            logger.info(
-                f"Query {self.qid} already have a document {doc.did} retrieved."
-            )
+            logger.info(f"Query {self.qid} already have a document {doc.did} retrieved.")
             return
 
         self.retrieved_docs[doc.did] = doc
@@ -104,14 +102,10 @@ class Query(BaseModel):
         agent = answer.agent
         answer = self.answers.get(agent, answer)
         if answer.agent in self.answers and not force:
-            logger.warning(
-                f"Answer from agent {answer.agent} already exists in query {self.qid}"
-            )
+            logger.warning(f"Answer from agent {answer.agent} already exists in query {self.qid}")
             return
         if answer.agent in self.answers:
-            logger.info(
-                f"Answer from agent {answer.agent} already exists in query {self.qid}. Overwriting."
-            )
+            logger.info(f"Answer from agent {answer.agent} already exists in query {self.qid}. Overwriting.")
         self.answers[agent] = answer
 
     def add_evaluation(
@@ -122,18 +116,12 @@ class Query(BaseModel):
         if isinstance(evaluation, RetrievalEvaluatorResult):
             did = evaluation.did
             if did not in self.retrieved_docs:
-                logger.warning(
-                    f"Trying to add evaluation for non-retrieved document {did} in query {self.qid}"
-                )
+                logger.warning(f"Trying to add evaluation for non-retrieved document {did} in query {self.qid}")
             if self.retrieved_docs[did].evaluation is not None and not force:
-                logger.warning(
-                    f"Document {did} in query {self.qid} already has an evaluation."
-                )
+                logger.warning(f"Document {did} in query {self.qid} already has an evaluation.")
                 return
             if self.retrieved_docs[did].evaluation is not None:
-                logger.info(
-                    f"Document {did} in query {self.qid} already has an evaluation. Overwriting."
-                )
+                logger.info(f"Document {did} in query {self.qid} already has an evaluation. Overwriting.")
             self.retrieved_docs[did].evaluation = evaluation
             return
         if evaluation.pairwise:
@@ -150,10 +138,7 @@ class Query(BaseModel):
                     f"{agent_a} and {agent_b}, but {agent_b} does not have an answer for query {self.qid}"
                 )
             for game in self.pairwise_games:
-                if (
-                    game.agent_a_answer.agent == agent_a
-                    and game.agent_b_answer.agent == agent_b
-                ):
+                if game.agent_a_answer.agent == agent_a and game.agent_b_answer.agent == agent_b:
                     if game.evaluation is not None and not force:
                         logger.warning(
                             f"Query {self.qid} already has an evaluation for agents {agent_a} and {agent_b}."
@@ -171,23 +156,17 @@ class Query(BaseModel):
             )
             return
         if evaluation.agent is None:
-            raise ValueError(
-                "A pointwise AnswerEvaluatorResult must have an agent assigned to it."
-            )
+            raise ValueError("A pointwise AnswerEvaluatorResult must have an agent assigned to it.")
         agent = evaluation.agent
         if agent not in self.answers:
             logger.warning(
                 f"Trying to add evaluation for agent {agent} in query {self.qid}, but {agent} does not have an answer."
             )
         if self.answers[agent].evaluation is not None and not force:
-            logger.warning(
-                f"Agent {agent} in query {self.qid} already has an evaluation."
-            )
+            logger.warning(f"Agent {agent} in query {self.qid} already has an evaluation.")
             return
         if self.answers[agent].evaluation is not None:
-            logger.info(
-                f"Agent {agent} in query {self.qid} already has an evaluation. Overwriting."
-            )
+            logger.info(f"Agent {agent} in query {self.qid} already has an evaluation. Overwriting.")
         self.answers[agent].evaluation = evaluation
 
     def get_qrels(
@@ -203,9 +182,7 @@ class Query(BaseModel):
         """
         qrels = {}
         if len(self.retrieved_docs) == 0:
-            logger.warning(
-                f"Query {self.qid} does not have any retrieved documents. Returning empty qrels."
-            )
+            logger.warning(f"Query {self.qid} does not have any retrieved documents. Returning empty qrels.")
         docs_without_relevance = 0
         for did, document in self.retrieved_docs.items():
             if document.evaluation is None:
@@ -224,10 +201,7 @@ class Query(BaseModel):
                     )
                     continue
             elif isinstance(document.evaluation.answer, dict):
-                if (
-                    relevance_key is None
-                    or relevance_key not in document.evaluation.answer
-                ):
+                if relevance_key is None or relevance_key not in document.evaluation.answer:
                     logger.warning(
                         f"Document {did} does not have a relevance key ({relevance_key})"
                         " in the evaluation. Skipping."
@@ -247,16 +221,12 @@ class Query(BaseModel):
                 relevance = int(document.evaluation.answer[relevance_key])
             qrels[did] = 0 if relevance < relevance_threshold else relevance
         if docs_without_relevance > 0:
-            logger.warning(
-                f"Query {self.qid} has {docs_without_relevance} documents without relevance."
-            )
+            logger.warning(f"Query {self.qid} has {docs_without_relevance} documents without relevance.")
         if docs_without_relevance == len(self.retrieved_docs):
             logger.error(f"Query {self.qid} has no documents without relevance.")
         return qrels
 
-    def get_runs(
-        self, agents: list[str] | None = None
-    ) -> dict[str, dict[str, dict[str, float]]]:
+    def get_runs(self, agents: list[str] | None = None) -> dict[str, dict[str, dict[str, float]]]:
         """Get a trec-style run dictionary with the documents retrieved by the agents provided.
         If no agents are provided, all agents will be included.
         Args:
@@ -272,15 +242,11 @@ class Query(BaseModel):
                 runs[agent][self.qid][did] = float(score)
 
         if len(runs) == 0:
-            logger.warning(
-                f"Query {self.qid} does not have any retrieved documents with an agent assigned."
-            )
+            logger.warning(f"Query {self.qid} does not have any retrieved documents with an agent assigned.")
         return runs
 
     @classmethod
-    def assemble_query(
-        cls, query: Query | str, metadata: dict[str, Any] | None = None
-    ) -> Query:
+    def assemble_query(cls, query: Query | str, metadata: dict[str, Any] | None = None) -> Query:
         """Assembles a Query object from a Query object or a query text.
         Args:
             query Query | str: The query object or the query text.

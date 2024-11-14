@@ -105,9 +105,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             exception=exc,
         )
 
-    def _get_tuples_to_evaluate(
-        self, experiment: Experiment
-    ) -> list[tuple[Query, Document]]:
+    def _get_tuples_to_evaluate(self, experiment: Experiment) -> list[tuple[Query, Document]]:
         tuples_to_eval = []
         all_tuples = 0
         missing_evaluations = 0
@@ -135,9 +133,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         raise NotImplementedError
 
     @classmethod
-    def from_config(
-        cls, config: BaseRetrievalEvaluatorConfig, llm_provider: BaseLLMProvider
-    ):
+    def from_config(cls, config: BaseRetrievalEvaluatorConfig, llm_provider: BaseLLMProvider):
         return cls(config, llm_provider)
 
     @classmethod
@@ -174,8 +170,7 @@ class RetrievalEvaluatorFactory:
             llm_provider_instance = llm_provider
         if evaluator_name not in cls.registry:
             raise ValueError(
-                f"Unknown retrieval evaluator {evaluator_name}\n"
-                f"Valid options are {list(cls.registry.keys())}"
+                f"Unknown retrieval evaluator {evaluator_name}\n" f"Valid options are {list(cls.registry.keys())}"
             )
         if config is None:
             class_ = cls.registry[evaluator_name]
@@ -195,9 +190,7 @@ def get_retrieval_evaluator(
     if evaluator_name is None:
         # get the name from the config
         if config is None:
-            raise ValueError(
-                "Either the evaluator_name or a config object must be provided"
-            )
+            raise ValueError("Either the evaluator_name or a config object must be provided")
         evaluator_name = config.evaluator_name
     if isinstance(evaluator_name, str):
         evaluator_name = RetrievalEvaluatorTypes(evaluator_name)

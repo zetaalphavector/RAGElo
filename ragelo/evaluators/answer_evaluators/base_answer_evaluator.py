@@ -84,12 +84,8 @@ class BaseAnswerEvaluator(BaseEvaluator):
         if self.config.pairwise:
             if not answer_a or not answer_b:
                 raise ValueError("Pairwise evaluations require two answers")
-            answer_a = AgentAnswer.assemble_answer(
-                answer_a, query.qid, metadata=answer_a_metadata
-            )
-            answer_b = AgentAnswer.assemble_answer(
-                answer_b, query.qid, metadata=answer_b_metadata
-            )
+            answer_a = AgentAnswer.assemble_answer(answer_a, query.qid, metadata=answer_a_metadata)
+            answer_b = AgentAnswer.assemble_answer(answer_b, query.qid, metadata=answer_b_metadata)
             agent = (answer_a.agent, answer_b.agent)
             evaluable = PairwiseGame(
                 qid=query.qid,
@@ -99,9 +95,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
         else:
             if not answer:
                 raise ValueError("Pointwise evaluations require an answer")
-            evaluable = AgentAnswer.assemble_answer(
-                answer, query.qid, metadata=answer_metadata
-            )
+            evaluable = AgentAnswer.assemble_answer(answer, query.qid, metadata=answer_metadata)
             agent = evaluable.agent
 
         try:
@@ -133,9 +127,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
             self.__add_pairwise_games(experiment)
         super().evaluate_experiment(experiment, n_threads)
 
-    async def evaluate_async(
-        self, eval_sample: tuple[Query, PairwiseGame | AgentAnswer]
-    ) -> AnswerEvaluatorResult:
+    async def evaluate_async(self, eval_sample: tuple[Query, PairwiseGame | AgentAnswer]) -> AnswerEvaluatorResult:
         """
         Evaluates a single sample asynchronously
         """
@@ -189,8 +181,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 answer = self._process_answer(raw_answer)
             except ValueError as e:
                 logger.warning(
-                    f"Failed to PARSE answer for qid: {query.qid} agent(s): {agent}\n"
-                    f"Raw answer: {raw_answer}"
+                    f"Failed to PARSE answer for qid: {query.qid} agent(s): {agent}\n" f"Raw answer: {raw_answer}"
                 )
                 exc = str(e)
                 answer = None
@@ -213,9 +204,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
             exception=exc,
         )
 
-    def _get_tuples_to_evaluate(
-        self, experiment: Experiment
-    ) -> list[tuple[Query, PairwiseGame | AgentAnswer]]:
+    def _get_tuples_to_evaluate(self, experiment: Experiment) -> list[tuple[Query, PairwiseGame | AgentAnswer]]:
         """
         Creates the list of pairs (query, evaluable) to evaluate
         """
@@ -247,22 +236,16 @@ class BaseAnswerEvaluator(BaseEvaluator):
 
         return tuples_to_eval
 
-    def _build_message(
-        self, query: Query, answer: AgentAnswer
-    ) -> str | list[dict[str, str]]:
+    def _build_message(self, query: Query, answer: AgentAnswer) -> str | list[dict[str, str]]:
         """Builds the message to send to the LLM evaluator"""
         raise NotImplementedError
 
-    def _build_message_pairwise(
-        self, query: Query, game: PairwiseGame
-    ) -> str | list[dict[str, str]]:
+    def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> str | list[dict[str, str]]:
         """Builds the message to send to the LLM evaluator"""
         raise NotImplementedError
 
     @classmethod
-    def from_config(
-        cls, config: BaseAnswerEvaluatorConfig, llm_provider: BaseLLMProvider
-    ):
+    def from_config(cls, config: BaseAnswerEvaluatorConfig, llm_provider: BaseLLMProvider):
         return cls(config, llm_provider)
 
     @classmethod
@@ -282,10 +265,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
             random.shuffle(pairs)
 
             # Filter out games that already exist
-            existing_games = {
-                (a.agent_a_answer.agent, a.agent_b_answer.agent)
-                for a in query.pairwise_games
-            }
+            existing_games = {(a.agent_a_answer.agent, a.agent_b_answer.agent) for a in query.pairwise_games}
             games = [g for g in pairs if g not in existing_games]
 
             games_to_add = self.config.n_games_per_query - len(existing_games)
@@ -375,9 +355,7 @@ def get_answer_evaluator(
     if evaluator_name is None:
         # get the name from the config
         if config is None:
-            raise ValueError(
-                "Either the evaluator_name or a config object must be provided"
-            )
+            raise ValueError("Either the evaluator_name or a config object must be provided")
         evaluator_name = config.evaluator_name
     if isinstance(evaluator_name, str):
         evaluator_name = AnswerEvaluatorTypes(evaluator_name)

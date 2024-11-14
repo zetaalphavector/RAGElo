@@ -69,6 +69,8 @@ check_untyped_defs = true
 implicit_reexport = true
 exclude = ["build/", "dist/", "venv/"]
 
+[tool.black]
+line-length = 119
 
 [tool.flake8]
 max-line-length = 119

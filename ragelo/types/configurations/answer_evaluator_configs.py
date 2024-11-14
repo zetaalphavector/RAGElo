@@ -12,16 +12,12 @@ from ragelo.types.types import AnswerEvaluatorTypes
 
 class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
     evaluator_name: str | AnswerEvaluatorTypes = ""
-    answer_placeholder: str = Field(
-        default="answer", description="The placeholder for the answer in the prompt"
-    )
+    answer_placeholder: str = Field(default="answer", description="The placeholder for the answer in the prompt")
     documents_placeholder: str = Field(
         default="documents",
         description="The placeholder for the documents in the prompt",
     )
-    pairwise: bool = Field(
-        default=False, description="Whether or not to the evaluator is pairwise"
-    )
+    pairwise: bool = Field(default=False, description="Whether or not to the evaluator is pairwise")
     document_template: str = Field(
         default="[{did}] {doc}",
         description="The template to format each individual document in the prompt",
@@ -54,19 +50,13 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     """Configuration for the pairwise evaluator."""
 
     evaluator_name: str | AnswerEvaluatorTypes = AnswerEvaluatorTypes.PAIRWISE
-    bidirectional: bool = Field(
-        default=False, description="Whether or not to run each game in both directions"
-    )
-    n_games_per_query: int = Field(
-        default=100, description="Maximum number of games to generate for each query"
-    )
+    bidirectional: bool = Field(default=False, description="Whether or not to run each game in both directions")
+    n_games_per_query: int = Field(default=100, description="Maximum number of games to generate for each query")
     games_evaluations_path: str = Field(
         default="pairwise_answers_evaluations.csv",
         description="Path to the output file",
     )
-    pairwise: bool = Field(
-        default=True, description="Whether or not to the evaluator is pairwise"
-    )
+    pairwise: bool = Field(default=True, description="Whether or not to the evaluator is pairwise")
     document_template: str = Field(
         default="[{did}] {annotation}",
         description="The template to format each individual document in the prompt",
@@ -77,8 +67,7 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     )
     factors: str = Field(
         default=(
-            "the correctness, helpfulness, completeness, accuracy, depth, and "
-            "level of detail of their responses"
+            "the correctness, helpfulness, completeness, accuracy, depth, and " "level of detail of their responses"
         ),
         description=(
             "A string containing the factors to be used when evaluating an answer. "
@@ -104,21 +93,11 @@ class CustomPairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     """Configuration for a custom pairwise evaluator."""
 
     evaluator_name: str | AnswerEvaluatorTypes = AnswerEvaluatorTypes.CUSTOM_PAIRWISE
-    system_prompt: str = Field(
-        default=None, description="System prompt to use for the evaluator"
-    )
-    user_prompt: str = Field(
-        default=None, description="User prompt to use for the evaluator."
-    )
-    bidirectional: bool = Field(
-        default=False, description="Whether or not to run each game in both directions"
-    )
-    n_games_per_query: int = Field(
-        default=100, description="Maximum number of games to generate for each query"
-    )
-    pairwise: bool = Field(
-        default=True, description="Whether or not to the evaluator is pairwise"
-    )
+    system_prompt: str = Field(default=None, description="System prompt to use for the evaluator")
+    user_prompt: str = Field(default=None, description="User prompt to use for the evaluator.")
+    bidirectional: bool = Field(default=False, description="Whether or not to run each game in both directions")
+    n_games_per_query: int = Field(default=100, description="Maximum number of games to generate for each query")
+    pairwise: bool = Field(default=True, description="Whether or not to the evaluator is pairwise")
     llm_answer_format: str | AnswerFormat = Field(
         default=AnswerFormat.JSON,
         description="The format of the answer returned by the LLM",

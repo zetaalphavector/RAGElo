@@ -49,14 +49,10 @@ class OllamaProvider(BaseLLMProvider):
         try:
             asyncio.get_running_loop()
             with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(
-                    run, self.call_async(prompt, answer_format, response_schema)
-                )
+                future = executor.submit(run, self.call_async(prompt, answer_format, response_schema))
                 answers = future.result()
         except RuntimeError:
-            answers = asyncio.run(
-                self.call_async(prompt, answer_format, response_schema)
-            )
+            answers = asyncio.run(self.call_async(prompt, answer_format, response_schema))
         return answers
 
     async def call_async(
@@ -73,9 +69,7 @@ class OllamaProvider(BaseLLMProvider):
         if isinstance(prompt, str):
             prompt = [{"role": "system", "content": prompt}]
         if answer_format == AnswerFormat.STRUCTURED:
-            raise NotImplementedError(
-                "Structured answer format is not supported on Ollama."
-            )
+            raise NotImplementedError("Structured answer format is not supported on Ollama.")
         if answer_format == AnswerFormat.JSON:
             if isinstance(response_schema, dict):
                 schema = json.dumps(response_schema, indent=4)
@@ -97,11 +91,7 @@ class OllamaProvider(BaseLLMProvider):
                 temperature=self.config.temperature,
                 max_tokens=self.config.max_tokens,
             )
-        if (
-            not answers.choices
-            or not answers.choices[0].message
-            or not answers.choices[0].message.content
-        ):
+        if not answers.choices or not answers.choices[0].message or not answers.choices[0].message.content:
             raise ValueError("Ollama did not return any completions.")
         if answer_format == AnswerFormat.JSON:
             return json.loads(answers.choices[0].message.content)

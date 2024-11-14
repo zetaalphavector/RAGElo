@@ -70,9 +70,7 @@ and 'C' for a tie.
         self.expert_in = self.config.expert_in
         self.company = self.config.company
 
-    def _build_message_pairwise(
-        self, query: Query, game: PairwiseGame
-    ) -> str | list[dict[str, str]]:
+    def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> str | list[dict[str, str]]:
         documents = self._prepare_documents(query)
         query_metadata = self._get_usable_fields_from_metadata(
             self.prompt, query.metadata, skip_fields=[self.config.query_placeholder]
@@ -105,7 +103,5 @@ and 'C' for a tie.
             **answer_b_metadata,
         }
         if self.company:
-            formatters["company_prompt"] = self.COMPANY_PROMPT.format(
-                company=self.company
-            )
+            formatters["company_prompt"] = self.COMPANY_PROMPT.format(company=self.company)
         return self.prompt.format(**formatters)

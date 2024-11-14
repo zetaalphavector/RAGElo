@@ -49,14 +49,10 @@ class OpenAIProvider(BaseLLMProvider):
         try:
             asyncio.get_running_loop()
             with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(
-                    run, self.call_async(prompt, answer_format, response_schema)
-                )
+                future = executor.submit(run, self.call_async(prompt, answer_format, response_schema))
                 answers = future.result()
         except RuntimeError:
-            answers = asyncio.run(
-                self.call_async(prompt, answer_format, response_schema)
-            )
+            answers = asyncio.run(self.call_async(prompt, answer_format, response_schema))
         return answers
 
     @retry(wait=wait_random_exponential(min=1, max=120), stop=stop_after_attempt(5))
@@ -75,9 +71,7 @@ class OpenAIProvider(BaseLLMProvider):
             prompt = [{"role": "system", "content": prompt}]
         if answer_format == AnswerFormat.STRUCTURED:
             if not isinstance(response_schema, type(PydanticBaseModel)):
-                raise ValueError(
-                    "response_schema must be a PydanticBaseModel Class when using structured output."
-                )
+                raise ValueError("response_schema must be a PydanticBaseModel Class when using structured output.")
             answers = await self.__openai_client.beta.chat.completions.parse(
                 model=self.config.model,
                 messages=prompt,  # type: ignore
@@ -107,11 +101,7 @@ class OpenAIProvider(BaseLLMProvider):
                 temperature=self.config.temperature,
                 max_tokens=self.config.max_tokens,
             )
-        if (
-            not answers.choices
-            or not answers.choices[0].message
-            or not answers.choices[0].message.content
-        ):
+        if not answers.choices or not answers.choices[0].message or not answers.choices[0].message.content:
             raise ValueError("OpenAI did not return any completions.")
         if answer_format == AnswerFormat.STRUCTURED:
             return answers.choices[0].message.parsed  # type: ignore
@@ -123,9 +113,7 @@ class OpenAIProvider(BaseLLMProvider):
     def __get_openai_client(openai_config: OpenAIConfiguration) -> AsyncOpenAI:
         if openai_config.api_type == "azure":
             if openai_config.api_base is None:
-                raise ValueError(
-                    "Azure-OpenAI base url (api_base) not found in configuration."
-                )
+                raise ValueError("Azure-OpenAI base url (api_base) not found in configuration.")
             return AsyncAzureOpenAI(
                 azure_endpoint=openai_config.api_base,
                 api_key=openai_config.api_key,

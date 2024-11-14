@@ -35,9 +35,7 @@ class AgentRanker:
     def get_config_class(cls) -> Type[AgentRankerConfig]:
         return get_type_hints(cls)["config"]
 
-    def _flatten_evaluations(
-        self, experiment: Experiment
-    ) -> list[tuple[str, str, str]]:
+    def _flatten_evaluations(self, experiment: Experiment) -> list[tuple[str, str, str]]:
         evaluations = []
         for query in experiment:
             for game in query.pairwise_games:
