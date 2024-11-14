@@ -9,11 +9,8 @@ from ragelo.types.configurations.answer_evaluator_configs import (
     PairwiseDomainExpertEvaluatorConfig,
     PairwiseEvaluatorConfig,
 )
-from ragelo.types.configurations.base_configs import (
-    AllConfig,
-    BaseConfig,
-    BaseEvaluatorConfig,
-)
+from ragelo.types.configurations.base_configs import BaseConfig, BaseEvaluatorConfig
+from ragelo.types.configurations.cli_configs import CLIConfig
 from ragelo.types.configurations.llm_provider_configs import (
     LLMProviderConfig,
     OllamaConfiguration,
@@ -29,7 +26,7 @@ from ragelo.types.configurations.retrieval_evaluator_configs import (
 )
 
 __all__ = [
-    "AllConfig",
+    "CLIConfig",
     "BaseConfig",
     "BaseEvaluatorConfig",
     "LLMProviderConfig",

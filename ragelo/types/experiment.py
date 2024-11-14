@@ -72,11 +72,11 @@ class Experiment:
         results_save_path: str | None = None,
         persist_on_disk: bool = True,
         clear_evaluations: bool = False,
-        csv_path: str | None = None,
-        csv_query_text_col: str = "query",
-        csv_query_id_col: str | None = None,
-        csv_infer_metadata_fields: bool = True,
-        csv_metadata_fields: list[str] | None = None,
+        queries_csv_path: str | None = None,
+        queries_csv_query_text_col: str = "query",
+        queries_csv_query_id_col: str | None = None,
+        queries_csv_infer_metadata_fields: bool = True,
+        queries_csv_metadata_fields: list[str] | None = None,
         **data,
     ):
         """
@@ -93,11 +93,11 @@ class Experiment:
                 results on disk.
             clear_evaluations (bool, defaults to False): If set to True, will clear all existing evaluations and
                 re-compute as needed.
-            csv_path (Optional[str]): An optional path to a CSV file with the queries to be used in the experiment.
-            csv_query_text_col (str): The column name for query text in the CSV file.
-            csv_query_id_col (Optional[str]): The column name for query ID in the CSV file.
-            csv_infer_metadata_fields (bool, defaults to True): Whether to infer metadata fields from the CSV file.
-            csv_metadata_fields (Optional[list[str]]): The list of metadata fields in the CSV file.
+            queries_csv_path (Optional[str]): An optional path to a CSV file with the queries to be used.
+            queries_csv_query_text_col (str): The column name for query text in the CSV file.
+            queries_csv_query_id_col (Optional[str]): The column name for query ID in the CSV file.
+            queries_csv_infer_metadata_fields (bool, defaults to True): Whether to infer metadata fields from the CSV.
+            queries_csv_metadata_fields (Optional[list[str]]): The list of metadata fields in the CSV file.
         Keyword Args:
             experiment_name (str): The name of your experiment
 
@@ -123,13 +123,13 @@ class Experiment:
         if self.results_cache_path is None:
             self.results_cache_path = self.cache_path.replace(".json", "_results.jsonl")
 
-        if csv_path:
+        if queries_csv_path:
             csv_queries = self._read_queries_from_csv(
-                csv_path,
-                csv_query_text_col,
-                csv_query_id_col,
-                csv_infer_metadata_fields,
-                csv_metadata_fields,
+                queries_csv_path,
+                queries_csv_query_text_col,
+                queries_csv_query_id_col,
+                queries_csv_infer_metadata_fields,
+                queries_csv_metadata_fields,
             )
             if len(self.queries) > 0 and set(csv_queries.keys()) != set(self.queries.keys()):
                 raise ValueError("Queries loaded from the CSV file do not match the queries passed")

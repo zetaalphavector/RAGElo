@@ -1,6 +1,5 @@
 from ragelo.types.configurations import (
     AgentRankerConfig,
-    AllConfig,
     BaseAnswerEvaluatorConfig,
     BaseConfig,
     EloAgentRankerConfig,
@@ -10,6 +9,7 @@ from ragelo.types.configurations import (
     PairwiseEvaluatorConfig,
     ReasonerEvaluatorConfig,
 )
+from ragelo.types.configurations.cli_configs import CLIConfig
 from ragelo.types.evaluables import AgentAnswer, Document, PairwiseGame
 from ragelo.types.experiment import Experiment
 from ragelo.types.formats import AnswerFormat
@@ -30,7 +30,7 @@ __all__ = [
     "AgentAnswer",
     "AgentRankerConfig",
     "AgentRankerTypes",
-    "AllConfig",
+    "CLIConfig",
     "BaseAnswerEvaluatorConfig",
     "BaseConfig",
     "EloAgentRankerConfig",

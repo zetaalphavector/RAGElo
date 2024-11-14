@@ -68,9 +68,7 @@ def get_params_from_function(func: Callable[..., Any]) -> Dict[str, ParamMeta]:
                             continue
                     if k in arguments:
                         argument = ArgumentInfo(default=v.default, help=description)
-                        params[k] = ParamMeta(
-                            name=k, default=argument, annotation=_type
-                        )
+                        params[k] = ParamMeta(name=k, default=argument, annotation=_type)
                     else:
                         option = OptionInfo(
                             default=v.default,
@@ -82,7 +80,5 @@ def get_params_from_function(func: Callable[..., Any]) -> Dict[str, ParamMeta]:
                     params[k] = ParamMeta(name=k, default=v, annotation=_type)
 
         else:
-            params[param.name] = ParamMeta(
-                name=param.name, default=param.default, annotation=annotation
-            )
+            params[param.name] = ParamMeta(name=param.name, default=param.default, annotation=annotation)
     return params
