@@ -140,7 +140,3 @@ class RDNAMEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default=AnswerFormat.JSON,
         description="The format of the answer returned by the LLM",
     )
-    scoring_key_retrieval_evaluator: str = Field(
-        default="answer",
-        description="The field to use when parsing the llm answer",
-    )

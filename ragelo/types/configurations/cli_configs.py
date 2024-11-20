@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from typing import Any, Type
-
-from pydantic import BaseModel as PydanticBaseModel
 from pydantic import Field
 
+from ragelo.types.configurations.agent_ranker_configs import EloAgentRankerConfig
+from ragelo.types.configurations.answer_evaluator_configs import (
+    PairwiseDomainExpertEvaluatorConfig,
+    PairwiseEvaluatorConfig,
+)
 from ragelo.types.configurations.base_configs import BaseEvaluatorConfig
 from ragelo.types.configurations.retrieval_evaluator_configs import (
-    BaseRetrievalEvaluatorConfig,
     DomainExpertEvaluatorConfig,
     RDNAMEvaluatorConfig,
     ReasonerEvaluatorConfig,
@@ -33,36 +34,61 @@ class BaseCLIConfig(BaseEvaluatorConfig):
         default=True,
         description="Whether or not to be verbose and print all intermediate steps.",
     )
+    llm_answer_format: str = Field(
+        default=AnswerFormat.JSON,
+        description="The format of the answer returned by the LLM.",
+    )
+    output_file: str = Field(
+        default="output.json",
+        description="The path to the output file where the results will be saved.",
+    )
+    llm_response_schema: None = None
 
 
-class CLIRetrievalEvaluatorConfig(BaseCLIConfig, BaseRetrievalEvaluatorConfig):
+class CLIEvaluatorConfig(BaseCLIConfig):
     documents_csv_file: str = Field(
         default="documents.csv",
-        description="The path to the documents CSV file. The file should contain at least the following columns: "
-        "qid, did, document. Any additional columns will be considered as metadata.",
-    )
-    llm_answer_format: str | AnswerFormat = Field(
-        default=AnswerFormat.JSON,
-        description="The format of the answer returned by the LLM for the retrieval evaluator.",
-    )
-    llm_response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = Field(
-        default=None,
         description=(
-            "The response schema for the LLM for the retrieval evaluator. "
-            "Required if the llm_answer_format is structured and recommended for JSON."
+            "The path to the documents CSV file. The file should contain at least the following columns: "
+            "qid, did, document. Any additional columns will be considered as metadata."
         ),
     )
+    answers_csv_file: str = Field(
+        default="answers.csv",
+        description="The path to the answers CSV file. The file should contain at least the following columns: "
+        "qid, agent, answer. Any additional columns will be considered as metadata. Ignored on Retrieval Evaluators.",
+    )
 
 
-class CLIDomainExpertEvaluatorConfig(CLIRetrievalEvaluatorConfig, DomainExpertEvaluatorConfig):
+class CLIDomainExpertEvaluatorConfig(CLIEvaluatorConfig, DomainExpertEvaluatorConfig):
     pass
 
 
-class CLIReasonerEvaluatorConfig(CLIRetrievalEvaluatorConfig, ReasonerEvaluatorConfig):
+class CLIReasonerEvaluatorConfig(CLIEvaluatorConfig, ReasonerEvaluatorConfig):
     pass
 
 
-class CLIRDNAMEvaluatorConfig(CLIRetrievalEvaluatorConfig, RDNAMEvaluatorConfig):
+class CLIRDNAMEvaluatorConfig(CLIEvaluatorConfig, RDNAMEvaluatorConfig):
+    pass
+
+
+class CLIPairwiseDomainExpertEvaluatorConfig(CLIEvaluatorConfig, PairwiseDomainExpertEvaluatorConfig):
+    add_reasoning: bool = Field(
+        default=False,
+        description="If set to True, a reasoning retrieval evaluator will run, and the reasoning of the quality "
+        "  of the retrieved results will be included in the prompt for the pairwise games.",
+    )
+
+
+class CLIPairwiseEvaluatorConfig(CLIEvaluatorConfig, PairwiseEvaluatorConfig):
+    add_reasoning: bool = Field(
+        default=False,
+        description="If set to True, a reasoning retrieval evaluator will run, and the reasoning of the quality "
+        "  of the retrieved results will be included in the prompt for the pairwise games.",
+    )
+
+
+class CLIEloAgentRankerConfig(BaseCLIConfig, EloAgentRankerConfig):
     pass
 
 
@@ -78,32 +104,6 @@ class CLIConfig(BaseCLIConfig):
         "qid, did, answer. Any additional columns will be considered as metadata.",
     )
 
-    llm_answer_format_retrieval_evaluator: str | AnswerFormat = Field(
-        default=AnswerFormat.JSON,
-        description="The format of the answer returned by the LLM for the retrieval evaluator.",
-    )
-    llm_response_schema_retrieval_evaluator: Type[PydanticBaseModel] | dict[str, Any] | None = Field(
-        default=None,
-        description=(
-            "The response schema for the LLM for the retrieval evaluator. "
-            "Required if the llm_answer_format is structured and recommended for JSON."
-        ),
-    )
-    llm_answer_format_answer_evaluator: str | AnswerFormat = Field(
-        default=AnswerFormat.JSON,
-        description="The format of the answer returned by the LLM for the answer evaluator.",
-    )
-    llm_response_schema_answer_evaluator: Type[PydanticBaseModel] | dict[str, Any] | None = Field(
-        default=None,
-        description=(
-            "The response schema for the LLM for the answer evaluator. "
-            "Required if the llm_answer_format is structured and recommended for JSON."
-        ),
-    )
-    scoring_key_retrieval_evaluator: str = Field(
-        default="answer",
-        description="When using answer_format=json, the key to extract from the answer for the retrieval evaluator.",
-    )
     k: int = Field(default=100, description="Number of pairwise games to generate")
     initial_score: int = Field(default=1000, description="The initial Elo score for each agent")
     elo_k: int = Field(default=32, description="The K factor for the Elo ranking algorithm")

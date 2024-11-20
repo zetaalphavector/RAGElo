@@ -32,14 +32,19 @@ def domain_expert(config: CLIDomainExpertEvaluatorConfig = CLIDomainExpertEvalua
     config = CLIDomainExpertEvaluatorConfig(**kwargs)
     queries_csv_file = get_path(config.data_dir, config.queries_csv_file)
     documents_file = get_path(config.data_dir, config.documents_csv_file)
+    experiment = Experiment(
+        experiment_name=config.experiment_name,
+        queries_csv_path=queries_csv_file,
+        documents_csv_path=documents_file,
+    )
 
     llm_provider = get_llm_provider(config.llm_provider_name, **kwargs)
-    experiment = Experiment(experiment_name=config.experiment_name, queries_csv_path=queries_csv_file)
-    experiment.add_retrieved_docs_from_csv(documents_file)
+
     evaluator = get_retrieval_evaluator(
         RetrievalEvaluatorTypes.DOMAIN_EXPERT, config=config, llm_provider=llm_provider
     )
     evaluator.evaluate_experiment(experiment)
+    experiment.save()
 
 
 @app.command()
@@ -50,12 +55,17 @@ def reasoner(config: CLIReasonerEvaluatorConfig = CLIReasonerEvaluatorConfig(), 
     config = CLIReasonerEvaluatorConfig(**kwargs)
     queries_csv_file = get_path(config.data_dir, config.queries_csv_file)
     documents_file = get_path(config.data_dir, config.documents_csv_file)
+    experiment = Experiment(
+        experiment_name=config.experiment_name,
+        queries_csv_path=queries_csv_file,
+        documents_csv_path=documents_file,
+    )
 
     llm_provider = get_llm_provider(config.llm_provider_name, **kwargs)
-    experiment = Experiment(experiment_name=config.experiment_name, queries_csv_path=queries_csv_file)
-    experiment.add_retrieved_docs_from_csv(documents_file)
+
     evaluator = get_retrieval_evaluator(RetrievalEvaluatorTypes.REASONER, config=config, llm_provider=llm_provider)
     evaluator.evaluate_experiment(experiment)
+    experiment.save()
 
 
 @app.command()
@@ -67,12 +77,17 @@ def rdnam(config: CLIRDNAMEvaluatorConfig = CLIRDNAMEvaluatorConfig(), **kwargs)
     config = CLIRDNAMEvaluatorConfig(**kwargs)
     queries_csv_file = get_path(config.data_dir, config.queries_csv_file)
     documents_file = get_path(config.data_dir, config.documents_csv_file)
+    experiment = Experiment(
+        experiment_name=config.experiment_name,
+        queries_csv_path=queries_csv_file,
+        documents_csv_path=documents_file,
+    )
 
     llm_provider = get_llm_provider(config.llm_provider_name, **kwargs)
-    experiment = Experiment(experiment_name=config.experiment_name, queries_csv_path=queries_csv_file)
-    experiment.add_retrieved_docs_from_csv(documents_file)
+
     evaluator = get_retrieval_evaluator(RetrievalEvaluatorTypes.RDNAM, config=config, llm_provider=llm_provider)
     evaluator.evaluate_experiment(experiment)
+    experiment.save()
 
 
 if __name__ == "__main__":

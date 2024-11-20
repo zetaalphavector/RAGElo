@@ -55,10 +55,6 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     evaluator_name: str | AnswerEvaluatorTypes = AnswerEvaluatorTypes.PAIRWISE
     bidirectional: bool = Field(default=False, description="Whether or not to run each game in both directions")
     n_games_per_query: int = Field(default=100, description="Maximum number of games to generate for each query")
-    games_evaluations_path: str = Field(
-        default="pairwise_answers_evaluations.csv",
-        description="Path to the output file",
-    )
     pairwise: bool = Field(default=True, description="Whether or not to the evaluator is pairwise")
     document_template: str = Field(
         default="[{did}] {annotation}",
@@ -136,14 +132,6 @@ class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
             "The prompt to be used to evaluate the documents. "
             "It should contain a {query} and a {document} placeholder"
         ),
-    )
-    answers_evaluations_path: str = Field(
-        default="custom_prompt_answers_evaluations.csv",
-        description="Path to the output file",
-    )
-    scoring_keys_answer_evaluator: list[str] = Field(
-        default=["quality", "trustworthiness", "originality"],
-        description="The fields to extract from the answer",
     )
     llm_answer_format: str | AnswerFormat = Field(
         default=AnswerFormat.JSON,

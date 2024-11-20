@@ -112,7 +112,7 @@ class BaseEvaluator(ABC):
                 if evaluation.exception:
                     failed += 1
                     continue
-                experiment.add_evaluation(evaluation)
+                experiment.add_evaluation(evaluation, exist_ok=True)
         pbar.close()
         if self.config.verbose:
             self._print_failed_evaluations(evaluations, failed)

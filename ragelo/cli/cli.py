@@ -41,11 +41,16 @@ def run_all(config: CLIConfig = CLIConfig(), **kwargs):
     documents_file = get_path(config.data_dir, config.documents_csv_file)
     answers_file = get_path(config.data_dir, config.answers_csv_file)
 
-    experiment = Experiment(experiment_name=config.experiment_name, queries_csv_path=queries_csv_file)
-    experiment.add_retrieved_docs_from_csv(documents_file)
-    experiment.add_answers_from_csv(answers_file)
+    experiment = Experiment(
+        experiment_name=config.experiment_name,
+        queries_csv_path=queries_csv_file,
+        documents_csv_path=documents_file,
+        answers_csv_path=answers_file,
+    )
 
     kwargs = config.model_dump()
+    kwargs.pop("llm_answer_format")
+    kwargs.pop("llm_response_schema")
     retrieval_evaluator = get_retrieval_evaluator("reasoner", llm_provider=llm_provider, **kwargs)
 
     answers_evaluator = get_answer_evaluator("pairwise", llm_provider=llm_provider, **kwargs)
@@ -55,6 +60,7 @@ def run_all(config: CLIConfig = CLIConfig(), **kwargs):
 
     ranker = get_agent_ranker("elo", **kwargs)
     ranker.run(experiment=experiment)
+    experiment.save(output_path=config.output_file)
 
 
 if __name__ == "__main__":

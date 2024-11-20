@@ -1,24 +1,20 @@
 import typer
 
-from ragelo import get_agent_ranker
+from ragelo import Experiment, get_agent_ranker
 from ragelo.cli.args import get_params_from_function
 from ragelo.cli.utils import get_path
-from ragelo.types import AgentRankerTypes, EloAgentRankerConfig
-from ragelo.utils import load_answer_evaluations_from_csv
+from ragelo.types import AgentRankerTypes
+from ragelo.types.configurations.cli_configs import CLIEloAgentRankerConfig
 
 typer.main.get_params_from_function = get_params_from_function  # type: ignore
 app = typer.Typer()
 
 
 @app.command()
-def elo(config: EloAgentRankerConfig = EloAgentRankerConfig(), **kwargs):
+def elo(config: CLIEloAgentRankerConfig = CLIEloAgentRankerConfig(), **kwargs):
     """Evaluate the performance of multiple agents using an Elo ranking system."""
-    config = EloAgentRankerConfig(**kwargs)
-    config.evaluations_file = get_path(config.data_dir, config.evaluations_file)
-    config.agents_evaluations_file = get_path(
-        config.data_dir, config.agents_evaluations_file, check_exists=False
-    )
+    config = CLIEloAgentRankerConfig(**kwargs)
+    queries_csv_file = get_path(config.data_dir, config.queries_csv_file)
+    experiment = Experiment(experiment_name=config.experiment_name, queries_csv_path=queries_csv_file)
     ranker = get_agent_ranker(AgentRankerTypes.ELO, config=config)
-    queries = load_answer_evaluations_from_csv(config.evaluations_file)
-
-    ranker.run(queries=queries)
+    ranker.run(experiment=experiment)

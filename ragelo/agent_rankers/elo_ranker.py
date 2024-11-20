@@ -58,7 +58,7 @@ class EloRanker(AgentRanker):
             total_games=self.total_games,
             total_tournaments=self.config.tournaments,
         )
-        experiment.add_evaluation(result, False)
+        experiment.add_evaluation(result)
         return result
 
     def get_agents_ratings(self):

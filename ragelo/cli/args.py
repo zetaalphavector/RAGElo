@@ -1,9 +1,12 @@
 """Parse arguments for the cli app"""
 
+from __future__ import annotations
+
 import collections.abc
 import inspect
 import sys
-from typing import Any, Callable, Dict, Union, get_args, get_origin, get_type_hints
+from types import NoneType, UnionType
+from typing import Any, Callable, Dict, get_args, get_origin, get_type_hints
 
 from typer.models import ArgumentInfo, OptionInfo, ParameterInfo, ParamMeta
 
@@ -11,10 +14,10 @@ from ragelo.types import BaseConfig
 from ragelo.types.pydantic_models import _PYDANTIC_MAJOR_VERSION
 
 arguments = {
-    "queries_file",
-    "documents_file",
+    "queries_csv_file",
+    "documents_csv_file",
+    "answers_csv_file",
     "domain_long",
-    "answers_file",
     "reasoning_file",
     "evaluations_file",
     "retrieval_evaluator_name",
@@ -51,14 +54,20 @@ def get_params_from_function(func: Callable[..., Any]) -> Dict[str, ParamMeta]:
                     _type = v.type_  # type: ignore
                     _outer_type = v.outer_type_  # type: ignore
                     t_args = get_args(_outer_type)
+                if get_origin(_outer_type) == list:
+                    _type = _outer_type
+                if get_origin(_outer_type) == NoneType or _type == NoneType:
+                    continue
+                if get_origin(_outer_type) == dict:
+                    continue
+
                 if not isinstance(v, ParameterInfo):
-                    if get_origin(_outer_type) == list:
-                        _type = _outer_type
-                    # elif _outer_type == Union:
-                    # _type = t_args[0]
-                    # parse the Union type, defaulting to the str type if possible
                     if len(t_args) > 1:
-                        if get_origin(_outer_type) == Union:
+                        # To resolve the True argument type, first remove any NoneType from the list of types"
+                        t_args = [t for t in t_args if t != NoneType]
+                        if len(t_args) == 1:
+                            _type = t_args[0]
+                        if get_origin(_outer_type) == UnionType:
                             _type = t_args[0]
                         if (
                             get_origin(_outer_type) == collections.abc.Callable

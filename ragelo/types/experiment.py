@@ -12,8 +12,6 @@ import os
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import Field
-
 from ragelo.logger import logger
 from ragelo.types.evaluables import AgentAnswer, Document
 from ragelo.types.query import Query
@@ -62,27 +60,28 @@ class Experiment:
         keys(): Returns the keys (query_ids) of all queries.
     """
 
-    experiment_name: str
-    queries: dict[str, Query] = Field(default_factory=dict)
-    elo_tournaments: list[EloTournamentResult] = Field(default_factory=list)
-
     def __init__(
         self,
+        experiment_name: str,
         save_path: str | None = None,
         results_save_path: str | None = None,
         persist_on_disk: bool = True,
         clear_evaluations: bool = False,
         queries_csv_path: str | None = None,
-        queries_csv_query_text_col: str = "query",
-        queries_csv_query_id_col: str | None = None,
-        queries_csv_infer_metadata_fields: bool = True,
-        queries_csv_metadata_fields: list[str] | None = None,
-        **data,
+        csv_query_id_col: str | None = None,
+        csv_query_text_col: str = "query",
+        documents_csv_path: str | None = None,
+        csv_document_id_col: str | None = None,
+        csv_document_text_col: str = "document",
+        answers_csv_path: str | None = None,
+        csv_agent_col: str = "agent",
+        csv_answer_text_col: str = "answer",
     ):
         """
         Initialize the experiment object with optional data and set up paths and caches.
 
         Args:
+            experiment_name (str): The name of your experiment
             save_path (Optional[str]): A JSON file path to persist the experiment on disk.
                 If not set, will create one based on experiment_name. If it already exists,
                 we will try to load the state from that file.
@@ -94,12 +93,18 @@ class Experiment:
             clear_evaluations (bool, defaults to False): If set to True, will clear all existing evaluations and
                 re-compute as needed.
             queries_csv_path (Optional[str]): An optional path to a CSV file with the queries to be used.
-            queries_csv_query_text_col (str): The column name for query text in the CSV file.
-            queries_csv_query_id_col (Optional[str]): The column name for query ID in the CSV file.
-            queries_csv_infer_metadata_fields (bool, defaults to True): Whether to infer metadata fields from the CSV.
-            queries_csv_metadata_fields (Optional[list[str]]): The list of metadata fields in the CSV file.
-        Keyword Args:
-            experiment_name (str): The name of your experiment
+            csv_query_id_col (Optional[str]): The column name for query ID in the CSV files.
+            csv_query_text_col (str): The column name for query text in the queries CSV file.
+            documents_csv_path (Optional[str]): An optional path to a CSV file with the retrieved documents for
+                the queries.
+            csv_document_id_col (Optional[str]): The column name for document ID in the documents CSV file.
+            csv_document_text_col (str): The column name for document text in the documents CSV file.
+            answers_csv_path (Optional[str]): An optional path to a CSV file with the answers for the queries.
+            csv_agent_col (str, defaults to "agent"): The column name for agent name in the documents and answers
+                CSV files.
+            csv_answer_text_col (str, defaults to "answer"): The column name for answer text in the answers CSV file.
+
+
 
         The initialization process involves setting up paths and loading queries from different sources:
         1. If `csv_path` is provided, queries are loaded from the specified CSV file.
@@ -110,35 +115,34 @@ class Experiment:
         The method prioritizes loading queries from the CSV file over the cache file. If neither source is available,
             it relies on the `queries` attribute if it has been set.
         """
-
-        super().__init__(**data)
         self.save_cache = persist_on_disk
-        self.cache_path = save_path
         self.results_cache_path = results_save_path
+        self.experiment_name = experiment_name
+        self.queries: dict[str, Query] = {}
+        self.elo_tournaments: list[EloTournamentResult] = []
 
-        if self.cache_path is None:
-            os.makedirs("cache", exist_ok=True)
-            self.cache_path = f"cache/{self.experiment_name}.json"
+        if save_path is None:
+            os.makedirs("ragelo_cache", exist_ok=True)
+            self.cache_path = f"ragelo_cache/{self.experiment_name}.json"
+        else:
+            self.cache_path = save_path
 
         if self.results_cache_path is None:
             self.results_cache_path = self.cache_path.replace(".json", "_results.jsonl")
 
-        if queries_csv_path:
-            csv_queries = self._read_queries_from_csv(
-                queries_csv_path,
-                queries_csv_query_text_col,
-                queries_csv_query_id_col,
-                queries_csv_infer_metadata_fields,
-                queries_csv_metadata_fields,
-            )
-            if len(self.queries) > 0 and set(csv_queries.keys()) != set(self.queries.keys()):
-                raise ValueError("Queries loaded from the CSV file do not match the queries passed")
-            self.queries = csv_queries
         if os.path.isfile(self.cache_path):
-            cache_queries = self._load_from_cache(self.cache_path)
-            if len(self.queries) > 0 and set(cache_queries.keys()) != set(self.queries.keys()):
-                raise ValueError("Queries loaded from the cache file do not match the queries passed")
-            self.queries = cache_queries
+            self.queries = self._load_from_cache(self.cache_path)
+        else:
+            self.queries = {}
+        if queries_csv_path:
+            self.add_queries_from_csv(queries_csv_path, csv_query_id_col, csv_query_text_col)
+        if documents_csv_path:
+            self.add_documents_from_csv(
+                documents_csv_path, csv_document_id_col, csv_document_text_col, csv_query_id_col, csv_agent_col
+            )
+        if answers_csv_path:
+            self.add_agent_answers_from_csv(answers_csv_path, csv_agent_col, csv_answer_text_col, csv_query_id_col)
+
         if os.path.isfile(self.results_cache_path):
             self._load_results_from_cache()
         if clear_evaluations:
@@ -248,6 +252,7 @@ class Experiment:
         evaluation: RetrievalEvaluatorResult | AnswerEvaluatorResult | EloTournamentResult,
         should_save: bool = True,
         force: bool = False,
+        exist_ok: bool = False,
     ):
         """
         Adds an evaluation to the queries and optionally saves the result.
@@ -259,12 +264,13 @@ class Experiment:
         """
         if isinstance(evaluation, EloTournamentResult):
             self.elo_tournaments.append(evaluation)
+            added = True
         else:
             qid = evaluation.qid
             if qid not in self.queries:
                 raise ValueError(f"Query {qid} not found in queries")
-            self.queries[qid].add_evaluation(evaluation, force=force)
-        if should_save:
+            added = self.queries[qid].add_evaluation(evaluation, force=force, exist_ok=exist_ok)
+        if added and should_save:
             self.save_results(evaluation)
 
     def evaluate_retrieval(
@@ -425,7 +431,7 @@ class Experiment:
 
         return runs_by_agent
 
-    def save(self):
+    def save(self, output_path: str | None = None):
         """
         Persist the current state of the model to disk if caching is enabled.
         This method checks if caching is enabled by evaluating the `save_cache` attribute.
@@ -437,14 +443,15 @@ class Experiment:
 
         if not self.save_cache:
             return
-        if self.cache_path is None:
-            raise ValueError("Cache path not set. Cannot dump queries")
-        output_dict: dict[str, Any] = {qid: query.model_dump() for qid, query in self.queries.items()}
+        output_path = output_path or self.cache_path
+        output_dict: dict[str, Any] = {}
+
+        output_dict["queries"] = {qid: query.model_dump() for qid, query in self.queries.items()}
         output_dict["experiment_name"] = self.experiment_name
         output_dict["elo_tournaments"] = [tournament.model_dump() for tournament in self.elo_tournaments]
 
-        with open(self.cache_path, "w") as f:
-            json.dump(output_dict, f)
+        with open(output_path, "w") as f:
+            json.dump(output_dict, f, indent=4)
 
     def save_results(
         self,
@@ -479,19 +486,48 @@ class Experiment:
                 raise ValueError(f"Cannot save evaluation of type {type(result)} to cache")
             f.write(json.dumps({result_type: result.model_dump()}) + "\n")
 
-    def add_retrieved_docs_from_csv(
+    def add_queries_from_csv(
         self,
-        csv_path: str,
-        query_id_col: str = "qid",
-        document_id_col: str = "did",
-        document_text_col: str = "document_text",
+        file_path: str,
+        query_id_column: str | None = None,
+        query_text_column: str = "query",
+    ):
+        if not os.path.isfile(file_path):
+            raise FileNotFoundError(f"CSV file with queries {file_path} not found")
+        queries: dict[str, Query] = {}
+        read_queries = set()
+        try:
+            query_id_column = self.__infer_query_id_column(file_path)
+        except ValueError:
+            query_id_column = None
+
+        for idx, row in enumerate(csv.DictReader(open(file_path))):
+            if query_id_column is None:
+                query_id_column = f"query_{idx}"
+            else:
+                qid = row.get(query_id_column, f"query_{idx}")
+            if qid in read_queries or qid in queries:
+                logger.warning(f"Query with ID {qid} already read. Skipping")
+                continue
+            query_text = row[query_text_column].strip()
+            metadata = {k: v for k, v in row.items() if k not in [query_id_column, query_text_column]}
+            self.queries[qid] = Query(qid=qid, query=query_text, metadata=metadata)
+            read_queries.add(qid)
+        logger.info(f"Loaded {len(queries)} queries from {file_path}")
+
+    def add_documents_from_csv(
+        self,
+        file_path: str,
+        document_id_col: str | None = "did",
+        document_text_col: str = "document",
+        query_id_col: str | None = "qid",
         agent_col: str | None = None,
     ):
         """
         Loads a list of retrieved documents from a csv file. The csv file should have the following columns:
         query_id, document_id, document_text, [agent], [metadata columns]
         Args:
-            csv_path (str): Path to the CSV file with the retrieved documents.
+            file_path (str): Path to the CSV file with the retrieved documents.
             query_id_col (str): Name of the column with the query id to which the document was retrieved.
                 Defaults to 'qid'.
             document_id_col (str): Name of the column with the document id. Defaults to 'did'.
@@ -500,16 +536,19 @@ class Experiment:
                 Defaults to None.
         """
         documents_read = 0
-        if not os.path.isfile(csv_path):
-            raise FileNotFoundError(f"CSV file {csv_path} not found")
-        for line in csv.DictReader(open(csv_path)):
+        if not os.path.isfile(file_path):
+            raise FileNotFoundError(f"CSV file {file_path} not found")
+        query_id_col = self.__infer_query_id_column(file_path, query_id_col)
+        document_id_col = self.__infer_document_id_column(file_path, document_id_col)
+
+        for line in csv.DictReader(open(file_path)):
             qid = line[query_id_col].strip()
             did = line[document_id_col].strip()
             text = line[document_text_col].strip()
             agent = line.get(agent_col)
             metadata = {k: v for k, v in line.items() if k not in [query_id_col, document_id_col, document_text_col]}
             if qid not in self.queries:
-                logger.warning(f"Query {qid} found in {csv_path} but not found in queries. Skipping")
+                logger.warning(f"Query {qid} found in {file_path} but not found in queries. Skipping")
                 continue
             doc_obj = Document(qid=qid, did=did, text=text)
             doc_obj.add_metadata(metadata)
@@ -517,7 +556,7 @@ class Experiment:
                 doc_obj.add_retrieved_by(agent)
             self.add_retrieved_doc(doc_obj)
             documents_read += 1
-        logger.info(f"Loaded {documents_read} documents from {csv_path}")
+        logger.info(f"Loaded {documents_read} documents from {file_path}")
 
     def add_retrieved_docs_from_runfile(
         self,
@@ -573,9 +612,9 @@ class Experiment:
         if len(missing_docs) > 0:
             logger.warning(f"Loaded {len(documents_read)} documents. {len(missing_docs)} missing docs")
 
-    def add_answers_from_csv(
+    def add_agent_answers_from_csv(
         self,
-        csv_path: str,
+        file_path: str,
         agent_col: str = "agent",
         answer_col: str = "answer",
         query_id_col: str | None = None,
@@ -591,19 +630,17 @@ class Experiment:
             query_id_col (str): Name of the column with the query id.
                 If None, will try to infer the query id column. Defaults to None.
         """
-        if not os.path.isfile(csv_path):
-            raise FileNotFoundError(f"Answers file {csv_path} not found")
+        if not os.path.isfile(file_path):
+            raise FileNotFoundError(f"Answers file {file_path} not found")
         answers_read = 0
-        query_id_col = query_id_col or self.__infer_query_id_column(csv_path)
-        if query_id_col is None:
-            raise ValueError(f"Could not identify Query ID column for file {csv_path}")
-        for line in csv.DictReader(open(csv_path)):
+        query_id_col = self.__infer_query_id_column(file_path, query_id_col)
+        for line in csv.DictReader(open(file_path)):
             qid = line[query_id_col].strip()
             agent = line[agent_col].strip()
             answer = line[answer_col].strip()
             metadata = {k: v for k, v in line.items() if k not in [query_id_col, agent_col, answer_col]}
             if qid not in self.queries:
-                logger.warning(f"Query {qid} found in {csv_path} but not found in queries. Skipping")
+                logger.warning(f"Query {qid} found in {file_path} but not found in queries. Skipping")
                 continue
             answer_obj = AgentAnswer(qid=qid, agent=agent, text=answer)
             answer_obj.add_metadata(metadata)
@@ -671,45 +708,6 @@ class Experiment:
 
             self.save()
 
-    def _read_queries_from_csv(
-        self,
-        csv_path: str,
-        csv_query_text_col: str = "query",
-        csv_query_id_col: str | None = None,
-        csv_infer_metadata_fields: bool = True,
-        csv_metadata_fields: list[str] | None = None,
-    ) -> dict[str, Query]:
-        queries: dict[str, Query] = {}
-        read_queries = set()
-        if not os.path.isfile(csv_path):
-            raise FileNotFoundError(f"CSV file {csv_path} not found")
-        if csv_query_id_col is None:
-            csv_query_id_col = self.__infer_query_id_column(csv_path)
-        with open(csv_path) as f:
-            reader = csv.DictReader(f)
-            headers = reader.fieldnames
-            if headers and csv_infer_metadata_fields:
-                if csv_metadata_fields is None:
-                    csv_metadata_fields = [x for x in headers if x not in [csv_query_id_col, csv_query_text_col]]
-                else:
-                    # Use only the metadata fields that actually exist
-                    csv_metadata_fields = [x for x in csv_metadata_fields if x in headers]
-                    if not csv_metadata_fields:
-                        logger.warning("No metadata fields found in the csv. Ignoring metadata fields")
-                        csv_metadata_fields = None
-            for idx, row in enumerate(reader):
-                qid = row.get(csv_query_id_col) or f"query_{idx}"
-                if qid in read_queries:
-                    logger.warning(f"Query with ID {qid} already read. Skipping")
-                    continue
-                query_text = row[csv_query_text_col].strip()
-                metadata = None
-                if csv_metadata_fields is not None:
-                    metadata = {k: v for k, v in row.items() if k in csv_metadata_fields}
-                queries[qid] = Query(qid=qid, query=query_text, metadata=metadata)
-                read_queries.add(qid)
-        return queries
-
     def _load_from_cache(self, cache_path: str) -> dict[str, Query]:
         if not os.path.isfile(cache_path):
             raise FileNotFoundError(f"Cache file {cache_path} not found")
@@ -718,7 +716,7 @@ class Experiment:
         read_experiment_name = data.get("experiment_name")
         if read_experiment_name and read_experiment_name != self.experiment_name:
             logger.warning(f"Experiment name mismatch. Expected {self.experiment_name}. Found {read_experiment_name}")
-        queries = {k: Query(**v) for k, v in json.load(f)["queries"].items()}
+        queries = {k: Query(**v) for k, v in data.get("queries").items()}
         if "elo_tournaments" in data:
             self.elo_tournaments = [EloTournamentResult(**t) for t in data["elo_tournaments"]]
         return queries
@@ -755,8 +753,10 @@ class Experiment:
         return self.queries[key]
 
     @staticmethod
-    def __infer_query_id_column(file_path: str) -> str | None:
+    def __infer_query_id_column(file_path: str, query_id_col: str | None = None) -> str:
         """Infer the column name with the query id from a CSV file."""
+        if query_id_col is not None:
+            return query_id_col
         possible_qid_columns = [
             "query_id",
             "qid",
@@ -772,7 +772,31 @@ class Experiment:
                 for col in possible_qid_columns:
                     if col in columns:
                         return col
-        return None
+        raise ValueError(f"Could not identify Query ID column for CSV file {file_path}")
+
+    @staticmethod
+    def __infer_document_id_column(file_path: str, doc_id_col: str | None = None) -> str:
+        """Infer the column name with the doc id from a CSV file."""
+        if doc_id_col is not None:
+            return doc_id_col
+        possible_did_columns = [
+            "document_id",
+            "did",
+            "d_id",
+            "documentid",
+            "passage_id",
+            "pid",
+            "p_id",
+            "passageid",
+        ]
+        with open(file_path) as f:
+            reader = csv.DictReader(f)
+            columns = reader.fieldnames
+            if columns is not None:
+                for col in possible_did_columns:
+                    if col in columns:
+                        return col
+        raise ValueError(f"Could not identify Document ID column for CSV file {file_path}")
 
     def keys(self):
         return self.queries.keys()

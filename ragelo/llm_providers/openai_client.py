@@ -69,38 +69,29 @@ class OpenAIProvider(BaseLLMProvider):
         """
         if isinstance(prompt, str):
             prompt = [{"role": "system", "content": prompt}]
+
+        call_args = {
+            "model": self.config.model,
+            "messages": prompt,
+            "temperature": self.config.temperature,
+            "max_tokens": self.config.max_tokens,
+        }
         if answer_format == AnswerFormat.STRUCTURED:
             if not isinstance(response_schema, type(PydanticBaseModel)):
                 raise ValueError("response_schema must be a PydanticBaseModel Class when using structured output.")
-            answers = await self.__openai_client.beta.chat.completions.parse(
-                model=self.config.model,
-                messages=prompt,  # type: ignore
-                temperature=self.config.temperature,
-                max_tokens=self.config.max_tokens,
-                response_format=response_schema,
-            )
+            call_args["response_format"] = response_schema
+
         elif answer_format == AnswerFormat.JSON:
             if isinstance(response_schema, dict):
                 schema = json.dumps(response_schema, indent=4)
-                prompt[0]["content"] += (
+                call_args["messages"][0]["content"] += (
                     "\n\nYour output should be a JSON string that STRICTLY "
                     f"adheres to the following schema:\n{schema}"
                 )
-            answers = await self.__openai_client.chat.completions.create(
-                model=self.config.model,
-                messages=prompt,  # type: ignore
-                temperature=self.config.temperature,
-                max_tokens=self.config.max_tokens,
-                response_format={"type": "json_object"},
-            )
+            call_args["response_format"] = {"type": "json_object"}
 
-        else:
-            answers = await self.__openai_client.chat.completions.create(
-                model=self.config.model,
-                messages=prompt,  # type: ignore
-                temperature=self.config.temperature,
-                max_tokens=self.config.max_tokens,
-            )
+        answers = await self.__openai_client.beta.chat.completions.parse(**call_args)
+
         if not answers.choices or not answers.choices[0].message or not answers.choices[0].message.content:
             raise ValueError("OpenAI did not return any completions.")
         if answer_format == AnswerFormat.STRUCTURED:
