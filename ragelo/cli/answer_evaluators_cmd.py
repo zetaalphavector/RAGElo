@@ -1,5 +1,3 @@
-from math import exp
-
 import typer
 
 from ragelo import (

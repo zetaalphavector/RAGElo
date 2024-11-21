@@ -328,7 +328,8 @@ class Experiment:
         for agent, runs in self.get_runs().items():
             # Transform the keys of the results back to strings
             results[agent] = {
-                str(k): v for k, v in ir_measures.calc_aggregate(measures, qrels, runs).items()  # type: ignore
+                str(k): v
+                for k, v in ir_measures.calc_aggregate(measures, qrels, runs).items()  # type: ignore
             }
 
         key_metric = metrics[0]

@@ -1,5 +1,3 @@
-from pydoc import doc
-
 import typer
 
 from ragelo import (

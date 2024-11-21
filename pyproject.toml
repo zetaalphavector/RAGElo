@@ -27,22 +27,20 @@ classifiers = [
 dependencies = ["openai>=1.10", "tenacity==9.0.0", "typer==0.12.5", "numpy>=1.24", "pydantic>=1.9"]
 
 [project.optional-dependencies]
-dev = [
-    "bandit==1.7.5",
-    "black==23.10.0",
-    "isort==5.12.0",
-    "flake8==6.1.0",
-    "flake8-black==0.3.6",
-    "flake8-isort==6.1.0",
-    "mypy==1.9.0",
-    "Flake8-pyproject==1.2.3",
-    "types-tqdm==4.66.0",
-    "pydantic>=1.9.0",
-    "pytest-asyncio==0.23.6",
-    "pytest-mock==3.12.0",
-]
 eval = [
     "ir-measures>=0.3.4"
+]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.9.0",
+    "pydantic>=1.9.0",
+    "pytest>=8.3.3",
+    "ruff>=0.7.4",
+    "types-tqdm==4.66.0",
+    "pytest-asyncio==0.23.6",
+    "pytest-mock==3.12.0",
+
 ]
 
 [project.scripts]
@@ -55,8 +53,6 @@ Repository = "https://github.com/zetaalphavector/RAGElo"
 [tool.setuptools.packages.find]
 exclude = ["data*"]
 
-[tool.isort]
-profile = "black"
 
 [tool.mypy]
 plugins = ["pydantic.mypy"]
@@ -69,15 +65,14 @@ check_untyped_defs = true
 implicit_reexport = true
 exclude = ["build/", "dist/", "venv/"]
 
-[tool.black]
+
+[tool.ruff]
+exclude = ["docs/examples/notebooks"]
 line-length = 119
+fix = true
 
-[tool.flake8]
-max-line-length = 119
-ignore = ["W503", "E203"]
-per-file-ignores = ['__init__.py:F401,F403']
-exclude = ["build/", "dist/", "venv/"]
-
+[tool.ruff.lint.isort]
+required-imports = ["from __future__ import annotations"]
 
 [tool.setuptools-git-versioning]
 enabled = true

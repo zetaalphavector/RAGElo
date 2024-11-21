@@ -54,11 +54,11 @@ def get_params_from_function(func: Callable[..., Any]) -> Dict[str, ParamMeta]:
                     _type = v.type_  # type: ignore
                     _outer_type = v.outer_type_  # type: ignore
                     t_args = get_args(_outer_type)
-                if get_origin(_outer_type) == list:
+                if get_origin(_outer_type) is list:
                     _type = _outer_type
                 if get_origin(_outer_type) == NoneType or _type == NoneType:
                     continue
-                if get_origin(_outer_type) == dict:
+                if get_origin(_outer_type) is dict:
                     continue
 
                 if not isinstance(v, ParameterInfo):
