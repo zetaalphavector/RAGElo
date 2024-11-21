@@ -1,14 +1,25 @@
 from __future__ import annotations
 
+from typing import Any, Literal
+
+from pydantic import BaseModel as PydanticBaseModel
+from pydantic import Field
+
 from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
     AnswerEvaluatorFactory,
     BaseAnswerEvaluator,
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
+from ragelo.logger import logger
 from ragelo.types.configurations import PairwiseEvaluatorConfig
 from ragelo.types.evaluables import PairwiseGame
+from ragelo.types.formats import AnswerFormat
 from ragelo.types.query import Query
 from ragelo.types.types import AnswerEvaluatorTypes
+
+
+class PairWiseAnswerAnswerFormat(PydanticBaseModel):
+    winner: Literal["A", "B", "C"] = Field(..., description="The winner of the pairwise comparison.")
 
 
 @AnswerEvaluatorFactory.register(AnswerEvaluatorTypes.PAIRWISE)
@@ -86,6 +97,14 @@ and "C" for a tie.
             raise ValueError("At least one of include_annotations or include_raw_documents must be True")
         if config.prompt:
             self.prompt = config.prompt
+        if config.llm_answer_format == AnswerFormat.STRUCTURED:
+            self.config.llm_response_schema = PairWiseAnswerAnswerFormat
+        elif self.config.llm_answer_format != AnswerFormat.JSON:
+            logger.warning("We are using a PairwiseAnswerEvaluator config. Forcing the LLM answer format to JSON.")
+            self.config.llm_answer_format = AnswerFormat.JSON
+            self.config.llm_response_schema = {
+                "winner": "The winner of the pairwise comparison. Either 'A', 'B', or 'C' for a tie."
+            }
 
     def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> str | list[dict[str, str]]:
         documents = self._prepare_documents(query)
@@ -120,12 +139,13 @@ and "C" for a tie.
         }
         return self.prompt.format(**formatters)
 
-    def _process_answer(self, raw_answer: dict[str, str]) -> str:
+    def _process_answer(
+        self, raw_answer: str | dict[str, Any] | PydanticBaseModel
+    ) -> str | dict[str, Any] | PydanticBaseModel:
         """Extracts the relevant part of an answer."""
-        try:
-            answer = raw_answer["winner"]
-        except KeyError as e:
-            raise ValueError(f"Could not find 'winner' in answer: {raw_answer}") from e
-        if answer not in ["A", "B", "C"]:
-            raise ValueError(f"Unknown answer: {answer}")
-        return answer
+        self._validate_answer(raw_answer)
+        if isinstance(raw_answer, PairWiseAnswerAnswerFormat):
+            return raw_answer.winner
+        if isinstance(raw_answer, dict):
+            return raw_answer["winner"]
+        return raw_answer

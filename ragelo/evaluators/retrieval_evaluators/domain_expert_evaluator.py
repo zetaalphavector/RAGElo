@@ -11,7 +11,7 @@ from ragelo.evaluators.retrieval_evaluators import (
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.logger import logger
 from ragelo.types.configurations import DomainExpertEvaluatorConfig
-from ragelo.types.evaluables import Document
+from ragelo.types.evaluables import Document, Evaluable
 from ragelo.types.formats import AnswerFormat
 from ragelo.types.query import Query
 from ragelo.types.results import RetrievalEvaluatorResult
@@ -126,8 +126,9 @@ document given the particular query. The score meaning is as follows:
         )
         return reason_prompt
 
-    async def evaluate_async(self, eval_sample: tuple[Query, Document]) -> RetrievalEvaluatorResult:
+    async def evaluate_async(self, eval_sample: tuple[Query, Evaluable]) -> RetrievalEvaluatorResult:
         query, document = eval_sample
+        assert isinstance(document, Document)
         reason_message = self.__build_reason_message(query, document)
         exc = None
         if document.evaluation is not None and not self.config.force:
@@ -138,6 +139,7 @@ document given the particular query. The score meaning is as follows:
         ]
         try:
             reasoning_answer = await self.llm_provider.call_async(messages, answer_format=AnswerFormat.TEXT)
+            assert isinstance(reasoning_answer, str)
         except Exception as e:
             logger.warning(f"Failed to FETCH reasonings for qid: {query.qid}")
             logger.warning(f"document id: {document.did}")
@@ -158,7 +160,7 @@ document given the particular query. The score meaning is as follows:
             score_answer = await self.llm_provider.call_async(
                 messages,
                 answer_format=AnswerFormat.JSON,
-                response_schema=self.config.llm_response_schema,
+                response_format=self.config.llm_response_schema,
             )
             assert isinstance(score_answer, dict)
             answer = score_answer["score"]  # type: ignore

@@ -35,7 +35,7 @@ class BaseRetrievalEvaluatorConfig(BaseEvaluatorConfig):
 
 class ReasonerEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.REASONER
-    llm_answer_format: str | AnswerFormat = Field(
+    llm_answer_format: AnswerFormat = Field(
         default=AnswerFormat.TEXT,
         description="The format of the answer returned by the LLM",
     )
@@ -61,7 +61,7 @@ class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default=None,
         description="A list of extra guidelines to be used when reasoning about the " "relevancy of the document.",
     )
-    llm_answer_format: str | AnswerFormat = Field(
+    llm_answer_format: AnswerFormat = Field(
         default=AnswerFormat.JSON,
         description="The format of the answer returned by the LLM",
     )
@@ -136,7 +136,7 @@ class RDNAMEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default=False,
         description="Should the prompt ask the LLM to mimic multiple annotators?",
     )
-    llm_answer_format: str | AnswerFormat = Field(
+    llm_answer_format: AnswerFormat = Field(
         default=AnswerFormat.JSON,
         description="The format of the answer returned by the LLM",
     )

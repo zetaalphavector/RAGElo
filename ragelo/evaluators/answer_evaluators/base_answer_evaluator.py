@@ -6,7 +6,7 @@ import asyncio
 import itertools
 import random
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Callable, Type, get_type_hints
+from typing import Any, Callable, Sequence, Type, get_type_hints
 
 from tenacity import RetryError
 
@@ -17,7 +17,7 @@ from ragelo.types.configurations import (
     BaseAnswerEvaluatorConfig,
     PairwiseEvaluatorConfig,
 )
-from ragelo.types.evaluables import AgentAnswer, Document, PairwiseGame
+from ragelo.types.evaluables import AgentAnswer, Document, Evaluable, PairwiseGame
 from ragelo.types.experiment import Experiment
 from ragelo.types.query import Query
 from ragelo.types.results import AnswerEvaluatorResult
@@ -83,6 +83,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
             query.retrieved_docs = retrieved_and_assembled_docs
 
         agent: str | tuple[str, str]
+        evaluable: AgentAnswer | PairwiseGame
 
         def run(coroutine):
             return asyncio.run(coroutine)
@@ -134,12 +135,17 @@ class BaseAnswerEvaluator(BaseEvaluator):
             self.__add_pairwise_games(experiment)
         super().evaluate_experiment(experiment, n_threads)
 
-    async def evaluate_async(self, eval_sample: tuple[Query, PairwiseGame | AgentAnswer]) -> AnswerEvaluatorResult:
+    async def evaluate_async(self, eval_sample: tuple[Query, Evaluable]) -> AnswerEvaluatorResult:
         """
         Evaluates a single sample asynchronously
         """
-        query, evaluable = eval_sample
         agent: str | tuple[str, str]
+        query, evaluable = eval_sample
+
+        if not isinstance(evaluable, AgentAnswer) or not isinstance(evaluable, PairwiseGame):
+            type_name = type(evaluable).__name__
+            raise ValueError(f"can't evaluate a {type_name} in a Retrieval Evaluator")
+
         if evaluable.evaluation is not None and not self.config.force:
             if isinstance(evaluable, AgentAnswer):
                 return AnswerEvaluatorResult(
@@ -172,7 +178,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
             raw_answer = await self.llm_provider.call_async(
                 prompt,
                 answer_format=self.config.llm_answer_format,
-                response_schema=self.config.llm_response_schema,
+                response_format=self.config.llm_response_schema,
             )
         except Exception as e:
             logger.warning(f"Failed to FETCH answers for qid: {query.qid}")
@@ -211,7 +217,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
             exception=exc,
         )
 
-    def _get_tuples_to_evaluate(self, experiment: Experiment) -> list[tuple[Query, PairwiseGame | AgentAnswer]]:
+    def _get_tuples_to_evaluate(self, experiment: Experiment) -> Sequence[tuple[Query, Evaluable]]:
         """
         Creates the list of pairs (query, evaluable) to evaluate
         """

@@ -14,7 +14,7 @@ from ragelo.evaluators.base_evaluator import BaseEvaluator
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
 from ragelo.logger import logger
 from ragelo.types.configurations import BaseRetrievalEvaluatorConfig
-from ragelo.types.evaluables import Document
+from ragelo.types.evaluables import Document, Evaluable
 from ragelo.types.experiment import Experiment
 from ragelo.types.query import Query
 from ragelo.types.results import RetrievalEvaluatorResult
@@ -63,9 +63,12 @@ class BaseRetrievalEvaluator(BaseEvaluator):
 
     async def evaluate_async(
         self,
-        eval_sample: tuple[Query, Document],
+        eval_sample: tuple[Query, Evaluable],
     ) -> RetrievalEvaluatorResult:
         query, document = eval_sample
+        if not isinstance(document, Document):
+            type_name = type(document).__name__
+            raise ValueError(f"can't evaluate a {type_name} in a Retrieval Evaluator")
         exc = None
         if document.evaluation is not None and not self.config.force:
             return document.evaluation  # type: ignore
@@ -74,7 +77,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             raw_answer = await self.llm_provider.call_async(
                 prompt,
                 answer_format=self.config.llm_answer_format,
-                response_schema=self.config.llm_response_schema,
+                response_format=self.config.llm_response_schema,
             )
         except Exception as e:
             logger.warning(f"Failed to FETCH answers for qid: {query.qid}")
@@ -105,7 +108,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             exception=exc,
         )
 
-    def _get_tuples_to_evaluate(self, experiment: Experiment) -> list[tuple[Query, Document]]:
+    def _get_tuples_to_evaluate(self, experiment: Experiment) -> list[tuple[Query, Evaluable]]:
         tuples_to_eval = []
         all_tuples = 0
         missing_evaluations = 0

@@ -31,7 +31,7 @@ class BaseEvaluatorConfig(BaseConfig):
         default="query",
         description="The placeholder for the query in the prompt.",
     )
-    llm_answer_format: str | AnswerFormat = Field(
+    llm_answer_format: AnswerFormat = Field(
         default=AnswerFormat.JSON,
         description="The format of the answer returned by the LLM.",
     )

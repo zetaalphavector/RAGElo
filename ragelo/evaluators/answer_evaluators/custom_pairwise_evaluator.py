@@ -26,6 +26,8 @@ class CustomPairwiseEvaluator(BaseAnswerEvaluator):
     ):
         super().__init__(config, llm_provider)
         self.system_prompt = config.system_prompt
+        if not config.user_prompt:
+            raise ValueError("User prompt is required for the custom pairwise evaluator.")
         self.user_prompt = config.user_prompt
 
     def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> str | list[dict[str, str]]:
@@ -59,13 +61,3 @@ class CustomPairwiseEvaluator(BaseAnswerEvaluator):
         user_message = self.user_prompt.format(**formatters)
         messages.append({"role": "user", "content": user_message})
         return messages
-
-    def _process_answer(self, raw_answer: dict[str, str]) -> str:
-        """Extracts the relevant part of an answer."""
-        try:
-            answer = raw_answer["winner"]
-        except KeyError as e:
-            raise ValueError(f"Could not find 'winner' in answer: {raw_answer}") from e
-        if answer not in ["A", "B", "C"]:
-            raise ValueError(f"Unknown answer: {answer}")
-        return answer

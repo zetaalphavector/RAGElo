@@ -329,11 +329,11 @@ class Experiment:
             measures.append(measure)
         metrics = [str(m) for m in measures]
         results = {}
-        for agent, runs in self.get_runs().items():
+        for agent, run in runs.items():
             # Transform the keys of the results back to strings
             results[agent] = {
                 str(k): v
-                for k, v in ir_measures.calc_aggregate(measures, qrels, runs).items()  # type: ignore
+                for k, v in ir_measures.calc_aggregate(measures, qrels, run).items()  # type: ignore
             }
 
         key_metric = metrics[0]
@@ -415,18 +415,18 @@ class Experiment:
                 corresponding float values.
         """
 
-        runs_by_agent = {}
+        runs_by_agent: dict[str, dict[str, dict[str, float]]] = {}
         for query in self.queries.values():
             runs = query.get_runs(agents)
-            for agent, runs in runs.items():
-                runs_by_agent[agent] = runs_by_agent.get(agent, {}) | runs
+            for agent, run in runs.items():
+                runs_by_agent[agent] = runs_by_agent.get(agent, {}) | run
         if output_path:
             if output_format.lower() == "trec":
                 if not os.path.isdir(output_path):
                     os.makedirs(output_path, exist_ok=True)
-                for agent, runs in runs_by_agent.items():
+                for agent, run in runs_by_agent.items():
                     with open(f"{output_path}/{agent}.run", "w") as f:
-                        for qid, docs in runs.items():
+                        for qid, docs in run.items():
                             sorted_scores = sorted(docs.items(), key=lambda x: x[1], reverse=True)
                             for idx, (did, score) in enumerate(sorted_scores):
                                 f.write(f"{qid} Q0 {did} {idx+1} {score} {agent}\n")
@@ -567,7 +567,7 @@ class Experiment:
         self,
         run_file_path: str,
         corpus: dict[str, Document] | dict[str, str],
-        top_k: int | None = None,
+        top_k: int = 1000,
     ):
         """
         Adds the retrieved documents from a run file to the queries.

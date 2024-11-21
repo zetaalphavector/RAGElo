@@ -73,7 +73,7 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
             "If not provided, a default string will be used"
         ),
     )
-    llm_answer_format: str | AnswerFormat = Field(
+    llm_answer_format: AnswerFormat = Field(
         default=AnswerFormat.JSON,
         description="The format of the answer returned by the LLM",
     )
@@ -98,12 +98,12 @@ class CustomPairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     """Configuration for a custom pairwise evaluator."""
 
     evaluator_name: str | AnswerEvaluatorTypes = AnswerEvaluatorTypes.CUSTOM_PAIRWISE
-    system_prompt: str = Field(default=None, description="System prompt to use for the evaluator")
-    user_prompt: str = Field(default=None, description="User prompt to use for the evaluator.")
+    system_prompt: str = Field(description="System prompt to use for the evaluator")
+    user_prompt: str | None = Field(default=None, description="User prompt to use for the evaluator.")
     bidirectional: bool = Field(default=False, description="Whether or not to run each game in both directions")
     n_games_per_query: int = Field(default=100, description="Maximum number of games to generate for each query")
     pairwise: bool = Field(default=True, description="Whether or not to the evaluator is pairwise")
-    llm_answer_format: str | AnswerFormat = Field(
+    llm_answer_format: AnswerFormat = Field(
         default=AnswerFormat.JSON,
         description="The format of the answer returned by the LLM",
     )
@@ -133,7 +133,7 @@ class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
             "It should contain a {query} and a {document} placeholder"
         ),
     )
-    llm_answer_format: str | AnswerFormat = Field(
+    llm_answer_format: AnswerFormat = Field(
         default=AnswerFormat.JSON,
         description="The format of the answer returned by the LLM",
     )

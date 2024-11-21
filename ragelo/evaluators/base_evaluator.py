@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import string
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
@@ -118,7 +119,7 @@ class BaseEvaluator(ABC):
             self._print_failed_evaluations(evaluations, failed)
 
     @abstractmethod
-    def _get_tuples_to_evaluate(self, queries: Experiment) -> list[tuple[Query, Evaluable]]:
+    def _get_tuples_to_evaluate(self, queries: Experiment) -> Sequence[tuple[Query, Evaluable]]:
         raise NotImplementedError
 
     def _validate_answer(
@@ -144,7 +145,7 @@ class BaseEvaluator(ABC):
 
     def _process_answer(
         self, raw_answer: str | dict[str, Any] | PydanticBaseModel
-    ) -> int | str | dict[str, Any] | PydanticBaseModel:
+    ) -> float | str | dict[str, Any] | PydanticBaseModel:
         """Processes the raw answer returned by the LLM. Should be implemented by the subclass if needed."""
         self._validate_answer(raw_answer)
         return raw_answer

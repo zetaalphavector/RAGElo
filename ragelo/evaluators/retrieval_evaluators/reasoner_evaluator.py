@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     BaseRetrievalEvaluator,
     RetrievalEvaluatorFactory,
@@ -41,6 +43,3 @@ user question.
             self.config.document_placeholder: document.text,
         }
         return self.prompt.format(**formatters)
-
-    def _process_answer(self, answer: str) -> str:
-        return answer
