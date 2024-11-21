@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from unittest.mock import AsyncMock
 
 import pytest
@@ -9,18 +11,16 @@ from ragelo.llm_providers.openai_client import OpenAIProvider
 class TestOpenAIProvider:
     def test_response(
         self,
-        chat_completion_mock,
+        chat_completion_mock_text,
         openai_client_mock,
         openai_client_config,
         monkeypatch,
         mocker,
     ):
-        mocker.patch("openai.types.chat.chat_completion", new_callable=AsyncMock)
+        mocker.patch("openai.types.chat.parsed_chat_completion", new_callable=AsyncMock)
 
         openai_client = OpenAIProvider(config=openai_client_config)
-        monkeypatch.setattr(
-            openai_client, "_OpenAIProvider__openai_client", openai_client_mock
-        )
+        monkeypatch.setattr(openai_client, "_OpenAIProvider__openai_client", openai_client_mock)
 
         prompt = "hello world"
         prompts = [
@@ -32,7 +32,7 @@ class TestOpenAIProvider:
         result = openai_client(prompts)
         assert result == "fake response"
 
-        call_args = chat_completion_mock.create.call_args_list
+        call_args = chat_completion_mock_text.parse.call_args_list
         assert call_args[0][1]["model"] == "fake model"
         assert call_args[0][1]["messages"] == [{"role": "system", "content": prompt}]
         assert call_args[1][1]["messages"] == prompts
@@ -49,9 +49,7 @@ class TestOpenAIProvider:
         mocker.patch("openai.types.chat.chat_completion", new_callable=AsyncMock)
 
         openai_client = OpenAIProvider(config=openai_client_config)
-        monkeypatch.setattr(
-            openai_client, "_OpenAIProvider__openai_client", openai_client_mock
-        )
+        monkeypatch.setattr(openai_client, "_OpenAIProvider__openai_client", openai_client_mock)
 
         prompt = "hello world"
         prompts = [

@@ -1,73 +1,55 @@
+from __future__ import annotations
+
 import json
 from unittest.mock import AsyncMock, Mock
 
 import pytest
 from openai import AsyncOpenAI
-from openai.resources.chat import AsyncChat
+from openai.resources.beta import AsyncBeta
+from openai.resources.beta.chat import AsyncChat, AsyncCompletions
 from openai.types.chat.chat_completion import ChatCompletion, Choice
 from openai.types.chat.chat_completion_message import ChatCompletionMessage
+from openai.types.chat.parsed_chat_completion import ParsedChatCompletion, ParsedChatCompletionMessage, ParsedChoice
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.llm_providers.openai_client import OpenAIConfiguration
 from ragelo.types.configurations import (
-    BaseEvaluatorConfig,
-    BaseRetrievalEvaluatorConfig,
     CustomPromptAnswerEvaluatorConfig,
     CustomPromptEvaluatorConfig,
     DomainExpertEvaluatorConfig,
-    FewShotEvaluatorConfig,
-    FewShotExample,
     LLMProviderConfig,
     PairwiseEvaluatorConfig,
     RDNAMEvaluatorConfig,
 )
-from ragelo.utils import (
-    add_answers_from_csv,
-    add_documents_from_csv,
-    load_queries_from_csv,
-)
+
+# from ragelo.types.configurations.retrieval_evaluator_configs import FewShotExample
+
+# from ragelo.utils import (
+# add_answers_from_csv,
+# add_documents_from_csv,
+# load_queries_from_csv,
+# )
 
 
-class MockLLMProvider(BaseLLMProvider):
-    def __init__(self, config):
-        self.config = config
-        self.call_mocker = Mock(
-            side_effect=lambda prompt: f"Received prompt: {prompt}."
-        )
-        self.async_call_mocker = AsyncMock(
-            side_effect=lambda prompt: f"Async prompt: {prompt}."
-        )
-
-    @classmethod
-    def from_configuration(cls, config: LLMProviderConfig):
-        return cls(config)
-
-    async def call_async(self, prompt):
-        return await self.async_call_mocker(prompt)
-
-    def __call__(self, prompt) -> str:
-        return self.call_mocker(prompt)
+# @pytest.fixture
+# def queries_test():
+#     return load_queries_from_csv("tests/data/queries.csv")
 
 
-@pytest.fixture
-def queries_test():
-    return load_queries_from_csv("tests/data/queries.csv")
+# @pytest.fixture
+# def qs_with_docs(queries_test):
+#     return add_documents_from_csv("tests/data/documents.csv", queries=queries_test)
 
 
-@pytest.fixture
-def qs_with_docs(queries_test):
-    return add_documents_from_csv("tests/data/documents.csv", queries=queries_test)
+# @pytest.fixture
+# def rdnam_queries():
+#     queries = load_queries_from_csv("tests/data/rdnam_queries.csv")
+#     return add_documents_from_csv("tests/data/documents.csv", queries=queries)
 
 
-@pytest.fixture
-def rdnam_queries():
-    queries = load_queries_from_csv("tests/data/rdnam_queries.csv")
-    return add_documents_from_csv("tests/data/documents.csv", queries=queries)
-
-
-@pytest.fixture
-def answers_test(queries_test):
-    return add_answers_from_csv("tests/data/answers.csv", queries=queries_test)
+# @pytest.fixture
+# def answers_test(queries_test):
+#     return add_answers_from_csv("tests/data/answers.csv", queries=queries_test)
 
 
 @pytest.fixture
@@ -89,18 +71,33 @@ def llm_provider_config():
     )
 
 
+class MockLLMProvider(BaseLLMProvider):
+    def __init__(self, config):
+        self.config = config
+        self.call_mocker = Mock(side_effect=lambda prompt: f"Received prompt: {prompt}.")
+        self.async_call_mocker = AsyncMock(side_effect=lambda prompt: f"Async prompt: {prompt}.")
+
+    @classmethod
+    def from_configuration(cls, config: LLMProviderConfig):
+        return cls(config)
+
+    async def call_async(self, prompt):
+        return await self.async_call_mocker(prompt)
+
+    def __call__(self, prompt) -> str:
+        return self.call_mocker(prompt)
+
+
 @pytest.fixture
-def chat_completion_mock():
-    fake_response = ChatCompletion(
+def chat_completion_mock_text():
+    fake_response = ParsedChatCompletion(
         id="fake id",
         choices=[
-            Choice(
+            ParsedChoice(
                 finish_reason="stop",
                 index=0,
                 logprobs=None,
-                message=ChatCompletionMessage(
-                    content="fake response", role="assistant"
-                ),
+                message=ParsedChatCompletionMessage(content="fake response", role="assistant"),
             )
         ],
         created=0,
@@ -108,39 +105,44 @@ def chat_completion_mock():
         object="chat.completion",
     )
     async_mock = AsyncMock()
-    async_mock.create.return_value = fake_response
+    async_mock.parse.return_value = fake_response
     return async_mock
 
 
 @pytest.fixture
-def openai_client_mock(mocker, chat_completion_mock):
+def openai_client_mock(mocker, chat_completion_mock_text):
     openai_client = mocker.AsyncMock(AsyncOpenAI)
-    type(openai_client).chat = mocker.AsyncMock(AsyncChat)
-    type(openai_client.chat).completions = mocker.PropertyMock(
-        return_value=chat_completion_mock
-    )
+    type(openai_client).beta = mocker.AsyncMock(AsyncBeta)
+    type(openai_client.beta).chat = mocker.AsyncMock(AsyncChat)
+    type(openai_client.beta.chat).completions = mocker.PropertyMock(return_value=chat_completion_mock_text)
+
+    # type(openai_client).beta = mocker.AsyncMock(AsyncBeta)
+    # type(openai_client.beta).chat = mocker.AsyncMock(AsyncChat)
+    # type(openai_client.beta.chat).completions = modkermocker.PropertyMock(return_value=chat_completion_mock)
+    # type(openai_client).chat = mocker.AsyncMock(AsyncChat)
+    # type(openai_client.chat).completions = mocker.PropertyMock(return_value=chat_completion_mock)
     return openai_client
 
 
-@pytest.fixture
-def base_eval_config():
-    return BaseEvaluatorConfig(
-        documents_file="tests/data/documents.csv",
-        queries_file="tests/data/queries.csv",
-        force=True,
-        verbose=True,
-        write_output=False,
-    )
+# @pytest.fixture
+# def base_eval_config():
+#     return BaseEvaluatorConfig(
+#         documents_file="tests/data/documents.csv",
+#         queries_file="tests/data/queries.csv",
+#         force=True,
+#         verbose=True,
+#         write_output=False,
+#     )
 
 
-@pytest.fixture
-def base_retrieval_eval_config(base_eval_config):
-    base_config = base_eval_config.model_dump()
-    del base_config["answer_format_retrieval_evaluator"]
-    return BaseRetrievalEvaluatorConfig(
-        answer_format_retrieval_evaluator="json",
-        **base_config,
-    )
+# @pytest.fixture
+# def base_retrieval_eval_config(base_eval_config):
+#     base_config = base_eval_config.model_dump()
+#     del base_config["answer_format_retrieval_evaluator"]
+#     return BaseRetrievalEvaluatorConfig(
+#         answer_format_retrieval_evaluator="json",
+#         **base_config,
+#     )
 
 
 @pytest.fixture
@@ -220,34 +222,34 @@ def custom_prompt_retrieval_eval_config(base_eval_config):
     return config
 
 
-@pytest.fixture
-def few_shot_retrieval_eval_config(base_eval_config):
-    base_eval_config = base_eval_config.model_dump()
-    few_shot_samples = [
-        FewShotExample(
-            passage="Few shot example 1",
-            query="Few shot query 1",
-            relevance=2,
-            reasoning="This is a good document",
-        ),
-        FewShotExample(
-            passage="Few shot example 2",
-            query="Few shot query 2",
-            relevance=0,
-            reasoning="This is a bad document",
-        ),
-    ]
-    del base_eval_config["answer_format_retrieval_evaluator"]
-    return FewShotEvaluatorConfig(
-        system_prompt="System prompt",
-        few_shot_user_prompt="query: {query} doc: {document}",
-        few_shot_assistant_answer=('{reasoning} {{"relevance": {relevance}}}'),
-        reasoning_placeholder="reasoning",
-        relevance_placeholder="relevance",
-        few_shots=few_shot_samples,
-        answer_format_retrieval_evaluator="json",
-        **base_eval_config,
-    )
+# @pytest.fixture
+# def few_shot_retrieval_eval_config(base_eval_config):
+#     base_eval_config = base_eval_config.model_dump()
+#     few_shot_samples = [
+#         FewShotExample(
+#             passage="Few shot example 1",
+#             query="Few shot query 1",
+#             relevance=2,
+#             reasoning="This is a good document",
+#         ),
+#         FewShotExample(
+#             passage="Few shot example 2",
+#             query="Few shot query 2",
+#             relevance=0,
+#             reasoning="This is a bad document",
+#         ),
+#     ]
+#     del base_eval_config["answer_format_retrieval_evaluator"]
+#     return FewShotEvaluatorConfig(
+#         system_prompt="System prompt",
+#         few_shot_user_prompt="query: {query} doc: {document}",
+#         few_shot_assistant_answer=('{reasoning} {{"relevance": {relevance}}}'),
+#         reasoning_placeholder="reasoning",
+#         relevance_placeholder="relevance",
+#         few_shots=few_shot_samples,
+#         answer_format_retrieval_evaluator="json",
+#         **base_eval_config,
+#     )
 
 
 @pytest.fixture
@@ -258,12 +260,8 @@ def llm_provider_mock(llm_provider_config):
 @pytest.fixture
 def llm_provider_json_mock(llm_provider_config):
     provider = MockLLMProvider(llm_provider_config)
-    provider.call_mocker = Mock(
-        side_effect=lambda _: 'LLM JSON response\n{"relevance": 0}'
-    )
-    provider.async_call_mocker = AsyncMock(
-        side_effect=lambda _: 'Async LLM JSON response\n{"relevance": 1}'
-    )
+    provider.call_mocker = Mock(side_effect=lambda _: 'LLM JSON response\n{"relevance": 0}')
+    provider.async_call_mocker = AsyncMock(side_effect=lambda _: 'Async LLM JSON response\n{"relevance": 1}')
     return provider
 
 
@@ -293,8 +291,7 @@ def llm_provider_pairwise_answer_mock(llm_provider_config):
 def llm_provider_answer_mock(llm_provider_config):
     provider = MockLLMProvider(llm_provider_config)
     provider.call_mocker = Mock(
-        side_effect=lambda prompt: f"Answer for {prompt}\n"
-        '{"quality": 2, "trustworthiness": 1, "originality": 1}',
+        side_effect=lambda prompt: f"Answer for {prompt}\n" '{"quality": 2, "trustworthiness": 1, "originality": 1}',
     )
     provider.async_call_mocker = AsyncMock(
         side_effect=lambda prompt: f"Async answer for {prompt}\n"
@@ -308,7 +305,5 @@ def llm_provider_mock_rdnam(llm_provider_config):
     mocked_scores = [{"M": 2, "T": 1, "O": 1}, {"M": 1, "T": 1, "O": 2}]
     provider = MockLLMProvider(llm_provider_config)
     provider.call_mocker = Mock(side_effect=lambda _: json.dumps(mocked_scores)[2:])
-    provider.async_call_mocker = AsyncMock(
-        side_effect=lambda _: json.dumps(mocked_scores)[2:]
-    )
+    provider.async_call_mocker = AsyncMock(side_effect=lambda _: json.dumps(mocked_scores)[2:])
     return provider
