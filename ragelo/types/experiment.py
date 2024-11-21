@@ -138,7 +138,11 @@ class Experiment:
             self.add_queries_from_csv(queries_csv_path, csv_query_id_col, csv_query_text_col)
         if documents_csv_path:
             self.add_documents_from_csv(
-                documents_csv_path, csv_document_id_col, csv_document_text_col, csv_query_id_col, csv_agent_col
+                documents_csv_path,
+                csv_document_id_col,
+                csv_document_text_col,
+                csv_query_id_col,
+                csv_agent_col,
             )
         if answers_csv_path:
             self.add_agent_answers_from_csv(answers_csv_path, csv_agent_col, csv_answer_text_col, csv_query_id_col)
