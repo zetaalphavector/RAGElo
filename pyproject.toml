@@ -34,7 +34,7 @@ eval = [
 [dependency-groups]
 dev = [
     "mypy>=1.9.0",
-    "pydantic>=1.9.0",
+    "pydantic>=2.0.0",
     "pytest>=8.3.3",
     "ruff>=0.7.4",
     "types-tqdm==4.66.0",
