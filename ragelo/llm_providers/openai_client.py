@@ -10,8 +10,10 @@ from pydantic import BaseModel as PydanticBaseModel
 from tenacity import retry, stop_after_attempt, wait_random_exponential
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, LLMProviderFactory
+from ragelo.logger import logger
 from ragelo.types.configurations import OpenAIConfiguration
 from ragelo.types.formats import AnswerFormat
+from ragelo.types.pydantic_models import _PYDANTIC_MAJOR_VERSION
 from ragelo.types.types import LLMProviderTypes
 
 
@@ -33,7 +35,7 @@ class OpenAIProvider(BaseLLMProvider):
         self,
         prompt: str | list[dict[str, str]],
         answer_format: AnswerFormat = AnswerFormat.TEXT,
-        response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = None,
+        response_format: Type[PydanticBaseModel] | dict[str, Any] | None = None,
     ) -> str | PydanticBaseModel | dict[str, Any]:
         """Calls the OpenAI API.
 
@@ -49,10 +51,10 @@ class OpenAIProvider(BaseLLMProvider):
         try:
             asyncio.get_running_loop()
             with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(run, self.call_async(prompt, answer_format, response_schema))
+                future = executor.submit(run, self.call_async(prompt, answer_format, response_format))
                 answers = future.result()
         except RuntimeError:
-            answers = asyncio.run(self.call_async(prompt, answer_format, response_schema))
+            answers = asyncio.run(self.call_async(prompt, answer_format, response_format))
         return answers
 
     @retry(wait=wait_random_exponential(min=1, max=120), stop=stop_after_attempt(5))
@@ -60,7 +62,7 @@ class OpenAIProvider(BaseLLMProvider):
         self,
         prompt: str | list[dict[str, str]],
         answer_format: AnswerFormat = AnswerFormat.TEXT,
-        response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = None,
+        response_format: Type[PydanticBaseModel] | dict[str, Any] | None = None,
     ) -> str | PydanticBaseModel | dict[str, Any]:
         """Calls the OpenAI API asynchronously.
 
@@ -70,27 +72,38 @@ class OpenAIProvider(BaseLLMProvider):
         if isinstance(prompt, str):
             prompt = [{"role": "system", "content": prompt}]
 
-        call_args = {
-            "model": self.config.model,
-            "messages": prompt,
-            "temperature": self.config.temperature,
-            "max_tokens": self.config.max_tokens,
-        }
         if answer_format == AnswerFormat.STRUCTURED:
-            if not isinstance(response_schema, type(PydanticBaseModel)):
+            if not isinstance(response_format, type(PydanticBaseModel)):
                 raise ValueError("response_schema must be a PydanticBaseModel Class when using structured output.")
-            call_args["response_format"] = response_schema
-
+            response_format = response_format
+        if answer_format == AnswerFormat.JSON:
+            if isinstance(response_format, type(PydanticBaseModel)):
+                logger.info(
+                    "You provided a PydanticBaseModel class for the response_schema. "
+                    "Using JSON as the desired answer format. Dumping the schema to JSON."
+                )
+                if _PYDANTIC_MAJOR_VERSION >= 2:
+                    response_format = response_format.model_json_schema()
+                else:
+                    response_format = response_format.schema()  # type: ignore
         elif answer_format == AnswerFormat.JSON:
-            if isinstance(response_schema, dict):
-                schema = json.dumps(response_schema, indent=4)
-                call_args["messages"][0]["content"] += (
+            if isinstance(response_format, dict):
+                schema = json.dumps(response_format, indent=4)
+                prompt[0]["content"] += (
                     "\n\nYour output should be a JSON string that STRICTLY "
                     f"adheres to the following schema:\n{schema}"
                 )
-            call_args["response_format"] = {"type": "json_object"}
+            response_format = {"type": "json_object"}
+        else:
+            response_format = None
 
-        answers = await self.__openai_client.beta.chat.completions.parse(**call_args)
+        answers = await self.__openai_client.beta.chat.completions.parse(
+            messages=prompt,  # type: ignore
+            model=self.config.model,
+            temperature=self.config.temperature,
+            max_tokens=self.config.max_tokens,
+            response_format=response_format,  # type: ignore
+        )
 
         if not answers.choices or not answers.choices[0].message or not answers.choices[0].message.content:
             raise ValueError("OpenAI did not return any completions.")

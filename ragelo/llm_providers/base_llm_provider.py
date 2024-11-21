@@ -23,9 +23,9 @@ class BaseLLMProvider(ABC):
     def __call__(
         self,
         prompt: str | list[dict[str, str]],
-        answer_format: AnswerFormat | str = AnswerFormat.TEXT,
-        response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = None,
-    ) -> str:
+        answer_format: AnswerFormat = AnswerFormat.TEXT,
+        response_format: Type[PydanticBaseModel] | dict[str, Any] | None = None,
+    ) -> str | PydanticBaseModel | dict[str, Any]:
         """Submits a single query-document pair to the LLM and returns the answer."""
         raise NotImplementedError
 
@@ -33,9 +33,9 @@ class BaseLLMProvider(ABC):
     async def call_async(
         self,
         prompt: str | list[dict[str, str]],
-        answer_format: AnswerFormat | str = AnswerFormat.TEXT,
-        response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = None,
-    ) -> str:
+        answer_format: AnswerFormat = AnswerFormat.TEXT,
+        response_format: Type[PydanticBaseModel] | dict[str, Any] | None = None,
+    ) -> str | PydanticBaseModel | dict[str, Any]:
         """Submits a single query-document pair to the LLM and returns the answer."""
         raise NotImplementedError
 

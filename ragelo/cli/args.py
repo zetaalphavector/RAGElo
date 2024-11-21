@@ -64,11 +64,11 @@ def get_params_from_function(func: Callable[..., Any]) -> Dict[str, ParamMeta]:
                 if not isinstance(v, ParameterInfo):
                     if len(t_args) > 1:
                         # To resolve the True argument type, first remove any NoneType from the list of types"
-                        t_args = [t for t in t_args if t != NoneType]
-                        if len(t_args) == 1:
-                            _type = t_args[0]
+                        _t_args = [t for t in t_args if t != NoneType]
+                        if len(_t_args) == 1:
+                            _type = _t_args[0]
                         if get_origin(_outer_type) == UnionType:
-                            _type = t_args[0]
+                            _type = _t_args[0]
                         if (
                             get_origin(_outer_type) == collections.abc.Callable
                             or get_origin(_type) == collections.abc.Callable

@@ -63,6 +63,7 @@ follow_imports = "silent"
 warn_redundant_casts = true
 check_untyped_defs = true
 implicit_reexport = true
+ignore_missing_imports = true
 exclude = ["build/", "dist/", "venv/"]
 
 
