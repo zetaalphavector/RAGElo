@@ -67,7 +67,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             raw_answer = await self.llm_provider.call_async(
                 prompt,
                 answer_format=self.config.llm_answer_format,
-                response_format=self.config.llm_response_schema,
+                response_schema=self.config.llm_response_schema,
             )
         except Exception as e:
             logger.warning(f"Failed to FETCH answers for qid: {query.qid}")

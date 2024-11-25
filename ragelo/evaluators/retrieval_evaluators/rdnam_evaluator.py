@@ -5,7 +5,6 @@ https://arxiv.org/abs/2309.10621
 
 from __future__ import annotations
 
-
 import numpy as np
 
 from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
@@ -133,11 +132,15 @@ Each rater used their own independent judgement."""
         return formatted_prompt
 
     def _process_answer(self, raw_answer) -> dict[str, float] | float:
-        self._validate_answer(raw_answer)
+        self._validate_raw_answer(raw_answer)
         assert isinstance(raw_answer, dict)
         if not self.multiple:
             return raw_answer
-        answer: dict[str, list[float]] = {"intent_match": [], "trustworthiness": [], "overall": []}
+        answer: dict[str, list[float]] = {
+            "intent_match": [],
+            "trustworthiness": [],
+            "overall": [],
+        }
         for v in raw_answer.values():
             if self.config.use_aspects:
                 answer["intent_match"].append(int(v["intent_match"]))

@@ -160,7 +160,7 @@ document given the particular query. The score meaning is as follows:
             score_answer = await self.llm_provider.call_async(
                 messages,
                 answer_format=AnswerFormat.JSON,
-                response_format=self.config.llm_response_schema,
+                response_schema=self.config.llm_response_schema,
             )
             assert isinstance(score_answer, dict)
             answer = score_answer["score"]  # type: ignore

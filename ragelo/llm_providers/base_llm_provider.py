@@ -34,7 +34,7 @@ class BaseLLMProvider(ABC):
         self,
         prompt: str | list[dict[str, str]],
         answer_format: AnswerFormat = AnswerFormat.TEXT,
-        response_format: Type[PydanticBaseModel] | dict[str, Any] | None = None,
+        response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = None,
     ) -> str | PydanticBaseModel | dict[str, Any]:
         """Submits a single query-document pair to the LLM and returns the answer."""
         raise NotImplementedError

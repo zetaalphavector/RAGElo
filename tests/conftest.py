@@ -19,6 +19,7 @@ from pydantic import BaseModel as PydanticBaseModel
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.llm_providers.openai_client import OpenAIConfiguration
 from ragelo.types.configurations import (
+    BaseEvaluatorConfig,
     BaseRetrievalEvaluatorConfig,
     CustomPromptAnswerEvaluatorConfig,
     CustomPromptEvaluatorConfig,
@@ -27,6 +28,7 @@ from ragelo.types.configurations import (
     PairwiseEvaluatorConfig,
     RDNAMEvaluatorConfig,
 )
+from ragelo.types.formats import AnswerFormat
 from ragelo.types.results import (
     AnswerEvaluatorResult,
     EloTournamentResult,
@@ -63,7 +65,7 @@ class MockLLMProvider(BaseLLMProvider):
     def from_configuration(cls, config: LLMProviderConfig):
         return cls(config)
 
-    async def call_async(self, prompt):
+    async def call_async(self, prompt, *args, **kwargs):
         return await self.async_call_mocker(prompt)
 
     def __call__(self, prompt, *args, **kwargs) -> str:
@@ -253,9 +255,13 @@ def elo_tournament_result():
 
 
 @pytest.fixture
+def base_eval_config():
+    return BaseEvaluatorConfig(force=True, verbose=True, llm_answer_format=AnswerFormat.JSON)
+
+
+@pytest.fixture
 def base_retrieval_eval_config(base_eval_config):
     base_config = base_eval_config.model_dump()
-    del base_config["answer_format_retrieval_evaluator"]
     return BaseRetrievalEvaluatorConfig(
         **base_config,
     )
@@ -276,11 +282,6 @@ def pairwise_answer_eval_config(base_eval_config):
 def custom_answer_eval_config(base_eval_config):
     base_config = base_eval_config.model_dump()
     base_config["answer_format_answer_evaluator"] = "multi_field_json"
-    base_config["scoring_keys_answer_evaluator"] = [
-        "quality",
-        "trustworthiness",
-        "originality",
-    ]
     config = CustomPromptAnswerEvaluatorConfig(
         prompt="""
 You are an useful assistant for evaluating the quality of the answers generated \
@@ -303,8 +304,7 @@ Agent answer: {answer}
 @pytest.fixture
 def expert_retrieval_eval_config(base_eval_config):
     base_eval_config = base_eval_config.model_dump()
-    del base_eval_config["scoring_keys_retrieval_evaluator"]
-    del base_eval_config["answer_format_retrieval_evaluator"]
+
     return DomainExpertEvaluatorConfig(
         expert_in="Computer Science",
         domain_short="computer scientists",
@@ -328,11 +328,8 @@ def rdnam_config(base_eval_config):
 @pytest.fixture
 def custom_prompt_retrieval_eval_config(base_eval_config):
     base_eval_config = base_eval_config.model_dump()
-    del base_eval_config["scoring_keys_retrieval_evaluator"]
-    del base_eval_config["answer_format_retrieval_evaluator"]
     config = CustomPromptEvaluatorConfig(
         prompt="query: {query} doc: {document}",
-        scoring_keys_retrieval_evaluator=["relevance"],
         **base_eval_config,
     )
     return config
@@ -346,8 +343,8 @@ def llm_provider_mock(llm_provider_config):
 @pytest.fixture
 def llm_provider_json_mock(llm_provider_config):
     provider = MockLLMProvider(llm_provider_config)
-    provider.call_mocker = Mock(side_effect=lambda _: 'LLM JSON response\n{"relevance": 0}')
-    provider.async_call_mocker = AsyncMock(side_effect=lambda _: 'Async LLM JSON response\n{"relevance": 1}')
+    provider.call_mocker = Mock(side_effect=lambda _: {"relevance": 0})
+    provider.async_call_mocker = AsyncMock(side_effect=lambda _: {"relevance": 1})
     return provider
 
 
