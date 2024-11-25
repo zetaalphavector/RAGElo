@@ -10,6 +10,7 @@ from openai.resources.beta.chat import AsyncChat, AsyncCompletions
 from openai.types.chat.chat_completion import ChatCompletion, Choice
 from openai.types.chat.chat_completion_message import ChatCompletionMessage
 from openai.types.chat.parsed_chat_completion import ParsedChatCompletion, ParsedChatCompletionMessage, ParsedChoice
+from pydantic import BaseModel as PydanticBaseModel
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.llm_providers.openai_client import OpenAIConfiguration
@@ -21,35 +22,6 @@ from ragelo.types.configurations import (
     PairwiseEvaluatorConfig,
     RDNAMEvaluatorConfig,
 )
-
-# from ragelo.types.configurations.retrieval_evaluator_configs import FewShotExample
-
-# from ragelo.utils import (
-# add_answers_from_csv,
-# add_documents_from_csv,
-# load_queries_from_csv,
-# )
-
-
-# @pytest.fixture
-# def queries_test():
-#     return load_queries_from_csv("tests/data/queries.csv")
-
-
-# @pytest.fixture
-# def qs_with_docs(queries_test):
-#     return add_documents_from_csv("tests/data/documents.csv", queries=queries_test)
-
-
-# @pytest.fixture
-# def rdnam_queries():
-#     queries = load_queries_from_csv("tests/data/rdnam_queries.csv")
-#     return add_documents_from_csv("tests/data/documents.csv", queries=queries)
-
-
-# @pytest.fixture
-# def answers_test(queries_test):
-#     return add_answers_from_csv("tests/data/answers.csv", queries=queries_test)
 
 
 @pytest.fixture
@@ -90,6 +62,53 @@ class MockLLMProvider(BaseLLMProvider):
 
 @pytest.fixture
 def chat_completion_mock_text():
+    fake_response = ChatCompletion(
+        id="fake id",
+        choices=[
+            Choice(
+                finish_reason="stop",
+                index=0,
+                logprobs=None,
+                message=ChatCompletionMessage(content="fake response", role="assistant"),
+            )
+        ],
+        created=0,
+        model="fake model",
+        object="chat.completion",
+    )
+    async_mock = AsyncMock()
+    async_mock.create.return_value = fake_response
+    return async_mock
+
+
+@pytest.fixture
+def chat_completion_mock_json():
+    fake_response = ChatCompletion(
+        id="fake id",
+        choices=[
+            Choice(
+                finish_reason="stop",
+                index=0,
+                logprobs=None,
+                message=ChatCompletionMessage(content='{"keyA": "valueA", "keyB": "valueB"}', role="assistant"),
+            )
+        ],
+        created=0,
+        model="fake model",
+        object="chat.completion",
+    )
+    async_mock = AsyncMock()
+    async_mock.create.return_value = fake_response
+    return async_mock
+
+
+class AnswerModel(PydanticBaseModel):
+    keyA: str
+    keyB: str
+
+
+@pytest.fixture
+def chat_completion_mock_structured():
     fake_response = ParsedChatCompletion(
         id="fake id",
         choices=[
@@ -97,7 +116,11 @@ def chat_completion_mock_text():
                 finish_reason="stop",
                 index=0,
                 logprobs=None,
-                message=ParsedChatCompletionMessage(content="fake response", role="assistant"),
+                message=ParsedChatCompletionMessage(
+                    content='{"keyA": "valueA", "keyB": "valueB"}',
+                    parsed=AnswerModel(keyA="valueA", keyB="valueB"),
+                    role="assistant",
+                ),
             )
         ],
         created=0,
@@ -110,39 +133,28 @@ def chat_completion_mock_text():
 
 
 @pytest.fixture
-def openai_client_mock(mocker, chat_completion_mock_text):
+def openai_client_mock_json(mocker, chat_completion_mock_json):
     openai_client = mocker.AsyncMock(AsyncOpenAI)
-    type(openai_client).beta = mocker.AsyncMock(AsyncBeta)
-    type(openai_client.beta).chat = mocker.AsyncMock(AsyncChat)
-    type(openai_client.beta.chat).completions = mocker.PropertyMock(return_value=chat_completion_mock_text)
-
-    # type(openai_client).beta = mocker.AsyncMock(AsyncBeta)
-    # type(openai_client.beta).chat = mocker.AsyncMock(AsyncChat)
-    # type(openai_client.beta.chat).completions = modkermocker.PropertyMock(return_value=chat_completion_mock)
-    # type(openai_client).chat = mocker.AsyncMock(AsyncChat)
-    # type(openai_client.chat).completions = mocker.PropertyMock(return_value=chat_completion_mock)
+    type(openai_client).chat = mocker.AsyncMock(AsyncChat)
+    type(openai_client.chat).completions = mocker.PropertyMock(return_value=chat_completion_mock_json)
     return openai_client
 
 
-# @pytest.fixture
-# def base_eval_config():
-#     return BaseEvaluatorConfig(
-#         documents_file="tests/data/documents.csv",
-#         queries_file="tests/data/queries.csv",
-#         force=True,
-#         verbose=True,
-#         write_output=False,
-#     )
+@pytest.fixture
+def openai_client_mock_text(mocker, chat_completion_mock_text):
+    openai_client = mocker.AsyncMock(AsyncOpenAI)
+    type(openai_client).chat = mocker.AsyncMock(AsyncChat)
+    type(openai_client.chat).completions = mocker.PropertyMock(return_value=chat_completion_mock_text)
+    return openai_client
 
 
-# @pytest.fixture
-# def base_retrieval_eval_config(base_eval_config):
-#     base_config = base_eval_config.model_dump()
-#     del base_config["answer_format_retrieval_evaluator"]
-#     return BaseRetrievalEvaluatorConfig(
-#         answer_format_retrieval_evaluator="json",
-#         **base_config,
-#     )
+@pytest.fixture
+def openai_beta_client_mock(mocker, chat_completion_mock_structured):
+    openai_client = mocker.AsyncMock(AsyncOpenAI)
+    type(openai_client).beta = mocker.AsyncMock(AsyncBeta)
+    type(openai_client.beta).chat = mocker.AsyncMock(AsyncChat)
+    type(openai_client.beta.chat).completions = mocker.PropertyMock(return_value=chat_completion_mock_structured)
+    return openai_client
 
 
 @pytest.fixture
@@ -222,36 +234,6 @@ def custom_prompt_retrieval_eval_config(base_eval_config):
     return config
 
 
-# @pytest.fixture
-# def few_shot_retrieval_eval_config(base_eval_config):
-#     base_eval_config = base_eval_config.model_dump()
-#     few_shot_samples = [
-#         FewShotExample(
-#             passage="Few shot example 1",
-#             query="Few shot query 1",
-#             relevance=2,
-#             reasoning="This is a good document",
-#         ),
-#         FewShotExample(
-#             passage="Few shot example 2",
-#             query="Few shot query 2",
-#             relevance=0,
-#             reasoning="This is a bad document",
-#         ),
-#     ]
-#     del base_eval_config["answer_format_retrieval_evaluator"]
-#     return FewShotEvaluatorConfig(
-#         system_prompt="System prompt",
-#         few_shot_user_prompt="query: {query} doc: {document}",
-#         few_shot_assistant_answer=('{reasoning} {{"relevance": {relevance}}}'),
-#         reasoning_placeholder="reasoning",
-#         relevance_placeholder="relevance",
-#         few_shots=few_shot_samples,
-#         answer_format_retrieval_evaluator="json",
-#         **base_eval_config,
-#     )
-
-
 @pytest.fixture
 def llm_provider_mock(llm_provider_config):
     return MockLLMProvider(llm_provider_config)
@@ -307,3 +289,84 @@ def llm_provider_mock_rdnam(llm_provider_config):
     provider.call_mocker = Mock(side_effect=lambda _: json.dumps(mocked_scores)[2:])
     provider.async_call_mocker = AsyncMock(side_effect=lambda _: json.dumps(mocked_scores)[2:])
     return provider
+
+
+# from ragelo.types.configurations.retrieval_evaluator_configs import FewShotExample
+
+# from ragelo.utils import (
+# add_answers_from_csv,
+# add_documents_from_csv,
+# load_queries_from_csv,
+# )
+
+
+# @pytest.fixture
+# def queries_test():
+#     return load_queries_from_csv("tests/data/queries.csv")
+
+
+# @pytest.fixture
+# def qs_with_docs(queries_test):
+#     return add_documents_from_csv("tests/data/documents.csv", queries=queries_test)
+
+
+# @pytest.fixture
+# def rdnam_queries():
+#     queries = load_queries_from_csv("tests/data/rdnam_queries.csv")
+#     return add_documents_from_csv("tests/data/documents.csv", queries=queries)
+
+
+# @pytest.fixture
+# def answers_test(queries_test):
+#     return add_answers_from_csv("tests/data/answers.csv", queries=queries_test)
+
+
+# @pytest.fixture
+# def few_shot_retrieval_eval_config(base_eval_config):
+#     base_eval_config = base_eval_config.model_dump()
+#     few_shot_samples = [
+#         FewShotExample(
+#             passage="Few shot example 1",
+#             query="Few shot query 1",
+#             relevance=2,
+#             reasoning="This is a good document",
+#         ),
+#         FewShotExample(
+#             passage="Few shot example 2",
+#             query="Few shot query 2",
+#             relevance=0,
+#             reasoning="This is a bad document",
+#         ),
+#     ]
+#     del base_eval_config["answer_format_retrieval_evaluator"]
+#     return FewShotEvaluatorConfig(
+#         system_prompt="System prompt",
+#         few_shot_user_prompt="query: {query} doc: {document}",
+#         few_shot_assistant_answer=('{reasoning} {{"relevance": {relevance}}}'),
+#         reasoning_placeholder="reasoning",
+#         relevance_placeholder="relevance",
+#         few_shots=few_shot_samples,
+#         answer_format_retrieval_evaluator="json",
+#         **base_eval_config,
+#     )
+
+
+# @pytest.fixture
+# def base_eval_config():
+#     return BaseEvaluatorConfig(
+#         documents_file="tests/data/documents.csv",
+#         queries_file="tests/data/queries.csv",
+#         force=True,
+#         verbose=True,
+#         write_output=False,
+#     )
+
+
+# @pytest.fixture
+# def base_retrieval_eval_config(base_eval_config):
+#     base_config = base_eval_config.model_dump()
+#     del base_config["answer_format_retrieval_evaluator"]
+#     return BaseRetrievalEvaluatorConfig(
+#         answer_format_retrieval_evaluator="json",
+#         **base_config,
+#     )

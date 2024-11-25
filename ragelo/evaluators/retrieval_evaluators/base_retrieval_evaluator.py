@@ -4,8 +4,6 @@ and returns a score or a label for each document."""
 
 from __future__ import annotations
 
-import asyncio
-from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Type, get_type_hints
 
 from tenacity import RetryError
@@ -19,6 +17,7 @@ from ragelo.types.experiment import Experiment
 from ragelo.types.query import Query
 from ragelo.types.results import RetrievalEvaluatorResult
 from ragelo.types.types import RetrievalEvaluatorTypes
+from ragelo.utils import call_async_fn
 
 
 class BaseRetrievalEvaluator(BaseEvaluator):
@@ -43,17 +42,8 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         """Evaluates a single query-document pair. Returns the raw answer and the processed answer."""
         query = Query.assemble_query(query, query_metadata)
         document = Document.assemble_document(document, query.qid, doc_metadata)
+        result = call_async_fn(self.evaluate_async, (query, document))
 
-        def run(coroutine):
-            return asyncio.run(coroutine)
-
-        try:
-            asyncio.get_running_loop()
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(run, self.evaluate_async((query, document)))
-                result = future.result()
-        except RuntimeError:
-            result = asyncio.run(self.evaluate_async((query, document)))
         if result.exception or result.raw_answer is None or result.answer is None:
             raise ValueError(
                 f"Failed to evaluate qid: {query.qid} did: {document.did}",

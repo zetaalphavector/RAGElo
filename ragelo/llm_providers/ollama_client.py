@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import asyncio
 import json
-from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Type
 
 from openai import AsyncOpenAI
@@ -13,6 +11,7 @@ from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, LLMProviderF
 from ragelo.types.configurations import OllamaConfiguration
 from ragelo.types.formats import AnswerFormat
 from ragelo.types.types import LLMProviderTypes
+from ragelo.utils import call_async_fn
 
 
 @LLMProviderFactory.register(LLMProviderTypes.OLLAMA)
@@ -40,20 +39,7 @@ class OllamaProvider(BaseLLMProvider):
         Args:
             prompt: The prompt to use. Either a list of messages or a string.
         """
-
-        def run(coroutine):
-            return asyncio.run(coroutine)
-
-        if isinstance(prompt, str):
-            prompt = [{"role": "system", "content": prompt}]
-        try:
-            asyncio.get_running_loop()
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(run, self.call_async(prompt, answer_format, response_schema))
-                answers = future.result()
-        except RuntimeError:
-            answers = asyncio.run(self.call_async(prompt, answer_format, response_schema))
-        return answers
+        return call_async_fn(self.call_async, prompt, answer_format, response_schema)
 
     async def call_async(
         self,

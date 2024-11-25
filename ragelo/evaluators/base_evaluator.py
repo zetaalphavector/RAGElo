@@ -4,7 +4,6 @@ import asyncio
 import string
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from pydantic import BaseModel as PydanticBaseModel
@@ -18,6 +17,7 @@ from ragelo.types.experiment import Experiment
 from ragelo.types.formats import AnswerFormat
 from ragelo.types.query import Query
 from ragelo.types.results import EvaluatorResult
+from ragelo.utils import call_async_fn
 
 
 class BaseEvaluator(ABC):
@@ -49,17 +49,7 @@ class BaseEvaluator(ABC):
                 If None, the number of threads defined in the config will be used.
         """
         n_threads = n_threads or self.config.n_processes
-
-        def run(coroutine):
-            return asyncio.run(coroutine)
-
-        try:
-            asyncio.get_running_loop()
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(run, self._evaluate_experiment_async(experiment, n_threads))
-                _ = future.result()
-        except RuntimeError:
-            _ = asyncio.run(self._evaluate_experiment_async(experiment, n_threads))
+        call_async_fn(self._evaluate_experiment_async, experiment, n_threads)
 
     @abstractmethod
     async def evaluate_async(

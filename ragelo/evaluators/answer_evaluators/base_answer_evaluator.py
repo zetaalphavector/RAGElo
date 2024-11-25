@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import itertools
 import random
-from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Sequence, Type, get_type_hints
 
 from tenacity import RetryError
@@ -22,6 +21,7 @@ from ragelo.types.experiment import Experiment
 from ragelo.types.query import Query
 from ragelo.types.results import AnswerEvaluatorResult
 from ragelo.types.types import AnswerEvaluatorTypes
+from ragelo.utils import call_async_fn
 
 
 class BaseAnswerEvaluator(BaseEvaluator):
@@ -104,14 +104,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 raise ValueError("Pointwise evaluations require an answer")
             evaluable = AgentAnswer.assemble_answer(answer, query.qid, metadata=answer_metadata)
             agent = evaluable.agent
-
-        try:
-            asyncio.get_running_loop()
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(run, self.evaluate_async((query, evaluable)))
-                result = future.result()
-        except RuntimeError:
-            result = asyncio.run(self.evaluate_async((query, evaluable)))
+        result = call_async_fn(self.evaluate_async, (query, evaluable))
 
         if result.exception or result.raw_answer is None or result.answer is None:
             raise ValueError(

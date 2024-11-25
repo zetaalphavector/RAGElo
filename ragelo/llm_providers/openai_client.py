@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import asyncio
 import json
-from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Type
 
 from openai import AsyncAzureOpenAI, AsyncOpenAI
+from openai._types import NOT_GIVEN
 from pydantic import BaseModel as PydanticBaseModel
 from tenacity import retry, stop_after_attempt, wait_random_exponential
 
@@ -15,6 +14,7 @@ from ragelo.types.configurations import OpenAIConfiguration
 from ragelo.types.formats import AnswerFormat
 from ragelo.types.pydantic_models import _PYDANTIC_MAJOR_VERSION
 from ragelo.types.types import LLMProviderTypes
+from ragelo.utils import call_async_fn
 
 
 @LLMProviderFactory.register(LLMProviderTypes.OPENAI)
@@ -35,75 +35,79 @@ class OpenAIProvider(BaseLLMProvider):
         self,
         prompt: str | list[dict[str, str]],
         answer_format: AnswerFormat = AnswerFormat.TEXT,
-        response_format: Type[PydanticBaseModel] | dict[str, Any] | None = None,
+        response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = None,
     ) -> str | PydanticBaseModel | dict[str, Any]:
         """Calls the OpenAI API.
 
         Args:
             prompt: The prompt to use. Either a list of messages or a string.
+            answer_format: The format of the answer to return. Either TEXT, JSON, or STRUCTURED.
+            response_format: The format of the response to expect. If the answer_format is STRUCTURED,
+                this should be a PydanticBaseModel class. If the answer_format is JSON, this should be a dictionary
+                with the desired format the answer should be in
+        Returns:
+            The response from the OpenAI API, formatted according to the answer_format.
         """
+        return call_async_fn(self.call_async, prompt, answer_format, response_schema)
 
-        def run(coroutine):
-            return asyncio.run(coroutine)
-
-        if isinstance(prompt, str):
-            prompt = [{"role": "system", "content": prompt}]
-        try:
-            asyncio.get_running_loop()
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(run, self.call_async(prompt, answer_format, response_format))
-                answers = future.result()
-        except RuntimeError:
-            answers = asyncio.run(self.call_async(prompt, answer_format, response_format))
-        return answers
-
-    @retry(wait=wait_random_exponential(min=1, max=120), stop=stop_after_attempt(5))
+    @retry(wait=wait_random_exponential(min=1, max=120), stop=stop_after_attempt(1))
     async def call_async(
         self,
         prompt: str | list[dict[str, str]],
         answer_format: AnswerFormat = AnswerFormat.TEXT,
-        response_format: Type[PydanticBaseModel] | dict[str, Any] | None = None,
+        response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = None,
     ) -> str | PydanticBaseModel | dict[str, Any]:
         """Calls the OpenAI API asynchronously.
 
         Args:
             prompt: The prompt to use. Either a list of messages or a string.
+            answer_format: The format of the answer to return. Either TEXT, JSON, or STRUCTURED.
+            response_format: The format of the response to expect. If the answer_format is STRUCTURED,
+                this should be a PydanticBaseModel class. If the answer_format is JSON, this should be a dictionary
+                with the desired format the answer should be in
+        Returns:
+            The response from the OpenAI API, formatted according to the answer_format. or a string.
         """
         if isinstance(prompt, str):
             prompt = [{"role": "system", "content": prompt}]
 
         if answer_format == AnswerFormat.STRUCTURED:
-            if not isinstance(response_format, type(PydanticBaseModel)):
+            if not isinstance(response_schema, type(PydanticBaseModel)):
                 raise ValueError("response_schema must be a PydanticBaseModel Class when using structured output.")
-            response_format = response_format
-        if answer_format == AnswerFormat.JSON:
-            if isinstance(response_format, type(PydanticBaseModel)):
-                logger.info(
-                    "You provided a PydanticBaseModel class for the response_schema. "
-                    "Using JSON as the desired answer format. Dumping the schema to JSON."
-                )
-                if _PYDANTIC_MAJOR_VERSION >= 2:
-                    response_format = response_format.model_json_schema()
-                else:
-                    response_format = response_format.schema()  # type: ignore
-        elif answer_format == AnswerFormat.JSON:
-            if isinstance(response_format, dict):
-                schema = json.dumps(response_format, indent=4)
-                prompt[0]["content"] += (
-                    "\n\nYour output should be a JSON string that STRICTLY "
-                    f"adheres to the following schema:\n{schema}"
-                )
-            response_format = {"type": "json_object"}
+            answers = await self.__openai_client.beta.chat.completions.parse(
+                messages=prompt,  # type: ignore
+                model=self.config.model,
+                temperature=self.config.temperature,
+                max_tokens=self.config.max_tokens,
+                response_format=response_schema,
+            )
         else:
-            response_format = None
-
-        answers = await self.__openai_client.beta.chat.completions.parse(
-            messages=prompt,  # type: ignore
-            model=self.config.model,
-            temperature=self.config.temperature,
-            max_tokens=self.config.max_tokens,
-            response_format=response_format,  # type: ignore
-        )
+            if answer_format == AnswerFormat.JSON:
+                if isinstance(response_schema, type(PydanticBaseModel)):
+                    logger.info(
+                        "You provided a PydanticBaseModel class for the response_schema. "
+                        "Using JSON as the desired answer format. Dumping the schema to JSON."
+                    )
+                    if _PYDANTIC_MAJOR_VERSION >= 2:
+                        response_schema = response_schema.model_json_schema()
+                    else:
+                        response_schema = response_schema.schema()  # type: ignore
+                elif isinstance(response_schema, dict):
+                    schema = json.dumps(response_schema, indent=4)
+                    prompt[0]["content"] += (
+                        "\n\nYour output should be a JSON string that STRICTLY "
+                        f"adheres to the following schema:\n{schema}"
+                    )
+                response_format_parameter = {"type": "json_object"}
+            else:
+                response_format_parameter = NOT_GIVEN  # type: ignore
+            answers = await self.__openai_client.chat.completions.create(
+                messages=prompt,  # type: ignore
+                model=self.config.model,
+                temperature=self.config.temperature,
+                max_tokens=self.config.max_tokens,
+                response_format=response_format_parameter,  # type: ignore
+            )
 
         if not answers.choices or not answers.choices[0].message or not answers.choices[0].message.content:
             raise ValueError("OpenAI did not return any completions.")

@@ -34,7 +34,7 @@ class BaseCLIConfig(BaseEvaluatorConfig):
         default=True,
         description="Whether or not to be verbose and print all intermediate steps.",
     )
-    llm_answer_format: str = Field(
+    llm_answer_format: AnswerFormat = Field(
         default=AnswerFormat.JSON,
         description="The format of the answer returned by the LLM.",
     )
