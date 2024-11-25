@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 from unittest.mock import AsyncMock
 
@@ -11,7 +13,7 @@ from ragelo.evaluators.retrieval_evaluators import (
     ReasonerEvaluator,
 )
 from ragelo.types import Document, Query
-from ragelo.types.types import RetrievalEvaluatorResult
+from ragelo.types.results import RetrievalEvaluatorResult
 
 
 class RetrievalEvaluator(BaseRetrievalEvaluator):
@@ -22,13 +24,11 @@ class RetrievalEvaluator(BaseRetrievalEvaluator):
 class TestRetrievalEvaluator:
     def test_evaluate_single_answer(
         self,
-        llm_provider_json_mock,
+        llm_provider_mock,
         base_retrieval_eval_config,
         qs_with_docs,
     ):
-        evaluator = RetrievalEvaluator.from_config(
-            config=base_retrieval_eval_config, llm_provider=llm_provider_json_mock
-        )
+        evaluator = RetrievalEvaluator.from_config(config=base_retrieval_eval_config, llm_provider=llm_provider_mock)
         query = qs_with_docs[0]
         doc = query.retrieved_docs["0"]
         raw_answer, answer = evaluator.evaluate(query, doc)
@@ -36,19 +36,17 @@ class TestRetrievalEvaluator:
         assert answer == 1
 
         expected_prompt = f"Query: {query.query}\nDocument: {doc.text}"
-        call_args = llm_provider_json_mock.async_call_mocker.call_args_list
+        call_args = llm_provider_mock.async_call_mocker.call_args_list
         assert call_args[0][0][0] == expected_prompt
 
     def test_batch_eval(
         self,
-        llm_provider_json_mock,
+        llm_provider_mock,
         base_retrieval_eval_config,
         qs_with_docs,
     ):
-        evaluator = RetrievalEvaluator.from_config(
-            config=base_retrieval_eval_config, llm_provider=llm_provider_json_mock
-        )
-        queries = evaluator.batch_evaluate(qs_with_docs)
+        evaluator = RetrievalEvaluator.from_config(config=base_retrieval_eval_config, llm_provider=llm_provider_mock)
+        queries = evaluator.evaluate_experiment(qs_with_docs)
         evaluations = [d.evaluation for q in queries for d in q.retrieved_docs.values()]
         doc_ids = ["0", "1", "2", "3"]
         qids = ["0", "0", "1", "1"]
@@ -60,21 +58,15 @@ class TestRetrievalEvaluator:
             assert e.did == did
             assert e.qid == qid
 
-    def test_evaluate_with_text(
-        self, llm_provider_json_mock, base_retrieval_eval_config
-    ):
-        evaluator = RetrievalEvaluator.from_config(
-            config=base_retrieval_eval_config, llm_provider=llm_provider_json_mock
-        )
-        raw_answer, processed_answer = evaluator.evaluate(
-            document="This is a query", query="This is a document"
-        )
+    def test_evaluate_with_text(self, llm_provider_mock, base_retrieval_eval_config):
+        evaluator = RetrievalEvaluator.from_config(config=base_retrieval_eval_config, llm_provider=llm_provider_mock)
+        raw_answer, processed_answer = evaluator.evaluate(document="This is a query", query="This is a document")
         assert raw_answer == 'Async LLM JSON response\n{"relevance": 1}'
         assert processed_answer == 1
 
     def test_rich_printing(
         self,
-        llm_provider_json_mock,
+        llm_provider_mock,
         base_eval_config,
         qs_with_docs,
         capsys,
@@ -82,9 +74,9 @@ class TestRetrievalEvaluator:
         base_eval_config.rich_print = True
         evaluator = RetrievalEvaluator.from_config(
             config=base_eval_config,
-            llm_provider=llm_provider_json_mock,
+            llm_provider=llm_provider_mock,
         )
-        _ = evaluator.batch_evaluate(qs_with_docs)
+        _ = evaluator.evaluate_experiment(qs_with_docs)
         captured = capsys.readouterr()
         assert "🔎" in captured.out
 
@@ -111,12 +103,8 @@ class TestRetrievalEvaluator:
 
 
 class TestRDNAMEvaluator:
-    def test_process_single_answer(
-        self, llm_provider_mock_rdnam, rdnam_config, rdnam_queries
-    ):
-        evaluator = RDNAMEvaluator.from_config(
-            config=rdnam_config, llm_provider=llm_provider_mock_rdnam
-        )
+    def test_process_single_answer(self, llm_provider_mock_rdnam, rdnam_config, rdnam_queries):
+        evaluator = RDNAMEvaluator.from_config(config=rdnam_config, llm_provider=llm_provider_mock_rdnam)
         query = rdnam_queries[0]
         doc = query.retrieved_docs["0"]
         raw_answer, answer = evaluator.evaluate(query, doc)
@@ -124,9 +112,7 @@ class TestRDNAMEvaluator:
         assert answer == 1
 
         call_args = llm_provider_mock_rdnam.async_call_mocker.call_args_list
-        assert call_args[0][0][0].startswith(
-            "You are a search quality rater evaluating"
-        )
+        assert call_args[0][0][0].startswith("You are a search quality rater evaluating")
 
 
 class TestReasonerEvaluator:
@@ -154,7 +140,7 @@ class TestReasonerEvaluator:
 class TestCustomPromptEvaluator:
     def test_process_single_answer(
         self,
-        llm_provider_json_mock,
+        llm_provider_mock,
         custom_prompt_retrieval_eval_config,
         qs_with_docs,
     ):
@@ -163,31 +149,29 @@ class TestCustomPromptEvaluator:
 
         evaluator = CustomPromptEvaluator.from_config(
             config=custom_prompt_retrieval_eval_config,
-            llm_provider=llm_provider_json_mock,
+            llm_provider=llm_provider_mock,
         )
         formatter = {
             custom_prompt_retrieval_eval_config.query_placeholder: query.query,
             custom_prompt_retrieval_eval_config.document_placeholder: doc.text,
         }
-        formatted_prompt = custom_prompt_retrieval_eval_config.prompt.format(
-            **formatter
-        )
+        formatted_prompt = custom_prompt_retrieval_eval_config.prompt.format(**formatter)
 
         _, answer = evaluator.evaluate(query, doc)
-        call_args = llm_provider_json_mock.async_call_mocker.call_args_list
+        call_args = llm_provider_mock.async_call_mocker.call_args_list
 
         assert answer == {"relevance": 1}
         assert call_args[0][0][0] == formatted_prompt
 
-    def test_process_with_custom_fields(
-        self, llm_provider_json_mock, custom_prompt_retrieval_eval_config
-    ):
-        custom_prompt_retrieval_eval_config.prompt = "query: {query} doc: {document} q_metadata: {q_metadata} d_metadata: {d_metadata}"
+    def test_process_with_custom_fields(self, llm_provider_mock, custom_prompt_retrieval_eval_config):
+        custom_prompt_retrieval_eval_config.prompt = (
+            "query: {query} doc: {document} q_metadata: {q_metadata} d_metadata: {d_metadata}"
+        )
         custom_prompt_retrieval_eval_config.query_placeholder = "query"
         custom_prompt_retrieval_eval_config.document_placeholder = "document"
         evaluator = get_retrieval_evaluator(
             "custom_prompt",
-            llm_provider_json_mock,
+            llm_provider_mock,
             config=custom_prompt_retrieval_eval_config,
         )
         evaluator.evaluate(
@@ -197,7 +181,7 @@ class TestCustomPromptEvaluator:
             doc_metadata={"d_metadata": "d_1"},
         )
         assert (
-            llm_provider_json_mock.async_call_mocker.call_args_list[0][0][0]
+            llm_provider_mock.async_call_mocker.call_args_list[0][0][0]
             == "query: this is a query doc: this is a document q_metadata: q_1 d_metadata: d_1"
         )
 
@@ -209,10 +193,7 @@ class TestDomainExpertEvaluator:
         )
         assert expert_retrieval_eval_config.expert_in in evaluator.sys_prompt
         assert expert_retrieval_eval_config.domain_short in evaluator.sys_prompt
-        assert (
-            f"You work for {expert_retrieval_eval_config.company}"
-            in evaluator.sys_prompt
-        )
+        assert f"You work for {expert_retrieval_eval_config.company}" in evaluator.sys_prompt
 
     def test_process_single_answer(
         self,
@@ -240,22 +221,20 @@ class TestDomainExpertEvaluator:
         assert prompts_score[2]["role"] == "assistant"
         assert prompts_score[1]["role"] == prompts_score[3]["role"] == "user"
         assert prompts_reasoning[0]["content"].startswith("You are a domain expert in")
-        assert prompts_score[1]["content"].endswith(
-            expert_retrieval_eval_config.extra_guidelines[0]
-        )
+        assert prompts_score[1]["content"].endswith(expert_retrieval_eval_config.extra_guidelines[0])
         assert prompts_score[3]["content"].startswith("Given the previous reasoning")
 
 
 class TestFewShotEvaluator:
     def test_process_single_answer(
         self,
-        llm_provider_json_mock,
+        llm_provider_mock,
         few_shot_retrieval_eval_config,
         qs_with_docs,
     ):
         evaluator = FewShotEvaluator.from_config(
             config=few_shot_retrieval_eval_config,
-            llm_provider=llm_provider_json_mock,
+            llm_provider=llm_provider_mock,
         )
         query = qs_with_docs[0]
         doc = query.retrieved_docs["0"]
@@ -263,27 +242,18 @@ class TestFewShotEvaluator:
         raw_answer, answer = evaluator.evaluate(query, doc)
         assert raw_answer == 'Async LLM JSON response\n{"relevance": 1}'
         assert answer == 1
-        call_args = llm_provider_json_mock.async_call_mocker.call_args_list
+        call_args = llm_provider_mock.async_call_mocker.call_args_list
         call_messages = call_args[0][0][0]
         assert len(call_messages) == 6
         assert call_messages[0]["role"] == "system"
-        assert (
-            call_messages[1]["role"]
-            == call_messages[3]["role"]
-            == call_messages[5]["role"]
-            == "user"
-        )
+        assert call_messages[1]["role"] == call_messages[3]["role"] == call_messages[5]["role"] == "user"
         assert call_messages[2]["role"] == call_messages[4]["role"] == "assistant"
 
 
 class TestReadmeExamples:
     def test_rdnam_example(self, llm_provider_mock_rdnam):
-        llm_provider_mock_rdnam.async_call_mocker = AsyncMock(
-            side_effect=lambda _: '"O": 0\n}'
-        )
-        evaluator = get_retrieval_evaluator(
-            "RDNAM", llm_provider=llm_provider_mock_rdnam, write_output=False
-        )
+        llm_provider_mock_rdnam.async_call_mocker = AsyncMock(side_effect=lambda _: '"O": 0\n}')
+        evaluator = get_retrieval_evaluator("RDNAM", llm_provider=llm_provider_mock_rdnam, write_output=False)
         raw_answer, processed_answer = evaluator.evaluate(
             query="What is the capital of France?",
             document="Lyon is the second largest city in France.",
@@ -314,12 +284,13 @@ WRITE YOUR ANSWER ON A SINGLE LINE AS A JSON OBJECT WITH THE FOLLOWING KEYS:
             "relevance": 0,
             "recency": 0,
             "truthfulness": 0,
-            "reasoning": "The document is outdated and incorrect. Rio de Janeiro was the capital of Brazil until 1960 when it was changed to Brasília.",
+            "reasoning": (
+                "The document is outdated and incorrect. Rio de Janeiro was the capital of "
+                "Brazil until 1960 when it was changed to Brasília."
+            ),
         }
         mocked_llm_answer = json.dumps(answer_dict)
-        llm_provider_mock.async_call_mocker = AsyncMock(
-            side_effect=lambda _: mocked_llm_answer
-        )
+        llm_provider_mock.async_call_mocker = AsyncMock(side_effect=lambda _: mocked_llm_answer)
         evaluator = get_retrieval_evaluator(
             "custom_prompt",
             llm_provider=llm_provider_mock,

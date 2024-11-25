@@ -6,21 +6,31 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from openai import AsyncOpenAI
 from openai.resources.beta import AsyncBeta
-from openai.resources.beta.chat import AsyncChat, AsyncCompletions
+from openai.resources.beta.chat import AsyncChat
 from openai.types.chat.chat_completion import ChatCompletion, Choice
 from openai.types.chat.chat_completion_message import ChatCompletionMessage
-from openai.types.chat.parsed_chat_completion import ParsedChatCompletion, ParsedChatCompletionMessage, ParsedChoice
+from openai.types.chat.parsed_chat_completion import (
+    ParsedChatCompletion,
+    ParsedChatCompletionMessage,
+    ParsedChoice,
+)
 from pydantic import BaseModel as PydanticBaseModel
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.llm_providers.openai_client import OpenAIConfiguration
 from ragelo.types.configurations import (
+    BaseRetrievalEvaluatorConfig,
     CustomPromptAnswerEvaluatorConfig,
     CustomPromptEvaluatorConfig,
     DomainExpertEvaluatorConfig,
     LLMProviderConfig,
     PairwiseEvaluatorConfig,
     RDNAMEvaluatorConfig,
+)
+from ragelo.types.results import (
+    AnswerEvaluatorResult,
+    EloTournamentResult,
+    RetrievalEvaluatorResult,
 )
 
 
@@ -56,7 +66,7 @@ class MockLLMProvider(BaseLLMProvider):
     async def call_async(self, prompt):
         return await self.async_call_mocker(prompt)
 
-    def __call__(self, prompt) -> str:
+    def __call__(self, prompt, *args, **kwargs) -> str:
         return self.call_mocker(prompt)
 
 
@@ -82,6 +92,14 @@ def chat_completion_mock_text():
 
 
 @pytest.fixture
+def openai_client_mock_text(mocker, chat_completion_mock_text):
+    openai_client = mocker.AsyncMock(AsyncOpenAI)
+    type(openai_client).chat = mocker.AsyncMock(AsyncChat)
+    type(openai_client.chat).completions = mocker.PropertyMock(return_value=chat_completion_mock_text)
+    return openai_client
+
+
+@pytest.fixture
 def chat_completion_mock_json():
     fake_response = ChatCompletion(
         id="fake id",
@@ -102,14 +120,21 @@ def chat_completion_mock_json():
     return async_mock
 
 
-class AnswerModel(PydanticBaseModel):
-    keyA: str
-    keyB: str
+@pytest.fixture
+def openai_client_mock_json(mocker, chat_completion_mock_json):
+    openai_client = mocker.AsyncMock(AsyncOpenAI)
+    type(openai_client).chat = mocker.AsyncMock(AsyncChat)
+    type(openai_client.chat).completions = mocker.PropertyMock(return_value=chat_completion_mock_json)
+    return openai_client
 
 
 @pytest.fixture
 def chat_completion_mock_structured():
-    fake_response = ParsedChatCompletion(
+    class AnswerModel(PydanticBaseModel):
+        keyA: str
+        keyB: str
+
+    fake_response: ParsedChatCompletion = ParsedChatCompletion(
         id="fake id",
         choices=[
             ParsedChoice(
@@ -133,28 +158,107 @@ def chat_completion_mock_structured():
 
 
 @pytest.fixture
-def openai_client_mock_json(mocker, chat_completion_mock_json):
-    openai_client = mocker.AsyncMock(AsyncOpenAI)
-    type(openai_client).chat = mocker.AsyncMock(AsyncChat)
-    type(openai_client.chat).completions = mocker.PropertyMock(return_value=chat_completion_mock_json)
-    return openai_client
-
-
-@pytest.fixture
-def openai_client_mock_text(mocker, chat_completion_mock_text):
-    openai_client = mocker.AsyncMock(AsyncOpenAI)
-    type(openai_client).chat = mocker.AsyncMock(AsyncChat)
-    type(openai_client.chat).completions = mocker.PropertyMock(return_value=chat_completion_mock_text)
-    return openai_client
-
-
-@pytest.fixture
 def openai_beta_client_mock(mocker, chat_completion_mock_structured):
     openai_client = mocker.AsyncMock(AsyncOpenAI)
     type(openai_client).beta = mocker.AsyncMock(AsyncBeta)
     type(openai_client.beta).chat = mocker.AsyncMock(AsyncChat)
     type(openai_client.beta.chat).completions = mocker.PropertyMock(return_value=chat_completion_mock_structured)
     return openai_client
+
+
+@pytest.fixture
+def base_experiment_config():
+    config = {
+        "experiment_name": "test_experiment",
+        "persist_on_disk": False,
+        "queries_csv_path": "tests/data/queries.csv",
+        "documents_csv_path": "tests/data/documents.csv",
+        "answers_csv_path": "tests/data/answers.csv",
+    }
+    return config
+
+
+@pytest.fixture
+def experiment(base_experiment_config):
+    from ragelo.types.experiment import Experiment
+
+    return Experiment(**base_experiment_config)
+
+
+@pytest.fixture
+def experiment_with_retrieval_scores(experiment):
+    experiment.queries["0"].retrieved_docs["0"].retrieved_by["agent1"] = 1.0
+    experiment.queries["0"].retrieved_docs["0"].retrieved_by["agent2"] = 0.5
+    experiment.queries["0"].retrieved_docs["1"].retrieved_by["agent1"] = 0.5
+    experiment.queries["0"].retrieved_docs["1"].retrieved_by["agent2"] = 1.0
+    experiment.queries["1"].retrieved_docs["2"].retrieved_by["agent1"] = 1.0
+    experiment.queries["1"].retrieved_docs["2"].retrieved_by["agent2"] = 0.5
+    experiment.queries["1"].retrieved_docs["3"].retrieved_by["agent1"] = 0.5
+    experiment.queries["1"].retrieved_docs["3"].retrieved_by["agent2"] = 1.0
+    return experiment
+
+
+@pytest.fixture
+def empty_experiment():
+    from ragelo.types.experiment import Experiment
+
+    return Experiment(experiment_name="test_experiment")
+
+
+@pytest.fixture
+def retrieval_evaluation():
+    return RetrievalEvaluatorResult(
+        qid="0",
+        did="0",
+        raw_answer="Document is relevant. Score: 1.0",
+        answer=1,
+    )
+
+
+@pytest.fixture
+def answer_evaluation():
+    return AnswerEvaluatorResult(
+        qid="0",
+        agent="agent1",
+        pairwise=False,
+        raw_answer="Answer is good. Scores: {'quality': 1.0, 'relevance': 0.8}",
+        answer={"quality": 1.0, "relevance": 0.8},
+    )
+
+
+@pytest.fixture
+def pairwise_answer_evaluation():
+    return AnswerEvaluatorResult(
+        qid="0",
+        agent_a="agent1",
+        agent_b="agent2",
+        pairwise=True,
+        raw_answer="Answer [[A]] is better than [[B]]",
+        answer="A",
+    )
+
+
+@pytest.fixture
+def elo_tournament_result():
+    return EloTournamentResult(
+        agents=["agent1", "agent2"],
+        scores={"agent1": 1200, "agent2": 1000},
+        games_played={"agent1": 1, "agent2": 1},
+        wins={"agent1": 1, "agent2": 0},
+        loses={"agent1": 0, "agent2": 1},
+        ties={"agent1": 0, "agent2": 0},
+        total_games=2,
+        total_tournaments=1,
+    )
+
+
+@pytest.fixture
+def base_retrieval_eval_config(base_eval_config):
+    base_config = base_eval_config.model_dump()
+    del base_config["answer_format_retrieval_evaluator"]
+    return BaseRetrievalEvaluatorConfig(
+        **base_config,
+    )
 
 
 @pytest.fixture
@@ -359,14 +463,4 @@ def llm_provider_mock_rdnam(llm_provider_config):
 #         force=True,
 #         verbose=True,
 #         write_output=False,
-#     )
-
-
-# @pytest.fixture
-# def base_retrieval_eval_config(base_eval_config):
-#     base_config = base_eval_config.model_dump()
-#     del base_config["answer_format_retrieval_evaluator"]
-#     return BaseRetrievalEvaluatorConfig(
-#         answer_format_retrieval_evaluator="json",
-#         **base_config,
 #     )

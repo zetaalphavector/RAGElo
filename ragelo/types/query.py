@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from typing import Any
 
 from ragelo.logger import logger
@@ -106,7 +107,7 @@ class Query(BaseModel):
         agent = answer.agent
         answer = self.answers.get(agent, answer)
         if answer.agent in self.answers and not force:
-            logger.warning(f"Answer from agent {answer.agent} already exists in query {self.qid}")
+            warnings.warn(f"Answer from agent {answer.agent} already exists in query {self.qid}")
             return
         if answer.agent in self.answers:
             logger.info(f"Answer from agent {answer.agent} already exists in query {self.qid}. Overwriting.")

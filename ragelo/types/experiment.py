@@ -9,6 +9,7 @@ from __future__ import annotations
 import csv
 import json
 import os
+import warnings
 from pathlib import Path
 from typing import Any, Literal
 
@@ -172,16 +173,17 @@ class Experiment:
 
         if isinstance(query, Query):
             if query_id is not None and query.qid != query_id:
-                logger.warning(f"Query ID mismatch. Using ID from query object: {query.qid}")
+                warnings.warn(f"Query ID mismatch. Using ID from query object: {query.qid}")
             query_id = query.qid
             query_obj = query
         elif query_id is None:
             query_id = f"query_{len(self.queries) + 1}"
-            logger.warning(f"Query ID not provided. Using default query ID: {query_id}.")
+            warnings.warn(f"Query ID not provided. Using default query ID: {query_id}.")
+            query_obj = Query(qid=query_id, query=query, metadata=metadata)
         else:
             query_obj = Query(qid=query_id, query=query, metadata=metadata)
         if query_id in self.queries and not force:
-            logger.info(f"Query {query_id} already exists. Use force=True to overwrite")
+            warnings.warn(f"Query {query_id} already exists. Use force=True to overwrite")
             return query_id
         if query_id in self.queries and force:
             logger.info(f"Query {query_id} already exists, but force was set to True. Overwriting.")
@@ -253,7 +255,7 @@ class Experiment:
 
     def add_evaluation(
         self,
-        evaluation: RetrievalEvaluatorResult | AnswerEvaluatorResult | EloTournamentResult,
+        evaluation: (RetrievalEvaluatorResult | AnswerEvaluatorResult | EloTournamentResult),
         should_save: bool = True,
         force: bool = False,
         exist_ok: bool = False,
@@ -446,8 +448,13 @@ class Experiment:
             ValueError: If `cache_path` is None and caching is enabled.
         """
 
-        if not self.save_cache:
+        if not self.save_cache and not output_path:
             return
+        if output_path and not self.save_cache:
+            logger.info(
+                "Experiment config is set to not save, but an explicit path was provided. "
+                f"Will save the experiment on the provided path {output_path}"
+            )
         output_path = output_path or self.cache_path
         output_dict: dict[str, Any] = {}
 
@@ -702,10 +709,12 @@ class Experiment:
                 if answer.evaluation is not None:
                     answer_eval_count += 1
                 answer.evaluation = None
+        self.elo_tournaments = []
         logger.info(
             f"Cleared {doc_eval_count} document evaluations, {game_eval_count} game evaluations, "
             "and {answer_eval_count} answer evaluations"
         )
+
         if should_save:
             if self.results_cache_path and os.path.isfile(self.results_cache_path):
                 with open(self.results_cache_path, "w"):
