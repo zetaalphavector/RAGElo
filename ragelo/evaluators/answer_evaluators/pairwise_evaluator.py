@@ -103,7 +103,10 @@ and "C" for a tie.
             logger.warning("We are using a PairwiseAnswerEvaluator config. Forcing the LLM answer format to JSON.")
             self.config.llm_answer_format = AnswerFormat.JSON
             self.config.llm_response_schema = {
-                "winner": "The winner of the pairwise comparison. Either 'A', 'B', or 'C' for a tie."
+                "answer_a_reasoning": "Your reasoning wether the answer provided by agent A is correct or not.",
+                "answer_b_reasoning": "Your reasoning wether the answer provided by agent B is correct or not.",
+                "comparison_reasoning": "A short explanation of the differences between the two answers.",
+                "winner": "The winner of the pairwise comparison. Either 'A', 'B', or 'C' for a tie.",
             }
 
     def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> str | list[dict[str, str]]:
