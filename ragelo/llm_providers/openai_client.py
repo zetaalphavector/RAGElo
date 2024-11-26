@@ -106,13 +106,17 @@ class OpenAIProvider(BaseLLMProvider):
         if answer_format == AnswerFormat.STRUCTURED:
             parsed_answer = answers.choices[0].message.parsed
             if not isinstance(parsed_answer, PydanticBaseModel):
-                raise ValueError("OpenAI did not return a valid structured answer.")
+                raise ValueError(f"OpenAI did not return a valid structured answer: {parsed_answer}")
         elif answer_format == AnswerFormat.JSON:
-            parsed_answer = json.loads(answers.choices[0].message.content)
+            try:
+                parsed_answer = json.loads(answers.choices[0].message.content)
+            except json.JSONDecodeError as e:
+                raise ValueError(
+                    f"Failed to parse raw JSON answer {answers.choices[0].message.content} as JSON: {e}"
+                ) from e
         else:
             parsed_answer = answers.choices[0].message.content
         return LLMResponseType(
-            type=answer_format,
             raw_answer=answers.choices[0].message.content,
             parsed_answer=parsed_answer,
         )

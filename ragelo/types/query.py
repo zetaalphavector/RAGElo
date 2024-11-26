@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import warnings
+from collections.abc import Iterator
 from typing import Any
 
 from ragelo.logger import logger
 from ragelo.types.evaluables import AgentAnswer, Document, PairwiseGame
 from ragelo.types.pydantic_models import BaseModel
-from ragelo.types.results import AnswerEvaluatorResult, RetrievalEvaluatorResult
+from ragelo.types.results import (
+    AnswerEvaluatorResult,
+    EvaluatorResult,
+    RetrievalEvaluatorResult,
+)
 
 
 class Query(BaseModel):
@@ -115,10 +120,12 @@ class Query(BaseModel):
 
     def add_evaluation(
         self,
-        evaluation: RetrievalEvaluatorResult | AnswerEvaluatorResult,
+        evaluation: EvaluatorResult,
         force: bool = False,
         exist_ok: bool = False,
     ) -> bool:
+        if not isinstance(evaluation, RetrievalEvaluatorResult) and not isinstance(evaluation, AnswerEvaluatorResult):
+            raise ValueError("Evaluation must be a RetrievalEvaluatorResult or an AnswerEvaluatorResult")
         if isinstance(evaluation, RetrievalEvaluatorResult):
             did = evaluation.did
             if did not in self.retrieved_docs:
@@ -281,6 +288,9 @@ class Query(BaseModel):
         if len(runs) == 0:
             logger.warning(f"Query {self.qid} does not have any retrieved documents with an agent assigned.")
         return runs
+
+    def retrieved_docs_iter(self) -> Iterator[Document]:
+        return iter(self.retrieved_docs.values())
 
     @classmethod
     def assemble_query(cls, query: Query | str, metadata: dict[str, Any] | None = None) -> Query:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel as PydanticBaseModel
 from pydantic import Field
@@ -13,7 +13,7 @@ from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.logger import logger
 from ragelo.types.configurations import PairwiseEvaluatorConfig
 from ragelo.types.evaluables import PairwiseGame
-from ragelo.types.formats import AnswerFormat
+from ragelo.types.formats import AnswerFormat, LLMResponseType
 from ragelo.types.query import Query
 from ragelo.types.types import AnswerEvaluatorTypes
 
@@ -142,13 +142,16 @@ and "C" for a tie.
         }
         return self.prompt.format(**formatters)
 
-    def _process_answer(
-        self, raw_answer: str | dict[str, Any] | PydanticBaseModel
-    ) -> str | dict[str, Any] | PydanticBaseModel:
+    def _process_answer(self, llm_response: LLMResponseType) -> LLMResponseType:
         """Extracts the relevant part of an answer."""
-        self._validate_answer(raw_answer)
-        if isinstance(raw_answer, PairWiseAnswerAnswerFormat):
-            return raw_answer.winner
-        if isinstance(raw_answer, dict):
-            return raw_answer["winner"]
-        return raw_answer
+        if isinstance(llm_response.parsed_answer, PairWiseAnswerAnswerFormat):
+            return LLMResponseType(
+                raw_answer=llm_response.raw_answer,
+                parsed_answer=llm_response.parsed_answer.winner,
+            )
+        if isinstance(llm_response.parsed_answer, dict):
+            return LLMResponseType(
+                raw_answer=llm_response.raw_answer,
+                parsed_answer=llm_response.parsed_answer["winner"],
+            )
+        return llm_response

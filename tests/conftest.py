@@ -28,7 +28,7 @@ from ragelo.types.configurations import (
     PairwiseEvaluatorConfig,
     RDNAMEvaluatorConfig,
 )
-from ragelo.types.formats import AnswerFormat
+from ragelo.types.formats import AnswerFormat, LLMResponseType
 from ragelo.types.results import (
     AnswerEvaluatorResult,
     EloTournamentResult,
@@ -58,8 +58,18 @@ def llm_provider_config():
 class MockLLMProvider(BaseLLMProvider):
     def __init__(self, config):
         self.config = config
-        self.call_mocker = Mock(side_effect=lambda prompt: f"Received prompt: {prompt}.")
-        self.async_call_mocker = AsyncMock(side_effect=lambda prompt: f"Async prompt: {prompt}.")
+        self.call_mocker = Mock(
+            side_effect=lambda prompt: LLMResponseType(
+                raw_answer=f"Received prompt: {prompt}.",
+                parsed_answer={"type": "sync", "prompt": prompt, "relevance": 1},
+            )
+        )
+        self.async_call_mocker = AsyncMock(
+            side_effect=lambda prompt: LLMResponseType(
+                raw_answer=f"Async prompt: {prompt}.",
+                parsed_answer={"type": "async", "prompt": prompt, "relevance": 0},
+            )
+        )
 
     @classmethod
     def from_configuration(cls, config: LLMProviderConfig):
@@ -151,6 +161,8 @@ def base_experiment_config():
         "queries_csv_path": "tests/data/queries.csv",
         "documents_csv_path": "tests/data/documents.csv",
         "answers_csv_path": "tests/data/answers.csv",
+        "rich_print": True,
+        "verbose": True,
     }
     return config
 
@@ -318,8 +330,12 @@ def llm_provider_mock(llm_provider_config):
 @pytest.fixture
 def llm_provider_json_mock(llm_provider_config):
     provider = MockLLMProvider(llm_provider_config)
-    provider.call_mocker = Mock(side_effect=lambda _: {"relevance": 0})
-    provider.async_call_mocker = AsyncMock(side_effect=lambda _: {"relevance": 1})
+    provider.call_mocker = Mock(
+        side_effect=lambda _: LLMResponseType(raw_answer='{"relevance": 0}', parsed_answer={"relevance": 0})
+    )
+    provider.async_call_mocker = AsyncMock(
+        side_effect=lambda _: LLMResponseType(raw_answer='{"relevance": 1}', parsed_answer={"relevance": 1})
+    )
     return provider
 
 

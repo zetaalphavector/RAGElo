@@ -81,5 +81,6 @@ class EloTournamentResult(BaseModel):
     wins: dict[str, int]
     loses: dict[str, int]
     ties: dict[str, int]
+    std_dev: dict[str, float]
     total_games: int
     total_tournaments: int

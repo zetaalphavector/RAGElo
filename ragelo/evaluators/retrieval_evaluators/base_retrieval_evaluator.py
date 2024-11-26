@@ -64,11 +64,19 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             return document.evaluation  # type: ignore
         prompt = self._build_message(query, document)
         try:
-            raw_answer = await self.llm_provider.call_async(
+            llm_response = await self.llm_provider.call_async(
                 prompt,
                 answer_format=self.config.llm_answer_format,
                 response_schema=self.config.llm_response_schema,
             )
+            llm_response = self._process_answer(llm_response)
+        except ValueError as e:
+            logger.warning(
+                f"Failed to PARSE answer for qid: {query.qid} "
+                f"document id: {document.did}\n"
+                f"Raw answer: {llm_response.raw_answer}"
+            )
+            exc = str(e)
         except Exception as e:
             logger.warning(f"Failed to FETCH answers for qid: {query.qid}")
             logger.warning(f"document id: {document.did}")
@@ -76,25 +84,11 @@ class BaseRetrievalEvaluator(BaseEvaluator):
                 exc = str(e.last_attempt.exception())
             else:
                 exc = str(e)
-
-            raw_answer = None
-            answer = None
-        if raw_answer is not None:
-            try:
-                answer = self._process_answer(raw_answer)
-            except ValueError as e:
-                logger.warning(
-                    f"Failed to PARSE answer for qid: {query.qid} "
-                    f"document id: {document.did}\n"
-                    f"Raw answer: {raw_answer}"
-                )
-                exc = str(e)
-                answer = None
         return RetrievalEvaluatorResult(
             qid=query.qid,
             did=document.did,
-            raw_answer=raw_answer,
-            answer=answer,
+            raw_answer=llm_response.raw_answer,
+            answer=llm_response.parsed_answer,
             exception=exc,
         )
 

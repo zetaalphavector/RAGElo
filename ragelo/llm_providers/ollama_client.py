@@ -81,12 +81,10 @@ class OllamaProvider(BaseLLMProvider):
             raise ValueError("Ollama did not return any completions.")
         if answer_format == AnswerFormat.JSON:
             return LLMResponseType(
-                type=answer_format,
                 raw_answer=answers.choices[0].message.content,
                 parsed_answer=json.loads(answers.choices[0].message.content),
             )
         return LLMResponseType(
-            type=answer_format,
             raw_answer=answers.choices[0].message.content,
             parsed_answer=answers.choices[0].message.content,
         )

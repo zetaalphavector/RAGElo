@@ -15,7 +15,7 @@ from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.logger import logger
 from ragelo.types.configurations import RDNAMEvaluatorConfig
 from ragelo.types.evaluables import Document
-from ragelo.types.formats import AnswerFormat
+from ragelo.types.formats import AnswerFormat, LLMResponseType
 from ragelo.types.query import Query
 from ragelo.types.types import RetrievalEvaluatorTypes
 
@@ -131,17 +131,16 @@ Each rater used their own independent judgement."""
         )
         return formatted_prompt
 
-    def _process_answer(self, raw_answer) -> dict[str, float] | float:
-        self._validate_raw_answer(raw_answer)
-        assert isinstance(raw_answer, dict)
+    def _process_answer(self, llm_response: LLMResponseType) -> LLMResponseType:
+        assert isinstance(llm_response.parsed_answer, dict)
         if not self.multiple:
-            return raw_answer
+            return llm_response
         answer: dict[str, list[float]] = {
             "intent_match": [],
             "trustworthiness": [],
             "overall": [],
         }
-        for v in raw_answer.values():
+        for v in llm_response.parsed_answer.values():
             if self.config.use_aspects:
                 answer["intent_match"].append(int(v["intent_match"]))
                 answer["trustworthiness"].append(int(v["trustworthiness"]))
@@ -149,5 +148,11 @@ Each rater used their own independent judgement."""
             else:
                 answer["overall"].append(int(v["overall"]))
         if self.config.use_aspects:
-            return {k: float(np.mean(v)) for k, v in answer.items()}
-        return float(np.mean(answer["overall"]))
+            return LLMResponseType(
+                raw_answer=llm_response.raw_answer,
+                parsed_answer={k: float(np.mean(v)) for k, v in answer.items()},
+            )
+        return LLMResponseType(
+            raw_answer=llm_response.raw_answer,
+            parsed_answer=float(np.mean(answer["overall"])),
+        )

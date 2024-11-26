@@ -168,11 +168,18 @@ class BaseAnswerEvaluator(BaseEvaluator):
 
         exc = None
         try:
-            raw_answer = await self.llm_provider.call_async(
+            llm_response = await self.llm_provider.call_async(
                 prompt,
                 answer_format=self.config.llm_answer_format,
                 response_schema=self.config.llm_response_schema,
             )
+            llm_response = self._process_answer(llm_response)
+        except ValueError as e:
+            logger.warning(
+                f"Failed to PARSE answer for qid: {query.qid} agent(s): {agent}\n"
+                f"Raw answer: {llm_response.raw_answer}"
+            )
+            exc = str(e)
         except Exception as e:
             logger.warning(f"Failed to FETCH answers for qid: {query.qid}")
             logger.warning(f"agent(s): {agent}")
@@ -180,23 +187,12 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 exc = str(e.last_attempt.exception())
             else:
                 exc = str(e)
-            raw_answer = None
-            answer = None
-        if raw_answer is not None:
-            try:
-                answer = self._process_answer(raw_answer)
-            except ValueError as e:
-                logger.warning(
-                    f"Failed to PARSE answer for qid: {query.qid} agent(s): {agent}\n" f"Raw answer: {raw_answer}"
-                )
-                exc = str(e)
-                answer = None
         if isinstance(evaluable, AgentAnswer):
             return AnswerEvaluatorResult(
                 qid=query.qid,
                 agent=evaluable.agent,
-                raw_answer=raw_answer,
-                answer=answer,
+                raw_answer=llm_response.raw_answer,
+                answer=llm_response.parsed_answer,
                 pairwise=False,
                 exception=exc,
             )
@@ -204,8 +200,8 @@ class BaseAnswerEvaluator(BaseEvaluator):
             qid=query.qid,
             agent_a=evaluable.agent_a_answer.agent,
             agent_b=evaluable.agent_b_answer.agent,
-            raw_answer=raw_answer,
-            answer=answer,
+            raw_answer=llm_response.raw_answer,
+            answer=llm_response.parsed_answer,
             pairwise=True,
             exception=exc,
         )

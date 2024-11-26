@@ -13,6 +13,9 @@ import warnings
 from pathlib import Path
 from typing import Any, Literal
 
+import rich
+from pydantic import BaseModel as PydanticBaseModel
+
 from ragelo.logger import logger
 from ragelo.types.evaluables import AgentAnswer, Document
 from ragelo.types.query import Query
@@ -67,6 +70,8 @@ class Experiment:
         save_path: str | None = None,
         results_save_path: str | None = None,
         persist_on_disk: bool = True,
+        verbose: bool = False,
+        rich_print: bool = True,
         clear_evaluations: bool = False,
         queries_csv_path: str | None = None,
         csv_query_id_col: str | None = None,
@@ -91,6 +96,8 @@ class Experiment:
                 to avoid re-computing evaluations. If not set, will create one based on experiment_name.
             persist_on_disk (bool, defaults to True): Whether or not to use save_path and results_save_path to persist
                 results on disk.
+            verbose (bool, defaults to False): Whether to print information about the experiment.
+            rich_print (bool, defaults to True): Whether to print information about the experiment using the rich library.
             clear_evaluations (bool, defaults to False): If set to True, will clear all existing evaluations and
                 re-compute as needed.
             queries_csv_path (Optional[str]): An optional path to a CSV file with the queries to be used.
@@ -121,6 +128,8 @@ class Experiment:
         self.experiment_name = experiment_name
         self.queries: dict[str, Query] = {}
         self.elo_tournaments: list[EloTournamentResult] = []
+        self.verbose = verbose
+        self.rich_print = rich_print
 
         if save_path is None:
             os.makedirs("ragelo_cache", exist_ok=True)
@@ -255,7 +264,7 @@ class Experiment:
 
     def add_evaluation(
         self,
-        evaluation: (RetrievalEvaluatorResult | AnswerEvaluatorResult | EloTournamentResult),
+        evaluation: EvaluatorResult | EloTournamentResult,
         should_save: bool = True,
         force: bool = False,
         exist_ok: bool = False,
@@ -276,8 +285,76 @@ class Experiment:
             if qid not in self.queries:
                 raise ValueError(f"Query {qid} not found in queries")
             added = self.queries[qid].add_evaluation(evaluation, force=force, exist_ok=exist_ok)
-        if added and should_save:
+        if not added:
+            return
+        if should_save:
             self.save_results(evaluation)
+        if not self.verbose:
+            return
+        if isinstance(evaluation, EloTournamentResult):
+            self._print_elo_tournament_result(evaluation)
+        else:
+            self._print_response(evaluation)
+
+    def _print_elo_tournament_result(self, result: EloTournamentResult):
+        scores = sorted(result.scores.items(), key=lambda x: x[1], reverse=True)
+        if self.rich_print:
+            rich.print("-------[bold white] Agents Elo Ratings [/bold white]-------")
+        else:
+            print("------- Agents Elo Ratings -------")
+        for agent, rating in scores:
+            std_dev = result.std_dev.get(agent, 0)
+            if self.rich_print:
+                rich.print(f"[bold white]{agent:<15}[/bold white]: {rating:.1f}(±{std_dev:.1f})")
+            else:
+                print(f"{agent:<15}: {rating:.1f} (±{std_dev:.1f})")
+
+    def _print_response(
+        self,
+        response: EvaluatorResult,
+    ):
+        answer: float | str | dict | int
+        if isinstance(response.answer, dict):
+            # Print the answer in a more readable format
+            answer = json.dumps(response.answer, indent=4)
+        elif isinstance(response.answer, PydanticBaseModel):
+            answer = response.answer.model_dump_json(indent=4)
+        else:
+            answer = str(response.answer)
+        response_dict = response.model_dump()
+        agent_a = response_dict.get("agent_a")
+        agent_b = response_dict.get("agent_b")
+        agent = response_dict.get("agent")
+        qid = response_dict.get("qid")
+        did = response_dict.get("did")
+        raw_answer = response_dict.get("raw_answer")
+
+        if self.rich_print:
+            rich.print(f"[bold blue]🔎 Query ID[/bold blue]: {qid}")
+            did = response_dict.get("did")
+            if did:
+                rich.print(f"[bold blue]📜 Document ID[/bold blue]: {did}")
+            if agent_a and agent_b:
+                rich.print(
+                    f"[bold bright_cyan] {agent_a:<18} [/bold bright_cyan] 🆚  " f"[bold red] {agent_b}[/bold red]"
+                )
+            elif agent:
+                rich.print(f"[bold bright_cyan]🕵️ Agent[/bold bright_cyan]: {agent}")
+                if raw_answer != answer:
+                    rich.print(f"[bold blue]Raw Answer[/bold blue]: {raw_answer}")
+            rich.print(f"[bold blue]Parsed Answer[/bold blue]: {answer}")
+            rich.print("")
+            return
+        print(f"Query ID: {qid}")
+        if did:
+            print(f"Document ID: {did}")
+        if agent_a and agent_b:
+            print(f"{agent_a} vs {agent_b}")
+        elif agent:
+            print(f"Agent: {agent}")
+        print(f"Raw Answer: {raw_answer}")
+        print(f"Parsed Answer: {answer}")
+        print("")
 
     def evaluate_retrieval(
         self,
@@ -342,9 +419,7 @@ class Experiment:
         max_agent_len = max([len(agent) for agent in results.keys()]) + 3
         max_metric_len = max([len(metric) for metric in metrics])
         sorted_agents = sorted(results.items(), key=lambda x: x[1][key_metric], reverse=True)
-        try:
-            import rich
-
+        if self.rich_print:
             rich.print("---[bold cyan] Retrieval Scores [/bold cyan] ---")
             if relevance_threshold > 0:
                 rich.print(f"[bold yellow]Relevance threshold: {relevance_threshold}[/bold yellow]")
@@ -357,8 +432,7 @@ class Experiment:
                 row += "\t".join([f"{scores[metric]:<{max_metric_len},.4f}" for metric in metrics])
                 rich.print(row)
 
-        except ImportError:
-            logger.warning("Rich not installed. Using plain print")
+        else:
             print(results)
         return results
 

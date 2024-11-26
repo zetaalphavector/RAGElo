@@ -62,7 +62,9 @@ class Document(Evaluable):
         self.retrieved_by[agent] = score
 
     def __str__(self) -> str:
-        return self.text
+        if len(self.text) > 100:
+            return f"{self.did}: {self.text[:100]}..."
+        return f"{self.did}: {self.text}"
 
     @classmethod
     def assemble_document(

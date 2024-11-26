@@ -4,20 +4,16 @@ import asyncio
 import string
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from typing import Any
-
-from pydantic import BaseModel as PydanticBaseModel
-from tqdm.auto import tqdm
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.logger import logger
 from ragelo.types.configurations import BaseEvaluatorConfig
 from ragelo.types.evaluables import Evaluable
 from ragelo.types.experiment import Experiment
-from ragelo.types.formats import AnswerFormat
+from ragelo.types.formats import AnswerFormat, LLMResponseType
 from ragelo.types.query import Query
 from ragelo.types.results import EvaluatorResult
-from ragelo.utils import call_async_fn
+from ragelo.utils import call_async_fn, get_pbar
 
 
 class BaseEvaluator(ABC):
@@ -61,24 +57,12 @@ class BaseEvaluator(ABC):
 
     async def _evaluate_experiment_async(self, experiment: Experiment, n_threads: int = 1):
         tuples_to_eval = self._get_tuples_to_evaluate(experiment)
-        if self.config.rich_print:
-            import warnings
-
-            from tqdm import TqdmExperimentalWarning
-
-            warnings.filterwarnings("ignore", category=TqdmExperimentalWarning)
-            from tqdm.rich import tqdm as rich_tqdm
-
-            pbar_fn = rich_tqdm  # type: ignore
-        else:
-            pbar_fn = tqdm  # type: ignore
-
-        pbar = pbar_fn(
-            total=len(tuples_to_eval),
-            ncols=100,
+        pbar = get_pbar(
+            len(tuples_to_eval),
+            self.config.rich_print,
             desc=f"Evaluating {self.evaluable_name}s",
-            disable=not self.config.use_progress_bar,
         )
+
         awaitables_ended = False
         pending: set[asyncio.Future] = set()
         aws = map(self.evaluate_async, tuples_to_eval)
@@ -112,33 +96,9 @@ class BaseEvaluator(ABC):
     def _get_tuples_to_evaluate(self, queries: Experiment) -> Sequence[tuple[Query, Evaluable]]:
         raise NotImplementedError
 
-    def _validate_answer(
-        self,
-        answer: dict[str, Any] | PydanticBaseModel | str,
-    ):
-        """Ensures that the LLM output is properly formatted."""
-
-        if self.config.llm_answer_format == AnswerFormat.JSON:
-            if not isinstance(answer, dict):
-                raise ValueError(f"Expected LLM answer as a JSON dictionary, got {type(answer)}: {answer}")
-            if self.config.llm_response_schema is not None:
-                if isinstance(self.config.llm_response_schema, dict):
-                    schema = self.config.llm_response_schema
-                    if not all(k in answer for k in schema.keys()):
-                        raise ValueError(f"Expected LLM answer to have keys {schema.keys()}, got {answer.keys()}")
-        elif self.config.llm_answer_format == AnswerFormat.STRUCTURED:
-            if not isinstance(answer, PydanticBaseModel):
-                raise ValueError(f"Expected LLM answer as a PydanticBaseModel, got {type(answer)}: {answer}")
-        elif self.config.llm_answer_format == AnswerFormat.TEXT:
-            if not isinstance(answer, str):
-                raise ValueError(f"Expected LLM answer as a string, got {type(answer)}: {answer}")
-
-    def _process_answer(
-        self, raw_answer: str | dict[str, Any] | PydanticBaseModel
-    ) -> float | str | dict[str, Any] | PydanticBaseModel:
+    def _process_answer(self, llm_response: LLMResponseType) -> LLMResponseType:
         """Processes the raw answer returned by the LLM. Should be implemented by the subclass if needed."""
-        self._validate_answer(raw_answer)
-        return raw_answer
+        return llm_response
 
     @staticmethod
     def _get_fields_from_string(s: str) -> list[str]:

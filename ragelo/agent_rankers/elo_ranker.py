@@ -47,7 +47,6 @@ class EloRanker(AgentRanker):
             self.std_dev[a] = float(np.std(agent_scores[a]))
             self.agents_scores[a] = float(np.mean(agent_scores[a]))
 
-        self.print_ranking()
         result = EloTournamentResult(
             agents=list(self.agents_scores.keys()),
             scores=self.agents_scores,
@@ -55,6 +54,7 @@ class EloRanker(AgentRanker):
             wins=self.wins,
             loses=self.losses,
             ties=self.ties,
+            std_dev=self.std_dev,
             total_games=self.total_games,
             total_tournaments=self.config.tournaments,
         )
@@ -98,25 +98,3 @@ class EloRanker(AgentRanker):
 
         self.computed = True
         return agents_scores
-
-    def print_ranking(self):
-        if not self.config.verbose:
-            return
-        scores = sorted(self.get_agents_ratings().items(), key=lambda x: x[1], reverse=True)
-        if self.config.rich_print:
-            try:
-                import rich
-
-                rich.print(f"-------[bold white] Agent Scores by {self.name} [/bold white]-------")
-
-                for agent, rating in scores:
-                    std_dev = self.std_dev.get(agent, 0)
-                    rich.print(f"[bold white]{agent:<15}[/bold white]: {rating:.1f}(±{std_dev:.1f})")
-            except ImportError:
-                logger.warning("Rich not installed. Using plain print")
-                self.config.rich_print = False
-        if not self.config.rich_print:
-            print(f"------- Agent Scores by {self.name} -------")
-            for agent, rating in scores:
-                std_dev = self.std_dev.get(agent, 0)
-                print(f"{agent:<15}: {rating:.1f} (±{std_dev:.1f})")

@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock
 import pytest
 from pydantic import BaseModel as PydanticBaseModel
 
-from ragelo import get_llm_provider
 from ragelo.llm_providers.openai_client import OpenAIProvider
 from ragelo.types.formats import AnswerFormat, LLMResponseType
 
@@ -59,7 +58,6 @@ class TestOpenAIProvider:
         ]
         result = openai_client(prompt, answer_format=answer_format, response_schema=response_schema)
         assert isinstance(result, LLMResponseType)
-        assert result.type == answer_format
         assert result.raw_answer == raw_answer
         if answer_format == AnswerFormat.STRUCTURED:
             assert isinstance(result.parsed_answer, PydanticBaseModel)
