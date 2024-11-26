@@ -14,6 +14,7 @@ from ragelo.logger import logger
 from ragelo.types.configurations import BaseRetrievalEvaluatorConfig
 from ragelo.types.evaluables import Document, Evaluable
 from ragelo.types.experiment import Experiment
+from ragelo.types.formats import LLMResponseType
 from ragelo.types.query import Query
 from ragelo.types.results import RetrievalEvaluatorResult
 from ragelo.types.types import RetrievalEvaluatorTypes
@@ -71,11 +72,11 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             )
             llm_response = self._process_answer(llm_response)
         except ValueError as e:
-            logger.warning(
-                f"Failed to PARSE answer for qid: {query.qid} "
-                f"document id: {document.did}\n"
-                f"Raw answer: {llm_response.raw_answer}"
-            )
+            logger.warning(f"Failed to PARSE answer for qid: {query.qid} document id: {document.did}")
+            try:
+                llm_response = LLMResponseType(raw_answer=llm_response.raw_answer, parsed_answer=None)
+            except Exception:
+                llm_response = LLMResponseType(raw_answer="", parsed_answer=None)
             exc = str(e)
         except Exception as e:
             logger.warning(f"Failed to FETCH answers for qid: {query.qid}")
@@ -84,6 +85,10 @@ class BaseRetrievalEvaluator(BaseEvaluator):
                 exc = str(e.last_attempt.exception())
             else:
                 exc = str(e)
+            try:
+                llm_response = LLMResponseType(raw_answer=llm_response.raw_answer, parsed_answer=None)
+            except Exception:
+                llm_response = LLMResponseType(raw_answer="", parsed_answer=None)
         return RetrievalEvaluatorResult(
             qid=query.qid,
             did=document.did,

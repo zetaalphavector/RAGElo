@@ -99,7 +99,9 @@ document given the particular query. The score meaning is as follows:
                 "For this evaluator, you need to provide the domain the evaluator "
                 "is an expert in the expert_in field."
             )
-
+        if self.config.llm_answer_format != AnswerFormat.JSON:
+            logger.warning("We are using the Domain Expert Evaluator config. Forcing the LLM answer format to JSON.")
+            self.config.llm_answer_format = AnswerFormat.JSON
         self.expert_in = self.config.expert_in
         self.domain_short = f" {self.config.domain_short}" if self.config.domain_short else ""
         self.system_prompt = self.system_prompt.format(
@@ -139,6 +141,7 @@ document given the particular query. The score meaning is as follows:
         ]
         try:
             reasoning_answer = await self.llm_provider.call_async(messages, answer_format=AnswerFormat.TEXT)
+            reasoning_answer = reasoning_answer.parsed_answer
             assert isinstance(reasoning_answer, str)
         except Exception as e:
             logger.warning(f"Failed to FETCH reasonings for qid: {query.qid}")
@@ -154,35 +157,23 @@ document given the particular query. The score meaning is as follows:
                 answer=None,
                 exception=exc,
             )
-        messages.append({"role": "assistant", "content": reasoning_answer})
-        messages.append({"role": "user", "content": self.score_prompt})
+        messages_score = messages.copy()
+        messages_score.append({"role": "assistant", "content": reasoning_answer})
+        messages_score.append({"role": "user", "content": self.score_prompt})
         try:
             score_answer = await self.llm_provider.call_async(
-                messages,
+                messages_score,
                 answer_format=AnswerFormat.JSON,
                 response_schema=self.config.llm_response_schema,
             )
-            assert isinstance(score_answer, dict)
-            answer = score_answer["score"]  # type: ignore
-        except ValueError as e:
-            logger.warning(f"Failed to parse scores for qid: {query.qid}")
-            logger.warning(f"document id: {document.did}")
-            score_answer = None
-            exc = str(e)
-            answer = None
         except Exception as e:
             logger.warning(f"Failed to FETCH scores for qid: {query.qid}")
             logger.warning(f"document id: {document.did}")
-            score_answer = None
             exc = str(e)
-            answer = None
         return RetrievalEvaluatorResult(
             qid=query.qid,
             did=document.did,
-            raw_answer={
-                "reasoning_answer": reasoning_answer,
-                "score_answer": score_answer,
-            },
-            answer=answer,
+            raw_answer=reasoning_answer,
+            answer=score_answer.parsed_answer,
             exception=exc,
         )

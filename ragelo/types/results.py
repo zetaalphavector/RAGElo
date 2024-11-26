@@ -19,7 +19,7 @@ class EvaluatorResult(BaseModel):
 
     qid: str
     agent: str | None = None
-    raw_answer: float | str | dict[str, Any] | PydanticBaseModel | None = None
+    raw_answer: str | None = None
     answer: float | str | dict[str, Any] | PydanticBaseModel | None = None
     exception: str | None = None
 

@@ -52,8 +52,6 @@ overall score.
 {multiple}
 Produce a JSON with the scores without providing any reasoning. Example: {example}
 
-{format}
-
 """.strip()
 
     NARRATIVE_DESCRIPTION_PROMPT = "They were looking for: {description}\n{narrative}"
@@ -82,10 +80,10 @@ Each rater used their own independent judgement."""
             "overall": "An integer between 0 and 2 representing the score of the document."
         }
 
-        self.__role = self.config.annotator_role if self.config.annotator_role else ""
+        self._role = self.config.annotator_role if self.config.annotator_role else ""
 
         if self.config.use_aspects:
-            self.__aspects_prompt = self.ASPECTS_NARRATIVE
+            self._aspects_prompt = self.ASPECTS_NARRATIVE
             self.config.llm_response_schema["intent_match"] = (
                 "An integer between 0 and 2 representing the match of the document to the query intent."
             )
@@ -93,9 +91,9 @@ Each rater used their own independent judgement."""
                 "An integer between 0 and 2 representing the trustworthiness of the document."
             )
         else:
-            self.__aspects_prompt = ""
+            self._aspects_prompt = ""
         if self.config.use_multiple_annotators:
-            self.__multiple_prompt = self.MULTIPLE_PROMPT
+            self._multiple_prompt = self.MULTIPLE_PROMPT
             self.config.llm_response_schema = {
                 "annotator_1": self.config.llm_response_schema,
                 "annotator_2": self.config.llm_response_schema,
@@ -105,7 +103,7 @@ Each rater used their own independent judgement."""
             }
             self.multiple = True
         else:
-            self.__multiple_prompt = ""
+            self._multiple_prompt = ""
             self.multiple = False
 
     def _build_message(self, query: Query, document: Document) -> str:
@@ -118,15 +116,15 @@ Each rater used their own independent judgement."""
                     narrative=narrative, description=description
                 )
 
-        example = self.ASPECTS_EXAMPLE if self.__aspects_prompt else self.DEFAULT_EXAMPLE
+        example = self.ASPECTS_EXAMPLE if self._aspects_prompt else self.DEFAULT_EXAMPLE
 
         formatted_prompt = self.prompt.format(
-            role=self.__role,
+            role=self._role,
             query=query.query,
             doc_content=document,
             narrative_description=narrative_description_str,
-            aspects=self.__aspects_prompt,
-            multiple=self.__multiple_prompt,
+            aspects=self._aspects_prompt,
+            multiple=self._multiple_prompt,
             example=example,
         )
         return formatted_prompt
@@ -135,11 +133,11 @@ Each rater used their own independent judgement."""
         assert isinstance(llm_response.parsed_answer, dict)
         if not self.multiple:
             return llm_response
-        answer: dict[str, list[float]] = {
-            "intent_match": [],
-            "trustworthiness": [],
-            "overall": [],
-        }
+        answer: dict[str, list[float]] = {"overall": []}
+        if self.config.use_aspects:
+            answer["intent_match"] = []
+            answer["trustworthiness"] = []
+
         for v in llm_response.parsed_answer.values():
             if self.config.use_aspects:
                 answer["intent_match"].append(int(v["intent_match"]))

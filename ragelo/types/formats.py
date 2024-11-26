@@ -16,4 +16,4 @@ class AnswerFormat(str, Enum):
 
 class LLMResponseType(BaseModel):
     raw_answer: str
-    parsed_answer: float | str | dict[str, Any] | PydanticBaseModel
+    parsed_answer: float | str | dict[str, Any] | PydanticBaseModel | None

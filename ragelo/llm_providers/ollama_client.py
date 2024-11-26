@@ -11,7 +11,6 @@ from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, LLMProviderF
 from ragelo.types.configurations import OllamaConfiguration
 from ragelo.types.formats import AnswerFormat, LLMResponseType
 from ragelo.types.types import LLMProviderTypes
-from ragelo.utils import call_async_fn
 
 
 @LLMProviderFactory.register(LLMProviderTypes.OLLAMA)
@@ -28,19 +27,6 @@ class OllamaProvider(BaseLLMProvider):
         self.__ollama_client = self.__get_ollama_client(config)
 
     @retry(wait=wait_random_exponential(min=1, max=120), stop=stop_after_attempt(1))
-    def __call__(
-        self,
-        prompt: str | list[dict[str, str]],
-        answer_format: AnswerFormat = AnswerFormat.TEXT,
-        response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = None,
-    ) -> LLMResponseType:
-        """Calls the Ollama using the OpenAI API interface.
-
-        Args:
-            prompt: The prompt to use. Either a list of messages or a string.
-        """
-        return call_async_fn(self.call_async, prompt, answer_format, response_schema)
-
     async def call_async(
         self,
         prompt: str | list[dict[str, str]],

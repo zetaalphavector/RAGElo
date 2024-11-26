@@ -10,6 +10,7 @@ from ragelo.types.configurations import LLMProviderConfig
 from ragelo.types.formats import AnswerFormat, LLMResponseType
 from ragelo.types.pydantic_models import _PYDANTIC_MAJOR_VERSION
 from ragelo.types.types import LLMProviderTypes
+from ragelo.utils import call_async_fn
 
 
 class BaseLLMProvider(ABC):
@@ -19,7 +20,6 @@ class BaseLLMProvider(ABC):
     def __init__(self, config: LLMProviderConfig):
         self.config = config
 
-    @abstractmethod
     def __call__(
         self,
         prompt: str | list[dict[str, str]],
@@ -27,7 +27,7 @@ class BaseLLMProvider(ABC):
         response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = None,
     ) -> LLMResponseType:
         """Submits a single query-document pair to the LLM and returns the answer."""
-        raise NotImplementedError
+        return call_async_fn(self.call_async, prompt, answer_format, response_schema)
 
     @abstractmethod
     async def call_async(

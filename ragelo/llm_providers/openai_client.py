@@ -13,7 +13,6 @@ from ragelo.types.configurations import OpenAIConfiguration
 from ragelo.types.formats import AnswerFormat, LLMResponseType
 from ragelo.types.pydantic_models import _PYDANTIC_MAJOR_VERSION
 from ragelo.types.types import LLMProviderTypes
-from ragelo.utils import call_async_fn
 
 
 @LLMProviderFactory.register(LLMProviderTypes.OPENAI)
@@ -30,26 +29,7 @@ class OpenAIProvider(BaseLLMProvider):
         super().__init__(config)
         self.__openai_client = self.__get_openai_client(config)
 
-    def __call__(
-        self,
-        prompt: str | list[dict[str, str]],
-        answer_format: AnswerFormat = AnswerFormat.TEXT,
-        response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = None,
-    ) -> LLMResponseType:
-        """Calls the OpenAI API.
-
-        Args:
-            prompt: The prompt to use. Either a list of messages or a string.
-            answer_format: The format of the answer to return. Either TEXT, JSON, or STRUCTURED.
-            response_format: The format of the response to expect. If the answer_format is STRUCTURED,
-                this should be a PydanticBaseModel class. If the answer_format is JSON, this should be a dictionary
-                with the desired format the answer should be in
-        Returns:
-            The response from the OpenAI API, formatted according to the answer_format.
-        """
-        return call_async_fn(self.call_async, prompt, answer_format, response_schema)
-
-    @retry(wait=wait_random_exponential(min=1, max=120), stop=stop_after_attempt(1))
+    @retry(wait=wait_random_exponential(min=1, max=120), stop=stop_after_attempt(5))
     async def call_async(
         self,
         prompt: str | list[dict[str, str]],

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 
 import pytest
 from openai import AsyncOpenAI
@@ -24,10 +24,12 @@ from ragelo.types.configurations import (
     CustomPromptAnswerEvaluatorConfig,
     CustomPromptEvaluatorConfig,
     DomainExpertEvaluatorConfig,
+    FewShotEvaluatorConfig,
     LLMProviderConfig,
     PairwiseEvaluatorConfig,
     RDNAMEvaluatorConfig,
 )
+from ragelo.types.configurations.retrieval_evaluator_configs import FewShotExample
 from ragelo.types.formats import AnswerFormat, LLMResponseType
 from ragelo.types.results import (
     AnswerEvaluatorResult,
@@ -55,36 +57,42 @@ def llm_provider_config():
     )
 
 
+class AnswerModel(PydanticBaseModel):
+    keyA: str
+    keyB: str
+
+
+def answer_model_factory(prompt, answer_format, **kwargs):
+    if answer_format == AnswerFormat.STRUCTURED:
+        return LLMResponseType(
+            raw_answer='{"keyA": "valueA", "keyB": "valueB"}',
+            parsed_answer=AnswerModel(keyA="valueA", keyB="valueB"),
+        )
+    elif answer_format == AnswerFormat.JSON:
+        return LLMResponseType(
+            raw_answer='{"relevance": 1}',
+            parsed_answer={"relevance": 1},
+        )
+    elif answer_format == AnswerFormat.TEXT:
+        return LLMResponseType(
+            raw_answer='{"keyA": "valueA", "keyB": "valueB"}',
+            parsed_answer='{"keyA": "valueA", "keyB": "valueB"}',
+        )
+    else:
+        raise ValueError(f"Unsupported answer format: {answer_format}")
+
+
 class MockLLMProvider(BaseLLMProvider):
     def __init__(self, config):
         self.config = config
-        self.call_mocker = Mock(
-            side_effect=lambda prompt: LLMResponseType(
-                raw_answer=f"Received prompt: {prompt}.",
-                parsed_answer={"type": "sync", "prompt": prompt, "relevance": 1},
-            )
-        )
-        self.async_call_mocker = AsyncMock(
-            side_effect=lambda prompt: LLMResponseType(
-                raw_answer=f"Async prompt: {prompt}.",
-                parsed_answer={"type": "async", "prompt": prompt, "relevance": 0},
-            )
-        )
+        self.async_call_mocker = AsyncMock(side_effect=answer_model_factory)
 
     @classmethod
     def from_configuration(cls, config: LLMProviderConfig):
         return cls(config)
 
-    async def call_async(self, prompt, *args, **kwargs):
-        return await self.async_call_mocker(prompt)
-
-    def __call__(self, prompt, *args, **kwargs) -> str:
-        return self.call_mocker(prompt)
-
-
-class AnswerModel(PydanticBaseModel):
-    keyA: str
-    keyB: str
+    async def call_async(self, prompt, answer_format, *args, **kwargs):
+        return await self.async_call_mocker(prompt, answer_format)
 
 
 @pytest.fixture
@@ -238,6 +246,7 @@ def elo_tournament_result():
         ties={"agent1": 0, "agent2": 0},
         total_games=2,
         total_tournaments=1,
+        std_dev={"agent1": 0, "agent2": 0},
     )
 
 
@@ -308,6 +317,7 @@ def rdnam_config(base_eval_config):
     return RDNAMEvaluatorConfig(
         annotator_role="You are a search quality rater evaluating the relevance of web pages. ",
         use_multiple_annotators=True,
+        use_aspects=True,
         **base_config,
     )
 
@@ -327,29 +337,46 @@ def llm_provider_mock(llm_provider_config):
     return MockLLMProvider(llm_provider_config)
 
 
+# @pytest.fixture
+# def llm_provider_json_mock(llm_provider_config):
+#     provider = MockLLMProvider(llm_provider_config)
+#     provider.async_call_mocker = AsyncMock(
+#         side_effect=lambda _: LLMResponseType(raw_answer='{"relevance": 1}', parsed_answer={"relevance": 1})
+#     )
+#     return provider
+
+
 @pytest.fixture
-def llm_provider_json_mock(llm_provider_config):
+def llm_provider_mock_rdnam(llm_provider_config):
+    mocked_scores = {
+        "annotator_1": {"intent_match": 2, "trustworthiness": 1, "overall": 1},
+        "annotator_2": {"intent_match": 1, "trustworthiness": 1, "overall": 2},
+    }
+    LLM_response = LLMResponseType(raw_answer=json.dumps(mocked_scores)[2:], parsed_answer=mocked_scores)
     provider = MockLLMProvider(llm_provider_config)
-    provider.call_mocker = Mock(
-        side_effect=lambda _: LLMResponseType(raw_answer='{"relevance": 0}', parsed_answer={"relevance": 0})
-    )
-    provider.async_call_mocker = AsyncMock(
-        side_effect=lambda _: LLMResponseType(raw_answer='{"relevance": 1}', parsed_answer={"relevance": 1})
-    )
+
+    def side_effect(*args, **kwargs):
+        return LLM_response
+
+    provider.async_call_mocker = AsyncMock(side_effect=side_effect)
+    return provider
+
+
+@pytest.fixture
+def llm_provider_reasoner_mock(llm_provider_config):
+    provider = MockLLMProvider(llm_provider_config)
+    answer = LLMResponseType(raw_answer="The document is very relevant", parsed_answer="The document is very relevant")
+
+    def side_effect(*args, **kwargs):
+        return answer
+
+    provider.async_call_mocker = AsyncMock(side_effect=side_effect)
     return provider
 
 
 @pytest.fixture
 def llm_provider_pairwise_answer_mock(llm_provider_config):
     provider = MockLLMProvider(llm_provider_config)
-    provider.call_mocker = Mock(
-        side_effect=[
-            "Agent [[A]] is better",
-            "Agent [[B]] is better",
-            "A tie. Therefore, [[C]]",
-            "I don't know. [[C]]",
-        ]
-    )
     provider.async_call_mocker = AsyncMock(
         side_effect=[
             "Async Agent [[A]] is better",
@@ -364,22 +391,10 @@ def llm_provider_pairwise_answer_mock(llm_provider_config):
 @pytest.fixture
 def llm_provider_answer_mock(llm_provider_config):
     provider = MockLLMProvider(llm_provider_config)
-    provider.call_mocker = Mock(
-        side_effect=lambda prompt: f"Answer for {prompt}\n" '{"quality": 2, "trustworthiness": 1, "originality": 1}',
-    )
     provider.async_call_mocker = AsyncMock(
         side_effect=lambda prompt: f"Async answer for {prompt}\n"
         '{"quality": 1, "trustworthiness": 0, "originality": 0}',
     )
-    return provider
-
-
-@pytest.fixture
-def llm_provider_mock_rdnam(llm_provider_config):
-    mocked_scores = [{"M": 2, "T": 1, "O": 1}, {"M": 1, "T": 1, "O": 2}]
-    provider = MockLLMProvider(llm_provider_config)
-    provider.call_mocker = Mock(side_effect=lambda _: json.dumps(mocked_scores)[2:])
-    provider.async_call_mocker = AsyncMock(side_effect=lambda _: json.dumps(mocked_scores)[2:])
     return provider
 
 
@@ -408,42 +423,30 @@ def llm_provider_mock_rdnam(llm_provider_config):
 #     return add_answers_from_csv("tests/data/answers.csv", queries=queries_test)
 
 
-# @pytest.fixture
-# def few_shot_retrieval_eval_config(base_eval_config):
-#     base_eval_config = base_eval_config.model_dump()
-#     few_shot_samples = [
-#         FewShotExample(
-#             passage="Few shot example 1",
-#             query="Few shot query 1",
-#             relevance=2,
-#             reasoning="This is a good document",
-#         ),
-#         FewShotExample(
-#             passage="Few shot example 2",
-#             query="Few shot query 2",
-#             relevance=0,
-#             reasoning="This is a bad document",
-#         ),
-#     ]
-#     del base_eval_config["answer_format_retrieval_evaluator"]
-#     return FewShotEvaluatorConfig(
-#         system_prompt="System prompt",
-#         few_shot_user_prompt="query: {query} doc: {document}",
-#         few_shot_assistant_answer=('{reasoning} {{"relevance": {relevance}}}'),
-#         reasoning_placeholder="reasoning",
-#         relevance_placeholder="relevance",
-#         few_shots=few_shot_samples,
-#         answer_format_retrieval_evaluator="json",
-#         **base_eval_config,
-#     )
+@pytest.fixture
+def few_shot_retrieval_eval_config(base_eval_config):
+    base_eval_config = base_eval_config.model_dump()
+    few_shot_samples = [
+        FewShotExample(
+            passage="Few shot example 1",
+            query="Few shot query 1",
+            relevance=2,
+            reasoning="This is a good document",
+        ),
+        FewShotExample(
+            passage="Few shot example 2",
+            query="Few shot query 2",
+            relevance=0,
+            reasoning="This is a bad document",
+        ),
+    ]
 
-
-# @pytest.fixture
-# def base_eval_config():
-#     return BaseEvaluatorConfig(
-#         documents_file="tests/data/documents.csv",
-#         queries_file="tests/data/queries.csv",
-#         force=True,
-#         verbose=True,
-#         write_output=False,
-#     )
+    return FewShotEvaluatorConfig(
+        system_prompt="System prompt",
+        few_shot_user_prompt="query: {query} doc: {document}",
+        few_shot_assistant_answer=('{reasoning} {{"relevance": {relevance}}}'),
+        reasoning_placeholder="reasoning",
+        relevance_placeholder="relevance",
+        few_shots=few_shot_samples,
+        **base_eval_config,
+    )
