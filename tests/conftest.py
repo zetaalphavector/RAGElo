@@ -72,73 +72,48 @@ class MockLLMProvider(BaseLLMProvider):
         return self.call_mocker(prompt)
 
 
+class AnswerModel(PydanticBaseModel):
+    keyA: str
+    keyB: str
+
+
 @pytest.fixture
-def chat_completion_mock_text():
-    fake_response = ChatCompletion(
+def chat_completion_mock(answer_format):
+    if answer_format == AnswerFormat.STRUCTURED:
+        _cls = ParsedChatCompletion
+    else:
+        _cls = ChatCompletion
+
+    async_mock = AsyncMock()
+    fake_response = _cls(
         id="fake id",
-        choices=[
+        choices=[],
+        created=0,
+        model="fake model",
+        object="chat.completion",
+    )
+    if answer_format == AnswerFormat.TEXT:
+        fake_response.choices.append(
             Choice(
                 finish_reason="stop",
                 index=0,
                 logprobs=None,
                 message=ChatCompletionMessage(content="fake response", role="assistant"),
-            )
-        ],
-        created=0,
-        model="fake model",
-        object="chat.completion",
-    )
-    async_mock = AsyncMock()
-    async_mock.create.return_value = fake_response
-    return async_mock
-
-
-@pytest.fixture
-def openai_client_mock_text(mocker, chat_completion_mock_text):
-    openai_client = mocker.AsyncMock(AsyncOpenAI)
-    type(openai_client).chat = mocker.AsyncMock(AsyncChat)
-    type(openai_client.chat).completions = mocker.PropertyMock(return_value=chat_completion_mock_text)
-    return openai_client
-
-
-@pytest.fixture
-def chat_completion_mock_json():
-    fake_response = ChatCompletion(
-        id="fake id",
-        choices=[
+            )  # type: ignore
+        )
+        async_mock.create.return_value = fake_response
+    elif answer_format == AnswerFormat.JSON:
+        fake_response.choices.append(
             Choice(
                 finish_reason="stop",
                 index=0,
                 logprobs=None,
                 message=ChatCompletionMessage(content='{"keyA": "valueA", "keyB": "valueB"}', role="assistant"),
-            )
-        ],
-        created=0,
-        model="fake model",
-        object="chat.completion",
-    )
-    async_mock = AsyncMock()
-    async_mock.create.return_value = fake_response
-    return async_mock
-
-
-@pytest.fixture
-def openai_client_mock_json(mocker, chat_completion_mock_json):
-    openai_client = mocker.AsyncMock(AsyncOpenAI)
-    type(openai_client).chat = mocker.AsyncMock(AsyncChat)
-    type(openai_client.chat).completions = mocker.PropertyMock(return_value=chat_completion_mock_json)
-    return openai_client
-
-
-@pytest.fixture
-def chat_completion_mock_structured():
-    class AnswerModel(PydanticBaseModel):
-        keyA: str
-        keyB: str
-
-    fake_response: ParsedChatCompletion = ParsedChatCompletion(
-        id="fake id",
-        choices=[
+            )  # type: ignore
+        )
+        async_mock.create.return_value = fake_response
+    elif answer_format == AnswerFormat.STRUCTURED:
+        fake_response.choices.append(
             ParsedChoice(
                 finish_reason="stop",
                 index=0,
@@ -148,23 +123,23 @@ def chat_completion_mock_structured():
                     parsed=AnswerModel(keyA="valueA", keyB="valueB"),
                     role="assistant",
                 ),
-            )
-        ],
-        created=0,
-        model="fake model",
-        object="chat.completion",
-    )
-    async_mock = AsyncMock()
-    async_mock.parse.return_value = fake_response
+            )  # type: ignore
+        )
+        async_mock.parse.return_value = fake_response
+    else:
+        raise ValueError(f"Unsupported answer format: {answer_format}")
+
     return async_mock
 
 
 @pytest.fixture
-def openai_beta_client_mock(mocker, chat_completion_mock_structured):
+def openai_client_mock(mocker, chat_completion_mock):
     openai_client = mocker.AsyncMock(AsyncOpenAI)
+    type(openai_client).chat = mocker.AsyncMock(AsyncChat)
+    type(openai_client.chat).completions = mocker.PropertyMock(return_value=chat_completion_mock)
     type(openai_client).beta = mocker.AsyncMock(AsyncBeta)
     type(openai_client.beta).chat = mocker.AsyncMock(AsyncChat)
-    type(openai_client.beta.chat).completions = mocker.PropertyMock(return_value=chat_completion_mock_structured)
+    type(openai_client.beta.chat).completions = mocker.PropertyMock(return_value=chat_completion_mock)
     return openai_client
 
 
@@ -404,11 +379,6 @@ def llm_provider_mock_rdnam(llm_provider_config):
 # @pytest.fixture
 # def queries_test():
 #     return load_queries_from_csv("tests/data/queries.csv")
-
-
-# @pytest.fixture
-# def qs_with_docs(queries_test):
-#     return add_documents_from_csv("tests/data/documents.csv", queries=queries_test)
 
 
 # @pytest.fixture
