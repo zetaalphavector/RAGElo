@@ -9,7 +9,7 @@ from tenacity import retry, stop_after_attempt, wait_random_exponential
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, LLMProviderFactory
 from ragelo.types.configurations import OllamaConfiguration
-from ragelo.types.formats import AnswerFormat
+from ragelo.types.formats import AnswerFormat, LLMResponseType
 from ragelo.types.types import LLMProviderTypes
 from ragelo.utils import call_async_fn
 
@@ -33,7 +33,7 @@ class OllamaProvider(BaseLLMProvider):
         prompt: str | list[dict[str, str]],
         answer_format: AnswerFormat = AnswerFormat.TEXT,
         response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = None,
-    ) -> str | PydanticBaseModel | dict[str, Any]:
+    ) -> LLMResponseType:
         """Calls the Ollama using the OpenAI API interface.
 
         Args:
@@ -46,7 +46,7 @@ class OllamaProvider(BaseLLMProvider):
         prompt: str | list[dict[str, str]],
         answer_format: AnswerFormat = AnswerFormat.TEXT,
         response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = None,
-    ) -> str | PydanticBaseModel | dict[str, Any]:
+    ) -> LLMResponseType:
         """Calls the Ollama Local API asynchronously.
 
         Args:
@@ -80,8 +80,16 @@ class OllamaProvider(BaseLLMProvider):
         if not answers.choices or not answers.choices[0].message or not answers.choices[0].message.content:
             raise ValueError("Ollama did not return any completions.")
         if answer_format == AnswerFormat.JSON:
-            return json.loads(answers.choices[0].message.content)
-        return answers.choices[0].message.content
+            return LLMResponseType(
+                type=answer_format,
+                raw_answer=answers.choices[0].message.content,
+                parsed_answer=json.loads(answers.choices[0].message.content),
+            )
+        return LLMResponseType(
+            type=answer_format,
+            raw_answer=answers.choices[0].message.content,
+            parsed_answer=answers.choices[0].message.content,
+        )
 
     @staticmethod
     def __get_ollama_client(ollama_config: OllamaConfiguration) -> AsyncOpenAI:

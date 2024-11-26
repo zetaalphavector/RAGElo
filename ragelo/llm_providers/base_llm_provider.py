@@ -7,7 +7,7 @@ from typing import Any, Type, get_type_hints
 from pydantic import BaseModel as PydanticBaseModel
 
 from ragelo.types.configurations import LLMProviderConfig
-from ragelo.types.formats import AnswerFormat
+from ragelo.types.formats import AnswerFormat, LLMResponseType
 from ragelo.types.pydantic_models import _PYDANTIC_MAJOR_VERSION
 from ragelo.types.types import LLMProviderTypes
 
@@ -25,7 +25,7 @@ class BaseLLMProvider(ABC):
         prompt: str | list[dict[str, str]],
         answer_format: AnswerFormat = AnswerFormat.TEXT,
         response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = None,
-    ) -> str | PydanticBaseModel | dict[str, Any]:
+    ) -> LLMResponseType:
         """Submits a single query-document pair to the LLM and returns the answer."""
         raise NotImplementedError
 
@@ -35,7 +35,7 @@ class BaseLLMProvider(ABC):
         prompt: str | list[dict[str, str]],
         answer_format: AnswerFormat = AnswerFormat.TEXT,
         response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = None,
-    ) -> str | PydanticBaseModel | dict[str, Any]:
+    ) -> LLMResponseType:
         """Submits a single query-document pair to the LLM and returns the answer."""
         raise NotImplementedError
 
