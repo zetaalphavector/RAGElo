@@ -23,12 +23,7 @@ class RetrievalEvaluator(BaseRetrievalEvaluator):
 
 
 class TestRetrievalEvaluator:
-    def test_evaluate_single_answer(
-        self,
-        llm_provider_mock,
-        experiment,
-        base_retrieval_eval_config,
-    ):
+    def test_evaluate_single_answer(self, llm_provider_mock, experiment, base_retrieval_eval_config):
         evaluator = RetrievalEvaluator.from_config(config=base_retrieval_eval_config, llm_provider=llm_provider_mock)
         query = experiment["0"]
         doc = query.retrieved_docs["0"]

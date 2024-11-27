@@ -20,6 +20,7 @@ from pydantic import BaseModel as PydanticBaseModel
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.llm_providers.openai_client import OpenAIConfiguration
 from ragelo.types.configurations import (
+    BaseAnswerEvaluatorConfig,
     BaseEvaluatorConfig,
     BaseRetrievalEvaluatorConfig,
     CustomPromptAnswerEvaluatorConfig,
@@ -266,17 +267,6 @@ def base_retrieval_eval_config(base_eval_config):
 
 
 @pytest.fixture
-def pairwise_answer_eval_config(base_eval_config):
-    base_config = base_eval_config.model_dump()
-    base_config["document_evaluations_file"] = "tests/data/reasonings.csv"
-    config = PairwiseEvaluatorConfig(
-        bidirectional=True,
-        **base_config,
-    )
-    return config
-
-
-@pytest.fixture
 def custom_answer_eval_config(base_eval_config):
     base_config = base_eval_config.model_dump()
     base_config["answer_format_answer_evaluator"] = "multi_field_json"
@@ -345,7 +335,7 @@ def llm_provider_mock_rdnam(llm_provider_config):
         "annotator_1": {"intent_match": 2, "trustworthiness": 1, "overall": 1},
         "annotator_2": {"intent_match": 1, "trustworthiness": 1, "overall": 2},
     }
-    LLM_response = LLMResponseType(raw_answer=json.dumps(mocked_scores)[2:], parsed_answer=mocked_scores)
+    LLM_response = LLMResponseType(raw_answer=json.dumps(mocked_scores), parsed_answer=mocked_scores)
     provider = MockLLMProvider(llm_provider_config)
 
     def side_effect(*args, **kwargs):
@@ -368,52 +358,16 @@ def llm_provider_reasoner_mock(llm_provider_config):
 
 
 @pytest.fixture
-def llm_provider_pairwise_answer_mock(llm_provider_config):
-    provider = MockLLMProvider(llm_provider_config)
-    provider.async_call_mocker = AsyncMock(
-        side_effect=[
-            "Async Agent [[A]] is better",
-            "Async Agent [[B]] is better",
-            "Async A tie. Therefore, [[C]]",
-            "Async I don't know. [[C]]",
-        ]
-    )
-    return provider
+def base_answer_eval_config(base_eval_config):
+    base_config = base_eval_config.model_dump()
+    return BaseAnswerEvaluatorConfig(**base_config)
 
 
 @pytest.fixture
-def llm_provider_answer_mock(llm_provider_config):
-    provider = MockLLMProvider(llm_provider_config)
-    provider.async_call_mocker = AsyncMock(
-        side_effect=lambda prompt: f"Async answer for {prompt}\n"
-        '{"quality": 1, "trustworthiness": 0, "originality": 0}',
-    )
-    return provider
-
-
-# from ragelo.types.configurations.retrieval_evaluator_configs import FewShotExample
-
-# from ragelo.utils import (
-# add_answers_from_csv,
-# add_documents_from_csv,
-# load_queries_from_csv,
-# )
-
-
-# @pytest.fixture
-# def queries_test():
-#     return load_queries_from_csv("tests/data/queries.csv")
-
-
-# @pytest.fixture
-# def rdnam_queries():
-#     queries = load_queries_from_csv("tests/data/rdnam_queries.csv")
-#     return add_documents_from_csv("tests/data/documents.csv", queries=queries)
-
-
-# @pytest.fixture
-# def answers_test(queries_test):
-#     return add_answers_from_csv("tests/data/answers.csv", queries=queries_test)
+def pairwise_answer_eval_config(base_answer_eval_config):
+    base_config = base_answer_eval_config.model_dump()
+    base_config["pairwise"] = True
+    return PairwiseEvaluatorConfig(bidirectional=True, **base_config)
 
 
 @pytest.fixture
@@ -443,3 +397,37 @@ def few_shot_retrieval_eval_config(base_eval_config):
         few_shots=few_shot_samples,
         **base_eval_config,
     )
+
+
+@pytest.fixture
+def llm_provider_answer_mock(llm_provider_config):
+    provider = MockLLMProvider(llm_provider_config)
+    mocked_answer = LLMResponseType(
+        raw_answer='{"quality": 1, "trustworthiness": 0, "originality": 0}',
+        parsed_answer={"quality": 1, "trustworthiness": 0, "originality": 0},
+    )
+
+    def side_effect(*args, **kwargs):
+        return mocked_answer
+
+    provider.async_call_mocker = AsyncMock(side_effect=side_effect)
+    return provider
+
+
+@pytest.fixture
+def llm_provider_pairwise_answer_mock(llm_provider_config):
+    provider = MockLLMProvider(llm_provider_config)
+    answer = {
+        "answer_a_reasoning": "Answer A is good",
+        "answer_b_reasoning": "Answer B is bad",
+        "comparison_reasoning": "Answer A is better than Answer B",
+        "winner": "A",
+    }
+    LLM_response = LLMResponseType(raw_answer=json.dumps(answer), parsed_answer=answer)
+
+    def side_effect(*args, **kwargs):
+        return LLM_response
+
+    provider.async_call_mocker = AsyncMock(side_effect=side_effect)
+
+    return provider

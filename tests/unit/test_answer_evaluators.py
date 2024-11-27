@@ -1,16 +1,114 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from ragelo import get_answer_evaluator
 from ragelo.evaluators.answer_evaluators import (
+    BaseAnswerEvaluator,
     ChatPairwiseEvaluator,
     CustomPairwiseEvaluator,
     CustomPromptEvaluator,
     PairwiseAnswerEvaluator,
     PairwiseDomainExpertEvaluator,
 )
+from ragelo.types.evaluables import AgentAnswer, PairwiseGame
+from ragelo.types.query import Query
 from ragelo.types.results import AnswerEvaluatorResult
+
+
+class AnswerEvaluator(BaseAnswerEvaluator):
+    def _build_message(self, query: Query, answer: AgentAnswer) -> str:
+        return f"Query: {query.query}\nAnswer: {answer.text}"
+
+    def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> str:
+        return f"Query: {query.query}\nAnswer A: {game.agent_a_answer.text}\nAnswer B: {game.agent_b_answer.text}"
+
+
+class TestAnswerEvaluator:
+    def test_evaluate_single_answer(
+        self,
+        llm_provider_answer_mock,
+        llm_provider_pairwise_answer_mock,
+        experiment,
+        base_answer_eval_config,
+        pairwise_answer_eval_config,
+    ):
+        pointwise_evaluator = AnswerEvaluator.from_config(
+            config=base_answer_eval_config, llm_provider=llm_provider_answer_mock
+        )
+        pairwise_evaluator = PairwiseAnswerEvaluator.from_config(
+            config=pairwise_answer_eval_config, llm_provider=llm_provider_pairwise_answer_mock
+        )
+        query = experiment["0"]
+        answer = query.answers["agent1"]
+        result = pointwise_evaluator.evaluate(query, answer)
+        assert isinstance(result, AnswerEvaluatorResult)
+        assert isinstance(result.answer, dict)
+        assert result.answer.keys() == {"quality", "trustworthiness", "originality"}
+        assert result.raw_answer == '{"quality": 1, "trustworthiness": 0, "originality": 0}'
+        assert result.exception is None
+        assert result.pairwise is False
+        assert result.qid == query.qid
+        assert result.agent == answer.agent
+        call_args = llm_provider_answer_mock.async_call_mocker.call_args_list
+        assert len(call_args) == 1
+        expected_prompt = f"Query: {query.query}\nAnswer: {answer.text}"
+        assert call_args[0][0][0] == expected_prompt
+
+        result = pairwise_evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
+        assert isinstance(result, AnswerEvaluatorResult)
+        assert isinstance(result.raw_answer, str)
+        assert isinstance(result.answer, str)
+        raw_answer = json.loads(result.raw_answer)
+        assert raw_answer.keys() == {"answer_a_reasoning", "answer_b_reasoning", "comparison_reasoning", "winner"}
+        assert result.answer == "A"
+        assert result.exception is None
+        assert result.pairwise is True
+        assert result.qid == query.qid
+        assert result.agent_a == query.answers["agent1"].agent
+        assert result.agent_b == query.answers["agent2"].agent
+
+    def test_evaluate_pairwise_game(self, llm_provider_mock, experiment, base_answer_eval_config):
+        base_answer_eval_config.pairwise = True
+        evaluator = AnswerEvaluator.from_config(config=base_answer_eval_config, llm_provider=llm_provider_mock)
+        query = experiment["0"]
+        result = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
+        assert isinstance(result, AnswerEvaluatorResult)
+        assert result.answer == {"relevance": 1}
+        assert result.raw_answer == '{"relevance": 1}'
+        assert result.exception is None
+        assert result.pairwise is True
+        assert result.qid == query.qid
+        assert result.agent_a == query.answers["agent1"].agent
+        assert result.agent_b == query.answers["agent2"].agent
+
+    def test_evaluate_experiment(self, llm_provider_mock, experiment, base_answer_eval_config):
+        evaluator = AnswerEvaluator.from_config(config=base_answer_eval_config, llm_provider=llm_provider_mock)
+        evaluator.evaluate_experiment(experiment)
+        for query in experiment:
+            for answer in query.answers.values():
+                assert isinstance(answer.evaluation, AnswerEvaluatorResult)
+                assert isinstance(answer.evaluation.answer, dict)
+                assert isinstance(answer.evaluation.raw_answer, str)
+                assert answer.evaluation.exception is None
+                assert answer.evaluation.pairwise is False
+                assert answer.evaluation.qid == query.qid
+                assert answer.evaluation.agent == answer.agent
+        base_answer_eval_config.pairwise = True
+        evaluator = AnswerEvaluator.from_config(config=base_answer_eval_config, llm_provider=llm_provider_mock)
+        evaluator.evaluate_experiment(experiment)
+        for query in experiment:
+            for game in query.pairwise_games:
+                assert isinstance(game.evaluation, AnswerEvaluatorResult)
+                assert isinstance(game.evaluation.answer, dict)
+                assert isinstance(game.evaluation.raw_answer, str)
+                assert game.evaluation.exception is None
+                assert game.evaluation.pairwise is True
+                assert game.evaluation.qid == query.qid
+                assert game.evaluation.agent_a == game.agent_a_answer.agent
+                assert game.evaluation.agent_b == game.agent_b_answer.agent
 
 
 class TestPairwiseWithReasoningEvaluator:

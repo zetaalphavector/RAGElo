@@ -85,9 +85,6 @@ class BaseAnswerEvaluator(BaseEvaluator):
         agent: str | tuple[str, str]
         evaluable: AgentAnswer | PairwiseGame
 
-        def run(coroutine):
-            return asyncio.run(coroutine)
-
         if self.config.pairwise:
             if not answer_a or not answer_b:
                 raise ValueError("Pairwise evaluations require two answers")
@@ -135,9 +132,9 @@ class BaseAnswerEvaluator(BaseEvaluator):
         agent: str | tuple[str, str]
         query, evaluable = eval_sample
 
-        if not isinstance(evaluable, AgentAnswer) or not isinstance(evaluable, PairwiseGame):
+        if not isinstance(evaluable, AgentAnswer) and not isinstance(evaluable, PairwiseGame):
             type_name = type(evaluable).__name__
-            raise ValueError(f"can't evaluate a {type_name} in a Retrieval Evaluator")
+            raise ValueError(f"can't evaluate a {type_name} in an Answer Evaluator")
 
         if evaluable.evaluation is not None and not self.config.force:
             if isinstance(evaluable, AgentAnswer):
