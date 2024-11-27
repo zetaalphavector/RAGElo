@@ -43,6 +43,10 @@ class BaseCLIConfig(BaseEvaluatorConfig):
         description="The path to the output file where the results will be saved.",
     )
     llm_response_schema: None = None
+    save_results: bool = Field(
+        default=True,
+        description="Whether or not to save the results to disk.",
+    )
 
 
 class CLIEvaluatorConfig(BaseCLIConfig):
@@ -61,7 +65,7 @@ class CLIEvaluatorConfig(BaseCLIConfig):
 
 
 class CLIDomainExpertEvaluatorConfig(CLIEvaluatorConfig, DomainExpertEvaluatorConfig):
-    pass
+    expert_in: str | None = Field(default=" ")
 
 
 class CLIReasonerEvaluatorConfig(CLIEvaluatorConfig, ReasonerEvaluatorConfig):
@@ -78,6 +82,7 @@ class CLIPairwiseDomainExpertEvaluatorConfig(CLIEvaluatorConfig, PairwiseDomainE
         description="If set to True, a reasoning retrieval evaluator will run, and the reasoning of the quality "
         "  of the retrieved results will be included in the prompt for the pairwise games.",
     )
+    expert_in: str | None = Field(default=" ")
 
 
 class CLIPairwiseEvaluatorConfig(CLIEvaluatorConfig, PairwiseEvaluatorConfig):

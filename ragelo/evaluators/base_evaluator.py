@@ -5,6 +5,8 @@ import string
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 
+import rich
+
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.logger import logger
 from ragelo.types.configurations import BaseEvaluatorConfig
@@ -122,15 +124,12 @@ class BaseEvaluator(ABC):
 
     def _print_failed_evaluations(self, total_evaluations: int, failed_evaluations: int):
         if self.config.rich_print:
-            try:
-                import rich
-
-                rich.print("✅ Done!")
-                rich.print(f"Failed evaluations: {failed_evaluations}")
-                rich.print(f"Total evaluations: {total_evaluations}")
-                return
-            except ImportError:
-                logger.warning("Rich not installed. Using plain print")
+            rich.print("✅ Done!")
+            if failed_evaluations > 0:
+                rich.print(f"[bold red]Failed evaluations: {failed_evaluations}[/bold red]")
+            rich.print(f"[bold green]Total evaluations: {total_evaluations}[/bold green]")
+            return
         print("✅ Done!")
-        print(f"Failed evaluations: {failed_evaluations}")
+        if failed_evaluations > 0:
+            print(f"Failed evaluations: {failed_evaluations}")
         print(f"Total evaluations: {total_evaluations}")

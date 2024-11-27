@@ -77,3 +77,10 @@ required-imports = ["from __future__ import annotations"]
 
 [tool.setuptools-git-versioning]
 enabled = true
+
+[tool.pytest.ini_options]
+markers = [
+    "requires_openai: marks tests as requiring a valid OpenAI api key (deselect with '-m \"not requires_openai\"')",
+    "serial",
+]
+

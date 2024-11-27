@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import typer
 
 from ragelo import (
@@ -39,24 +41,32 @@ def run_all(config: CLIConfig = CLIConfig(), **kwargs):
     documents_file = get_path(config.data_dir, config.documents_csv_file)
     answers_file = get_path(config.data_dir, config.answers_csv_file)
 
+    if config.force:
+        clear_evaluations = True
+    else:
+        clear_evaluations = False
+
     experiment = Experiment(
         experiment_name=config.experiment_name,
         queries_csv_path=queries_csv_file,
         documents_csv_path=documents_file,
         answers_csv_path=answers_file,
+        verbose=config.verbose,
+        clear_evaluations=clear_evaluations,
+        rich_print=config.rich_print,
+        persist_on_disk=config.save_results,
     )
 
     kwargs = config.model_dump()
     kwargs.pop("llm_answer_format")
     kwargs.pop("llm_response_schema")
-    retrieval_evaluator = get_retrieval_evaluator("reasoner", llm_provider=llm_provider, **kwargs)
 
+    retrieval_evaluator = get_retrieval_evaluator("reasoner", llm_provider=llm_provider, **kwargs)
     answers_evaluator = get_answer_evaluator("pairwise", llm_provider=llm_provider, **kwargs)
+    ranker = get_agent_ranker("elo", **kwargs)
 
     retrieval_evaluator.evaluate_experiment(experiment)
     answers_evaluator.evaluate_experiment(experiment)
-
-    ranker = get_agent_ranker("elo", **kwargs)
     ranker.run(experiment=experiment)
     experiment.save(output_path=config.output_file)
 
