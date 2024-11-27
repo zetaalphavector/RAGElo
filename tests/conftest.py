@@ -28,6 +28,7 @@ from ragelo.types.configurations import (
     DomainExpertEvaluatorConfig,
     FewShotEvaluatorConfig,
     LLMProviderConfig,
+    PairwiseDomainExpertEvaluatorConfig,
     PairwiseEvaluatorConfig,
     RDNAMEvaluatorConfig,
 )
@@ -419,6 +420,14 @@ def pairwise_answer_eval_config(base_answer_eval_config):
     base_config = base_answer_eval_config.model_dump()
     base_config["pairwise"] = True
     return PairwiseEvaluatorConfig(bidirectional=True, **base_config)
+
+
+@pytest.fixture
+def domain_expert_answer_eval_config(base_answer_eval_config):
+    base_config = base_answer_eval_config.model_dump()
+    base_config["pairwise"] = True
+    base_config["expert_in"] = "Computer Science"
+    return PairwiseDomainExpertEvaluatorConfig(**base_config)
 
 
 @pytest.fixture
