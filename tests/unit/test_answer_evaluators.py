@@ -25,6 +25,37 @@ class AnswerEvaluator(BaseAnswerEvaluator):
     def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> str:
         return f"Query: {query.query}\nAnswer A: {game.agent_a_answer.text}\nAnswer B: {game.agent_b_answer.text}"
 
+    def test_get_by_name(self, llm_provider_mock):
+        pairwise_evaluator = get_answer_evaluator(
+            "pairwise",
+            llm_provider_mock,
+        )
+        assert isinstance(pairwise_evaluator, PairwiseAnswerEvaluator)
+        custom_evaluator = get_answer_evaluator(
+            "custom_prompt",
+            llm_provider_mock,
+        )
+        assert isinstance(custom_evaluator, CustomPromptEvaluator)
+        custom_pairwise_evaluator = get_answer_evaluator(
+            "custom_pairwise",
+            llm_provider=llm_provider_mock,
+            system_prompt="system prompt",
+            user_prompt="user prompt",
+        )
+        assert isinstance(custom_pairwise_evaluator, CustomPairwiseEvaluator)
+        domain_expert_evaluator = get_answer_evaluator(
+            "domain_expert",
+            expert_in="computer science",
+            llm_provider=llm_provider_mock,
+        )
+        assert isinstance(domain_expert_evaluator, PairwiseDomainExpertEvaluator)
+
+        chat_pairwise_evaluator = get_answer_evaluator(
+            "chat_pairwise",
+            llm_provider=llm_provider_mock,
+        )
+        assert isinstance(chat_pairwise_evaluator, ChatPairwiseEvaluator)
+
 
 class TestAnswerEvaluator:
     def test_evaluate_single_answer(self, llm_provider_answer_mock, experiment, base_answer_eval_config):
@@ -100,12 +131,17 @@ class TestAnswerEvaluator:
 
 
 class TestPairwiseAnswerEvaluator:
-    def test_evaluate_single_game(self, llm_provider_pairwise_answer_mock, experiment, pairwise_answer_eval_config):
+    def test_evaluate_single_game(
+        self,
+        llm_provider_pairwise_answer_mock,
+        experiment_with_conversations_and_reasonings,
+        pairwise_answer_eval_config,
+    ):
         evaluator = PairwiseAnswerEvaluator.from_config(
             config=pairwise_answer_eval_config,
             llm_provider=llm_provider_pairwise_answer_mock,
         )
-        query = experiment["0"]
+        query = experiment_with_conversations_and_reasonings["0"]
         result = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
         assert isinstance(result, AnswerEvaluatorResult)
         assert isinstance(result.answer, str)
@@ -128,6 +164,14 @@ class TestPairwiseAnswerEvaluator:
         assert agent_a_answer != agent_b_answer
         assert agent_a_answer == query.answers["agent1"].text
         assert agent_b_answer == query.answers["agent2"].text
+
+    def test_evaluation_no_documents(self, llm_provider_pairwise_answer_mock, experiment, pairwise_answer_eval_config):
+        evaluator = PairwiseAnswerEvaluator.from_config(
+            config=pairwise_answer_eval_config, llm_provider=llm_provider_pairwise_answer_mock
+        )
+        query = experiment["0"]
+        with pytest.warns(UserWarning):
+            _ = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
 
 
 class TestCustomPromptEvaluator:
@@ -157,33 +201,36 @@ class TestCustomPromptEvaluator:
         assert llm_call_args[0][0][0] == expected_prompt
 
 
-def test_get_by_name(llm_provider_mock):
-    pairwise_evaluator = get_answer_evaluator(
-        "pairwise",
-        llm_provider_mock,
-    )
-    assert isinstance(pairwise_evaluator, PairwiseAnswerEvaluator)
-    custom_evaluator = get_answer_evaluator(
-        "custom_prompt",
-        llm_provider_mock,
-    )
-    assert isinstance(custom_evaluator, CustomPromptEvaluator)
-    custom_pairwise_evaluator = get_answer_evaluator(
-        "custom_pairwise",
-        llm_provider=llm_provider_mock,
-        system_prompt="system prompt",
-        user_prompt="user prompt",
-    )
-    assert isinstance(custom_pairwise_evaluator, CustomPairwiseEvaluator)
-    domain_expert_evaluator = get_answer_evaluator(
-        "domain_expert",
-        expert_in="computer science",
-        llm_provider=llm_provider_mock,
-    )
-    assert isinstance(domain_expert_evaluator, PairwiseDomainExpertEvaluator)
+class TestChatPairwiseEvaluator:
+    def test_evaluate_single_game(
+        self,
+        llm_provider_pairwise_answer_mock,
+        experiment_with_conversations_and_reasonings,
+        pairwise_answer_eval_config,
+    ):
+        evaluator = ChatPairwiseEvaluator.from_config(
+            config=pairwise_answer_eval_config,
+            llm_provider=llm_provider_pairwise_answer_mock,
+        )
+        query = experiment_with_conversations_and_reasonings["0"]
 
-    chat_pairwise_evaluator = get_answer_evaluator(
-        "chat_pairwise",
-        llm_provider=llm_provider_mock,
-    )
-    assert isinstance(chat_pairwise_evaluator, ChatPairwiseEvaluator)
+        result = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
+        assert isinstance(result, AnswerEvaluatorResult)
+        assert isinstance(result.answer, str)
+        assert isinstance(result.raw_answer, str)
+        assert result.answer == "A"
+        llm_call_args = llm_provider_pairwise_answer_mock.async_call_mocker.call_args_list
+        assert len(llm_call_args) == 1
+        prompt = llm_call_args[0][0][0]
+        ans_a = (
+            prompt.split("[The Start of Conversation with Assistant A]")[1]
+            .split("[The End of Conversation with Assistant A]")[0]
+            .strip()
+        )
+        ans_b = (
+            prompt.split("[The Start of Conversation with Assistant B]")[1]
+            .split("[The End of Conversation with Assistant B]")[0]
+            .strip()
+        )
+        assert ans_a == "\n".join([str(msg) for msg in query.answers["agent1"].conversation])
+        assert ans_b == "\n".join([str(msg) for msg in query.answers["agent2"].conversation])
