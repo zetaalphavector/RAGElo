@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Type
+from typing import Any, Callable, Type
 
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 from pydantic import BaseModel as PydanticBaseModel
@@ -55,6 +55,7 @@ class OpenAIProvider(BaseLLMProvider):
             "temperature": self.config.temperature,
             "max_tokens": self.config.max_tokens,
         }
+        call_fn: Callable
         if answer_format == AnswerFormat.STRUCTURED:
             if not isinstance(response_schema, type(PydanticBaseModel)):
                 raise ValueError("response_schema must be a PydanticBaseModel Class when using structured output.")

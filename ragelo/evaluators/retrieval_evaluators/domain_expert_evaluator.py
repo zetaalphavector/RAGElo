@@ -140,8 +140,8 @@ document given the particular query. The score meaning is as follows:
             {"role": "user", "content": reason_message},
         ]
         try:
-            reasoning_answer = await self.llm_provider.call_async(messages, answer_format=AnswerFormat.TEXT)
-            reasoning_answer = reasoning_answer.parsed_answer
+            return_answer = await self.llm_provider.call_async(messages, answer_format=AnswerFormat.TEXT)
+            reasoning_answer = return_answer.parsed_answer
             assert isinstance(reasoning_answer, str)
         except Exception as e:
             logger.warning(f"Failed to FETCH reasonings for qid: {query.qid}")
