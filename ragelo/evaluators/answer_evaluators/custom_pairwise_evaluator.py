@@ -26,8 +26,6 @@ class CustomPairwiseEvaluator(BaseAnswerEvaluator):
     ):
         super().__init__(config, llm_provider)
         self.system_prompt = config.system_prompt
-        if not config.user_prompt:
-            raise ValueError("User prompt is required for the custom pairwise evaluator.")
         self.user_prompt = config.user_prompt
 
     def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> str | list[dict[str, str]]:

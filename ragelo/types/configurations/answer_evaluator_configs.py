@@ -99,7 +99,7 @@ class CustomPairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
 
     evaluator_name: str | AnswerEvaluatorTypes = AnswerEvaluatorTypes.CUSTOM_PAIRWISE
     system_prompt: str = Field(description="System prompt to use for the evaluator")
-    user_prompt: str | None = Field(default=None, description="User prompt to use for the evaluator.")
+    user_prompt: str = Field(description="User prompt to use for the evaluator.")
     bidirectional: bool = Field(default=False, description="Whether or not to run each game in both directions")
     n_games_per_query: int = Field(default=100, description="Maximum number of games to generate for each query")
     pairwise: bool = Field(default=True, description="Whether or not to the evaluator is pairwise")
@@ -141,10 +141,7 @@ class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
 
 class PairwiseDomainExpertEvaluatorConfig(PairwiseEvaluatorConfig):
     evaluator_name: str | AnswerEvaluatorTypes = AnswerEvaluatorTypes.DOMAIN_EXPERT
-    expert_in: str = Field(
-        default="",
-        description="What the LLM should mimic being an expert in.",
-    )
+    expert_in: str = Field(description="What the LLM should mimic being an expert in.")
     company: str | None = Field(
         default=None,
         description="Name of the company or organization that the user that "

@@ -334,7 +334,9 @@ class AnswerEvaluatorFactory:
         **kwargs,
     ) -> BaseAnswerEvaluator:
         if evaluator_name not in cls.registry:
-            raise ValueError(f"Unknown evaluator {evaluator_name}")
+            raise ValueError(
+                f"Unknown answer evaluator {evaluator_name}\n" f"Valid options are {list(cls.registry.keys())}"
+            )
         if isinstance(llm_provider, str):
             llm_provider_instance = get_llm_provider(llm_provider, **kwargs)
         else:
@@ -344,6 +346,10 @@ class AnswerEvaluatorFactory:
             type_config = class_.get_config_class()
             valid_keys = [field for field in type_config.get_model_fields()]
             valid_args = {k: v for k, v in kwargs.items() if k in valid_keys}
+            required_fields = [arg for arg, info in type_config.get_model_fields().items() if info.is_required()]
+            for field in required_fields:
+                if field not in valid_args:
+                    raise ValueError(f"Required argument {field} for evaluator {evaluator_name} not provided")
             config = type_config(**valid_args)
         return cls.registry[evaluator_name].from_config(config, llm_provider_instance)
 
@@ -360,7 +366,10 @@ def get_answer_evaluator(
             raise ValueError("Either the evaluator_name or a config object must be provided")
         evaluator_name = config.evaluator_name
     if isinstance(evaluator_name, str):
-        evaluator_name = AnswerEvaluatorTypes(evaluator_name)
+        try:
+            evaluator_name = AnswerEvaluatorTypes(evaluator_name)
+        except ValueError:
+            raise ValueError(f"Unknown answer evaluator {evaluator_name}")
     return AnswerEvaluatorFactory.create(
         evaluator_name,
         llm_provider=llm_provider,
