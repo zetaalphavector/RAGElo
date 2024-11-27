@@ -77,12 +77,14 @@ and 'C' for a tie.
             citations = ""
 
         if not game.agent_a_answer.conversation or not game.agent_b_answer.conversation:
-            raise ValueError("The conversation of the agents cannot " "be empty for the chat_pairwise evaluator")
+            raise ValueError("The conversation of the agents cannot be empty for the chat_pairwise evaluator")
+        conversation_a = "\n".join([str(msg) for msg in game.agent_a_answer.conversation])
+        conversation_b = "\n".join([str(msg) for msg in game.agent_b_answer.conversation])
         formatters = {
             self.config.query_placeholder: query.query,
             self.config.documents_placeholder: documents,
-            "answer_a": game.agent_a_answer.conversation,
-            "answer_b": game.agent_b_answer.conversation,
+            "answer_a": conversation_a,
+            "answer_b": conversation_b,
             "citations": citations,
             "factors": self.factors,
             "document_rel": self.documents_prompt,

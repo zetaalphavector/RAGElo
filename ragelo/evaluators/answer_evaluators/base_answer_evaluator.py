@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import asyncio
 import itertools
 import random
+import warnings
 from typing import Any, Callable, Sequence, Type, get_type_hints
 
 from tenacity import RetryError
@@ -298,6 +298,8 @@ class BaseAnswerEvaluator(BaseEvaluator):
                     continue
                 if not self.config.document_filter(str(d.evaluation.answer)):
                     continue
+            if self.config.include_annotations and d.evaluation is None:
+                continue
             formatters = {
                 "did": did,
                 "doc": d.text,
@@ -305,6 +307,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
             }
             documents.append(self.config.document_template.format(**formatters))
         if len(documents) == 0:
+            warnings.warn("No documents were retrieved for the answer evaluator")
             return "NO DOCUMENTS WERE RETRIEVED"
         return "\n".join(documents)
 

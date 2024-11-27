@@ -11,6 +11,9 @@ class ChatMessage(BaseModel):
     sender: str
     content: str
 
+    def __str__(self) -> str:
+        return f"{self.sender}: {self.content}"
+
 
 class Evaluable(BaseModel):
     """A base class for objects that can be evaluated. Either a retrieved document or an agent answer.

@@ -32,6 +32,7 @@ from ragelo.types.configurations import (
     RDNAMEvaluatorConfig,
 )
 from ragelo.types.configurations.retrieval_evaluator_configs import FewShotExample
+from ragelo.types.evaluables import ChatMessage
 from ragelo.types.formats import AnswerFormat, LLMResponseType
 from ragelo.types.results import (
     AnswerEvaluatorResult,
@@ -186,6 +187,57 @@ def experiment(base_experiment_config):
 
 
 @pytest.fixture
+def experiment_with_conversations_and_reasonings(experiment):
+    experiment.queries["0"].answers["agent1"].conversation = [
+        ChatMessage(sender="user", content="What is the capital of Brazil?"),
+        ChatMessage(sender="agent1", content="Brasília is the capital of Brazil, according to [0]."),
+    ]
+    experiment.queries["0"].answers["agent2"].conversation = [
+        ChatMessage(sender="user", content="What is the capital of Brazil?"),
+        ChatMessage(
+            sender="agent2",
+            content="According to [1], Rio de Janeiro used to be the capital of Brazil, until the 60s.",
+        ),
+    ]
+    experiment.queries["1"].answers["agent1"].conversation = [
+        ChatMessage(sender="user", content="What is the capital of France?"),
+        ChatMessage(sender="agent1", content="Paris is the capital of France, according to [2]."),
+    ]
+    experiment.queries["1"].answers["agent2"].conversation = [
+        ChatMessage(sender="user", content="What is the capital of France?"),
+        ChatMessage(
+            sender="agent2",
+            content="According to [3], Lyon is the second largest city in France. Meanwhile, Paris is its capital [2].",
+        ),
+    ]
+    experiment.queries["0"].retrieved_docs["0"].evaluation = RetrievalEvaluatorResult(
+        qid=experiment.queries["0"].qid,
+        did="0",
+        raw_answer="The document is very relevant as it directly answers the user's question about the capital of Brazil",
+        answer="The document is very relevant as it directly answers the user's question about the capital of Brazil",
+    )
+    experiment.queries["0"].retrieved_docs["1"].evaluation = RetrievalEvaluatorResult(
+        qid=experiment.queries["0"].qid,
+        did="1",
+        raw_answer="The document is somewhat relevant as it provides historical information about the capital of Brazil, but it does not provide the current capital.",
+        answer="The document is somewhat relevant as it provides historical information about the capital of Brazil, but it does not provide the current capital.",
+    )
+    experiment.queries["1"].retrieved_docs["2"].evaluation = RetrievalEvaluatorResult(
+        qid=experiment.queries["1"].qid,
+        did="2",
+        raw_answer="The document is very relevant as it directly answers the user's question about the capital of France.",
+        answer="The document is very relevant as it directly answers the user's question about the capital of France.",
+    )
+    experiment.queries["1"].retrieved_docs["3"].evaluation = RetrievalEvaluatorResult(
+        qid=experiment.queries["1"].qid,
+        did="3",
+        raw_answer="The document is not relevant to the user question as it does not provide information about the capital of France.",
+        answer="The document is not relevant to the user question as it does not provide information about the capital of France.",
+    )
+    return experiment
+
+
+@pytest.fixture
 def experiment_with_retrieval_scores(experiment):
     experiment.queries["0"].retrieved_docs["0"].retrieved_by["agent1"] = 1.0
     experiment.queries["0"].retrieved_docs["0"].retrieved_by["agent2"] = 0.5
@@ -269,7 +321,6 @@ def base_retrieval_eval_config(base_eval_config):
 @pytest.fixture
 def custom_answer_eval_config(base_eval_config):
     base_config = base_eval_config.model_dump()
-    base_config["answer_format_answer_evaluator"] = "multi_field_json"
     config = CustomPromptAnswerEvaluatorConfig(
         prompt="""
 You are an useful assistant for evaluating the quality of the answers generated \
