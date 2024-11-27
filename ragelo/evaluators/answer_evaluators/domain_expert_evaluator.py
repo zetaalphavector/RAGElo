@@ -19,7 +19,7 @@ from ragelo.types.types import AnswerEvaluatorTypes
 class PairwiseDomainExpertEvaluator(PairwiseAnswerEvaluator):
     config: PairwiseDomainExpertEvaluatorConfig
     prompt = """
-{company_prompt}You are a domain expert in {expert_in}. Your task is to \
+You are a domain expert in {expert_in}.{company_prompt} Your task is to \
 evaluate the quality of the responses provided by two AI assistants \
 tasked to answer the question shown below, based on a set \
 of documents retrieved by a search engine.
@@ -98,4 +98,6 @@ and 'C' for a tie.
         }
         if self.company:
             formatters["company_prompt"] = self.COMPANY_PROMPT.format(company=self.company)
+        else:
+            formatters["company_prompt"] = ""
         return self.prompt.format(**formatters)

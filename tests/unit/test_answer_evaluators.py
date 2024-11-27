@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import warnings
 
 import pytest
 
@@ -234,3 +235,57 @@ class TestChatPairwiseEvaluator:
         )
         assert ans_a == "\n".join([str(msg) for msg in query.answers["agent1"].conversation])
         assert ans_b == "\n".join([str(msg) for msg in query.answers["agent2"].conversation])
+
+
+class TestDomainExpertEvaluator:
+    def test_evaluate_single_answer(
+        self,
+        llm_provider_pairwise_answer_mock,
+        experiment_with_conversations_and_reasonings,
+        domain_expert_answer_eval_config,
+    ):
+        evaluator = PairwiseDomainExpertEvaluator.from_config(
+            config=domain_expert_answer_eval_config, llm_provider=llm_provider_pairwise_answer_mock
+        )
+        query = experiment_with_conversations_and_reasonings["0"]
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            result = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
+        assert isinstance(result, AnswerEvaluatorResult)
+        prompt = llm_provider_pairwise_answer_mock.async_call_mocker.call_args_list[0][0][0]
+        assert isinstance(prompt, str)
+        assert "You work for" not in prompt
+
+    def test_evaluate_single_answer_with_company(
+        self,
+        llm_provider_pairwise_answer_mock,
+        experiment_with_conversations_and_reasonings,
+        domain_expert_answer_eval_config,
+    ):
+        domain_expert_answer_eval_config.company = "Zeta Alpha"
+        evaluator = PairwiseDomainExpertEvaluator.from_config(
+            config=domain_expert_answer_eval_config, llm_provider=llm_provider_pairwise_answer_mock
+        )
+        query = experiment_with_conversations_and_reasonings["0"]
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            result = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
+        assert isinstance(result, AnswerEvaluatorResult)
+        prompt = llm_provider_pairwise_answer_mock.async_call_mocker.call_args_list[0][0][0]
+        assert "You work for" in prompt
+
+    def test_evaluate_single_answer_no_documents(
+        self,
+        llm_provider_pairwise_answer_mock,
+        experiment,
+        domain_expert_answer_eval_config,
+    ):
+        evaluator = PairwiseDomainExpertEvaluator.from_config(
+            config=domain_expert_answer_eval_config, llm_provider=llm_provider_pairwise_answer_mock
+        )
+        query = experiment["0"]
+        with pytest.warns(UserWarning):
+            result = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
+        assert isinstance(result, AnswerEvaluatorResult)
+        prompt = llm_provider_pairwise_answer_mock.async_call_mocker.call_args_list[0][0][0]
+        assert "You work for" not in prompt
