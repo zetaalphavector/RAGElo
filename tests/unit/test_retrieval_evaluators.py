@@ -13,6 +13,7 @@ from ragelo.evaluators.retrieval_evaluators import (
     ReasonerEvaluator,
 )
 from ragelo.types import Document, Query
+from ragelo.types.formats import LLMResponseType
 from ragelo.types.results import RetrievalEvaluatorResult
 
 
@@ -248,16 +249,31 @@ class TestFewShotEvaluator:
 
 class TestReadmeExamples:
     def test_rdnam_example(self, llm_provider_mock_rdnam):
-        llm_provider_mock_rdnam.async_call_mocker = AsyncMock(side_effect=lambda _: '"O": 0\n}')
+        def side_effect(*args, **kwargs):
+            return LLMResponseType(raw_answer='{"overall": 1}', parsed_answer={"overall": 1})
+
+        llm_provider_mock_rdnam.async_call_mocker = AsyncMock(side_effect=side_effect)
         evaluator = get_retrieval_evaluator("RDNAM", llm_provider=llm_provider_mock_rdnam, write_output=False)
-        raw_answer, processed_answer = evaluator.evaluate(
+        result = evaluator.evaluate(
             query="What is the capital of France?",
             document="Lyon is the second largest city in France.",
         )
-        assert raw_answer == '"O": 0\n}'
-        assert processed_answer == 0
+        assert isinstance(result.answer, dict)
+        assert result.answer["overall"] == 1
+        assert result.answer == {"overall": 1}
+        assert result.raw_answer == '{"overall": 1}'
 
     def test_custom_prompt_evaluator_example(self, llm_provider_mock):
+        answer_dict = {
+            "relevance": 0,
+            "recency": 0,
+            "truthfulness": 0,
+            "reasoning": (
+                "The document is outdated and incorrect. Rio de Janeiro was the capital of "
+                "Brazil until 1960 when it was changed to Brasília."
+            ),
+        }
+
         prompt = """You are a helpful assistant for evaluating the relevance of a retrieved document to a user query.
 You should pay extra attention to how **recent** a document is. A document older than 5 years is considered outdated.
 
@@ -276,40 +292,36 @@ WRITE YOUR ANSWER ON A SINGLE LINE AS A JSON OBJECT WITH THE FOLLOWING KEYS:
 - "truthfulness": 0 if the document is false, 1 if it is true.
 - "reasoning": A short explanation of why you think the document is relevant or irrelevant.
 """
-        answer_dict = {
-            "relevance": 0,
-            "recency": 0,
-            "truthfulness": 0,
-            "reasoning": (
-                "The document is outdated and incorrect. Rio de Janeiro was the capital of "
-                "Brazil until 1960 when it was changed to Brasília."
-            ),
+        response_schema = {
+            "relevance": "An integer, either 0 or 1. 0 if the document is irrelevant, 1 if it is relevant.",
+            "recency": "An integer, either 0 or 1. 0 if the document is outdated, 1 if it is recent.",
+            "truthfulness": "An integer, either 0 or 1. 0 if the document is false, 1 if it is true.",
+            "reasoning": "A short explanation of why you think the document is relevant or irrelevant.",
         }
-        mocked_llm_answer = json.dumps(answer_dict)
-        llm_provider_mock.async_call_mocker = AsyncMock(side_effect=lambda _: mocked_llm_answer)
+        response_format = "json"
+
         evaluator = get_retrieval_evaluator(
-            "custom_prompt",
-            llm_provider=llm_provider_mock,
-            prompt=prompt,
-            query_placeholder="q",
-            document_placeholder="d",
-            scoring_keys_retrieval_evaluator=[
-                "relevance",
-                "recency",
-                "truthfulness",
-                "reasoning",
-            ],
-            answer_format_retrieval_evaluator="multi_field_json",
-            write_output=False,
+            "custom_prompt",  # name of the retrieval evaluator
+            llm_provider=llm_provider_mock,  # Which LLM provider to use
+            prompt=prompt,  # your custom prompt
+            query_placeholder="q",  # the placeholder for the query in the prompt
+            document_placeholder="d",  # the placeholder for the document in the prompt
+            llm_answer_format=response_format,  # The format of the answer. Can be either TEXT, if you expect plain text to be returned, JSON if the answer should be in JSON format, or STRUCTURED, if you provide a Pydantic BaseModel as the response_schema.
+            llm_response_schema=response_schema,  # The response schema for the LLM. Required if the llm_answer_format is structured and recommended for JSON.
         )
 
-        raw_answer, answer = evaluator.evaluate(
-            query="What is the capital of Brazil?",
-            document="Rio de Janeiro is the capital of Brazil.",
-            query_metadata={"today_date": "08-04-2024"},
-            doc_metadata={"document_date": "04-03-1950"},
+        def side_effect(*args, **kwargs):
+            return LLMResponseType(raw_answer=json.dumps(answer_dict), parsed_answer=answer_dict)
+
+        llm_provider_mock.async_call_mocker = AsyncMock(side_effect=side_effect)
+
+        result = evaluator.evaluate(
+            query="What is the capital of Brazil?",  # The user query
+            document="Rio de Janeiro is the capital of Brazil.",  # The retrieved document
+            query_metadata={"today_date": "08-04-2024"},  # Some metadata for the query
+            doc_metadata={"document_date": "04-03-1950"},  # Some metadata for the document
         )
         call_args = llm_provider_mock.async_call_mocker.call_args_list
-        assert raw_answer == mocked_llm_answer
-        assert answer == answer_dict
+        assert result.raw_answer == json.dumps(answer_dict)
+        assert result.answer == answer_dict
         assert len(call_args) == 1

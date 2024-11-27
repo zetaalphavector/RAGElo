@@ -30,11 +30,13 @@ To use RAGElo as a library, all you need to do is import RAGElo, initialize an `
 from ragelo import get_retrieval_evaluator
 
 evaluator = get_retrieval_evaluator("RDNAM", llm_provider="openai")
-raw_answer, processed_answer = evaluator.evaluate(query="What is the capital of France?", document='Lyon is the second largest city in France.')
-print(processed_answer)
+result = evaluator.evaluate(query="What is the capital of France?", document='Lyon is the second largest city in France.')
+print(result.answer)
+# Output: {'overall': 1}
+print(result.answer["overall"])
 # Output: 1
-print(raw_answer)
-# Output: '"O": 1\n}'
+print(result.raw_answer)
+# Output: '{"overall": 1"}'
 ```
 
 For a more complete example, we can evaluate with a custom prompt, and inject metadata into our evaluation prompt:
@@ -53,13 +55,14 @@ Retrieved document: {d}
 
 The document has a date of {document_date}.
 Today is {today_date}.
-
-WRITE YOUR ANSWER ON A SINGLE LINE AS A JSON OBJECT WITH THE FOLLOWING KEYS:
-- "relevance": 0 if the document is irrelevant, 1 if it is relevant.
-- "recency": 0 if the document is outdated, 1 if it is recent.
-- "truthfulness": 0 if the document is false, 1 if it is true.
-- "reasoning": A short explanation of why you think the document is relevant or irrelevant.
 """
+response_schema = {
+    "relevance": "An integer, either 0 or 1. 0 if the document is irrelevant, 1 if it is relevant.",
+    "recency": "An integer, either 0 or 1. 0 if the document is outdated, 1 if it is recent.",
+    "truthfulness": "An integer, either 0 or 1. 0 if the document is false, 1 if it is true.",
+    "reasoning": "A short explanation of why you think the document is relevant or irrelevant.",
+}
+response_format = "json"
 
 evaluator = get_retrieval_evaluator(
     "custom_prompt", # name of the retrieval evaluator
@@ -67,11 +70,11 @@ evaluator = get_retrieval_evaluator(
     prompt=prompt, # your custom prompt
     query_placeholder="q", # the placeholder for the query in the prompt
     document_placeholder="d", # the placeholder for the document in the prompt
-    scoring_keys_retrieval_evaluator=["relevance", "recency", "truthfulness", "reasoning"], # Which keys to extract from the answer
-    answer_format_retrieval_evaluator="multi_field_json", # The format of the answer. In this case, a JSON object with multiple fields
+    llm_answer_format=response_format, # The format of the answer. Can be either `text`, if you expect plain text to be returned, `JSON` if the answer should be in JSON format, or `structured`, if you provide a Pydantic BaseModel as the response_schema.
+    llm_response_schema=response_schema, # The response schema for the LLM. Required if the llm_answer_format is structured and recommended for JSON.
 )
 
-raw_answer, answer = evaluator.evaluate(
+result = evaluator.evaluate(
     query="What is the capital of Brazil?", # The user query
     document="Rio de Janeiro is the capital of Brazil.", # The retrieved document
     query_metadata={"today_date": "08-04-2024"}, # Some metadata for the query
@@ -91,7 +94,7 @@ Other examples are available as notebooks in the [docs/examples/notebooks folder
 ## 🚀 CLI Quickstart 
 After installing RAGElo as a CLI app, you can run it with the following command:
 ```bash
-ragelo run-all queries.csv documents.csv answers.csv --data-dir tests/data/
+ragelo run-all experiment_name queries.csv documents.csv answers.csv --data-dir tests/data/
 
 ---------- Agent Scores by Elo ranking ----------
  agent1        : 1026.7
@@ -127,6 +130,16 @@ qid,agent,answer
 1, agent2,"According to [3], Lyon is the second largest city in France. Meanwhile, Paris is its capital [2]."
 ```
 
+Internally, RAGElo relies on Pydantic base models to represent queries, documents, answers and evaluations. When RAGElo is used in CLI mode, it will save the its state to `cache/experiment_name.json` with the following format:
+```json
+{
+    queries: [
+        {"qid": " }
+    ]
+
+}
+```
+
 
 ## 🧩 Components
 While **RAGElo** can be used as either an end-to-end tool or by calling individual CLI components.
@@ -135,7 +148,7 @@ While **RAGElo** can be used as either an end-to-end tool or by calling individu
 The `retrieval-evaluator` tool annotates retrieved documents based on their relevance to the user query. This is done regardless of the answers provided by any Agent. As an example, for calling the `Reasoner` retrieval evaluator (reasoner only outputs the reasoning why a document is relevant or not) we can use:
 
 ```bash
-ragelo retrieval-evaluator reasoner queries.csv documents.csv output.csv --verbose --data-dir tests/data/
+ragelo retrieval-evaluator reasoner queries.csv documents.csv --data-dir tests/data/
 ```
 The output file changes according to the evaluator used. In general it will have one row per document evaluator, with the query_id, document_id, the raw LLM answer and the parsed answer. An example of the output for the reasoner is found here: [tests/data/reasonings.csv](https://github.com/zetaalphavector/RAGElo/blob/master/tests/data/reasonings.csv).
 

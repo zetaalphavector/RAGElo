@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import Type
 from unittest.mock import AsyncMock
 
 import pytest
@@ -97,6 +98,7 @@ class MockLLMProvider(BaseLLMProvider):
 
 @pytest.fixture
 def chat_completion_mock(answer_format):
+    _cls: Type[ChatCompletion | ParsedChatCompletion]
     if answer_format == AnswerFormat.STRUCTURED:
         _cls = ParsedChatCompletion
     else:
