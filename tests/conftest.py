@@ -337,15 +337,6 @@ def llm_provider_mock(llm_provider_config):
     return MockLLMProvider(llm_provider_config)
 
 
-# @pytest.fixture
-# def llm_provider_json_mock(llm_provider_config):
-#     provider = MockLLMProvider(llm_provider_config)
-#     provider.async_call_mocker = AsyncMock(
-#         side_effect=lambda _: LLMResponseType(raw_answer='{"relevance": 1}', parsed_answer={"relevance": 1})
-#     )
-#     return provider
-
-
 @pytest.fixture
 def llm_provider_mock_rdnam(llm_provider_config):
     mocked_scores = {
