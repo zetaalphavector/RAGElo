@@ -93,12 +93,6 @@ document given the particular query. The score meaning is as follows:
         llm_provider: BaseLLMProvider,
     ):
         super().__init__(config, llm_provider)
-        if not self.config.expert_in:
-            raise ValueError(
-                "You are trying to use the Domain Expert Retrieval Evaluator. "
-                "For this evaluator, you need to provide the domain the evaluator "
-                "is an expert in the expert_in field."
-            )
         if self.config.llm_answer_format != AnswerFormat.JSON:
             logger.warning("We are using the Domain Expert Evaluator config. Forcing the LLM answer format to JSON.")
             self.config.llm_answer_format = AnswerFormat.JSON

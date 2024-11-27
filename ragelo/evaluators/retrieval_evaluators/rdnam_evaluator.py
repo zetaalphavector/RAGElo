@@ -73,9 +73,6 @@ Each rater used their own independent judgement."""
     ):
         """Initializes an evaluator based on RDNAM framework."""
         super().__init__(config, llm_provider)
-        if self.config.llm_answer_format != AnswerFormat.JSON:
-            logger.warning("We are using the RDNAM Evaluator config. Forcing the LLM answer format to JSON.")
-            self.config.llm_answer_format = AnswerFormat.JSON
         self.config.llm_response_schema = {
             "overall": "An integer between 0 and 2 representing the score of the document."
         }

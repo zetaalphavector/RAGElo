@@ -5,8 +5,9 @@ from typing import Any, Type
 from pydantic import BaseModel as PydanticBaseModel
 from pydantic import Field
 
+from ragelo.logger import logger
 from ragelo.types.configurations.base_configs import AnswerFormat, BaseEvaluatorConfig
-from ragelo.types.pydantic_models import BaseModel
+from ragelo.types.pydantic_models import BaseModel, ValidationError, validator
 from ragelo.types.types import RetrievalEvaluatorTypes
 
 
@@ -43,10 +44,7 @@ class ReasonerEvaluatorConfig(BaseRetrievalEvaluatorConfig):
 
 class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.DOMAIN_EXPERT
-    expert_in: str = Field(
-        default="",
-        description="What the LLM should mimic being an expert in.",
-    )
+    expert_in: str = Field(description="What the LLM should mimic being an expert in.")
     domain_short: str | None = Field(
         default=None,
         description="A short or alternative name of the domain. " "(e.g., Chemistry, CS, etc.)",
@@ -94,7 +92,8 @@ class FewShotEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         description="The system prompt to be used to evaluate the documents.",
     )
     few_shots: list[FewShotExample] = Field(
-        default=[], description="A list of few-shot examples to be used in the prompt"
+        default_factory=list,
+        description="A list of few-shot examples to be used in the prompt",
     )
     few_shot_user_prompt: str = Field(
         default="Query: {query}\n\nPassage:{passage}",
@@ -140,3 +139,11 @@ class RDNAMEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default=AnswerFormat.JSON,
         description="The format of the answer returned by the LLM",
     )
+
+    @validator
+    @classmethod
+    def check_answer_format(cls, values):
+        if values["llm_answer_format"] != AnswerFormat.JSON:
+            logger.warning("We are using the RDNAM Evaluator config. Forcing the LLM answer format to JSON.")
+            values["llm_answer_format"] = AnswerFormat.JSON
+        return values

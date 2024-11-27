@@ -7,6 +7,7 @@ from pydantic import Field
 
 from ragelo.types.configurations.base_configs import BaseEvaluatorConfig
 from ragelo.types.formats import AnswerFormat
+from ragelo.types.pydantic_models import ValidationError, validator
 from ragelo.types.types import AnswerEvaluatorTypes
 
 
@@ -92,6 +93,13 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
             "Required if the llm_answer_format is structured and recommended for JSON."
         ),
     )
+
+    @validator
+    @classmethod
+    def check_annotations_or_raw_documents(cls, v):
+        if v is None and cls.include_annotations is False and cls.include_raw_documents is False:
+            raise ValidationError("At least one of include_annotations or include_raw_documents must be True")
+        return v
 
 
 class CustomPairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):

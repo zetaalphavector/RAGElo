@@ -93,8 +93,6 @@ and "C" for a tie.
         elif config.include_raw_documents:
             config.document_template = self.document_template_raw_only
             self.documents_prompt = self.documents_prompt_raw_only
-        else:
-            raise ValueError("At least one of include_annotations or include_raw_documents must be True")
         if config.prompt:
             self.prompt = config.prompt
         if config.llm_answer_format == AnswerFormat.STRUCTURED:
