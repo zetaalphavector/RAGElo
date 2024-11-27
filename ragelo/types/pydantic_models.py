@@ -9,12 +9,16 @@ if _PYDANTIC_MAJOR_VERSION == 1:
     from pydantic import root_validator
 
     validator = root_validator(pre=True)  # type: ignore
+    post_validator = root_validator(pre=False)  # type: ignore
     ValidationError = TypeError
 else:
-    from pydantic import ValidationError  # type: ignore
-    from pydantic import model_validator  # type: ignore
+    from pydantic import (
+        ValidationError,  # type: ignore
+        model_validator,  # type: ignore
+    )
 
     validator = model_validator(mode="before")  # type: ignore
+    post_validator = model_validator(mode="after")  # type: ignore
     ValidationError = ValidationError
 
 

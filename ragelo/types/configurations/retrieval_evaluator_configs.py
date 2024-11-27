@@ -7,7 +7,7 @@ from pydantic import Field
 
 from ragelo.logger import logger
 from ragelo.types.configurations.base_configs import AnswerFormat, BaseEvaluatorConfig
-from ragelo.types.pydantic_models import BaseModel, ValidationError, validator
+from ragelo.types.pydantic_models import BaseModel, post_validator
 from ragelo.types.types import RetrievalEvaluatorTypes
 
 
@@ -140,10 +140,10 @@ class RDNAMEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         description="The format of the answer returned by the LLM",
     )
 
-    @validator
+    @post_validator
     @classmethod
     def check_answer_format(cls, values):
-        if values["llm_answer_format"] != AnswerFormat.JSON:
+        if values.llm_answer_format != AnswerFormat.JSON:
             logger.warning("We are using the RDNAM Evaluator config. Forcing the LLM answer format to JSON.")
-            values["llm_answer_format"] = AnswerFormat.JSON
+            values.llm_answer_format = AnswerFormat.JSON
         return values
