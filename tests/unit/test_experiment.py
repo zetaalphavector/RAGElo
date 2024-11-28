@@ -8,10 +8,7 @@ import pytest
 from ragelo.types.evaluables import AgentAnswer, Document
 from ragelo.types.experiment import Experiment
 from ragelo.types.query import Query
-from ragelo.types.results import (
-    AnswerEvaluatorResult,
-    RetrievalEvaluatorResult,
-)
+from ragelo.types.results import AnswerEvaluatorResult, RetrievalEvaluatorResult
 
 
 class TestExperiment:
@@ -36,7 +33,7 @@ class TestExperiment:
     def test_add_query(self, empty_experiment):
         """Test adding queries manually"""
         # Add query as string
-        qid = empty_experiment.add_query("Test query 1")
+        qid = empty_experiment.add_query("Test query 1", query_id="test1")
         assert qid in empty_experiment.queries
         assert empty_experiment[qid].query == "Test query 1"
 
@@ -54,7 +51,7 @@ class TestExperiment:
 
     def test_add_retrieved_doc(self, empty_experiment):
         """Test adding retrieved documents manually"""
-        qid = empty_experiment.add_query("Test query")
+        qid = empty_experiment.add_query("Test query", query_id="test1")
 
         # Add document as string
         empty_experiment.add_retrieved_doc("Test document", query_id=qid, doc_id="doc1", score=0.5, agent="agent1")
@@ -72,7 +69,7 @@ class TestExperiment:
 
     def test_add_agent_answer(self, empty_experiment):
         """Test adding agent answers manually"""
-        qid = empty_experiment.add_query("Test query")
+        qid = empty_experiment.add_query("Test query", query_id="test1")
 
         # Add answer as string
         empty_experiment.add_agent_answer("Test answer", agent="agent1", query_id=qid)
