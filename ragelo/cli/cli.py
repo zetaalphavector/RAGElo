@@ -54,8 +54,8 @@ def run_all(config: CLIConfig = CLIConfig(), **kwargs):
     )
 
     kwargs = config.model_dump()
-    kwargs.pop("llm_answer_format")
-    kwargs.pop("llm_response_schema")
+    kwargs.pop("llm_answer_format", None)
+    kwargs.pop("llm_response_schema", None)
 
     retrieval_evaluator = get_retrieval_evaluator("reasoner", llm_provider=llm_provider, **kwargs)
     answers_evaluator = get_answer_evaluator("pairwise", llm_provider=llm_provider, **kwargs)

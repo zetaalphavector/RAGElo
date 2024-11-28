@@ -32,6 +32,13 @@ def test_run_all_cli():
     )
     assert result.exit_code == 0
     assert "Agents Elo Ratings" in result.stdout
+    assert result.stdout.startswith("🔎 Query ID: 0\n📜 Document ID: 0")
+    assert "🔎 Query ID: 0\n agent1              🆚   agent2\nParsed Answer: A" in result.stdout
+    assert "Total evaluations: 4" in result.stdout
+    assert "Total evaluations: 2" in result.stdout
+    assert "Evaluating Retrieved documents" in result.stdout
+    assert "Evaluating Agent Answers" in result.stdout
+    assert len(result.stdout.split("✅ Done!")) == 3
     assert os.path.exists("test-output.json")
     os.remove("test-output.json")
 

@@ -193,6 +193,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 pairwise=False,
                 exception=exc,
             )
+        assert isinstance(evaluable, PairwiseGame)
         return AnswerEvaluatorResult(
             qid=query.qid,
             agent_a=evaluable.agent_a_answer.agent,
@@ -373,6 +374,8 @@ def get_answer_evaluator(
             evaluator_name = AnswerEvaluatorTypes(evaluator_name)
         except ValueError:
             raise ValueError(f"Unknown answer evaluator {evaluator_name}")
+    if evaluator_name is None:
+        raise ValueError("The evaluator_name must be provided")
     return AnswerEvaluatorFactory.create(
         evaluator_name,
         llm_provider=llm_provider,

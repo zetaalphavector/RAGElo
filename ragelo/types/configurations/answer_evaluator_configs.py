@@ -101,14 +101,6 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
             "Required if the llm_answer_format is structured and recommended for JSON."
         ),
     )
-    include_annotations: bool = Field(
-        default=True,
-        description="Whether or not to include the document relevance annotations in the prompt",
-    )
-    include_raw_documents: bool = Field(
-        default=False,
-        description="Whether or not to include the raw documents in the prompt",
-    )
 
     @validator
     @classmethod

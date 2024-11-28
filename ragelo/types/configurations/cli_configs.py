@@ -62,8 +62,7 @@ class CLIEvaluatorConfig(BaseCLIConfig):
 
 
 class CLIDomainExpertEvaluatorConfig(CLIEvaluatorConfig, DomainExpertEvaluatorConfig):
-    expert_in: str | None = Field(default=" ")
-    pass
+    expert_in: str = " "
 
 
 class CLIReasonerEvaluatorConfig(CLIEvaluatorConfig, ReasonerEvaluatorConfig):
@@ -80,7 +79,7 @@ class CLIPairwiseDomainExpertEvaluatorConfig(CLIEvaluatorConfig, PairwiseDomainE
         description="If set to True, a reasoning retrieval evaluator will run, and the reasoning of the quality "
         "  of the retrieved results will be included in the prompt for the pairwise games.",
     )
-    expert_in: str | None = Field(default=" ")
+    expert_in: str = " "
 
 
 class CLIPairwiseEvaluatorConfig(CLIEvaluatorConfig, PairwiseEvaluatorConfig):

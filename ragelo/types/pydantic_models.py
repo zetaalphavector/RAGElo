@@ -5,6 +5,7 @@ from importlib import metadata
 from pydantic import BaseModel as PydanticBaseModel
 
 _PYDANTIC_MAJOR_VERSION: int = int(metadata.version("pydantic").split(".")[0])
+ValidationError: type[TypeError] | type[ValueError]
 if _PYDANTIC_MAJOR_VERSION == 1:
     from pydantic import root_validator
 
