@@ -7,6 +7,7 @@ from pydantic import Field
 
 from ragelo.types.formats import AnswerFormat
 from ragelo.types.pydantic_models import BaseModel
+from ragelo.types.types import AnswerEvaluatorTypes
 
 
 class BaseConfig(BaseModel):
@@ -31,6 +32,10 @@ class BaseConfig(BaseModel):
 
 
 class BaseEvaluatorConfig(BaseConfig):
+    evaluator_name: str | AnswerEvaluatorTypes | None = Field(
+        default=None,
+        description="The name of the evaluator to use.",
+    )
     query_placeholder: str = Field(
         default="query",
         description="The placeholder for the query in the prompt.",

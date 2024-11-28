@@ -12,7 +12,6 @@ from ragelo.types.types import AnswerEvaluatorTypes
 
 
 class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
-    evaluator_name: AnswerEvaluatorTypes
     answer_placeholder: str = Field(default="answer", description="The placeholder for the answer in the prompt")
     documents_placeholder: str = Field(
         default="documents",

@@ -41,6 +41,7 @@ from ragelo.types.results import (
     EloTournamentResult,
     RetrievalEvaluatorResult,
 )
+from ragelo.types.types import AnswerEvaluatorTypes, RetrievalEvaluatorTypes
 
 
 def pytest_addoption(parser):
@@ -331,6 +332,7 @@ def base_eval_config():
 @pytest.fixture
 def base_retrieval_eval_config(base_eval_config):
     base_config = base_eval_config.model_dump()
+    base_config["evaluator_name"] = RetrievalEvaluatorTypes.REASONER
     return BaseRetrievalEvaluatorConfig(
         **base_config,
     )
@@ -339,6 +341,7 @@ def base_retrieval_eval_config(base_eval_config):
 @pytest.fixture
 def custom_answer_eval_config(base_eval_config):
     base_config = base_eval_config.model_dump()
+    base_config["evaluator_name"] = AnswerEvaluatorTypes.CUSTOM_PROMPT
     config = CustomPromptAnswerEvaluatorConfig(
         prompt="""
 You are an useful assistant for evaluating the quality of the answers generated \
@@ -361,7 +364,7 @@ Agent answer: {answer}
 @pytest.fixture
 def expert_retrieval_eval_config(base_eval_config):
     base_eval_config = base_eval_config.model_dump()
-
+    base_eval_config["evaluator_name"] = AnswerEvaluatorTypes.DOMAIN_EXPERT
     return DomainExpertEvaluatorConfig(
         expert_in="Computer Science",
         domain_short="computer scientists",
@@ -375,6 +378,7 @@ def expert_retrieval_eval_config(base_eval_config):
 def rdnam_config(base_eval_config):
     base_config = base_eval_config.model_dump()
     base_config["query_file"] = "tests/data/rdnam_queries.csv"
+    base_config["evaluator_name"] = RetrievalEvaluatorTypes.RDNAM
     return RDNAMEvaluatorConfig(
         annotator_role="You are a search quality rater evaluating the relevance of web pages. ",
         use_multiple_annotators=True,
@@ -386,6 +390,7 @@ def rdnam_config(base_eval_config):
 @pytest.fixture
 def custom_prompt_retrieval_eval_config(base_eval_config):
     base_eval_config = base_eval_config.model_dump()
+    base_eval_config["evaluator_name"] = RetrievalEvaluatorTypes.CUSTOM_PROMPT
     config = CustomPromptEvaluatorConfig(
         prompt="query: {query} doc: {document}",
         **base_eval_config,
@@ -436,6 +441,7 @@ def base_answer_eval_config(base_eval_config):
 def pairwise_answer_eval_config(base_answer_eval_config):
     base_config = base_answer_eval_config.model_dump()
     base_config["pairwise"] = True
+    base_config["evaluator_name"] = AnswerEvaluatorTypes.PAIRWISE
     return PairwiseEvaluatorConfig(bidirectional=True, **base_config)
 
 
@@ -446,12 +452,14 @@ def domain_expert_answer_eval_config(base_answer_eval_config):
     base_config["expert_in"] = "Computer Science"
     base_config["include_annotations"] = True
     base_config["include_raw_documents"] = False
+    base_config["evaluator_name"] = AnswerEvaluatorTypes.DOMAIN_EXPERT
     return PairwiseDomainExpertEvaluatorConfig(**base_config)
 
 
 @pytest.fixture
 def few_shot_retrieval_eval_config(base_eval_config):
     base_eval_config = base_eval_config.model_dump()
+    base_eval_config["evaluator_name"] = RetrievalEvaluatorTypes.FEW_SHOT
     few_shot_samples = [
         FewShotExample(
             passage="Few shot example 1",
