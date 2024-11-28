@@ -42,6 +42,22 @@ from ragelo.types.results import (
 )
 
 
+def pytest_addoption(parser):
+    parser.addoption(
+        "--runopenai", action="store_true", default=False, help="run tests that requires an OpenAI API key"
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    if config.getoption("--runopenai"):
+        # --runopenai given in cli: do not skip tests that will call OpenAI
+        return
+    skip_openai = pytest.mark.skip(reason="need --runopenai option to run")
+    for item in items:
+        if "requires_openai" in item.keywords:
+            item.add_marker(skip_openai)
+
+
 @pytest.fixture
 def openai_client_config():
     return OpenAIConfiguration(
