@@ -9,10 +9,10 @@ from ragelo import (
     get_llm_provider,
     get_retrieval_evaluator,
 )
-from ragelo.cli.agent_rankers_cmd import app as ranker_app
-from ragelo.cli.answer_evaluators_cmd import app as answer_evaluator_app
+from ragelo.cli.agent_rankers_cli import app as ranker_app
+from ragelo.cli.answer_evaluators_cli import app as answer_evaluator_app
 from ragelo.cli.args import get_params_from_function
-from ragelo.cli.retrieval_evaluator_cmd import app as retrieval_evaluator_app
+from ragelo.cli.retrieval_evaluator_cli import app as retrieval_evaluator_app
 from ragelo.cli.utils import get_path
 from ragelo.types import CLIConfig
 
@@ -40,19 +40,13 @@ def run_all(config: CLIConfig = CLIConfig(), **kwargs):
     queries_csv_file = get_path(config.data_dir, config.queries_csv_file)
     documents_file = get_path(config.data_dir, config.documents_csv_file)
     answers_file = get_path(config.data_dir, config.answers_csv_file)
-
-    if config.force:
-        clear_evaluations = True
-    else:
-        clear_evaluations = False
-
     experiment = Experiment(
         experiment_name=config.experiment_name,
         queries_csv_path=queries_csv_file,
         documents_csv_path=documents_file,
         answers_csv_path=answers_file,
         verbose=config.verbose,
-        clear_evaluations=clear_evaluations,
+        clear_evaluations=config.force,
         rich_print=config.rich_print,
         persist_on_disk=config.save_results,
     )

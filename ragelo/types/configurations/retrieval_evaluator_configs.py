@@ -41,6 +41,14 @@ class ReasonerEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         description="The format of the answer returned by the LLM",
     )
 
+    @post_validator
+    @classmethod
+    def check_answer_format(cls, values):
+        if values.llm_answer_format != AnswerFormat.TEXT:
+            logger.warning("We are using the Reasoner Evaluator config. Forcing the LLM answer format to TEXT.")
+            values.llm_answer_format = AnswerFormat.TEXT
+        return values
+
 
 class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.DOMAIN_EXPERT

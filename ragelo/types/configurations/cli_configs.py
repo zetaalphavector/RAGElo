@@ -47,6 +47,10 @@ class BaseCLIConfig(BaseEvaluatorConfig):
         default=True,
         description="Whether or not to save the results to disk.",
     )
+    rich_print: bool = Field(
+        default=True,
+        description="Use rich to print colorful outputs.",
+    )
 
 
 class CLIEvaluatorConfig(BaseCLIConfig):

@@ -1,9 +1,12 @@
+from __future__ import annotations
+
 import typer
 
 from ragelo import Experiment, get_llm_provider, get_retrieval_evaluator
 from ragelo.cli.args import get_params_from_function
 from ragelo.cli.utils import get_path
 from ragelo.types.configurations.cli_configs import (
+    AnswerFormat,
     CLIDomainExpertEvaluatorConfig,
     CLIRDNAMEvaluatorConfig,
     CLIReasonerEvaluatorConfig,
@@ -32,11 +35,20 @@ def domain_expert(config: CLIDomainExpertEvaluatorConfig = CLIDomainExpertEvalua
     config = CLIDomainExpertEvaluatorConfig(**kwargs)
     queries_csv_file = get_path(config.data_dir, config.queries_csv_file)
     documents_file = get_path(config.data_dir, config.documents_csv_file)
+
     experiment = Experiment(
         experiment_name=config.experiment_name,
         queries_csv_path=queries_csv_file,
         documents_csv_path=documents_file,
+        verbose=config.verbose,
+        clear_evaluations=config.force,
+        rich_print=config.rich_print,
+        persist_on_disk=config.save_results,
     )
+
+    kwargs = config.model_dump()
+    kwargs.pop("llm_answer_format")
+    kwargs.pop("llm_response_schema")
 
     llm_provider = get_llm_provider(config.llm_provider_name, **kwargs)
 
@@ -44,28 +56,41 @@ def domain_expert(config: CLIDomainExpertEvaluatorConfig = CLIDomainExpertEvalua
         RetrievalEvaluatorTypes.DOMAIN_EXPERT, config=config, llm_provider=llm_provider
     )
     evaluator.evaluate_experiment(experiment)
-    experiment.save()
+    experiment.save(output_path=config.output_file)
 
 
 @app.command()
-def reasoner(config: CLIReasonerEvaluatorConfig = CLIReasonerEvaluatorConfig(), **kwargs):
+def reasoner(
+    config: CLIReasonerEvaluatorConfig = CLIReasonerEvaluatorConfig(llm_answer_format=AnswerFormat.TEXT),
+    **kwargs,
+):
     """
     A document Evaluator that only outputs the reasoning for why a document is relevant.
     """
+    kwargs.pop("llm_response_schema", None)
+    kwargs["llm_answer_format"] = AnswerFormat.TEXT
+
     config = CLIReasonerEvaluatorConfig(**kwargs)
     queries_csv_file = get_path(config.data_dir, config.queries_csv_file)
     documents_file = get_path(config.data_dir, config.documents_csv_file)
+
     experiment = Experiment(
         experiment_name=config.experiment_name,
         queries_csv_path=queries_csv_file,
         documents_csv_path=documents_file,
+        verbose=config.verbose,
+        clear_evaluations=config.force,
+        rich_print=config.rich_print,
+        persist_on_disk=config.save_results,
     )
+
+    kwargs = config.model_dump()
 
     llm_provider = get_llm_provider(config.llm_provider_name, **kwargs)
 
     evaluator = get_retrieval_evaluator(RetrievalEvaluatorTypes.REASONER, config=config, llm_provider=llm_provider)
     evaluator.evaluate_experiment(experiment)
-    experiment.save()
+    experiment.save(output_path=config.output_file)
 
 
 @app.command()
@@ -77,17 +102,26 @@ def rdnam(config: CLIRDNAMEvaluatorConfig = CLIRDNAMEvaluatorConfig(), **kwargs)
     config = CLIRDNAMEvaluatorConfig(**kwargs)
     queries_csv_file = get_path(config.data_dir, config.queries_csv_file)
     documents_file = get_path(config.data_dir, config.documents_csv_file)
+
     experiment = Experiment(
         experiment_name=config.experiment_name,
         queries_csv_path=queries_csv_file,
         documents_csv_path=documents_file,
+        verbose=config.verbose,
+        clear_evaluations=config.force,
+        rich_print=config.rich_print,
+        persist_on_disk=config.save_results,
     )
+
+    kwargs = config.model_dump()
+    kwargs.pop("llm_answer_format")
+    kwargs.pop("llm_response_schema")
 
     llm_provider = get_llm_provider(config.llm_provider_name, **kwargs)
 
     evaluator = get_retrieval_evaluator(RetrievalEvaluatorTypes.RDNAM, config=config, llm_provider=llm_provider)
     evaluator.evaluate_experiment(experiment)
-    experiment.save()
+    experiment.save(output_path=config.output_file)
 
 
 if __name__ == "__main__":

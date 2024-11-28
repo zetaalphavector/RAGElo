@@ -266,6 +266,7 @@ class Experiment:
         self,
         evaluation: EvaluatorResult | EloTournamentResult,
         should_save: bool = True,
+        should_print: bool = True,
         force: bool = False,
         exist_ok: bool = False,
     ):
@@ -290,6 +291,8 @@ class Experiment:
         if should_save:
             self.save_results(evaluation)
         if not self.verbose:
+            return
+        if not should_print:
             return
         if isinstance(evaluation, EloTournamentResult):
             self._print_elo_tournament_result(evaluation)
@@ -530,6 +533,8 @@ class Experiment:
                 f"Will save the experiment on the provided path {output_path}"
             )
         output_path = output_path or self.cache_path
+        if output_path == "output.json" or output_path == "experiment.json":
+            print("HERE")
         output_dict: dict[str, Any] = {}
 
         output_dict["queries"] = {qid: query.model_dump() for qid, query in self.queries.items()}
@@ -561,6 +566,10 @@ class Experiment:
             return
         if self.results_cache_path is None:
             raise ValueError("Results cache path not set. Cannot dump result")
+        if self.results_cache_path == "experiment_results.jsonl":
+            print("HERE2")
+        if self.results_cache_path == "test_results.jsonl":
+            print("HERE3")
         with open(self.results_cache_path, "a+") as f:
             if isinstance(result, AnswerEvaluatorResult):
                 result_type = "answer"
@@ -829,7 +838,7 @@ class Experiment:
                     continue
             elif result_type == "elo_tournament":
                 result = EloTournamentResult(**result["elo_tournament"])
-            self.add_evaluation(result, should_save=False)
+            self.add_evaluation(result, should_save=False, should_print=False)
 
     def __len__(self):
         return len(self.queries)

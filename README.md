@@ -94,14 +94,44 @@ Other examples are available as notebooks in the [docs/examples/notebooks folder
 ## 🚀 CLI Quickstart 
 After installing RAGElo as a CLI app, you can run it with the following command:
 ```bash
-ragelo run-all experiment_name queries.csv documents.csv answers.csv --data-dir tests/data/
+ragelo run-all queries.csv documents.csv answers.csv --data-dir tests/data/ --experiment-name test
 
----------- Agent Scores by Elo ranking ----------
- agent1        : 1026.7
- agent2        : 973.3
+🔎 Query ID: 0
+📜 Document ID: 0
+Parsed Answer: Very relevant: The document directly answers the user question by stating that Brasília is the capital of Brazil.
+
+🔎 Query ID: 0
+📜 Document ID: 1
+Parsed Answer: Somewhat relevant: The document mentions a former capital of Brazil but does not provide the current capital.
+
+🔎 Query ID: 1
+📜 Document ID: 2
+Parsed Answer: Very relevant: The document clearly states that Paris is the capital of France, directly answering the user question.
+
+🔎 Query ID: 1
+📜 Document ID: 3
+Parsed Answer: Not relevant: The document does not provide information about the capital of France.
+
+Evaluating Retrieved documents 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4/4  [ 0:00:02 < 0:00:00 , 2 it/s ]
+✅ Done!
+Total evaluations: 4
+🔎 Query ID: 0
+ agent1              🆚   agent2
+Parsed Answer: A
+
+🔎 Query ID: 1
+ agent1              🆚   agent2
+Parsed Answer: A
+
+Evaluating Agent Answers 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2/2  [ 0:00:09 < 0:00:00 , 0 it/s ]
+✅ Done!
+Total evaluations: 2
+------- Agents Elo Ratings -------
+agent1         : 1033.0(±0.0)
+agent2         : 966.0(±0.0)
 ```
 
-When running as a CLI, RAGElo expects the input files as CSV files. Specifically, it needs a csv file with the user queries, one with the documents retrieved by the retrieval system and one of the answers each agent produced. These files can be passed with the parameters `--queries_csv_file`, `--documents_csv_file` and `--answers_csv_file`, respectively.
+When running as a CLI, RAGElo expects the input files as CSV files. Specifically, it expects a csv file with the user queries, one with the documents retrieved by the retrieval system and one of the answers each agent produced. These files can be passed with the parameters `--queries_csv_file`, `--documents_csv_file` and `--answers_csv_file`, respectively.
 
 Here are some examples of their expected formats:
 `queries.csv`: 

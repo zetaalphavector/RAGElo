@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import csv
 import os
-from unittest.mock import AsyncMock
 
 import pytest
 from typer.testing import CliRunner
@@ -30,39 +28,43 @@ def test_run_all_cli(mocker):
             "test-output.json",
             "--no-save-results",
             "--force",
-            "--n-processes",
-            "4",
         ],
     )
     assert result.exit_code == 0
     assert "Agents Elo Ratings" in result.stdout
     assert os.path.exists("test-output.json")
     os.remove("test-output.json")
+    os.remove("test_results.jsonl")
 
 
-# def test_run_reasoner_cli():
-#     result = runner.invoke(
-#         app,
-#         [
-#             "retrieval-evaluator",
-#             "reasoner",
-#             "queries.csv",
-#             "documents.csv",
-#             "output.csv",
-#             "--verbose",
-#             "--data-dir",
-#             "tests/data/",
-#         ],
-#     )
-#     assert result.exit_code == 0
-#     assert "✅ Done!" in result.stdout
-#     assert "Failed evaluations: 0" in result.stdout
-#     assert "Total evaluations: 4" in result.stdout
-#     # Make sure that the output file was created
-#     with open("tests/data/reasonings.csv", "r") as f:
-#         reader = csv.DictReader(f)
-#         assert reader.fieldnames == ["qid", "did", "raw_answer", "answer"]
-#         assert len(list(reader)) == 4
+@pytest.mark.requires_openai
+def test_run_reasoner_cli():
+    result = runner.invoke(
+        app,
+        [
+            "retrieval-evaluator",
+            "reasoner",
+            "queries.csv",
+            "documents.csv",
+            "output.csv",
+            "--verbose",
+            "--verbose",
+            "--data-dir",
+            "tests/data/",
+            "--experiment-name",
+            "test",
+            "--output-file",
+            "test-output.json",
+            "--no-save-results",
+            "--force",
+        ],
+    )
+    assert result.exit_code == 0
+    assert "✅ Done!" in result.stdout
+    assert result.stdout.startswith("🔎 Query ID: 0\n📜 Document ID: 0")
+    assert "Total evaluations: 4" in result.stdout
+    assert os.path.exists("test-output.json")
+    os.remove("test-output.json")
 
 
 # def test_run_answer_cli():
