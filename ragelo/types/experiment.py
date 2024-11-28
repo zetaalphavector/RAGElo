@@ -533,8 +533,6 @@ class Experiment:
                 f"Will save the experiment on the provided path {output_path}"
             )
         output_path = output_path or self.cache_path
-        if output_path == "output.json" or output_path == "experiment.json":
-            print("HERE")
         output_dict: dict[str, Any] = {}
 
         output_dict["queries"] = {qid: query.model_dump() for qid, query in self.queries.items()}
@@ -566,10 +564,6 @@ class Experiment:
             return
         if self.results_cache_path is None:
             raise ValueError("Results cache path not set. Cannot dump result")
-        if self.results_cache_path == "experiment_results.jsonl":
-            print("HERE2")
-        if self.results_cache_path == "test_results.jsonl":
-            print("HERE3")
         with open(self.results_cache_path, "a+") as f:
             if isinstance(result, AnswerEvaluatorResult):
                 result_type = "answer"

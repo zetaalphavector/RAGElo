@@ -11,7 +11,7 @@ runner = CliRunner()
 
 
 @pytest.mark.requires_openai
-def test_run_all_cli(mocker):
+def test_run_all_cli():
     result = runner.invoke(
         app,
         [
@@ -34,7 +34,6 @@ def test_run_all_cli(mocker):
     assert "Agents Elo Ratings" in result.stdout
     assert os.path.exists("test-output.json")
     os.remove("test-output.json")
-    os.remove("test_results.jsonl")
 
 
 @pytest.mark.requires_openai

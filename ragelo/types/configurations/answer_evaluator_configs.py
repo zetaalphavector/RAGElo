@@ -31,11 +31,11 @@ class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
         ),
     )
     include_annotations: bool = Field(
-        default=True,
+        default=False,
         description="Whether or not to include the document relevance annotations in the prompt",
     )
     include_raw_documents: bool = Field(
-        default=False,
+        default=True,
         description="Whether or not to include the raw documents in the prompt",
     )
     document_filter: Callable[[str], bool] | None = Field(
@@ -57,6 +57,15 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     bidirectional: bool = Field(default=False, description="Whether or not to run each game in both directions")
     n_games_per_query: int = Field(default=100, description="Maximum number of games to generate for each query")
     pairwise: bool = Field(default=True, description="Whether or not to the evaluator is pairwise")
+    include_annotations: bool = Field(
+        default=True,
+        description="Whether or not to include the document relevance annotations in the prompt",
+    )
+    include_raw_documents: bool = Field(
+        default=False,
+        description="Whether or not to include the raw documents in the prompt",
+    )
+
     document_template: str = Field(
         default="[{did}] {annotation}",
         description="The template to format each individual document in the prompt",
@@ -92,6 +101,14 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
             "The response schema for the LLM. "
             "Required if the llm_answer_format is structured and recommended for JSON."
         ),
+    )
+    include_annotations: bool = Field(
+        default=True,
+        description="Whether or not to include the document relevance annotations in the prompt",
+    )
+    include_raw_documents: bool = Field(
+        default=False,
+        description="Whether or not to include the raw documents in the prompt",
     )
 
     @validator
@@ -145,6 +162,8 @@ class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
         default=AnswerFormat.JSON,
         description="The format of the answer returned by the LLM",
     )
+    include_annotations: bool = False
+    include_raw_documents: bool = True
 
 
 class PairwiseDomainExpertEvaluatorConfig(PairwiseEvaluatorConfig):
@@ -156,3 +175,5 @@ class PairwiseDomainExpertEvaluatorConfig(PairwiseEvaluatorConfig):
         "submitted the query works for. that the domain belongs to. "
         "(e.g.: ChemCorp, CS Inc.)",
     )
+    include_annotations: bool = True
+    include_raw_documents: bool = False

@@ -34,6 +34,7 @@ from ragelo.types.configurations import (
 )
 from ragelo.types.configurations.retrieval_evaluator_configs import FewShotExample
 from ragelo.types.evaluables import ChatMessage
+from ragelo.types.experiment import Experiment
 from ragelo.types.formats import AnswerFormat, LLMResponseType
 from ragelo.types.results import (
     AnswerEvaluatorResult,
@@ -198,8 +199,6 @@ def base_experiment_config():
 
 @pytest.fixture
 def experiment(base_experiment_config):
-    from ragelo.types.experiment import Experiment
-
     return Experiment(**base_experiment_config)
 
 
@@ -268,10 +267,12 @@ def experiment_with_retrieval_scores(experiment):
 
 
 @pytest.fixture
-def empty_experiment():
-    from ragelo.types.experiment import Experiment
-
-    return Experiment(experiment_name="test_experiment")
+def empty_experiment(base_experiment_config):
+    base_config = base_experiment_config.copy()
+    base_config.pop("queries_csv_path")
+    base_config.pop("documents_csv_path")
+    base_config.pop("answers_csv_path")
+    return Experiment(**base_config)
 
 
 @pytest.fixture
@@ -443,6 +444,8 @@ def domain_expert_answer_eval_config(base_answer_eval_config):
     base_config = base_answer_eval_config.model_dump()
     base_config["pairwise"] = True
     base_config["expert_in"] = "Computer Science"
+    base_config["include_annotations"] = True
+    base_config["include_raw_documents"] = False
     return PairwiseDomainExpertEvaluatorConfig(**base_config)
 
 

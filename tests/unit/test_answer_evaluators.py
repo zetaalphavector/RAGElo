@@ -166,11 +166,16 @@ class TestPairwiseAnswerEvaluator:
         assert agent_a_answer == query.answers["agent1"].text
         assert agent_b_answer == query.answers["agent2"].text
 
-    def test_evaluation_no_documents(self, llm_provider_pairwise_answer_mock, experiment, pairwise_answer_eval_config):
+    def test_evaluation_no_documents(
+        self, llm_provider_pairwise_answer_mock, empty_experiment, pairwise_answer_eval_config
+    ):
         evaluator = PairwiseAnswerEvaluator.from_config(
             config=pairwise_answer_eval_config, llm_provider=llm_provider_pairwise_answer_mock
         )
-        query = experiment["0"]
+        empty_experiment.add_query("empty_query", "0")
+        empty_experiment.add_agent_answer("answer_a", "agent1", "0")
+        empty_experiment.add_agent_answer("answer_b", "agent2", "0")
+        query = empty_experiment["0"]
         with pytest.warns(UserWarning):
             _ = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
 

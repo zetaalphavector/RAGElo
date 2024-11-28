@@ -300,6 +300,9 @@ class BaseAnswerEvaluator(BaseEvaluator):
                     continue
             if self.config.include_annotations and d.evaluation is None:
                 continue
+            if self.config.include_raw_documents and d.text is None:
+                continue
+
             formatters = {
                 "did": did,
                 "doc": d.text,
