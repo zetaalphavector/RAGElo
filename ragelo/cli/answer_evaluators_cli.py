@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import typer
 
 from ragelo import (
@@ -28,26 +30,45 @@ def pairwise(config: CLIPairwiseEvaluatorConfig = CLIPairwiseEvaluatorConfig(), 
 
     """
     config = CLIPairwiseEvaluatorConfig(**kwargs)
+
+    llm_provider = get_llm_provider(config.llm_provider_name, **kwargs)
+
     queries_csv_file = get_path(config.data_dir, config.queries_csv_file)
     documents_file = get_path(config.data_dir, config.documents_csv_file)
     answers_file = get_path(config.data_dir, config.answers_csv_file)
+
     experiment = Experiment(
         experiment_name=config.experiment_name,
         queries_csv_path=queries_csv_file,
         documents_csv_path=documents_file,
         answers_csv_path=answers_file,
+        verbose=config.verbose,
+        clear_evaluations=config.force,
+        rich_print=config.rich_print,
+        persist_on_disk=config.save_results,
     )
 
-    llm_provider = get_llm_provider(config.llm_provider_name, **kwargs)
+    kwargs = config.model_dump()
+    kwargs.pop("llm_answer_format")
+    kwargs.pop("llm_response_schema")
 
     if config.add_reasoning:
-        reasoner_evaluator = get_retrieval_evaluator(RetrievalEvaluatorTypes.REASONER, llm_provider=llm_provider)
+        reasoner_evaluator = get_retrieval_evaluator(
+            RetrievalEvaluatorTypes.REASONER,
+            llm_provider=llm_provider,
+            rich_print=config.rich_print,
+            verbose=config.verbose,
+        )
         reasoner_evaluator.evaluate_experiment(experiment)
         config.include_annotations = True
+        config.include_raw_documents = False
+    else:
+        config.include_annotations = False
+        config.include_raw_documents = True
 
     evaluator = get_answer_evaluator(AnswerEvaluatorTypes.PAIRWISE, config=config, llm_provider=llm_provider)
     evaluator.evaluate_experiment(experiment)
-    experiment.save()
+    experiment.save(output_path=config.output_file)
 
 
 @app.command()
@@ -60,17 +81,23 @@ def expert_pairwise(
     """
 
     config = CLIPairwiseDomainExpertEvaluatorConfig(**kwargs)
+
+    llm_provider = get_llm_provider(config.llm_provider_name, **kwargs)
+
     queries_csv_file = get_path(config.data_dir, config.queries_csv_file)
     documents_file = get_path(config.data_dir, config.documents_csv_file)
     answers_file = get_path(config.data_dir, config.answers_csv_file)
+
     experiment = Experiment(
         experiment_name=config.experiment_name,
         queries_csv_path=queries_csv_file,
         documents_csv_path=documents_file,
         answers_csv_path=answers_file,
+        verbose=config.verbose,
+        clear_evaluations=config.force,
+        rich_print=config.rich_print,
+        persist_on_disk=config.save_results,
     )
-
-    llm_provider = get_llm_provider(config.llm_provider_name, **kwargs)
 
     if config.add_reasoning:
         reasoner_evaluator = get_retrieval_evaluator(RetrievalEvaluatorTypes.REASONER, llm_provider=llm_provider)

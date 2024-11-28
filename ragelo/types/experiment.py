@@ -843,6 +843,9 @@ class Experiment:
     def __getitem__(self, key: str) -> Query:
         return self.queries[key]
 
+    def keys(self):
+        return self.queries.keys()
+
     @staticmethod
     def __infer_query_id_column(file_path: str, query_id_col: str | None = None) -> str:
         """Infer the column name with the query id from a CSV file."""
@@ -889,5 +892,6 @@ class Experiment:
                         return col
         raise ValueError(f"Could not identify Document ID column for CSV file {file_path}")
 
-    def keys(self):
-        return self.queries.keys()
+    @classmethod
+    def load(cls, experiment_name: str, path: str):
+        return cls(experiment_name=experiment_name, save_path=path)

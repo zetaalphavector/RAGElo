@@ -18,11 +18,9 @@ arguments = {
     "documents_csv_file",
     "answers_csv_file",
     "domain_long",
-    "reasoning_file",
-    "evaluations_file",
-    "retrieval_evaluator_name",
-    "answer_evaluator_name",
 }
+
+ignore_args = {"llm_response_schema"}
 
 
 def get_params_from_function(func: Callable[..., Any]) -> Dict[str, ParamMeta]:
@@ -44,6 +42,8 @@ def get_params_from_function(func: Callable[..., Any]) -> Dict[str, ParamMeta]:
         if inspect.isclass(annotation) and issubclass(annotation, BaseConfig):
             fields = annotation.get_model_fields()
             for k, v in fields.items():
+                if k in ignore_args:
+                    continue
                 if _PYDANTIC_MAJOR_VERSION == 2:
                     description = v.description  # type: ignore
                     _type = v.annotation  # type: ignore
@@ -81,7 +81,7 @@ def get_params_from_function(func: Callable[..., Any]) -> Dict[str, ParamMeta]:
                     else:
                         option = OptionInfo(
                             default=v.default,
-                            default_factory=v.default_factory,
+                            default_factory=v.default_factory,  # type: ignore
                             help=description,
                         )
                         params[k] = ParamMeta(name=k, default=option, annotation=_type)

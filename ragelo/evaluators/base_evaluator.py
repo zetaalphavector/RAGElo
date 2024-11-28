@@ -8,7 +8,6 @@ from collections.abc import Sequence
 import rich
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
-from ragelo.logger import logger
 from ragelo.types.configurations import BaseEvaluatorConfig
 from ragelo.types.evaluables import Evaluable
 from ragelo.types.experiment import Experiment

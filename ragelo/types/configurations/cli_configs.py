@@ -2,21 +2,19 @@ from __future__ import annotations
 
 from pydantic import Field
 
-from ragelo.types.configurations.agent_ranker_configs import EloAgentRankerConfig
 from ragelo.types.configurations.answer_evaluator_configs import (
     PairwiseDomainExpertEvaluatorConfig,
     PairwiseEvaluatorConfig,
 )
-from ragelo.types.configurations.base_configs import BaseEvaluatorConfig
+from ragelo.types.configurations.base_configs import BaseConfig
 from ragelo.types.configurations.retrieval_evaluator_configs import (
     DomainExpertEvaluatorConfig,
     RDNAMEvaluatorConfig,
     ReasonerEvaluatorConfig,
 )
-from ragelo.types.formats import AnswerFormat
 
 
-class BaseCLIConfig(BaseEvaluatorConfig):
+class BaseCLIConfig(BaseConfig):
     experiment_name: str = Field(
         default="experiment",
         description="The name of the experiment to run. This is also used as the local cache file name",
@@ -34,15 +32,10 @@ class BaseCLIConfig(BaseEvaluatorConfig):
         default=True,
         description="Whether or not to be verbose and print all intermediate steps.",
     )
-    llm_answer_format: AnswerFormat = Field(
-        default=AnswerFormat.JSON,
-        description="The format of the answer returned by the LLM.",
-    )
     output_file: str = Field(
         default="output.json",
         description="The path to the output file where the results will be saved.",
     )
-    llm_response_schema: None = None
     save_results: bool = Field(
         default=True,
         description="Whether or not to save the results to disk.",
@@ -70,6 +63,7 @@ class CLIEvaluatorConfig(BaseCLIConfig):
 
 class CLIDomainExpertEvaluatorConfig(CLIEvaluatorConfig, DomainExpertEvaluatorConfig):
     expert_in: str | None = Field(default=" ")
+    pass
 
 
 class CLIReasonerEvaluatorConfig(CLIEvaluatorConfig, ReasonerEvaluatorConfig):
@@ -97,10 +91,6 @@ class CLIPairwiseEvaluatorConfig(CLIEvaluatorConfig, PairwiseEvaluatorConfig):
     )
 
 
-class CLIEloAgentRankerConfig(BaseCLIConfig, EloAgentRankerConfig):
-    pass
-
-
 class CLIConfig(BaseCLIConfig):
     documents_csv_file: str = Field(
         default="documents.csv",
@@ -118,4 +108,3 @@ class CLIConfig(BaseCLIConfig):
     elo_k: int = Field(default=32, description="The K factor for the Elo ranking algorithm")
     bidirectional: bool = Field(default=False, description="Wether or not to run each game in both directions")
     model: str = Field(default="gpt-4o-mini", description="The model to use for the LLM")
-    rich_print: bool = Field(default=True, description="Use rich to print colorful outputs.")

@@ -6,11 +6,11 @@ from ragelo import Experiment, get_llm_provider, get_retrieval_evaluator
 from ragelo.cli.args import get_params_from_function
 from ragelo.cli.utils import get_path
 from ragelo.types.configurations.cli_configs import (
-    AnswerFormat,
     CLIDomainExpertEvaluatorConfig,
     CLIRDNAMEvaluatorConfig,
     CLIReasonerEvaluatorConfig,
 )
+from ragelo.types.formats import AnswerFormat
 from ragelo.types.types import RetrievalEvaluatorTypes
 
 typer.main.get_params_from_function = get_params_from_function  # type: ignore

@@ -24,6 +24,10 @@ class BaseConfig(BaseModel):
         default=True,
         description="Whether or not to show a progress bar while running the evaluations.",
     )
+    n_processes: int = Field(
+        default=1,
+        description="The number of parallel LLM calls to use for the evaluation.",
+    )
 
 
 class BaseEvaluatorConfig(BaseConfig):
@@ -41,8 +45,4 @@ class BaseEvaluatorConfig(BaseConfig):
             "The response schema for the LLM. "
             "Required if the llm_answer_format is structured and recommended for JSON."
         ),
-    )
-    n_processes: int = Field(
-        default=1,
-        description="The number of parallel LLM calls to use for the evaluation.",
     )
