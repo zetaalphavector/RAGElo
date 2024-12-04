@@ -70,7 +70,7 @@ class OpenAIProvider(BaseLLMProvider):
                         "Using JSON as the desired answer format. Dumping the schema to JSON."
                     )
                     if _PYDANTIC_MAJOR_VERSION >= 2:
-                        response_schema = response_schema.model_json_schema()
+                        response_schema = response_schema.model_json_schema()  # type: ignore
                     else:
                         response_schema = response_schema.schema()  # type: ignore
                 elif isinstance(response_schema, dict):

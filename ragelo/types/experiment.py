@@ -18,6 +18,7 @@ from pydantic import BaseModel as PydanticBaseModel
 
 from ragelo.logger import logger
 from ragelo.types.evaluables import AgentAnswer, Document
+from ragelo.types.pydantic_models import _PYDANTIC_MAJOR_VERSION
 from ragelo.types.query import Query
 from ragelo.types.results import (
     AnswerEvaluatorResult,
@@ -330,7 +331,10 @@ class Experiment:
             # Print the answer in a more readable format
             answer = json.dumps(response.answer, indent=4, ensure_ascii=False)
         elif isinstance(response.answer, PydanticBaseModel):
-            answer = response.answer.model_dump_json(indent=4)
+            if _PYDANTIC_MAJOR_VERSION >= 2:
+                answer = response.answer.model_dump_json(indent=4)  # type: ignore
+            else:
+                answer = response.answer.schema_json(indent=4)  # type: ignore
         else:
             answer = str(response.answer)
         response_dict = response.model_dump()
