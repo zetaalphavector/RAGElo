@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Type
+from typing import Any, Type
 from unittest.mock import AsyncMock
 
 import pytest
@@ -113,8 +113,13 @@ class MockLLMProvider(BaseLLMProvider):
     def from_configuration(cls, config: LLMProviderConfig):
         return cls(config)
 
-    async def call_async(self, prompt, answer_format, *args, **kwargs):
-        return await self.async_call_mocker(prompt, answer_format)
+    async def call_async(
+        self,
+        prompt: str | list[dict[str, str]],
+        answer_format: AnswerFormat = AnswerFormat.TEXT,
+        response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = None,
+    ) -> LLMResponseType:
+        return await self.async_call_mocker(prompt, answer_format, response_schema)
 
 
 @pytest.fixture

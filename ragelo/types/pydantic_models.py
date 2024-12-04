@@ -31,8 +31,8 @@ class BaseModel(PydanticBaseModel):
         else:
             return cls.model_fields  # type: ignore
 
-    def model_dump(self):
+    def model_dump(self, *args, **kwargs):
         if _PYDANTIC_MAJOR_VERSION == 1:
             return self.dict()  # type: ignore
         else:
-            return super().model_dump()  # type: ignore
+            return super().model_dump(*args, **kwargs)  # type: ignore
