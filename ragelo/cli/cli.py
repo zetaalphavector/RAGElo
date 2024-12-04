@@ -41,16 +41,18 @@ def run_all(config: CLIConfig = CLIConfig(), **kwargs):
     queries_csv_file = get_path(config.data_dir, config.queries_csv_file)
     documents_file = get_path(config.data_dir, config.documents_csv_file)
     answers_file = get_path(config.data_dir, config.answers_csv_file)
+    output_file = get_path(config.data_dir, config.output_file, check_exists=False) if config.output_file else None
 
     experiment = Experiment(
         experiment_name=config.experiment_name,
+        save_path=output_file,
         queries_csv_path=queries_csv_file,
         documents_csv_path=documents_file,
         answers_csv_path=answers_file,
         verbose=config.verbose,
         clear_evaluations=config.force,
         rich_print=config.rich_print,
-        persist_on_disk=config.save_results,
+        cache_evaluations=config.save_results,
     )
 
     kwargs = config.model_dump()
@@ -64,7 +66,7 @@ def run_all(config: CLIConfig = CLIConfig(), **kwargs):
     retrieval_evaluator.evaluate_experiment(experiment)
     answers_evaluator.evaluate_experiment(experiment)
     ranker.run(experiment=experiment)
-    experiment.save(output_path=config.output_file)
+    experiment.save(output_file)
 
 
 if __name__ == "__main__":

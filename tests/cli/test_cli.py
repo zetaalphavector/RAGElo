@@ -25,8 +25,7 @@ def test_run_all_cli():
             "--experiment-name",
             "test",
             "--output-file",
-            "test-output.json",
-            "--no-save-results",
+            "output.json",
             "--force",
         ],
     )
@@ -39,8 +38,11 @@ def test_run_all_cli():
     assert "Evaluating Retrieved documents" in result.stdout
     assert "Evaluating Agent Answers" in result.stdout
     assert len(result.stdout.split("✅ Done!")) == 3
-    assert os.path.exists("test-output.json")
-    os.remove("test-output.json")
+    assert os.path.exists("tests/data/output.json")
+    assert os.path.exists("tests/data/output_results.jsonl")
+    assert not os.path.exists("ragelo_cache/test.json")
+    os.remove("tests/data/output.json")
+    os.remove("tests/data/output_results.jsonl")
 
 
 @pytest.mark.requires_openai
@@ -67,7 +69,7 @@ def test_run_reasoner_cli():
     assert "✅ Done!" in result.stdout
     assert result.stdout.startswith("🔎 Query ID: 0\n📜 Document ID: 0")
     assert "Total evaluations: 4" in result.stdout
-    assert os.path.exists("test-output.json")
+    assert os.path.exists("tests/data/test-output.json")
     os.remove("test-output.json")
 
 

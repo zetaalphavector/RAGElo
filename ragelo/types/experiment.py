@@ -54,7 +54,7 @@ class Experiment:
         get_runs(agents, output_path, output_format): Gets the runs (retrieval results) for the provided agents for
             all the queries. Optionally saves the result to output_path with output_format.
         save(): Saves the current state of the queries object to disk as a JSON object to `cache_path`.
-        save_results(result): Saves an evaluation result to the `results_cache_path` file.
+        save_results(result): Saves an evaluation result to the `evaluations_cache_path` file.
         add_retrieved_docs_from_runfile(run_file_path, corpus, top_k): Adds retrieved documents from a trec-formatted
             run file to the queries. Will create the Document objects as needed.
 
@@ -68,8 +68,9 @@ class Experiment:
         self,
         experiment_name: str,
         save_path: str | None = None,
-        results_save_path: str | None = None,
-        persist_on_disk: bool = True,
+        evaluations_cache_path: str | None = None,
+        cache_evaluations: bool = True,
+        save_on_disk: bool = True,
         verbose: bool = False,
         rich_print: bool = True,
         clear_evaluations: bool = False,
@@ -89,13 +90,12 @@ class Experiment:
         Args:
             experiment_name (str): The name of your experiment
             save_path (Optional[str]): A JSON file path to persist the experiment on disk.
-                If not set, will create one based on experiment_name. If it already exists,
+                If not set, results will not be saved locally. If it already exists,
                 we will try to load the state from that file.
-
-            results_save_path (Optional[str]): A JSON Lines file path to persist the evaluators result on disk,
+            evaluations_cache_path (Optional[str]): A JSON Lines file path to persist the evaluators result on disk,
                 to avoid re-computing evaluations. If not set, will create one based on experiment_name.
-            persist_on_disk (bool, defaults to True): Whether or not to use save_path and results_save_path to persist
-                results on disk.
+            cache_evaluations (bool, defaults to True): Whether or not to cache the evaluations on evaluations_cache_path,
+            save_on_disk (bool, defaults to True): Whether to save the experiment to disk using the experiment_name.
             verbose (bool, defaults to False): Whether to print information about the experiment.
             rich_print (bool, defaults to True): Whether to print information about the experiment using the rich library.
             clear_evaluations (bool, defaults to False): If set to True, will clear all existing evaluations and
@@ -123,25 +123,31 @@ class Experiment:
         The method prioritizes loading queries from the CSV file over the cache file. If neither source is available,
             it relies on the `queries` attribute if it has been set.
         """
-        self.save_cache = persist_on_disk
-        self.results_cache_path = results_save_path
+        self.cache_evaluations = cache_evaluations
+        self.evaluations_cache_path = evaluations_cache_path
         self.experiment_name = experiment_name
         self.queries: dict[str, Query] = {}
         self.elo_tournaments: list[EloTournamentResult] = []
         self.verbose = verbose
         self.rich_print = rich_print
+        self.save_on_disk = save_on_disk
+        self.save_path = save_path
 
-        if save_path is None:
+        if self.save_on_disk and not self.save_path:
+            logger.info("Creating a save path for the experiment")
             os.makedirs("ragelo_cache", exist_ok=True)
-            self.cache_path = f"ragelo_cache/{self.experiment_name}.json"
-        else:
-            self.cache_path = save_path
+            self.save_path = f"ragelo_cache/{self.experiment_name}.json"
+        elif self.save_path is None and not self.save_on_disk:
+            logger.info("No save path provided. Will not save the experiment to disk.")
 
-        if self.results_cache_path is None:
-            self.results_cache_path = self.cache_path.replace(".json", "_results.jsonl")
+        if self.cache_evaluations and not self.evaluations_cache_path:
+            logger.info("Creating a cache path for the evaluations cache")
+            os.makedirs("ragelo_cache", exist_ok=True)
+            self.evaluations_cache_path = f"ragelo_cache/{self.experiment_name}_results.jsonl"
+            Path(self.evaluations_cache_path).touch()
 
-        if os.path.isfile(self.cache_path):
-            self.queries = self._load_from_cache(self.cache_path)
+        if self.save_path and os.path.isfile(self.save_path):
+            self.queries = self._load_from_cache(self.save_path)
         else:
             self.queries = {}
         if queries_csv_path:
@@ -157,8 +163,8 @@ class Experiment:
         if answers_csv_path:
             self.add_agent_answers_from_csv(answers_csv_path, csv_agent_col, csv_answer_text_col, csv_query_id_col)
 
-        if os.path.isfile(self.results_cache_path):
-            self._load_results_from_cache()
+        if self.evaluations_cache_path and os.path.isfile(self.evaluations_cache_path):
+            self._load_results_from_cache(self.evaluations_cache_path)
         if clear_evaluations:
             self.__clear_all_evaluations()
         self.save()
@@ -524,15 +530,13 @@ class Experiment:
         Raises:
             ValueError: If `cache_path` is None and caching is enabled.
         """
-
-        if not self.save_cache and not output_path:
+        if not self.save_on_disk:
             return
-        if output_path and not self.save_cache:
-            logger.info(
-                "Experiment config is set to not save, but an explicit path was provided. "
-                f"Will save the experiment on the provided path {output_path}"
-            )
-        output_path = output_path or self.cache_path
+        if output_path is None:
+            assert self.save_path is not None, "Cannot save experiment without a save path"
+            output_path = self.save_path
+        else:
+            assert self.save_path is not None, "Cannot save experiment without a save path"
         output_dict: dict[str, Any] = {}
 
         output_dict["queries"] = {qid: query.model_dump() for qid, query in self.queries.items()}
@@ -549,22 +553,22 @@ class Experiment:
         """
         Persist the evaluation result to a cache file.
         This method writes the given evaluation result to a cache file specified by
-        `self.results_cache_path`. The result is serialized to JSON format and appended
+        `self.evaluations_cache_path`. The result is serialized to JSON format and appended
         to the file. The type of the result (either "answer" or "retrieval") is included
         in the serialized data.
         Args:
             result (EvaluatorResult | EloTournamentResult): The evaluation result
                 to be persisted to the cache.
         Raises:
-            ValueError: If `self.results_cache_path` is not set or if the type of `result`
+            ValueError: If `self.evaluations_cache_path` is not set or if the type of `result`
                 is not recognized.
         """
 
-        if not self.save_cache:
+        if not self.cache_evaluations:
             return
-        if self.results_cache_path is None:
+        if self.evaluations_cache_path is None:
             raise ValueError("Results cache path not set. Cannot dump result")
-        with open(self.results_cache_path, "a+") as f:
+        with open(self.evaluations_cache_path, "a+") as f:
             if isinstance(result, AnswerEvaluatorResult):
                 result_type = "answer"
             elif isinstance(result, RetrievalEvaluatorResult):
@@ -583,7 +587,6 @@ class Experiment:
     ):
         if not os.path.isfile(file_path):
             raise FileNotFoundError(f"CSV file with queries {file_path} not found")
-        queries: dict[str, Query] = {}
         read_queries = set()
         try:
             query_id_column = self.__infer_query_id_column(file_path)
@@ -595,14 +598,14 @@ class Experiment:
                 query_id_column = f"query_{idx}"
             else:
                 qid = row.get(query_id_column, f"query_{idx}")
-            if qid in read_queries or qid in queries:
+            if qid in read_queries or qid in self.queries:
                 logger.warning(f"Query with ID {qid} already read. Skipping")
                 continue
             query_text = row[query_text_column].strip()
             metadata = {k: v for k, v in row.items() if k not in [query_id_column, query_text_column]}
             self.queries[qid] = Query(qid=qid, query=query_text, metadata=metadata)
             read_queries.add(qid)
-        logger.info(f"Loaded {len(queries)} queries from {file_path}")
+        logger.info(f"Loaded {len(self.queries)} queries from {file_path}")
 
     def add_documents_from_csv(
         self,
@@ -787,14 +790,15 @@ class Experiment:
                     answer_eval_count += 1
                 answer.evaluation = None
         self.elo_tournaments = []
-        logger.info(
-            f"Cleared {doc_eval_count} document evaluations, {game_eval_count} game evaluations, "
-            "and {answer_eval_count} answer evaluations"
-        )
+        if doc_eval_count > 0 or game_eval_count > 0 or answer_eval_count > 0:
+            logger.info(
+                f"Cleared {doc_eval_count} document evaluations, {game_eval_count} game evaluations, "
+                f"and {answer_eval_count} answer evaluations"
+            )
 
         if should_save:
-            if self.results_cache_path and os.path.isfile(self.results_cache_path):
-                with open(self.results_cache_path, "w"):
+            if self.evaluations_cache_path and os.path.isfile(self.evaluations_cache_path):
+                with open(self.evaluations_cache_path, "w"):
                     pass
 
             self.save()
@@ -812,14 +816,9 @@ class Experiment:
             self.elo_tournaments = [EloTournamentResult(**t) for t in data["elo_tournaments"]]
         return queries
 
-    def _load_results_from_cache(self):
-        if not self.cache_path:
-            raise ValueError("Cache path not set. Cannot load queries")
-        if self.results_cache_path is None:
-            self.results_cache_path = self.cache_path.replace(".json", "_results.jsonl")
-            with open(self.results_cache_path, "w"):
-                pass
-        for line in open(self.results_cache_path):
+    def _load_results_from_cache(self, cache_path: str):
+        assert os.path.isfile(cache_path)
+        for line in open(cache_path):
             result = json.loads(line)
             result_type = list(result.keys())[0]
             if result_type == "answer":

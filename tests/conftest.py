@@ -46,7 +46,10 @@ from ragelo.types.types import AnswerEvaluatorTypes, RetrievalEvaluatorTypes
 
 def pytest_addoption(parser):
     parser.addoption(
-        "--runopenai", action="store_true", default=False, help="run tests that requires an OpenAI API key"
+        "--runopenai",
+        action="store_true",
+        default=False,
+        help="run tests that requires an OpenAI API key",
     )
 
 
@@ -84,7 +87,7 @@ class AnswerModel(PydanticBaseModel):
     keyB: str
 
 
-def answer_model_factory(prompt, answer_format, **kwargs):
+def answer_model_factory(prompt, answer_format, response_schema, **kwargs):
     if answer_format == AnswerFormat.STRUCTURED:
         return LLMResponseType(
             raw_answer='{"keyA": "valueA", "keyB": "valueB"}',
@@ -107,7 +110,11 @@ def answer_model_factory(prompt, answer_format, **kwargs):
 class MockLLMProvider(BaseLLMProvider):
     def __init__(self, config):
         self.config = config
-        self.async_call_mocker = AsyncMock(side_effect=answer_model_factory)
+
+        def side_effect(*args, **kwargs):
+            return answer_model_factory(*args, **kwargs)
+
+        self.async_call_mocker = AsyncMock(side_effect=side_effect)
 
     @classmethod
     def from_configuration(cls, config: LLMProviderConfig):
@@ -193,7 +200,8 @@ def openai_client_mock(mocker, chat_completion_mock):
 def base_experiment_config():
     config = {
         "experiment_name": "test_experiment",
-        "persist_on_disk": False,
+        "save_on_disk": False,
+        "cache_evaluations": False,
         "queries_csv_path": "tests/data/queries.csv",
         "documents_csv_path": "tests/data/documents.csv",
         "answers_csv_path": "tests/data/answers.csv",
@@ -212,7 +220,10 @@ def experiment(base_experiment_config):
 def experiment_with_conversations_and_reasonings(experiment):
     experiment.queries["0"].answers["agent1"].conversation = [
         ChatMessage(sender="user", content="What is the capital of Brazil?"),
-        ChatMessage(sender="agent1", content="Brasília is the capital of Brazil, according to [0]."),
+        ChatMessage(
+            sender="agent1",
+            content="Brasília is the capital of Brazil, according to [0].",
+        ),
     ]
     experiment.queries["0"].answers["agent2"].conversation = [
         ChatMessage(sender="user", content="What is the capital of Brazil?"),
@@ -427,7 +438,10 @@ def llm_provider_mock_rdnam(llm_provider_config):
 @pytest.fixture
 def llm_provider_reasoner_mock(llm_provider_config):
     provider = MockLLMProvider(llm_provider_config)
-    answer = LLMResponseType(raw_answer="The document is very relevant", parsed_answer="The document is very relevant")
+    answer = LLMResponseType(
+        raw_answer="The document is very relevant",
+        parsed_answer="The document is very relevant",
+    )
 
     def side_effect(*args, **kwargs):
         return answer

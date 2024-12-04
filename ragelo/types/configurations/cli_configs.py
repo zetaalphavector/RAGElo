@@ -32,8 +32,8 @@ class BaseCLIConfig(BaseConfig):
         default=True,
         description="Whether or not to be verbose and print all intermediate steps.",
     )
-    output_file: str = Field(
-        default="output.json",
+    output_file: str | None = Field(
+        default=None,
         description="The path to the output file where the results will be saved.",
     )
     save_results: bool = Field(

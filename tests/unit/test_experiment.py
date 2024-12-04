@@ -85,9 +85,11 @@ class TestExperiment:
         with pytest.raises(ValueError):
             empty_experiment.add_agent_answer("Test", "agent3", "invalid_qid")
 
-    def test_save_and_load(self, tmp_path, experiment):
+    def test_save_and_load(self, tmp_path, base_experiment_config):
         """Test saving and loading experiment state"""
         # Save experiment
+        base_experiment_config["save_on_disk"] = True
+        experiment = Experiment(**base_experiment_config)
         save_path = tmp_path / "test_experiment.json"
         experiment.save(str(save_path))
 
@@ -95,7 +97,8 @@ class TestExperiment:
         loaded_experiment = Experiment(
             experiment_name="test_experiment",
             save_path=str(save_path),
-            persist_on_disk=False,
+            cache_evaluations=False,
+            save_on_disk=True,
         )
 
         # Verify contents
@@ -214,7 +217,7 @@ class TestExperiment:
     def test_save_evaluations(
         self,
         tmp_path,
-        experiment,
+        base_experiment_config,
         retrieval_evaluation,
         answer_evaluation,
         pairwise_answer_evaluation,
@@ -223,8 +226,9 @@ class TestExperiment:
         """Test saving evaluations to disk"""
         # Set up save paths
         results_path = tmp_path / "test_results.jsonl"
-        experiment.results_cache_path = str(results_path)
-        experiment.save_cache = True
+        base_experiment_config["evaluations_cache_path"] = str(results_path)
+        base_experiment_config["cache_evaluations"] = True
+        experiment = Experiment(**base_experiment_config)
 
         # Add and save evaluations
         experiment.add_evaluation(retrieval_evaluation, should_save=True)
