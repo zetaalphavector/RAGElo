@@ -5,8 +5,7 @@ from __future__ import annotations
 import collections.abc
 import inspect
 import sys
-from types import NoneType, UnionType
-from typing import Any, Callable, Dict, get_args, get_origin, get_type_hints
+from typing import Any, Callable, Dict, Union, get_args, get_origin, get_type_hints
 
 from typer.models import ArgumentInfo, OptionInfo, ParameterInfo, ParamMeta
 
@@ -56,7 +55,7 @@ def get_params_from_function(func: Callable[..., Any]) -> Dict[str, ParamMeta]:
                     t_args = get_args(_outer_type)
                 if get_origin(_outer_type) is list:
                     _type = _outer_type
-                if get_origin(_outer_type) == NoneType or _type == NoneType:
+                if get_origin(_outer_type) is type(None) or _type is type(None):
                     continue
                 if get_origin(_outer_type) is dict:
                     continue
@@ -64,10 +63,10 @@ def get_params_from_function(func: Callable[..., Any]) -> Dict[str, ParamMeta]:
                 if not isinstance(v, ParameterInfo):
                     if len(t_args) > 1:
                         # To resolve the True argument type, first remove any NoneType from the list of types"
-                        _t_args = [t for t in t_args if t != NoneType]
+                        _t_args = [t for t in t_args if t is not type(None)]
                         if len(_t_args) == 1:
                             _type = _t_args[0]
-                        if get_origin(_outer_type) == UnionType:
+                        if get_origin(_outer_type) is type(Union):
                             _type = _t_args[0]
                         if (
                             get_origin(_outer_type) == collections.abc.Callable

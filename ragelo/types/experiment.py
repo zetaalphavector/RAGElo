@@ -498,7 +498,7 @@ class Experiment:
         for query in self.queries.values():
             runs = query.get_runs(agents)
             for agent, run in runs.items():
-                runs_by_agent[agent] = runs_by_agent.get(agent, {}) | run
+                runs_by_agent[agent] = runs_by_agent.get(agent, {}) or run
         if output_path:
             if output_format.lower() == "trec":
                 if not os.path.isdir(output_path):
