@@ -142,8 +142,11 @@ class Experiment:
 
         if self.cache_evaluations and not self.evaluations_cache_path:
             logger.info("Creating a cache path for the evaluations cache")
-            os.makedirs("ragelo_cache", exist_ok=True)
-            self.evaluations_cache_path = f"ragelo_cache/{self.experiment_name}_results.jsonl"
+            if self.save_path:
+                self.evaluations_cache_path = self.save_path.replace(".json", "_results.jsonl")
+            else:
+                os.makedirs("ragelo_cache", exist_ok=True)
+                self.evaluations_cache_path = f"ragelo_cache/{self.experiment_name}_results.jsonl"
             Path(self.evaluations_cache_path).touch()
 
         if self.save_path and os.path.isfile(self.save_path):
@@ -325,7 +328,7 @@ class Experiment:
         answer: float | str | dict | int
         if isinstance(response.answer, dict):
             # Print the answer in a more readable format
-            answer = json.dumps(response.answer, indent=4)
+            answer = json.dumps(response.answer, indent=4, ensure_ascii=False)
         elif isinstance(response.answer, PydanticBaseModel):
             answer = response.answer.model_dump_json(indent=4)
         else:
@@ -544,7 +547,7 @@ class Experiment:
         output_dict["elo_tournaments"] = [tournament.model_dump() for tournament in self.elo_tournaments]
 
         with open(output_path, "w") as f:
-            json.dump(output_dict, f, indent=4)
+            json.dump(output_dict, f, indent=4, ensure_ascii=False)
 
     def save_results(
         self,
@@ -577,7 +580,7 @@ class Experiment:
                 result_type = "elo_tournament"
             else:
                 raise ValueError(f"Cannot save evaluation of type {type(result)} to cache")
-            f.write(json.dumps({result_type: result.model_dump()}) + "\n")
+            f.write(json.dumps({result_type: result.model_dump()}, ensure_ascii=False) + "\n")
 
     def add_queries_from_csv(
         self,

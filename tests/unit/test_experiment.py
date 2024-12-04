@@ -88,10 +88,11 @@ class TestExperiment:
     def test_save_and_load(self, tmp_path, base_experiment_config):
         """Test saving and loading experiment state"""
         # Save experiment
-        base_experiment_config["save_on_disk"] = True
-        experiment = Experiment(**base_experiment_config)
         save_path = tmp_path / "test_experiment.json"
-        experiment.save(str(save_path))
+        base_experiment_config["save_on_disk"] = True
+        base_experiment_config["save_path"] = str(save_path)
+        experiment = Experiment(**base_experiment_config)
+        experiment.save()
 
         # Load experiment
         loaded_experiment = Experiment(

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import typer
 
 from ragelo import (
@@ -29,16 +31,21 @@ def pairwise(config: CLIPairwiseEvaluatorConfig = CLIPairwiseEvaluatorConfig(), 
     >> ragelo answer-evaluator pairwise queries.csv answers.csv
 
     """
-    config = CLIPairwiseEvaluatorConfig(**kwargs)
+    logging.getLogger("ragelo").setLevel(logging.INFO)
+    kwargs.pop("llm_answer_format", None)
+    kwargs.pop("llm_response_schema", None)
 
+    config = CLIPairwiseEvaluatorConfig(**kwargs)
     llm_provider = get_llm_provider(config.llm_provider_name, **kwargs)
 
     queries_csv_file = get_path(config.data_dir, config.queries_csv_file)
     documents_file = get_path(config.data_dir, config.documents_csv_file)
     answers_file = get_path(config.data_dir, config.answers_csv_file)
+    output_file = get_path(config.data_dir, config.output_file, check_exists=False) if config.output_file else None
 
     experiment = Experiment(
         experiment_name=config.experiment_name,
+        save_path=output_file,
         queries_csv_path=queries_csv_file,
         documents_csv_path=documents_file,
         answers_csv_path=answers_file,
@@ -49,8 +56,6 @@ def pairwise(config: CLIPairwiseEvaluatorConfig = CLIPairwiseEvaluatorConfig(), 
     )
 
     kwargs = config.model_dump()
-    kwargs.pop("llm_answer_format")
-    kwargs.pop("llm_response_schema")
 
     if config.add_reasoning:
         reasoner_evaluator = get_retrieval_evaluator(
@@ -68,7 +73,7 @@ def pairwise(config: CLIPairwiseEvaluatorConfig = CLIPairwiseEvaluatorConfig(), 
 
     evaluator = get_answer_evaluator(AnswerEvaluatorTypes.PAIRWISE, config=config, llm_provider=llm_provider)
     evaluator.evaluate_experiment(experiment)
-    experiment.save(output_path=config.output_file)
+    experiment.save(output_file)
 
 
 @app.command()
@@ -79,6 +84,9 @@ def expert_pairwise(
     """
     An evaluator that evaluates RAG-based answers by comparing answers of two agents and impersonating a domain expert.
     """
+    logging.getLogger("ragelo").setLevel(logging.INFO)
+    kwargs.pop("llm_answer_format", None)
+    kwargs.pop("llm_response_schema", None)
 
     config = CLIPairwiseDomainExpertEvaluatorConfig(**kwargs)
 
@@ -87,9 +95,11 @@ def expert_pairwise(
     queries_csv_file = get_path(config.data_dir, config.queries_csv_file)
     documents_file = get_path(config.data_dir, config.documents_csv_file)
     answers_file = get_path(config.data_dir, config.answers_csv_file)
+    output_file = get_path(config.data_dir, config.output_file, check_exists=False) if config.output_file else None
 
     experiment = Experiment(
         experiment_name=config.experiment_name,
+        save_path=output_file,
         queries_csv_path=queries_csv_file,
         documents_csv_path=documents_file,
         answers_csv_path=answers_file,
@@ -106,4 +116,4 @@ def expert_pairwise(
 
     evaluator = get_answer_evaluator(AnswerEvaluatorTypes.PAIRWISE, config=config, llm_provider=llm_provider)
     evaluator.evaluate_experiment(experiment)
-    experiment.save()
+    experiment.save(output_file)

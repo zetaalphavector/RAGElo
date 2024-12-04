@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import typer
 
 from ragelo import Experiment, get_llm_provider, get_retrieval_evaluator
@@ -31,13 +33,20 @@ def domain_expert(config: CLIDomainExpertEvaluatorConfig = CLIDomainExpertEvalua
     ragelo retrieval_evaluator domain_expert queries.csv documents.csv "Chemical Engineering" --company "ChemCorp Inc."
 
     """
+    logging.getLogger("ragelo").setLevel(logging.INFO)
+    kwargs.pop("llm_answer_format", None)
+    kwargs.pop("llm_response_schema", None)
 
     config = CLIDomainExpertEvaluatorConfig(**kwargs)
+    llm_provider = get_llm_provider(config.llm_provider_name, **kwargs)
+
     queries_csv_file = get_path(config.data_dir, config.queries_csv_file)
     documents_file = get_path(config.data_dir, config.documents_csv_file)
+    output_file = get_path(config.data_dir, config.output_file, check_exists=False) if config.output_file else None
 
     experiment = Experiment(
         experiment_name=config.experiment_name,
+        save_path=output_file,
         queries_csv_path=queries_csv_file,
         documents_csv_path=documents_file,
         verbose=config.verbose,
@@ -47,16 +56,12 @@ def domain_expert(config: CLIDomainExpertEvaluatorConfig = CLIDomainExpertEvalua
     )
 
     kwargs = config.model_dump()
-    kwargs.pop("llm_answer_format")
-    kwargs.pop("llm_response_schema")
-
-    llm_provider = get_llm_provider(config.llm_provider_name, **kwargs)
 
     evaluator = get_retrieval_evaluator(
         RetrievalEvaluatorTypes.DOMAIN_EXPERT, config=config, llm_provider=llm_provider
     )
     evaluator.evaluate_experiment(experiment)
-    experiment.save(output_path=config.output_file)
+    experiment.save(output_file)
 
 
 @app.command()
@@ -67,15 +72,20 @@ def reasoner(
     """
     A document Evaluator that only outputs the reasoning for why a document is relevant.
     """
+    logging.getLogger("ragelo").setLevel(logging.INFO)
+
     kwargs.pop("llm_response_schema", None)
     kwargs["llm_answer_format"] = AnswerFormat.TEXT
 
     config = CLIReasonerEvaluatorConfig(**kwargs)
+
     queries_csv_file = get_path(config.data_dir, config.queries_csv_file)
     documents_file = get_path(config.data_dir, config.documents_csv_file)
+    output_file = get_path(config.data_dir, config.output_file, check_exists=False) if config.output_file else None
 
     experiment = Experiment(
         experiment_name=config.experiment_name,
+        save_path=output_file,
         queries_csv_path=queries_csv_file,
         documents_csv_path=documents_file,
         verbose=config.verbose,
@@ -90,7 +100,7 @@ def reasoner(
 
     evaluator = get_retrieval_evaluator(RetrievalEvaluatorTypes.REASONER, config=config, llm_provider=llm_provider)
     evaluator.evaluate_experiment(experiment)
-    experiment.save(output_path=config.output_file)
+    experiment.save(output_file)
 
 
 @app.command()
@@ -99,12 +109,19 @@ def rdnam(config: CLIRDNAMEvaluatorConfig = CLIRDNAMEvaluatorConfig(), **kwargs)
     Evaluator based on the paper by Thomas, Spielman, Craswell and Mitra:
     Large language models can accurately predict searcher preferences.
     """
+    logging.getLogger("ragelo").setLevel(logging.INFO)
+
+    kwargs.pop("llm_answer_format", None)
+    kwargs.pop("llm_response_schema", None)
+
     config = CLIRDNAMEvaluatorConfig(**kwargs)
     queries_csv_file = get_path(config.data_dir, config.queries_csv_file)
     documents_file = get_path(config.data_dir, config.documents_csv_file)
+    output_file = get_path(config.data_dir, config.output_file, check_exists=False) if config.output_file else None
 
     experiment = Experiment(
         experiment_name=config.experiment_name,
+        save_path=output_file,
         queries_csv_path=queries_csv_file,
         documents_csv_path=documents_file,
         verbose=config.verbose,
@@ -121,7 +138,7 @@ def rdnam(config: CLIRDNAMEvaluatorConfig = CLIRDNAMEvaluatorConfig(), **kwargs)
 
     evaluator = get_retrieval_evaluator(RetrievalEvaluatorTypes.RDNAM, config=config, llm_provider=llm_provider)
     evaluator.evaluate_experiment(experiment)
-    experiment.save(output_path=config.output_file)
+    experiment.save(output_file)
 
 
 if __name__ == "__main__":
