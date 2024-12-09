@@ -1,10 +1,14 @@
+from __future__ import annotations
+
 from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     BaseRetrievalEvaluator,
     RetrievalEvaluatorFactory,
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
-from ragelo.types import Document, Query, RetrievalEvaluatorTypes
 from ragelo.types.configurations import CustomPromptEvaluatorConfig
+from ragelo.types.evaluables import Document
+from ragelo.types.query import Query
+from ragelo.types.types import RetrievalEvaluatorTypes
 
 
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.CUSTOM_PROMPT)

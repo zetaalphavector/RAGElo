@@ -1,6 +1,6 @@
 """Answer Evaluator with a domain expert persona"""
 
-from typing import Dict, List, Union
+from __future__ import annotations
 
 from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
     AnswerEvaluatorFactory,
@@ -9,15 +9,17 @@ from ragelo.evaluators.answer_evaluators.pairwise_evaluator import (
     PairwiseAnswerEvaluator,
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
-from ragelo.types import AnswerEvaluatorTypes, PairwiseGame, Query
 from ragelo.types.configurations import PairwiseDomainExpertEvaluatorConfig
+from ragelo.types.evaluables import PairwiseGame
+from ragelo.types.query import Query
+from ragelo.types.types import AnswerEvaluatorTypes
 
 
 @AnswerEvaluatorFactory.register(AnswerEvaluatorTypes.DOMAIN_EXPERT)
 class PairwiseDomainExpertEvaluator(PairwiseAnswerEvaluator):
     config: PairwiseDomainExpertEvaluatorConfig
     prompt = """
-{company_prompt}You are a domain expert in {expert_in}. Your task is to \
+You are a domain expert in {expert_in}.{company_prompt} Your task is to \
 evaluate the quality of the responses provided by two AI assistants \
 tasked to answer the question shown below, based on a set \
 of documents retrieved by a search engine.
@@ -34,8 +36,8 @@ on their differences. Avoid any position biases and ensure that the order in whi
 the responses were presented does not influence your decision. Do not allow the \
 length of the responses to influence your evaluation. Be as objective as possible.
 After providing your explanation, output your final verdict by strictly following \
-this format: "[[A]]" if assistant A is better, "[[B]]" if assistant B is better, \
-and "[[C]]" for a tie.
+this format: 'A' if assistant A is better, 'B' if assistant B is better, \
+and 'C' for a tie.
 
 [User Question]
 {query}
@@ -59,18 +61,10 @@ and "[[C]]" for a tie.
         llm_provider: BaseLLMProvider,
     ):
         super().__init__(config, llm_provider)
-        if not self.config.expert_in:
-            raise ValueError(
-                "You are trying to use the Domain Expert Answer Evaluator. "
-                "For this evaluator, you need to provide the domain the evaluator "
-                "is an expert in the expert_in field."
-            )
         self.expert_in = self.config.expert_in
         self.company = self.config.company
 
-    def _build_message_pairwise(
-        self, query: Query, game: PairwiseGame
-    ) -> Union[str, List[Dict[str, str]]]:
+    def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> str | list[dict[str, str]]:
         documents = self._prepare_documents(query)
         query_metadata = self._get_usable_fields_from_metadata(
             self.prompt, query.metadata, skip_fields=[self.config.query_placeholder]
@@ -103,7 +97,7 @@ and "[[C]]" for a tie.
             **answer_b_metadata,
         }
         if self.company:
-            formatters["company_prompt"] = self.COMPANY_PROMPT.format(
-                company=self.company
-            )
+            formatters["company_prompt"] = self.COMPANY_PROMPT.format(company=self.company)
+        else:
+            formatters["company_prompt"] = ""
         return self.prompt.format(**formatters)

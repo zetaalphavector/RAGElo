@@ -1,22 +1,23 @@
-import asyncio
-from concurrent.futures import ThreadPoolExecutor
-from typing import Dict, List, Union
+from __future__ import annotations
+
+import json
+from typing import Any, Type
 
 from openai import AsyncOpenAI
+from pydantic import BaseModel as PydanticBaseModel
 from tenacity import retry, stop_after_attempt, wait_random_exponential
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, LLMProviderFactory
-from ragelo.types import LLMProviderTypes
 from ragelo.types.configurations import OllamaConfiguration
+from ragelo.types.formats import AnswerFormat, LLMResponseType
+from ragelo.types.types import LLMProviderTypes
 
 
-# TODO: Change client to use tools instead of processing the raw files
 @LLMProviderFactory.register(LLMProviderTypes.OLLAMA)
 class OllamaProvider(BaseLLMProvider):
     """A Wrapper over the Ollama client."""
 
     config: OllamaConfiguration
-    api_key_env_var: str = "OPENAI_API_KEY"
 
     def __init__(
         self,
@@ -26,77 +27,53 @@ class OllamaProvider(BaseLLMProvider):
         self.__ollama_client = self.__get_ollama_client(config)
 
     @retry(wait=wait_random_exponential(min=1, max=120), stop=stop_after_attempt(1))
-    def __call__(
-        self,
-        prompt: Union[str, List[Dict[str, str]]],
-    ) -> str:
-        """Calls the OpenAI API.
-
-        Args:
-            prompt: The prompt to use. Either a list of messages or a string.
-        """
-
-        def run(coroutine):
-            return asyncio.run(coroutine)
-
-        if isinstance(prompt, str):
-            prompt = [{"role": "system", "content": prompt}]
-        try:
-            asyncio.get_running_loop()
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(
-                    run,
-                    self.__ollama_client.chat.completions.create(
-                        model=self.config.model,
-                        messages=prompt,  # type: ignore
-                        temperature=self.config.temperature,
-                        max_tokens=self.config.max_tokens,
-                    ),
-                )
-                answers = future.result()
-        except RuntimeError:
-            answers = asyncio.run(
-                self.__ollama_client.chat.completions.create(
-                    model=self.config.model,
-                    messages=prompt,  # type: ignore
-                    temperature=self.config.temperature,
-                    max_tokens=self.config.max_tokens,
-                )
-            )
-        if (
-            not answers.choices
-            or not answers.choices[0].message
-            or not answers.choices[0].message.content
-        ):
-            raise ValueError("Ollama did not return any completions.")
-        return answers.choices[0].message.content
-
     async def call_async(
         self,
-        prompt: Union[str, List[Dict[str, str]]],
-    ) -> str:
+        prompt: str | list[dict[str, str]],
+        answer_format: AnswerFormat = AnswerFormat.TEXT,
+        response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = None,
+    ) -> LLMResponseType:
         """Calls the Ollama Local API asynchronously.
 
         Args:
             prompt: The prompt to use. Either a list of messages or a string.
-            temperature : The temperature to use. Defaults to 0.1.
-            max_tokens: The maximum number of tokens to retrieve. Defaults 512.
         """
         if isinstance(prompt, str):
             prompt = [{"role": "system", "content": prompt}]
-        answers = await self.__ollama_client.chat.completions.create(
-            model=self.config.model,
-            messages=prompt,  # type: ignore
-            temperature=self.config.temperature,
-            max_tokens=self.config.max_tokens,
+        if answer_format == AnswerFormat.STRUCTURED:
+            raise NotImplementedError("Structured answer format is not supported on Ollama.")
+        if answer_format == AnswerFormat.JSON:
+            if isinstance(response_schema, dict):
+                schema = json.dumps(response_schema, indent=4)
+                prompt[0]["content"] += (
+                    "\n\nYour output should be a JSON string that STRICTLY "
+                    f"adheres to the following schema:\n{schema}"
+                )
+            answers = await self.__ollama_client.chat.completions.create(
+                model=self.config.model,
+                messages=prompt,  # type: ignore
+                temperature=self.config.temperature,
+                max_tokens=self.config.max_tokens,
+                response_format={"type": "json_object"},
+            )
+        else:
+            answers = await self.__ollama_client.chat.completions.create(
+                model=self.config.model,
+                messages=prompt,  # type: ignore
+                temperature=self.config.temperature,
+                max_tokens=self.config.max_tokens,
+            )
+        if not answers.choices or not answers.choices[0].message or not answers.choices[0].message.content:
+            raise ValueError("Ollama did not return any completions.")
+        if answer_format == AnswerFormat.JSON:
+            return LLMResponseType(
+                raw_answer=answers.choices[0].message.content,
+                parsed_answer=json.loads(answers.choices[0].message.content),
+            )
+        return LLMResponseType(
+            raw_answer=answers.choices[0].message.content,
+            parsed_answer=answers.choices[0].message.content,
         )
-        if (
-            not answers.choices
-            or not answers.choices[0].message
-            or not answers.choices[0].message.content
-        ):
-            raise ValueError("OpenAI did not return any completions.")
-        return answers.choices[0].message.content
 
     @staticmethod
     def __get_ollama_client(ollama_config: OllamaConfiguration) -> AsyncOpenAI:

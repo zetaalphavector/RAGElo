@@ -1,6 +1,8 @@
 """Evaluator with a domain expert persona"""
 
-from typing import Tuple
+from __future__ import annotations
+
+from tenacity import RetryError
 
 from ragelo.evaluators.retrieval_evaluators import (
     BaseRetrievalEvaluator,
@@ -8,18 +10,17 @@ from ragelo.evaluators.retrieval_evaluators import (
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.logger import logger
-from ragelo.types import (
-    Document,
-    Query,
-    RetrievalEvaluatorResult,
-    RetrievalEvaluatorTypes,
-)
 from ragelo.types.configurations import DomainExpertEvaluatorConfig
+from ragelo.types.evaluables import Document, Evaluable
+from ragelo.types.formats import AnswerFormat
+from ragelo.types.query import Query
+from ragelo.types.results import RetrievalEvaluatorResult
+from ragelo.types.types import RetrievalEvaluatorTypes
 
 
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.DOMAIN_EXPERT)
 class DomainExpertEvaluator(BaseRetrievalEvaluator):
-    sys_prompt = """
+    system_prompt = """
 You are a domain expert in {expert_in}.{company_prompt_1} You are tasked \
 with evaluating the performance of a retrieval system for question \
 answering in this domain. The question answering system will be used \
@@ -79,7 +80,6 @@ document given the particular query. The score meaning is as follows:
 - 0: indicates that the retrieved document is not relevant to the query
 - 1: the document is somewhat relevant to the query
 - 2: the document is highly relevant to the query
-Please only answer with a single number.
 """.strip()
 
     COMPANY_PROMPT_1 = " You work for {company}."
@@ -93,44 +93,27 @@ Please only answer with a single number.
         llm_provider: BaseLLMProvider,
     ):
         super().__init__(config, llm_provider)
-        if not self.config.expert_in:
-            raise ValueError(
-                "You are trying to use the Domain Expert Retrieval Evaluator. "
-                "For this evaluator, you need to provide the domain the evaluator "
-                "is an expert in the expert_in field."
-            )
-
+        if self.config.llm_answer_format != AnswerFormat.JSON:
+            logger.warning("We are using the Domain Expert Evaluator config. Forcing the LLM answer format to JSON.")
+            self.config.llm_answer_format = AnswerFormat.JSON
         self.expert_in = self.config.expert_in
-        self.domain_short = (
-            f" {self.config.domain_short}" if self.config.domain_short else ""
-        )
-        self.sys_prompt = self.sys_prompt.format(
+        self.domain_short = f" {self.config.domain_short}" if self.config.domain_short else ""
+        self.system_prompt = self.system_prompt.format(
             expert_in=self.expert_in,
             company_prompt_1=(
-                self.COMPANY_PROMPT_1.format(company=self.config.company)
-                if self.config.company
-                else ""
+                self.COMPANY_PROMPT_1.format(company=self.config.company) if self.config.company else ""
             ),
             company_prompt_2=(
-                self.COMPANY_PROMPT_2.format(company=self.config.company)
-                if self.config.company
-                else ""
+                self.COMPANY_PROMPT_2.format(company=self.config.company) if self.config.company else ""
             ),
             domain_short=(
-                self.DOMAIN_SHORT.format(domain_short=self.config.domain_short)
-                if self.config.domain_short
-                else ""
+                self.DOMAIN_SHORT.format(domain_short=self.config.domain_short) if self.config.domain_short else ""
             ),
         )
-        self.extra_guidelines = (
-            self.config.extra_guidelines if self.config.extra_guidelines else []
-        )
-        # self.reasoner_eva
+        self.extra_guidelines = self.config.extra_guidelines if self.config.extra_guidelines else []
 
     def __build_reason_message(self, query: Query, document: Document) -> str:
-        guidelines = "\n".join(
-            [f"- {guideline}" for guideline in self.extra_guidelines]
-        )
+        guidelines = "\n".join([f"- {guideline}" for guideline in self.extra_guidelines])
         reason_prompt = self.reason_prompt.format(
             query=query.query,
             doc_content=document.text,
@@ -139,22 +122,28 @@ Please only answer with a single number.
         )
         return reason_prompt
 
-    async def _async_evaluate(
-        self, eval_sample: Tuple[Query, Document]
-    ) -> RetrievalEvaluatorResult:
+    async def evaluate_async(self, eval_sample: tuple[Query, Evaluable]) -> RetrievalEvaluatorResult:
         query, document = eval_sample
+        assert isinstance(document, Document)
         reason_message = self.__build_reason_message(query, document)
-        messages_reasoning = [
-            {"role": "system", "content": self.sys_prompt},
+        exc = None
+        if document.evaluation is not None and not self.config.force:
+            return document.evaluation  # type: ignore
+        messages = [
+            {"role": "system", "content": self.system_prompt},
             {"role": "user", "content": reason_message},
         ]
-        exc = None
         try:
-            reasoning_answer = await self.llm_provider.call_async(messages_reasoning)
+            return_answer = await self.llm_provider.call_async(messages, answer_format=AnswerFormat.TEXT)
+            reasoning_answer = return_answer.parsed_answer
+            assert isinstance(reasoning_answer, str)
         except Exception as e:
             logger.warning(f"Failed to FETCH reasonings for qid: {query.qid}")
             logger.warning(f"document id: {document.did}")
-            exc = str(e)
+            if isinstance(e, RetryError):
+                exc = str(e.last_attempt.exception())
+            else:
+                exc = str(e)
             return RetrievalEvaluatorResult(
                 qid=query.qid,
                 did=document.did,
@@ -162,26 +151,23 @@ Please only answer with a single number.
                 answer=None,
                 exception=exc,
             )
-        messages_score = messages_reasoning.copy()
+        messages_score = messages.copy()
         messages_score.append({"role": "assistant", "content": reasoning_answer})
         messages_score.append({"role": "user", "content": self.score_prompt})
         try:
-            score_answer = await self.llm_provider.call_async(messages_score)
-            score_answer = self._process_answer(score_answer)
-        except ValueError as e:
-            logger.warning(f"Failed to parse scores for qid: {query.qid}")
-            logger.warning(f"document id: {document.did}")
-            score_answer = None
-            exc = str(e)
+            score_answer = await self.llm_provider.call_async(
+                messages_score,
+                answer_format=AnswerFormat.JSON,
+                response_schema=self.config.llm_response_schema,
+            )
         except Exception as e:
             logger.warning(f"Failed to FETCH scores for qid: {query.qid}")
             logger.warning(f"document id: {document.did}")
-            score_answer = None
             exc = str(e)
         return RetrievalEvaluatorResult(
             qid=query.qid,
             did=document.did,
             raw_answer=reasoning_answer,
-            answer=score_answer,
+            answer=score_answer.parsed_answer,
             exception=exc,
         )

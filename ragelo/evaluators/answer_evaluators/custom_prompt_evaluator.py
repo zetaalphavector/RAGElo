@@ -1,16 +1,19 @@
+from __future__ import annotations
+
 from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
     AnswerEvaluatorFactory,
     BaseAnswerEvaluator,
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
-from ragelo.types import AgentAnswer, AnswerEvaluatorTypes, Query
 from ragelo.types.configurations import CustomPromptAnswerEvaluatorConfig
+from ragelo.types.evaluables import AgentAnswer
+from ragelo.types.query import Query
+from ragelo.types.types import AnswerEvaluatorTypes
 
 
 @AnswerEvaluatorFactory.register(AnswerEvaluatorTypes.CUSTOM_PROMPT)
 class CustomPromptEvaluator(BaseAnswerEvaluator):
     config: CustomPromptAnswerEvaluatorConfig
-    output_file: str = "custom_prompt_evaluations.csv"
 
     def __init__(
         self,

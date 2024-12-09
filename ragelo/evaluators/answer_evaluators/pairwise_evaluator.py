@@ -1,26 +1,36 @@
-import re
-from typing import Dict, List, Union
+from __future__ import annotations
+
+from typing import Literal
+
+from pydantic import BaseModel as PydanticBaseModel
+from pydantic import Field
 
 from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
     AnswerEvaluatorFactory,
     BaseAnswerEvaluator,
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
-from ragelo.types import AnswerEvaluatorTypes, PairwiseGame, Query
+from ragelo.logger import logger
 from ragelo.types.configurations import PairwiseEvaluatorConfig
+from ragelo.types.evaluables import PairwiseGame
+from ragelo.types.formats import AnswerFormat, LLMResponseType
+from ragelo.types.query import Query
+from ragelo.types.types import AnswerEvaluatorTypes
+
+
+class PairWiseAnswerAnswerFormat(PydanticBaseModel):
+    winner: Literal["A", "B", "C"] = Field(..., description="The winner of the pairwise comparison.")
 
 
 @AnswerEvaluatorFactory.register(AnswerEvaluatorTypes.PAIRWISE)
 class PairwiseAnswerEvaluator(BaseAnswerEvaluator):
-    """A evaluator that evaluates RAG-based answers pairwise, with document reasoning and citations."""
+    """An evaluator that evaluates RAG-based answers pairwise, with document reasoning and citations."""
 
     config: PairwiseEvaluatorConfig
     citations_prompt = " Answers cite documents using square brackets."
     document_template_raw_only = "[{did}] {doc}"
     document_template_annotation_only = "[{did}] {annotation}"
-    document_template_raw_and_annotation = (
-        "[RETRIEVED DOCUMENT]\n{doc}\n[DOCUMENT RELEVANCE]\n{annotation}\n"
-    )
+    document_template_raw_and_annotation = "[RETRIEVED DOCUMENT]\n{doc}\n[DOCUMENT RELEVANCE]\n{annotation}\n"
     documents_prompt_relevance_only = (
         "For each reference document, you will be provided with a reasoning "
         "explaining why the document is or is not relevant."
@@ -30,9 +40,7 @@ class PairwiseAnswerEvaluator(BaseAnswerEvaluator):
         "of the document as well as a reasoning  why the document "
         "is or is not relevant."
     )
-    documents_prompt_raw_only = (
-        "You will be provided with the text of each reference document."
-    )
+    documents_prompt_raw_only = "You will be provided with the text of each reference document."
 
     prompt = """
 Please act as an impartial judge and evaluate the quality of the responses provided \
@@ -45,14 +53,14 @@ Your evaluation should consider factors such as {factors}.
 Details are only useful if they answer the user question. If an answer \
 contains non-relevant details, it should not be preferred over one that only \
 use relevant information.
-Begin your evaluation by explaining why each answer correctly answers the user \
+Begin your evaluation by explaining whether or nor each answer correctly answers the user \
 question. Then, you should compare the two responses and provide a short explanation \
 on their differences. Avoid any position biases and ensure that the order in which \
 the responses were presented does not influence your decision. Do not allow the \
 length of the responses to influence your evaluation. Be as objective as possible.
 After providing your explanation, output your final verdict by strictly following \
-this format: "[[A]]" if assistant A is better, "[[B]]" if assistant B is better, \
-and "[[C]]" for a tie.
+this format: "A" if assistant A is better, "B" if assistant B is better, \
+and "C" for a tie.
 
 [User Question]
 {query}
@@ -75,7 +83,6 @@ and "[[C]]" for a tie.
         llm_provider: BaseLLMProvider,
     ):
         super().__init__(config, llm_provider)
-        self.pattern = re.compile(r"\[\[([^]]+)]].*$(?:(?!\[\[).)*", re.DOTALL)
         self.factors = config.factors
         if config.include_annotations and config.include_raw_documents:
             config.document_template = self.document_template_raw_and_annotation
@@ -86,17 +93,23 @@ and "[[C]]" for a tie.
         elif config.include_raw_documents:
             config.document_template = self.document_template_raw_only
             self.documents_prompt = self.documents_prompt_raw_only
-        else:
-            raise ValueError(
-                "At least one of include_annotations or include_raw_documents must be True"
-            )
         if config.prompt:
             self.prompt = config.prompt
+        if config.llm_answer_format == AnswerFormat.STRUCTURED:
+            self.config.llm_response_schema = PairWiseAnswerAnswerFormat
+        elif self.config.llm_answer_format != AnswerFormat.JSON:
+            logger.warning("We are using a PairwiseAnswerEvaluator config. Forcing the LLM answer format to JSON.")
+            self.config.llm_answer_format = AnswerFormat.JSON
+            self.config.llm_response_schema = {
+                "answer_a_reasoning": "Your reasoning wether the answer provided by agent A is correct or not.",
+                "answer_b_reasoning": "Your reasoning wether the answer provided by agent B is correct or not.",
+                "comparison_reasoning": "A short explanation of the differences between the two answers.",
+                "winner": "The winner of the pairwise comparison. Either 'A', 'B', or 'C' for a tie.",
+            }
 
-    def _build_message_pairwise(
-        self, query: Query, game: PairwiseGame
-    ) -> Union[str, List[Dict[str, str]]]:
+    def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> str | list[dict[str, str]]:
         documents = self._prepare_documents(query)
+
         query_metadata = self._get_usable_fields_from_metadata(
             self.prompt, query.metadata, skip_fields=[self.config.query_placeholder]
         )
@@ -128,12 +141,16 @@ and "[[C]]" for a tie.
         }
         return self.prompt.format(**formatters)
 
-    def _process_answer(self, answer: str) -> str:
+    def _process_answer(self, llm_response: LLMResponseType) -> LLMResponseType:
         """Extracts the relevant part of an answer."""
-        match_ans = self.pattern.search(answer)
-        if not match_ans:
-            raise ValueError(f"Could not find answer in {answer}")
-        better_agent = match_ans.group(1)
-        if better_agent not in ["A", "B", "C"]:
-            raise ValueError(f"Unknown answer: {better_agent}")
-        return better_agent
+        if isinstance(llm_response.parsed_answer, PairWiseAnswerAnswerFormat):
+            return LLMResponseType(
+                raw_answer=llm_response.raw_answer,
+                parsed_answer=llm_response.parsed_answer.winner,
+            )
+        if isinstance(llm_response.parsed_answer, dict):
+            return LLMResponseType(
+                raw_answer=llm_response.raw_answer,
+                parsed_answer=llm_response.parsed_answer["winner"],
+            )
+        return llm_response

@@ -1,11 +1,13 @@
-from importlib import metadata
-from typing import List, Optional, Union
+from __future__ import annotations
 
+from typing import Any, Type
+
+from pydantic import BaseModel as PydanticBaseModel
 from pydantic import Field
 
-from ragelo.types.types import AnswerFormat, BaseModel
-
-_PYDANTIC_MAJOR_VERSION: int = int(metadata.version("pydantic").split(".")[0])
+from ragelo.types.formats import AnswerFormat
+from ragelo.types.pydantic_models import BaseModel
+from ragelo.types.types import AnswerEvaluatorTypes
 
 
 class BaseConfig(BaseModel):
@@ -13,97 +15,15 @@ class BaseConfig(BaseModel):
         default=False,
         description="Force the execution of the commands and overwrite any existing files.",
     )
-    rich_print: bool = Field(
-        default=False, description="Use rich to print colorful outputs."
-    )
+    rich_print: bool = Field(default=False, description="Use rich to print colorful outputs.")
     verbose: bool = Field(
         default=False,
         description="Whether or not to be verbose and print all intermediate steps.",
     )
-    credentials_file: Optional[str] = Field(
-        default=None,
-        description="Path to a txt file with the credentials for the different LLM providers.",
-    )
-    data_dir: Optional[str] = Field(
-        default=None,
-        description="Path to the data folder. Defaults to the root folder where the script is being executed. Every file path in the configuration will be relative to this path.",
-    )
-
-    llm_provider_name: str = Field(
-        default="openai", description="The name of the LLM provider to be used."
-    )
-    write_output: bool = Field(
-        default=True, description="Whether or not to write the outputs to a file."
-    )
+    llm_provider_name: str = Field(default="openai", description="The name of the LLM provider to be used.")
     use_progress_bar: bool = Field(
         default=True,
         description="Whether or not to show a progress bar while running the evaluations.",
-    )
-
-
-class BaseEvaluatorConfig(BaseConfig):
-    queries_file: str = Field(
-        default="queries.csv",
-        description="Input CSV file with the user queries answered by the agents",
-    )
-    documents_file: str = Field(
-        default="documents.csv",
-        description="Input CSV file with the documents retrieved by the agents",
-    )
-    answers_file: str = Field(
-        default="answers.csv", description="Input CSV file with agents answers."
-    )
-    document_evaluations_file: str = Field(
-        default="reasonings.csv",
-        description="CSV file to write (or read) the output of the retrieval evaluators on the retrieved documents.",
-    )
-    answers_evaluations_file: str = Field(
-        default="answers_evaluations.csv",
-        description="CSV file to write (or read) the evaluations of each agent's answers.",
-    )
-    games_evaluations_file: str = Field(
-        default="pairwise_answers_evaluations.csv",
-        description="CSV file to write (or read) the evaluations of the pairwise games between agents answers to queries.",
-    )
-    query_placeholder: str = Field(
-        default="query",
-        description="The placeholder for the query in the prompt.",
-    )
-    scoring_key_retrieval_evaluator: str = Field(
-        default="relevance",
-        description="When using answer_format=json, the key to extract from the answer for the retrieval evaluator.",
-    )
-    scoring_key_answer_evaluator: str = Field(
-        default="relevance",
-        description="When using answer_format=json, the key to extract from the answer for the answer evaluator.",
-    )
-    scoring_keys_answer_evaluator: List[str] = Field(
-        default=["relevance"],
-        description="When using answer_format=multi_field_json, the keys to extract from the answer for the answer evaluator.",
-    )
-    scoring_keys_retrieval_evaluator: List[str] = Field(
-        default=["relevance"],
-        description="When using answer_format=multi_field_json, the keys to extract from the answer for the retrieval evaluator.",
-    )
-    answer_format_retrieval_evaluator: Union[str, AnswerFormat] = Field(
-        default="text",
-        description="The format of the answer returned by the LLM for the retrieval evaluator.",
-    )
-    answer_format_answer_evaluator: Union[str, AnswerFormat] = Field(
-        default="json",
-        description="The format of the answer returned by the LLM for the answer evaluator.",
-    )
-    output_columns_retrieval_evaluator: List[str] = Field(
-        default=["qid", "did", "raw_answer", "answer"],
-        description="The columns to write in the --document_evaluations_file csv.",
-    )
-    output_columns_answer_evaluator: List[str] = Field(
-        default=["qid", "agent", "raw_answer", "answer"],
-        description="The columns to write in the --answers_evaluations_file csv.",
-    )
-    output_columns_pairwise_evaluator: List[str] = Field(
-        default=["qid", "agent_a", "agent_b", "raw_answer", "answer"],
-        description="The columns to write in the --games_evaluations_file csv.",
     )
     n_processes: int = Field(
         default=1,
@@ -111,50 +31,23 @@ class BaseEvaluatorConfig(BaseConfig):
     )
 
 
-class AllConfig(BaseEvaluatorConfig):
-    reasoning_file: str = Field(
-        default="reasonings.csv",
-        description="CSV file to write (or read) the reasonings generated by the `Reasoner` retrieval evaluator on the relevance of the documents retrieved by the agents.",
+class BaseEvaluatorConfig(BaseConfig):
+    evaluator_name: str | AnswerEvaluatorTypes | None = Field(
+        default=None,
+        description="The name of the evaluator to use.",
     )
-    answers_evaluations_file: str = Field(
-        default="answers_evaluations.csv",
-        description="CSV file to write (or read) the evaluations of each agent's answers, generated by an `AnswerEvaluator`",
+    query_placeholder: str = Field(
+        default="query",
+        description="The placeholder for the query in the prompt.",
     )
-    agents_evaluations_file: str = Field(
-        default="agents_ranking.csv", description="Path to the output file"
+    llm_answer_format: AnswerFormat = Field(
+        default=AnswerFormat.JSON,
+        description="The format of the answer returned by the LLM.",
     )
-    retrieval_evaluator_name: str = Field(
-        default="reasoner",
-        description="The name of the retrieval evaluator to use",
-    )
-    answer_evaluator_name: str = Field(
-        default="pairwise",
-        description="The name of the answer evaluator to use",
-    )
-    answer_ranker_name: str = Field(
-        default="elo", description="The name of the answer ranker to use"
-    )
-    scoring_key_retrieval_evaluator: str = Field(
-        default="answer",
-        description="When using answer_format=json, the key to extract from the answer for the retrieval evaluator.",
-    )
-    scoring_key_answer_evaluator: str = Field(
-        default="answer",
-        description="When using answer_format=json, the key to extract from the answer for the answer evaluator.",
-    )
-    k: int = Field(default=100, description="Number of games to generate")
-    initial_score: int = Field(
-        default=1000, description="The initial score for each agent"
-    )
-    elo_k: int = Field(
-        default=32, description="The K factor for the Elo ranking algorithm"
-    )
-    bidirectional: bool = Field(
-        default=False, description="Wether or not to run each game in both directions"
-    )
-    model: str = Field(
-        default="gpt-4o-mini", description="The model to use for the LLM"
-    )
-    rich_print: bool = Field(
-        default=True, description="Use rich to print colorful outputs."
+    llm_response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "The response schema for the LLM. "
+            "Required if the llm_answer_format is structured and recommended for JSON."
+        ),
     )

@@ -30,11 +30,13 @@ To use RAGElo as a library, all you need to do is import RAGElo, initialize an `
 from ragelo import get_retrieval_evaluator
 
 evaluator = get_retrieval_evaluator("RDNAM", llm_provider="openai")
-raw_answer, processed_answer = evaluator.evaluate(query="What is the capital of France?", document='Lyon is the second largest city in France.')
-print(processed_answer)
+result = evaluator.evaluate(query="What is the capital of France?", document='Lyon is the second largest city in France.')
+print(result.answer)
+# Output: {'overall': 1}
+print(result.answer["overall"])
 # Output: 1
-print(raw_answer)
-# Output: '"O": 1\n}'
+print(result.raw_answer)
+# Output: '{"overall": 1"}'
 ```
 
 For a more complete example, we can evaluate with a custom prompt, and inject metadata into our evaluation prompt:
@@ -53,13 +55,14 @@ Retrieved document: {d}
 
 The document has a date of {document_date}.
 Today is {today_date}.
-
-WRITE YOUR ANSWER ON A SINGLE LINE AS A JSON OBJECT WITH THE FOLLOWING KEYS:
-- "relevance": 0 if the document is irrelevant, 1 if it is relevant.
-- "recency": 0 if the document is outdated, 1 if it is recent.
-- "truthfulness": 0 if the document is false, 1 if it is true.
-- "reasoning": A short explanation of why you think the document is relevant or irrelevant.
 """
+response_schema = {
+    "relevance": "An integer, either 0 or 1. 0 if the document is irrelevant, 1 if it is relevant.",
+    "recency": "An integer, either 0 or 1. 0 if the document is outdated, 1 if it is recent.",
+    "truthfulness": "An integer, either 0 or 1. 0 if the document is false, 1 if it is true.",
+    "reasoning": "A short explanation of why you think the document is relevant or irrelevant.",
+}
+response_format = "json"
 
 evaluator = get_retrieval_evaluator(
     "custom_prompt", # name of the retrieval evaluator
@@ -67,11 +70,11 @@ evaluator = get_retrieval_evaluator(
     prompt=prompt, # your custom prompt
     query_placeholder="q", # the placeholder for the query in the prompt
     document_placeholder="d", # the placeholder for the document in the prompt
-    scoring_keys_retrieval_evaluator=["relevance", "recency", "truthfulness", "reasoning"], # Which keys to extract from the answer
-    answer_format_retrieval_evaluator="multi_field_json", # The format of the answer. In this case, a JSON object with multiple fields
+    llm_answer_format=response_format, # The format of the answer. Can be either `text`, if you expect plain text to be returned, `JSON` if the answer should be in JSON format, or `structured`, if you provide a Pydantic BaseModel as the response_schema.
+    llm_response_schema=response_schema, # The response schema for the LLM. Required if the llm_answer_format is structured and recommended for JSON.
 )
 
-raw_answer, answer = evaluator.evaluate(
+result = evaluator.evaluate(
     query="What is the capital of Brazil?", # The user query
     document="Rio de Janeiro is the capital of Brazil.", # The retrieved document
     query_metadata={"today_date": "08-04-2024"}, # Some metadata for the query
@@ -91,15 +94,52 @@ Other examples are available as notebooks in the [docs/examples/notebooks folder
 ## 🚀 CLI Quickstart 
 After installing RAGElo as a CLI app, you can run it with the following command:
 ```bash
-ragelo run-all queries.csv documents.csv answers.csv --verbose --data-dir tests/data/
+ragelo run-all queries.csv documents.csv answers.csv --data-dir tests/data/ --experiment-name experiment --output-file experiment.json
 
----------- Agent Scores by Elo ranking ----------
- agent1        : 1026.7
- agent2        : 973.3
+🔎 Query ID: 0
+📜 Document ID: 0
+Parsed Answer: Very relevant: The document directly answers the user question by stating that Brasília is the capital of Brazil.
+
+🔎 Query ID: 0
+📜 Document ID: 1
+Parsed Answer: Somewhat relevant: The document mentions a former capital of Brazil but does not provide the current capital.
+
+🔎 Query ID: 1
+📜 Document ID: 2
+Parsed Answer: Very relevant: The document clearly states that Paris is the capital of France, directly answering the user question.
+
+🔎 Query ID: 1
+📜 Document ID: 3
+Parsed Answer: Not relevant: The document does not provide information about the capital of France.
+
+Evaluating Retrieved documents 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4/4  [ 0:00:02 < 0:00:00 , 2 it/s ]
+✅ Done!
+Total evaluations: 4
+🔎 Query ID: 0
+ agent1              🆚   agent2
+Parsed Answer: A
+
+🔎 Query ID: 1
+ agent1              🆚   agent2
+Parsed Answer: A
+
+Evaluating Agent Answers 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2/2  [ 0:00:09 < 0:00:00 , 0 it/s ]
+✅ Done!
+Total evaluations: 2
+------- Agents Elo Ratings -------
+agent1         : 1033.0(±0.0)
+agent2         : 966.0(±0.0)
 ```
 
-When running as a CLI, RAGElo expects the input files as CSV files. Specifically, it needs a csv file with the user queries, one with the documents retrieved by the retrieval system and one of the answers each agent produced. Here are some examples of the expected format:
+In this example, the output file is a JSON file with all the annotations performed by the evaluators and the final Elo ratings. These can also be loaded directly as a new `Experiment` object:
 
+```python
+experiment = Experiment.load("experiment", "experiment.json")
+```
+
+When running as a CLI, RAGElo expects the input files as CSV files. Specifically, it expects a csv file with the user queries, one with the documents retrieved by the retrieval system and one of the answers each agent produced. These files can be passed with the parameters `--queries_csv_file`, `--documents_csv_file` and `--answers_csv_file`, respectively, or directly as positional arguments.
+
+Here are some examples of their expected formats:
 `queries.csv`: 
 ```csv
 qid,query
@@ -110,7 +150,7 @@ qid,query
 
 `documents.csv`:
 ```csv
-qid,did,document_text
+qid,did,document
 0,0, Brasília is the capital of Brazil.
 0,1, Rio de Janeiro used to be the capital of Brazil.
 1,2, Paris is the capital of France.
@@ -134,29 +174,17 @@ While **RAGElo** can be used as either an end-to-end tool or by calling individu
 The `retrieval-evaluator` tool annotates retrieved documents based on their relevance to the user query. This is done regardless of the answers provided by any Agent. As an example, for calling the `Reasoner` retrieval evaluator (reasoner only outputs the reasoning why a document is relevant or not) we can use:
 
 ```bash
-ragelo retrieval-evaluator reasoner queries.csv documents.csv output.csv --verbose --data-dir tests/data/
+ragelo retrieval-evaluator reasoner queries.csv documents.csv --data-dir tests/data/ --experiment-name experiment
 ```
 The output file changes according to the evaluator used. In general it will have one row per document evaluator, with the query_id, document_id, the raw LLM answer and the parsed answer. An example of the output for the reasoner is found here: [tests/data/reasonings.csv](https://github.com/zetaalphavector/RAGElo/blob/master/tests/data/reasonings.csv).
 
 ### 💬 `answers-annotator`
 
-The `answers-annotator` tool annotates the answers generated by the Agents, taking the quality of the documents retrieved by the retrieval pipeline. By default, it uses the `Pairwise` annotator, which generates `k` random pairs of answers for each query and chooses the best answer based on the relevant documents cited in the answer. It relies on the reasonings generated by the `Reasoner` `retrieval-evaluator`.
+The `answers-annotator` tool annotates the answers generated by the Agents, taking the quality of the documents retrieved by the retrieval pipeline. By default, it uses the `Pairwise` annotator, which generates `k` random pairs of answers for each query and chooses the best answer based on the relevant documents cited in the answer. If the experiment already exists with annotations for the documents, it will try to load these and inject into the prompts for a better context for the LLM. Otherwise, you can pass the `--add-reasoning` flag to run the `Reasoner` retrieval evaluator first.
 
 ```bash
-ragelo answer-evaluator pairwise-reasoning queries.csv documents.csv answers.csv --games-evaluations-file  pairwise_answers_evaluations.csv --verbose --data-dir tests/data/
+ragelo answer-evaluator pairwise queries.csv documents.csv answers.csv --data-dir tests/data/ --experiment-name experiment --add-reasoning
 ```
-
-The `pairwise_answers_evaluations.csv` file is a CSV file with both the raw answer and the parsed result for each pair of "games" between two agents. An output file example is provided at [tests/data/pairwise_answers_evaluations.csv](https://github.com/zetaalphavector/RAGElo/blob/master/tests/data/pairwise_answers_evaluations.csv)
- 
-### 🏆 `agents-ranker`
-
-Finally, the `agents-ranker` tool ranks the agents by simulating an Elo tournament where the output of each game is given by the answers from the `answers-annotator`:
-
-```bash
-ragelo agents-ranker elo pairwise_answers_evaluations.csv --agents-evaluations-file agents_ranking.csv --verbose --data-dir tests/data/
-```
-The output of this step is written to the output file `agents_ranking.csv` with columns agent and score: [tests/data/agents_ranking.csv](https://github.com/zetaalphavector/RAGElo/blob/master/tests/data/agents_ranking.csv).
-
 
 ## 🙋 Contributing
 
@@ -180,7 +208,7 @@ python -m build
 - [x] Add option to few-shot examples (Undocumented, yet)
 - [x] Testing!
 - [x] Publish on PyPi
-- [x] Add more document evaluators (Microsoft)
+- [x] Add more document evaluators
 - [x] Split Elo evaluator
 - [x] Install as standalone CLI
 

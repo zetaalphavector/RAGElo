@@ -1,25 +1,16 @@
-"""A LLM provider is a class that can be called with a string and returns with another string as an answer from an LLM model."""
+from __future__ import annotations
 
-import logging
 import os
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Type, Union, get_type_hints
+from typing import Any, Type, get_type_hints
 
-from ragelo.types import LLMProviderConfig, LLMProviderTypes
-from ragelo.types.configurations.base_configs import _PYDANTIC_MAJOR_VERSION
+from pydantic import BaseModel as PydanticBaseModel
 
-
-def set_credentials_from_file(credentials_file: str, split_char: str = "="):
-    """Read credentials from a file and add them to the environment"""
-    logging.info(f"Loading credentials from {credentials_file}")
-    if not os.path.isfile(credentials_file):
-        raise FileNotFoundError(f"Credentials file {credentials_file} not found")
-    with open(credentials_file) as f:
-        for line in f:
-            key, value = line.strip().split(split_char, 1)
-            logging.debug(f"Setting {key} from file")
-            os.environ[key] = value
-            os.environ[key] = value
+from ragelo.types.configurations import LLMProviderConfig
+from ragelo.types.formats import AnswerFormat, LLMResponseType
+from ragelo.types.pydantic_models import _PYDANTIC_MAJOR_VERSION
+from ragelo.types.types import LLMProviderTypes
+from ragelo.utils import call_async_fn
 
 
 class BaseLLMProvider(ABC):
@@ -29,16 +20,22 @@ class BaseLLMProvider(ABC):
     def __init__(self, config: LLMProviderConfig):
         self.config = config
 
-    @abstractmethod
-    def __call__(self, prompt: Union[str, List[Dict[str, str]]]) -> str:
+    def __call__(
+        self,
+        prompt: str | list[dict[str, str]],
+        answer_format: AnswerFormat = AnswerFormat.TEXT,
+        response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = None,
+    ) -> LLMResponseType:
         """Submits a single query-document pair to the LLM and returns the answer."""
-        raise NotImplementedError
+        return call_async_fn(self.call_async, prompt, answer_format, response_schema)
 
     @abstractmethod
     async def call_async(
         self,
-        prompt: Union[str, List[Dict[str, str]]],
-    ) -> str:
+        prompt: str | list[dict[str, str]],
+        answer_format: AnswerFormat = AnswerFormat.TEXT,
+        response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = None,
+    ) -> LLMResponseType:
         """Submits a single query-document pair to the LLM and returns the answer."""
         raise NotImplementedError
 
@@ -56,7 +53,7 @@ class BaseLLMProvider(ABC):
 
 
 class LLMProviderFactory:
-    registry: Dict[LLMProviderTypes, Type[BaseLLMProvider]] = {}
+    registry: dict[LLMProviderTypes, Type[BaseLLMProvider]] = {}
 
     @classmethod
     def register(cls, name: LLMProviderTypes):
@@ -74,15 +71,12 @@ class LLMProviderFactory:
     def create(
         cls,
         name: LLMProviderTypes,
-        config: Optional[LLMProviderConfig] = None,
-        credentials_file: Optional[str] = None,
+        config: LLMProviderConfig | None = None,
         **kwargs,
     ) -> BaseLLMProvider:
         """Creates a new LLM provider"""
         if name not in cls.registry:
             raise ValueError(f"LLM provider {name} not found")
-        if credentials_file and os.path.isfile(credentials_file):
-            set_credentials_from_file(credentials_file)
         if config is None:
             class_ = cls.registry[name]
             type_config = class_.get_config_class()
@@ -97,9 +91,7 @@ class LLMProviderFactory:
                     else:
                         is_required = api_key_field.required  # type: ignore
                     if is_required:
-                        raise ValueError(
-                            f"API key not found in environment variable {class_.api_key_env_var}"
-                        )
+                        raise ValueError(f"API key not found in environment variable {class_.api_key_env_var}")
                     else:
                         api_key = api_key_field.default
                 kwargs["api_key"] = api_key
@@ -109,12 +101,11 @@ class LLMProviderFactory:
 
 
 def get_llm_provider(
-    name: Union[LLMProviderTypes, str],
-    config: Optional[LLMProviderConfig] = None,
-    credentials_file: Optional[str] = None,
+    name: LLMProviderTypes | str,
+    config: LLMProviderConfig | None = None,
     **kwargs,
 ) -> BaseLLMProvider:
     """Creates a new LLM provider"""
     if isinstance(name, str):
         name = LLMProviderTypes(name)
-    return LLMProviderFactory.create(name, config, credentials_file, **kwargs)
+    return LLMProviderFactory.create(name, config, **kwargs)

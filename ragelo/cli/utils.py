@@ -1,10 +1,9 @@
+from __future__ import annotations
+
 import os
-from typing import Optional
 
 
-def get_path(
-    data_path: Optional[str], file_path: str, check_exists: bool = True
-) -> str:
+def get_path(data_path: str | None, file_path: str, check_exists: bool = True) -> str:
     if data_path is None:
         data_path = "."
     if file_path.startswith("/"):

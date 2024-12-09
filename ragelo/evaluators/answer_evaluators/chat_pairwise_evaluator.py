@@ -1,7 +1,6 @@
 """Answer Evaluator for conversations between two agents."""
 
-
-from typing import Dict, List, Union
+from __future__ import annotations
 
 from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
     AnswerEvaluatorFactory,
@@ -9,8 +8,10 @@ from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
 from ragelo.evaluators.answer_evaluators.pairwise_evaluator import (
     PairwiseAnswerEvaluator,
 )
-from ragelo.types import AnswerEvaluatorTypes, PairwiseGame, Query
 from ragelo.types.configurations import PairwiseEvaluatorConfig
+from ragelo.types.evaluables import PairwiseGame
+from ragelo.types.query import Query
+from ragelo.types.types import AnswerEvaluatorTypes
 
 
 @AnswerEvaluatorFactory.register(AnswerEvaluatorTypes.CHAT_PAIRWISE)
@@ -34,8 +35,8 @@ on their differences. Avoid any position biases and ensure that the order in whi
 the conversations were presented does not influence your decision. Do not allow the \
 length of the responses to influence your evaluation. Be as objective as possible.
 After providing your explanation, output your final verdict by strictly following \
-this format: "[[A]]" if assistant A is better, "[[B]]" if assistant B is better, \
-and "[[C]]" for a tie.
+this format: 'A' if assistant A is better, 'B' if assistant B is better, \
+and 'C' for a tie.
 
 [User Intent]
 {query}
@@ -55,9 +56,7 @@ and "[[C]]" for a tie.
 [The End of Conversation with Assistant B]
 """.strip()
 
-    def _build_message_pairwise(
-        self, query: Query, game: PairwiseGame
-    ) -> Union[str, List[Dict[str, str]]]:
+    def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> str | list[dict[str, str]]:
         documents = self._prepare_documents(query)
         query_metadata = self._get_usable_fields_from_metadata(
             self.prompt, query.metadata, skip_fields=[self.config.query_placeholder]
@@ -78,15 +77,14 @@ and "[[C]]" for a tie.
             citations = ""
 
         if not game.agent_a_answer.conversation or not game.agent_b_answer.conversation:
-            raise ValueError(
-                "The conversation of the agents cannot "
-                "be empty for the chat_pairwise evaluator"
-            )
+            raise ValueError("The conversation of the agents cannot be empty for the chat_pairwise evaluator")
+        conversation_a = "\n".join([str(msg) for msg in game.agent_a_answer.conversation])
+        conversation_b = "\n".join([str(msg) for msg in game.agent_b_answer.conversation])
         formatters = {
             self.config.query_placeholder: query.query,
             self.config.documents_placeholder: documents,
-            "answer_a": game.agent_a_answer.conversation,
-            "answer_b": game.agent_b_answer.conversation,
+            "answer_a": conversation_a,
+            "answer_b": conversation_b,
             "citations": citations,
             "factors": self.factors,
             "document_rel": self.documents_prompt,
