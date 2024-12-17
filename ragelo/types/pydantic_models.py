@@ -40,3 +40,10 @@ class BaseModel(PydanticBaseModel):
             return self.dict()  # type: ignore
         else:
             return super().model_dump(*args, **kwargs)  # type: ignore
+
+    @classmethod
+    def dump_pydantic(cls, pydantic_model: PydanticBaseModel):
+        if _PYDANTIC_MAJOR_VERSION == 1:
+            return pydantic_model.dict()  # type: ignore
+        else:
+            return pydantic_model.model_dump()  # type: ignore
