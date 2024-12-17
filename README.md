@@ -10,9 +10,9 @@
 
 **RAGElo**[^1] is a streamlined toolkit for evaluating Retrieval Augmented Generation (RAG)-powered Large Language Models (LLMs) question answering agents using the Elo rating system.
 
-While it has become easier to prototype and incorporate generative LLMs in production, evaluation is still the most challenging part of the solution. Comparing different outputs from multiple prompt and pipeline variations to a "gold standard" is not easy. Still, we can ask a powerful LLM to judge between pairs of answers and a set of questions. 
+While it has become easier to prototype and incorporate generative LLMs in production, evaluation is still the most challenging part of the solution. Comparing different outputs from multiple prompt and pipeline variations to a "gold standard" is not easy. Still, we can ask a powerful LLM to judge between pairs of answers and a set of questions.
 
-This led us to develop a simple tool for tournament-style Elo ranking of LLM outputs. By comparing answers from different RAG pipelines and prompts over multiple questions, RAGElo computes a ranking of the different settings, providing a good overview of what works (and what doesn't). 
+This led us to develop a simple tool for tournament-style Elo ranking of LLM outputs. By comparing answers from different RAG pipelines and prompts over multiple questions, RAGElo computes a ranking of the different settings, providing a good overview of what works (and what doesn't).
 
 
 ## ⚙️ Installation
@@ -47,7 +47,7 @@ from ragelo import get_retrieval_evaluator
 prompt = """You are a helpful assistant for evaluating the relevance of a retrieved document to a user query.
 You should pay extra attention to how **recent** a document is. A document older than 5 years is considered outdated.
 
-The answer should be evaluated according tot its recency, truthfulness, and relevance to the user query.
+The answer should be evaluated according to its recency, truthfulness, and relevance to the user query.
 
 User query: {q}
 
@@ -91,7 +91,7 @@ Note that, in this example, we passed to the `evaluate` method two dictionaries 
 
 Other examples are available as notebooks in the [docs/examples/notebooks folder](https://github.com/zetaalphavector/RAGElo/tree/master/docs/examples/notebooks) of the repository.
 
-## 🚀 CLI Quickstart 
+## 🚀 CLI Quickstart
 After installing RAGElo as a CLI app, you can run it with the following command:
 ```bash
 ragelo run-all queries.csv documents.csv answers.csv --data-dir tests/data/ --experiment-name experiment --output-file experiment.json
@@ -140,7 +140,7 @@ experiment = Experiment.load("experiment", "experiment.json")
 When running as a CLI, RAGElo expects the input files as CSV files. Specifically, it expects a csv file with the user queries, one with the documents retrieved by the retrieval system and one of the answers each agent produced. These files can be passed with the parameters `--queries_csv_file`, `--documents_csv_file` and `--answers_csv_file`, respectively, or directly as positional arguments.
 
 Here are some examples of their expected formats:
-`queries.csv`: 
+`queries.csv`:
 ```csv
 qid,query
 0, What is the capital of Brazil?
