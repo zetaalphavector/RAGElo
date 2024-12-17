@@ -54,6 +54,7 @@ class OpenAIProvider(BaseLLMProvider):
             "model": self.config.model,
             "temperature": self.config.temperature,
             "max_tokens": self.config.max_tokens,
+            "seed": self.config.seed,
         }
         call_fn: Callable
         if answer_format == AnswerFormat.STRUCTURED:
