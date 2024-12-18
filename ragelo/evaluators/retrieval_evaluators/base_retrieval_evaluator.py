@@ -62,7 +62,13 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             raise ValueError(f"can't evaluate a {type_name} in a Retrieval Evaluator")
         exc = None
         if document.evaluation is not None and not self.config.force:
-            return document.evaluation  # type: ignore
+            return RetrievalEvaluatorResult(
+                did=document.did,
+                qid=query.qid,
+                raw_answer=document.evaluation.raw_answer,
+                answer=document.evaluation.answer,
+                exception=document.evaluation.exception,
+            )
         prompt = self._build_message(query, document)
         try:
             llm_response = await self.llm_provider.call_async(
