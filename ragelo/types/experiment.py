@@ -10,6 +10,7 @@ import csv
 import json
 import os
 import warnings
+from collections import defaultdict
 from pathlib import Path
 from typing import Any, Literal
 
@@ -513,11 +514,11 @@ class Experiment:
                 corresponding float values.
         """
 
-        runs_by_agent: dict[str, dict[str, dict[str, float]]] = {}
+        runs_by_agent: dict[str, dict[str, dict[str, float]]] = defaultdict(dict)
         for query in self.queries.values():
             runs = query.get_runs(agents)
             for agent, run in runs.items():
-                runs_by_agent[agent] = runs_by_agent.get(agent, {}) or run
+                runs_by_agent[agent].update(run)
         if output_path:
             if output_format.lower() == "trec":
                 if not os.path.isdir(output_path):
