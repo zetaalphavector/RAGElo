@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from ragelo import __app_name__
 from ragelo.cli import app
 

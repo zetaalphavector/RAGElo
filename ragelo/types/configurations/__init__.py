@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from ragelo.types.configurations.agent_ranker_configs import (
     AgentRankerConfig,
     EloAgentRankerConfig,

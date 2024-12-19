@@ -273,8 +273,7 @@ class Query(BaseModel):
                 relevance = int(answer[relevance_key])
             else:
                 logger.warning(
-                    f"Unsupported relevance type {type(answer)} for document {did} "
-                    f"in query {self.qid}. Skipping."
+                    f"Unsupported relevance type {type(answer)} for document {did} " f"in query {self.qid}. Skipping."
                 )
                 docs_without_relevance += 1
                 continue
