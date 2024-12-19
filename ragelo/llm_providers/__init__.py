@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from ragelo.llm_providers.base_llm_provider import (
     BaseLLMProvider,
     LLMProviderFactory,

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from ragelo.evaluators.answer_evaluators import PairwiseAnswerEvaluator
 from ragelo.evaluators.retrieval_evaluators import (
     DomainExpertEvaluator,
