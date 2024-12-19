@@ -3,7 +3,15 @@ from __future__ import annotations
 from enum import Enum
 
 
-class RetrievalEvaluatorTypes(str, Enum):
+class StrEnum(str, Enum):
+    # Implementing __str__ to allow for easy conversion to string
+    # e.g. str(RetrievalEvaluatorTypes.CUSTOM_PROMPT) -> "custom_prompt"
+    # otherwise, it's "RetrievalEvaluatorTypes.CUSTOM_PROMPT"
+    def __str__(self):
+        return self.value
+
+
+class RetrievalEvaluatorTypes(StrEnum):
     """Enum that contains the names of the available retrieval evaluators"""
 
     CUSTOM_PROMPT = "custom_prompt"
@@ -13,14 +21,14 @@ class RetrievalEvaluatorTypes(str, Enum):
     REASONER = "reasoner"
 
 
-class LLMProviderTypes(str, Enum):
+class LLMProviderTypes(StrEnum):
     """Enum that contains the names of the available LLM providers"""
 
     OPENAI = "openai"
     OLLAMA = "ollama"
 
 
-class AnswerEvaluatorTypes(str, Enum):
+class AnswerEvaluatorTypes(StrEnum):
     """Enum that contains the names of the available answer evaluators"""
 
     PAIRWISE = "pairwise"
@@ -30,5 +38,5 @@ class AnswerEvaluatorTypes(str, Enum):
     CHAT_PAIRWISE = "chat_pairwise"
 
 
-class AgentRankerTypes(str, Enum):
+class AgentRankerTypes(StrEnum):
     ELO = "elo"
