@@ -7,6 +7,7 @@ class LLMProviderConfig(BaseModel):
     api_key: str | None
     temperature: float = 0.1
     max_tokens: int = 2048
+    seed: int | None = 42
 
 
 class OpenAIConfiguration(LLMProviderConfig):

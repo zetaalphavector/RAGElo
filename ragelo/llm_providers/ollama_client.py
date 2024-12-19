@@ -55,6 +55,7 @@ class OllamaProvider(BaseLLMProvider):
                 temperature=self.config.temperature,
                 max_tokens=self.config.max_tokens,
                 response_format={"type": "json_object"},
+                seed=self.config.seed,
             )
         else:
             answers = await self.__ollama_client.chat.completions.create(
@@ -62,6 +63,7 @@ class OllamaProvider(BaseLLMProvider):
                 messages=prompt,  # type: ignore
                 temperature=self.config.temperature,
                 max_tokens=self.config.max_tokens,
+                seed=self.config.seed,
             )
         if not answers.choices or not answers.choices[0].message or not answers.choices[0].message.content:
             raise ValueError("Ollama did not return any completions.")
