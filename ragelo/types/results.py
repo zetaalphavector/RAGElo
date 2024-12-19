@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel as PydanticBaseModel
-
-from ragelo.types.pydantic_models import BaseModel, ValidationError, validator
+from ragelo.types.pydantic_models import (
+    BaseModel,
+    SerializablePydanticBaseModel,
+    ValidationError,
+    validator,
+)
 
 
 class EvaluatorResult(BaseModel):
@@ -20,7 +23,7 @@ class EvaluatorResult(BaseModel):
     qid: str
     agent: str | None = None
     raw_answer: str | None = None
-    answer: float | str | dict[str, Any] | PydanticBaseModel | None = None
+    answer: float | str | dict[str, Any] | SerializablePydanticBaseModel | None = None
     exception: str | None = None
 
     @validator

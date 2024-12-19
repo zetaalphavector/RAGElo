@@ -4,6 +4,8 @@ import warnings
 from collections.abc import Iterator
 from typing import Any
 
+from pydantic import BaseModel as PydanticBaseModel
+
 from ragelo.logger import logger
 from ragelo.types.evaluables import AgentAnswer, Document, PairwiseGame
 from ragelo.types.pydantic_models import BaseModel
@@ -232,37 +234,50 @@ class Query(BaseModel):
             if document.evaluation is None:
                 docs_without_relevance += 1
                 continue
-            if isinstance(document.evaluation.answer, int):
-                relevance = document.evaluation.answer
-            elif isinstance(document.evaluation.answer, str):
+            answer = document.evaluation.answer
+            if isinstance(answer, PydanticBaseModel):
+                answer = BaseModel.dump_pydantic(answer)
+            if isinstance(answer, int):
+                relevance = answer
+            elif isinstance(answer, str):
                 try:
-                    relevance = int(document.evaluation.answer)
+                    relevance = int(answer)
                 except ValueError:
                     logger.warning(
                         f"Document {did} has a relevance key ({relevance_key})"
-                        f" that cannot be converted to an int ({document.evaluation.answer})."
+                        f" that cannot be converted to an int ({answer})."
                         " Skipping."
                     )
+                    docs_without_relevance += 1
                     continue
-            elif isinstance(document.evaluation.answer, dict):
-                if relevance_key is None or relevance_key not in document.evaluation.answer:
+            elif isinstance(answer, dict):
+                if relevance_key is None or relevance_key not in answer:
                     logger.warning(
                         f"Document {did} does not have a relevance key ({relevance_key})"
                         " in the evaluation. Skipping."
                     )
+                    docs_without_relevance += 1
                     continue
                 # check if the relevance is a number or a str that can be converted to an int
-                if not isinstance(document.evaluation.answer[relevance_key], int):
+                if not isinstance(answer[relevance_key], int):
                     try:
-                        relevance = int(document.evaluation.answer[relevance_key])
+                        relevance = int(answer[relevance_key])
                     except ValueError:
                         logger.warning(
                             f"Document {did} has a relevance key ({relevance_key})"
-                            f" that cannot be converted to an int ({document.evaluation.answer[relevance_key]})."
+                            f" that cannot be converted to an int ({answer[relevance_key]})."
                             " Skipping."
                         )
+                        docs_without_relevance += 1
                         continue
-                relevance = int(document.evaluation.answer[relevance_key])
+                relevance = int(answer[relevance_key])
+            else:
+                logger.warning(
+                    f"Unsupported relevance type {type(answer)} for document {did} "
+                    f"in query {self.qid}. Skipping."
+                )
+                docs_without_relevance += 1
+                continue
             qrels[did] = 0 if relevance < relevance_threshold else relevance
         if docs_without_relevance > 0:
             logger.warning(f"Query {self.qid} has {docs_without_relevance} documents without relevance.")

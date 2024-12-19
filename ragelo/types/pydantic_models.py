@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from importlib import metadata
+from typing import TypeAlias
 
 from pydantic import BaseModel as PydanticBaseModel
 
@@ -12,8 +13,10 @@ if _PYDANTIC_MAJOR_VERSION == 1:
     validator = root_validator(pre=True)  # type: ignore
     post_validator = root_validator(pre=False)  # type: ignore
     ValidationError = TypeError
+    SerializablePydanticBaseModel: TypeAlias = PydanticBaseModel
 else:
     from pydantic import (
+        SerializeAsAny,  # type: ignore
         ValidationError,  # type: ignore
         model_validator,  # type: ignore
     )
@@ -21,6 +24,7 @@ else:
     validator = model_validator(mode="before")  # type: ignore
     post_validator = model_validator(mode="after")  # type: ignore
     ValidationError = ValidationError
+    SerializablePydanticBaseModel: TypeAlias = SerializeAsAny[PydanticBaseModel]
 
 
 class BaseModel(PydanticBaseModel):
@@ -36,3 +40,10 @@ class BaseModel(PydanticBaseModel):
             return self.dict()  # type: ignore
         else:
             return super().model_dump(*args, **kwargs)  # type: ignore
+
+    @classmethod
+    def dump_pydantic(cls, pydantic_model: PydanticBaseModel):
+        if _PYDANTIC_MAJOR_VERSION == 1:
+            return pydantic_model.dict()  # type: ignore
+        else:
+            return pydantic_model.model_dump()  # type: ignore
