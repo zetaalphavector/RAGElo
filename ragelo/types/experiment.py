@@ -16,6 +16,7 @@ from typing import Any, Literal
 
 import rich
 from pydantic import BaseModel as PydanticBaseModel
+
 from ragelo.logger import logger
 from ragelo.types.evaluables import AgentAnswer, Document
 from ragelo.types.pydantic_models import _PYDANTIC_MAJOR_VERSION
@@ -156,7 +157,7 @@ class Experiment:
         else:
             self.queries = {}
         if queries_csv_path:
-            self.add_queries_from_csv(queries_csv_path, csv_query_id_col, csv_query_text_col)
+            self.add_queries_from_csv(queries_csv_path, csv_query_id_col, csv_query_text_col, exist_ok=True)
         if documents_csv_path:
             self.add_documents_from_csv(
                 documents_csv_path,
@@ -598,7 +599,7 @@ class Experiment:
         file_path: str,
         query_id_column: str | None = None,
         query_text_column: str = "query",
-        exists_ok: bool = False,
+        exist_ok: bool = False,
     ):
         if not os.path.isfile(file_path):
             raise FileNotFoundError(f"CSV file with queries {file_path} not found")
@@ -614,7 +615,7 @@ class Experiment:
             else:
                 qid = row.get(query_id_column, f"query_{idx}")
             if qid in read_queries or qid in self.queries:
-                if not exists_ok:
+                if not exist_ok:
                     logger.warning(f"Query with ID {qid} already read. Skipping")
                 continue
             query_text = row[query_text_column].strip()
