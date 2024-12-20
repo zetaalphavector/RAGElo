@@ -598,6 +598,7 @@ class Experiment:
         file_path: str,
         query_id_column: str | None = None,
         query_text_column: str = "query",
+        exists_ok: bool = False,
     ):
         if not os.path.isfile(file_path):
             raise FileNotFoundError(f"CSV file with queries {file_path} not found")
@@ -613,7 +614,8 @@ class Experiment:
             else:
                 qid = row.get(query_id_column, f"query_{idx}")
             if qid in read_queries or qid in self.queries:
-                logger.warning(f"Query with ID {qid} already read. Skipping")
+                if not exists_ok:
+                    logger.warning(f"Query with ID {qid} already read. Skipping")
                 continue
             query_text = row[query_text_column].strip()
             metadata = {k: v for k, v in row.items() if k not in [query_id_column, query_text_column]}
