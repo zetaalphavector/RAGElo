@@ -16,7 +16,6 @@ from typing import Any, Literal
 
 import rich
 from pydantic import BaseModel as PydanticBaseModel
-
 from ragelo.logger import logger
 from ragelo.types.evaluables import AgentAnswer, Document
 from ragelo.types.pydantic_models import _PYDANTIC_MAJOR_VERSION
@@ -149,6 +148,7 @@ class Experiment:
             else:
                 os.makedirs("ragelo_cache", exist_ok=True)
                 self.evaluations_cache_path = f"ragelo_cache/{self.experiment_name}_results.jsonl"
+            Path(self.evaluations_cache_path).parent.mkdir(parents=True, exist_ok=True)
             Path(self.evaluations_cache_path).touch()
 
         if self.save_path and os.path.isfile(self.save_path):
