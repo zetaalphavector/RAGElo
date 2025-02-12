@@ -149,7 +149,9 @@ class Experiment:
             else:
                 os.makedirs("ragelo_cache", exist_ok=True)
                 self.evaluations_cache_path = f"ragelo_cache/{self.experiment_name}_results.jsonl"
-            Path(self.evaluations_cache_path).touch()
+            path = Path(self.evaluations_cache_path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.touch()
 
         if self.save_path and os.path.isfile(self.save_path):
             self.queries = self._load_from_cache(self.save_path)
