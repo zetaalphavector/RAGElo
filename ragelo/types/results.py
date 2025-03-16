@@ -23,7 +23,7 @@ class EvaluatorResult(BaseModel):
     qid: str
     agent: str | None = None
     raw_answer: str | None = None
-    answer: float | str | dict[str, Any] | SerializablePydanticBaseModel | None = None
+    answer: float | str | dict[str, Any] | SerializablePydanticBaseModel | None
     exception: str | None = None
 
     @validator

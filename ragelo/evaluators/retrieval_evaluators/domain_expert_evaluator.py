@@ -124,11 +124,19 @@ document given the particular query. The score meaning is as follows:
 
     async def evaluate_async(self, eval_sample: tuple[Query, Evaluable]) -> RetrievalEvaluatorResult:
         query, document = eval_sample
-        assert isinstance(document, Document)
-        reason_message = self.__build_reason_message(query, document)
+        if not isinstance(document, Document):
+            type_name = type(document).__name__
+            raise ValueError(f"can't evaluate a {type_name} in a Retrieval Evaluator")
         exc = None
         if document.evaluation is not None and not self.config.force:
-            return document.evaluation  # type: ignore
+            return RetrievalEvaluatorResult(
+                did=document.did,
+                qid=query.qid,
+                raw_answer=document.evaluation.raw_answer,
+                answer=document.evaluation.answer,
+                exception=document.evaluation.exception,
+            )
+        reason_message = self.__build_reason_message(query, document)
         messages = [
             {"role": "system", "content": self.system_prompt},
             {"role": "user", "content": reason_message},

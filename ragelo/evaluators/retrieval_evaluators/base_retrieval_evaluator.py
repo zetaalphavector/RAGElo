@@ -164,7 +164,7 @@ class RetrievalEvaluatorFactory:
     ) -> BaseRetrievalEvaluator:
         if evaluator_name not in cls.registry:
             raise ValueError(
-                f"Unknown retrieval evaluator {evaluator_name}\n" f"Valid options are {list(cls.registry.keys())}"
+                f"Unknown retrieval evaluator {evaluator_name}\nValid options are {list(cls.registry.keys())}"
             )
         if isinstance(llm_provider, str):
             llm_provider_instance = get_llm_provider(llm_provider, **kwargs)

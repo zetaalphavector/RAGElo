@@ -161,3 +161,10 @@ class PairwiseGame(Evaluable):
 
     agent_a_answer: AgentAnswer
     agent_b_answer: AgentAnswer
+
+
+class FlatGame(BaseModel):
+    qid: str
+    agent_a: str
+    agent_b: str
+    evaluation: str
