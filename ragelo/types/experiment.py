@@ -9,6 +9,7 @@ from __future__ import annotations
 import csv
 import json
 import os
+import sys
 import warnings
 from collections import defaultdict
 from pathlib import Path
@@ -27,6 +28,8 @@ from ragelo.types.results import (
     EvaluatorResult,
     RetrievalEvaluatorResult,
 )
+
+csv.field_size_limit(sys.maxsize)
 
 
 class Experiment:
@@ -78,13 +81,13 @@ class Experiment:
         clear_evaluations: bool = False,
         queries_csv_path: str | None = None,
         csv_query_id_col: str | None = None,
-        csv_query_text_col: str = "query",
+        csv_query_text_col: str | None = None,
         documents_csv_path: str | None = None,
         csv_document_id_col: str | None = None,
-        csv_document_text_col: str = "document",
+        csv_document_text_col: str | None = None,
         answers_csv_path: str | None = None,
-        csv_agent_col: str = "agent",
-        csv_answer_text_col: str = "answer",
+        csv_agent_col: str | None = None,
+        csv_answer_text_col: str | None = None,
     ):
         """
         Initialize the experiment object with optional data and set up paths and caches.
@@ -149,16 +152,15 @@ class Experiment:
             else:
                 os.makedirs("ragelo_cache", exist_ok=True)
                 self.evaluations_cache_path = f"ragelo_cache/{self.experiment_name}_results.jsonl"
-            path = Path(self.evaluations_cache_path)
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.touch()
+            Path(self.evaluations_cache_path).parent.mkdir(parents=True, exist_ok=True)
+            Path(self.evaluations_cache_path).touch()
 
         if self.save_path and os.path.isfile(self.save_path):
             self.queries = self._load_from_cache(self.save_path)
         else:
             self.queries = {}
         if queries_csv_path:
-            self.add_queries_from_csv(queries_csv_path, csv_query_id_col, csv_query_text_col)
+            self.add_queries_from_csv(queries_csv_path, csv_query_id_col, csv_query_text_col, exist_ok=True)
         if documents_csv_path:
             self.add_documents_from_csv(
                 documents_csv_path,
@@ -171,7 +173,7 @@ class Experiment:
             self.add_agent_answers_from_csv(answers_csv_path, csv_agent_col, csv_answer_text_col, csv_query_id_col)
 
         if self.evaluations_cache_path and os.path.isfile(self.evaluations_cache_path):
-            self._load_results_from_cache(self.evaluations_cache_path)
+            self._load_results_from_cache(self.evaluations_cache_path, exist_ok=True)
         if clear_evaluations:
             self.__clear_all_evaluations()
         self.save()
@@ -219,8 +221,9 @@ class Experiment:
         doc_id: str | None = None,
         score: float | None = None,
         agent: str | None = None,
+        metadata: dict | None = None,
         force: bool = False,
-    ):
+    ) -> bool:
         """
         Adds a retrieved document to a query.
         Args:
@@ -229,6 +232,7 @@ class Experiment:
             doc_id (Optional[str]): The identifier for the document. If not provided, a default ID will be generated.
             score (Optional[float]): The score of the document. Defaults to None.
             agent (Optional[str]): The agent that retrieved the document. Defaults to None.
+            metadata (Optional[dict]): Additional metadata for the document. Defaults to None.
             force (bool): Whether to overwrite the document if it already exists. Defaults to False.
         """
         if isinstance(doc, Document):
@@ -237,43 +241,54 @@ class Experiment:
                 query_id = doc.qid
             if doc.did != doc_id and doc_id is not None:
                 logger.warning(f"Document ID mismatch. Using ID from document object: {doc.did}")
-            doc_id = doc.did
-            query_id = doc.qid
-        elif doc_id is None:
+                doc_id = doc.did
+        if doc_id is None:
             raise ValueError("Document was provided as string, but Document ID was not provided")
         if query_id is None:
             raise ValueError(f"ID of the query to which document {doc_id} was retrieved was not provided.")
         if isinstance(doc, str):
             doc = Document(qid=query_id, did=doc_id, text=doc)
+            if metadata is not None:
+                doc.add_metadata(metadata)
         if query_id not in self.queries:
             raise ValueError(f"Query {query_id} not found in queries")
-        self.queries[query_id].add_retrieved_doc(doc, score, agent, force)
+        return self.queries[query_id].add_retrieved_doc(doc, score, agent, force)
 
     def add_agent_answer(
         self,
         answer: AgentAnswer | str,
         agent: str | None = None,
         query_id: str | None = None,
+        metadata: dict | None = None,
         force: bool = False,
     ):
+        """
+        Adds an agent answer to a query.
+        Args:
+            answer (AgentAnswer | str): The answer to be added. It can be an instance of the AgentAnswer class or a string.
+            agent (Optional[str]): The agent that provided the answer.
+            query_id (Optional[str]): The query ID to which the answer belongs.
+            metadata (Optional[dict]): Additional metadata for the answer.
+            force (bool): Whether to overwrite the answer if it already exists.
+        """
         if isinstance(answer, AgentAnswer):
             if answer.qid != query_id and query_id is not None:
                 logger.warning(f"Query ID mismatch. Using ID from answer object: {answer.qid}")
-            query_id = answer.qid
+                query_id = answer.qid
             if answer.agent != agent and agent is not None:
                 logger.warning(f"Agent mismatch. Using agent from answer object: {answer.agent}")
-        elif query_id is None:
+                agent = answer.agent
+        if query_id is None:
             raise ValueError("Query ID not provided")
-        else:
-            if agent is None:
-                agent = f"agent_{len(self.queries[query_id].answers) + 1}"
-                logger.warning(f"Agent not provided. Using default agent name: {agent}.")
-            if query_id is None:
-                raise ValueError("Query ID not provided")
-            answer = AgentAnswer(qid=query_id, agent=agent, text=answer)
+        if agent is None:
+            agent = f"agent_{len(self.queries[query_id].answers) + 1}"
+            logger.warning(f"Agent not provided. Using default agent name: {agent}.")
         if query_id not in self.queries:
             raise ValueError(f"Query {query_id} not found in queries")
-        self.queries[query_id].add_agent_answer(answer, force=force)
+        if isinstance(answer, str):
+            answer = AgentAnswer(qid=query_id, agent=agent, text=answer)
+        answer.add_metadata(metadata)
+        return self.queries[query_id].add_agent_answer(answer, force)
 
     def add_evaluation(
         self,
@@ -354,9 +369,7 @@ class Experiment:
             if did:
                 rich.print(f"[bold blue]📜 Document ID[/bold blue]: {did}")
             if agent_a and agent_b:
-                rich.print(
-                    f"[bold bright_cyan] {agent_a:<18} [/bold bright_cyan] 🆚  " f"[bold red] {agent_b}[/bold red]"
-                )
+                rich.print(f"[bold bright_cyan] {agent_a:<18} [/bold bright_cyan] 🆚  [bold red] {agent_b}[/bold red]")
             elif agent:
                 rich.print(f"[bold bright_cyan]🕵️ Agent[/bold bright_cyan]: {agent}")
                 if raw_answer != answer:
@@ -378,9 +391,12 @@ class Experiment:
     def evaluate_retrieval(
         self,
         relevance_key: str = "relevance",
-        metrics: list[str] = ["Precision@10", "nDCG@10", "Judged@10"],
+        metrics: list[str] = ["Precision@10", "nDCG@10", "MRR@10", "Judged@10"],
         relevance_threshold: int = 0,
-    ) -> dict[str, dict[str, float]]:
+        return_per_query_results: bool = False,
+        ignore_no_relevant: bool = True,
+        ignore_not_retrieved_by_all: bool = True,
+    ) -> dict[str, dict[str, float]] | dict[str, dict[str, dict[str, float]]]:
         """
         Evaluate the retrieval performance of agents using specified metrics.
         Args:
@@ -388,6 +404,7 @@ class Experiment:
                 document.
             metrics (list[str]): A list of metrics to use. defaults to ["Precision@10", "nDCG@10", "Judged@10"].
             relevance_threshold (int): The threshold above which a document is considered relevant (default is 0).
+            ignore_no_relevant (bool): Flag indicating whether to ignore queries with no relevant documents.
         Returns:
             dict[str, dict[str, float]]: A dictionary where keys are agent names and values are dictionaries of scores.
         Raises:
@@ -422,7 +439,36 @@ class Experiment:
             relevance_key=relevance_key,
             relevance_threshold=relevance_threshold,
         )
-        runs = self.get_runs()
+        qrels = {qid: qrels[qid] for qid in qrels.keys() if len(qrels[qid]) > 0}
+        # Check if any query have no relevant documents
+        if ignore_no_relevant:
+            qrels = {qid: qrels[qid] for qid in qrels.keys() if max(qrels[qid].values()) > 0}
+        if len(qrels) == 0:
+            logger.error("No retrieved documents were judged. Cannot evaluate retrieval.")
+            return {}
+        if len(qrels) != len(self.queries):
+            logger.warning(
+                f"Only {len(qrels)} queries had judged documents. Evaluating retrieval for {len(qrels)} queries."
+            )
+        runs = self.get_runs(valid_qids=list(qrels.keys()))
+        if len(runs) == 0:
+            logger.error("No agents have retrieved any documents. Cannot evaluate retrieval.")
+            return {}
+        runs = {agent: run for agent, run in runs.items() if len(run) > 0}
+        # Only consider qids that all agents retrieved ate
+        if ignore_not_retrieved_by_all:
+            qids_retrieved_by_agent = [set(run.keys()) for run in runs.values()]
+            qids_retrieved_by_all_agents = set.intersection(*qids_retrieved_by_agent)
+            qrels = {qid: qrels[qid] for qid in qids_retrieved_by_all_agents}
+            if len(qrels) == 0:
+                logger.error("No queries had judged documents and retrieved by all agents. Cannot evaluate retrieval.")
+                return {}
+            if len(qrels) != len(self.queries):
+                logger.warning(
+                    f"Only {len(qrels)} queries had judged and retrieved documents by all agents. Evaluating retrieval for {len(qrels)} queries."
+                )
+            for agent, run in runs.items():
+                runs[agent] = {qid: run[qid] for qid in qids_retrieved_by_all_agents}
         measures = []
         for metric in metrics:
             try:
@@ -459,7 +505,19 @@ class Experiment:
 
         else:
             print(results)
-        return results
+        if not return_per_query_results:
+            return results
+        per_query_results = {}
+        for agent, run in runs.items():
+            for metric in ir_measures.iter_calc(measures, qrels, run):
+                qid = metric.query_id
+                if qid not in per_query_results:
+                    per_query_results[qid] = {}
+                measure = metric.measure
+                if measure not in per_query_results[qid]:
+                    per_query_results[qid][measure] = {}
+                per_query_results[qid][measure][agent] = metric.value
+        return per_query_results
 
     def get_qrels(
         self,
@@ -491,7 +549,7 @@ class Experiment:
                     json.dump(qrels, f)
                 else:
                     raise ValueError(
-                        f"Invalid output format for QRELS: {output_format}" "Valid options are 'trec' and 'json'"
+                        f"Invalid output format for QRELS: {output_format}Valid options are 'trec' and 'json'"
                     )
         return qrels
 
@@ -499,7 +557,8 @@ class Experiment:
         self,
         agents: list[str] | None = None,
         output_path: str | None = None,
-        output_format: str = "trec",
+        output_format: Literal["trec", "json"] = "trec",
+        valid_qids: list[str] | None = None,
     ) -> dict[str, dict[str, dict[str, float]]]:
         """
         Retrieve runs for specified agents.
@@ -518,6 +577,8 @@ class Experiment:
 
         runs_by_agent: dict[str, dict[str, dict[str, float]]] = defaultdict(dict)
         for query in self.queries.values():
+            if valid_qids is not None and query.qid not in valid_qids:
+                continue
             runs = query.get_runs(agents)
             for agent, run in runs.items():
                 runs_by_agent[agent].update(run)
@@ -530,7 +591,7 @@ class Experiment:
                         for qid, docs in run.items():
                             sorted_scores = sorted(docs.items(), key=lambda x: x[1], reverse=True)
                             for idx, (did, score) in enumerate(sorted_scores):
-                                f.write(f"{qid} Q0 {did} {idx+1} {score} {agent}\n")
+                                f.write(f"{qid} Q0 {did} {idx + 1} {score} {agent}\n")
             elif output_format.lower() == "json":
                 with open(output_path, "w") as f:
                     json.dump(runs_by_agent, f)
@@ -599,7 +660,8 @@ class Experiment:
         self,
         file_path: str,
         query_id_column: str | None = None,
-        query_text_column: str = "query",
+        query_text_column: str | None = None,
+        exist_ok: bool = False,
     ):
         if not os.path.isfile(file_path):
             raise FileNotFoundError(f"CSV file with queries {file_path} not found")
@@ -608,14 +670,15 @@ class Experiment:
             query_id_column = self.__infer_query_id_column(file_path)
         except ValueError:
             query_id_column = None
-
+        query_text_column = self.__infer_query_text_column(file_path, query_text_column)
         for idx, row in enumerate(csv.DictReader(open(file_path))):
             if query_id_column is None:
                 query_id_column = f"query_{idx}"
             else:
                 qid = row.get(query_id_column, f"query_{idx}")
             if qid in read_queries or qid in self.queries:
-                logger.warning(f"Query with ID {qid} already read. Skipping")
+                if not exist_ok:
+                    logger.warning(f"Query with ID {qid} already read. Skipping")
                 continue
             query_text = row[query_text_column].strip()
             metadata = {k: v for k, v in row.items() if k not in [query_id_column, query_text_column]}
@@ -626,10 +689,12 @@ class Experiment:
     def add_documents_from_csv(
         self,
         file_path: str,
-        document_id_col: str | None = "did",
-        document_text_col: str = "document",
-        query_id_col: str | None = "qid",
+        document_id_col: str | None = None,
+        document_text_col: str | None = None,
+        query_id_col: str | None = None,
         agent_col: str | None = None,
+        agent_name: str | None = None,
+        retrieval_score_col: str | None = None,
     ):
         """
         Loads a list of retrieved documents from a csv file. The csv file should have the following columns:
@@ -640,30 +705,41 @@ class Experiment:
                 Defaults to 'qid'.
             document_id_col (str): Name of the column with the document id. Defaults to 'did'.
             document_text_col (str): Name of the column with the document text. Defaults to 'document_text'.
-            agent (str): Name of the column with the agent name. If None, will not add the agent name.
+            agent_col (str): Name of the column with the agent name. If None, will not add the agent name.
                 Defaults to None.
+            agent_name (str): Name of the agent. If None, will not add the agent name.
+                Defaults to None.
+
+
         """
-        documents_read = 0
         if not os.path.isfile(file_path):
             raise FileNotFoundError(f"CSV file {file_path} not found")
+        documents_read = 0
         query_id_col = self.__infer_query_id_column(file_path, query_id_col)
         document_id_col = self.__infer_document_id_column(file_path, document_id_col)
-
+        document_text_col = self.__infer_document_text_column(file_path, document_text_col)
+        agent_col = self.__infer_agent_column(file_path, agent_col)
+        retrieval_score_col = self.__infer_retrieval_score_column(file_path, retrieval_score_col)
         for line in csv.DictReader(open(file_path)):
             qid = line[query_id_col].strip()
             did = line[document_id_col].strip()
             text = line[document_text_col].strip()
-            agent = line.get(agent_col)
+            agent = agent_name if agent_name else line.get(agent_col)
             metadata = {k: v for k, v in line.items() if k not in [query_id_col, document_id_col, document_text_col]}
             if qid not in self.queries:
                 logger.warning(f"Query {qid} found in {file_path} but not found in queries. Skipping")
                 continue
-            doc_obj = Document(qid=qid, did=did, text=text)
-            doc_obj.add_metadata(metadata)
-            if agent is not None:
-                doc_obj.add_retrieved_by(agent)
-            self.add_retrieved_doc(doc_obj)
-            documents_read += 1
+            retrieval_score = line.get(retrieval_score_col)
+            if retrieval_score is not None:
+                retrieval_score = float(retrieval_score)
+            documents_read += self.add_retrieved_doc(
+                doc=text,
+                query_id=qid,
+                doc_id=did,
+                agent=agent,
+                score=retrieval_score,
+                metadata=metadata,
+            )
         logger.info(f"Loaded {documents_read} documents from {file_path}")
 
     def add_retrieved_docs_from_runfile(
@@ -723,9 +799,10 @@ class Experiment:
     def add_agent_answers_from_csv(
         self,
         file_path: str,
-        agent_col: str = "agent",
-        answer_col: str = "answer",
+        agent_col: str | None = None,
+        answer_col: str | None = None,
         query_id_col: str | None = None,
+        agent_name: str | None = None,
     ):
         """
         Adds agent answers from a CSV file to the queries.
@@ -742,6 +819,9 @@ class Experiment:
             raise FileNotFoundError(f"Answers file {file_path} not found")
         answers_read = 0
         query_id_col = self.__infer_query_id_column(file_path, query_id_col)
+        agent_col = self.__infer_agent_column(file_path, agent_col)
+        answer_col = self.__infer_answer_column(file_path, answer_col)
+        agent_name = agent_name if agent_name is not None else agent_col
         for line in csv.DictReader(open(file_path)):
             qid = line[query_id_col].strip()
             agent = line[agent_col].strip()
@@ -750,17 +830,15 @@ class Experiment:
             if qid not in self.queries:
                 logger.warning(f"Query {qid} found in {file_path} but not found in queries. Skipping")
                 continue
-            answer_obj = AgentAnswer(qid=qid, agent=agent, text=answer)
-            answer_obj.add_metadata(metadata)
-            self.add_agent_answer(answer_obj)
-            answers_read += 1
+            answers_read += self.add_agent_answer(answer, agent, qid, metadata)
+        logger.info(f"Loaded {answers_read} answers from {file_path}")
 
     def add_answers_from_multiple_csv(
         self,
         answers_files: list[str],
         query_id_col: str | None = None,
-        query_text_col: str = "query",
-        answer_text_col: str = "answer",
+        query_text_col: str | None = None,
+        answer_text_col: str | None = None,
     ):
         """Loads queries and answers from a list of CSVs with queries and answers generated by agents.
         We assume that each csv was generated by a single agent, and name each agent according to the file name.
@@ -774,8 +852,10 @@ class Experiment:
         for f in answers_files:
             if query_id_col is None:
                 query_id_col = self.__infer_query_id_column(f)
-            if query_id_col is None:
-                query_id_col = query_text_col
+            if query_text_col is None:
+                query_text_col = self.__infer_query_text_column(f)
+            if answer_text_col is None:
+                answer_text_col = self.__infer_answer_column(f)
             p = Path(f)
             agent_name = p.stem
 
@@ -832,7 +912,7 @@ class Experiment:
             self.elo_tournaments = [EloTournamentResult(**t) for t in data["elo_tournaments"]]
         return queries
 
-    def _load_results_from_cache(self, cache_path: str):
+    def _load_results_from_cache(self, cache_path: str, exist_ok: bool = False):
         assert os.path.isfile(cache_path)
         for line in open(cache_path):
             result = json.loads(line)
@@ -847,7 +927,7 @@ class Experiment:
                     continue
             elif result_type == "elo_tournament":
                 result = EloTournamentResult(**result["elo_tournament"])
-            self.add_evaluation(result, should_save=False, should_print=False)
+            self.add_evaluation(result, should_save=False, should_print=False, exist_ok=exist_ok)
 
     def __len__(self):
         return len(self.queries)
@@ -881,7 +961,27 @@ class Experiment:
                 for col in possible_qid_columns:
                     if col in columns:
                         return col
-        raise ValueError(f"Could not identify Query ID column for CSV file {file_path}")
+        return None
+
+    @staticmethod
+    def __infer_query_text_column(file_path: str, query_text_col: str | None = None) -> str:
+        """Infer the column name with the query text from a CSV file."""
+        if query_text_col is not None:
+            return query_text_col
+        possible_query_text_columns = [
+            "query",
+            "question",
+            "question_text",
+            "question_text",
+        ]
+        with open(file_path) as f:
+            reader = csv.DictReader(f)
+            columns = reader.fieldnames
+            if columns is not None:
+                for col in possible_query_text_columns:
+                    if col in columns:
+                        return col
+        raise ValueError(f"Could not identify Query Text column for CSV file {file_path}")
 
     @staticmethod
     def __infer_document_id_column(file_path: str, doc_id_col: str | None = None) -> str:
@@ -906,6 +1006,87 @@ class Experiment:
                     if col in columns:
                         return col
         raise ValueError(f"Could not identify Document ID column for CSV file {file_path}")
+
+    @staticmethod
+    def __infer_document_text_column(file_path: str, doc_text_col: str | None = None) -> str:
+        """Infer the column name with the document text from a CSV file."""
+        if doc_text_col is not None:
+            return doc_text_col
+        possible_doc_text_columns = [
+            "document",
+            "document_text",
+            "text",
+            "passage",
+            "content",
+            "passage_text",
+        ]
+        with open(file_path) as f:
+            reader = csv.DictReader(f)
+            columns = reader.fieldnames
+            if columns is not None:
+                for col in possible_doc_text_columns:
+                    if col in columns:
+                        return col
+        raise ValueError(f"Could not identify Document Text column for CSV file {file_path}")
+
+    @staticmethod
+    def __infer_agent_column(file_path: str, agent_col: str | None = None) -> str:
+        """Infer the column name with the agent name from a CSV file."""
+        if agent_col is not None:
+            return agent_col
+        possible_agent_columns = [
+            "agent",
+            "agent_name",
+            "agent_id",
+            "chain",
+            "chain_id",
+        ]
+        with open(file_path) as f:
+            reader = csv.DictReader(f)
+            columns = reader.fieldnames
+            if columns is not None:
+                for col in possible_agent_columns:
+                    if col in columns:
+                        return col
+        return None
+
+    @staticmethod
+    def __infer_answer_column(file_path: str, answer_col: str | None = None) -> str:
+        """Infer the column name with the answer text from a CSV file."""
+        if answer_col is not None:
+            return answer_col
+        possible_answer_columns = [
+            "answer",
+            "response",
+            "response_text",
+            "answer_text",
+        ]
+        with open(file_path) as f:
+            reader = csv.DictReader(f)
+            columns = reader.fieldnames
+            if columns is not None:
+                for col in possible_answer_columns:
+                    if col in columns:
+                        return col
+        raise ValueError(f"Could not identify Agent Answer column for CSV file {file_path}")
+
+    @staticmethod
+    def __infer_retrieval_score_column(file_path: str, retrieval_score_col: str | None = None) -> str:
+        """Infer the column name with the retrieval score from a CSV file."""
+        if retrieval_score_col is not None:
+            return retrieval_score_col
+        possible_retrieval_score_columns = [
+            "score",
+            "retrieval_score",
+        ]
+        with open(file_path) as f:
+            reader = csv.DictReader(f)
+            columns = reader.fieldnames
+            if columns is not None:
+                for col in possible_retrieval_score_columns:
+                    if col in columns:
+                        return col
+        return None
 
     @classmethod
     def load(cls, experiment_name: str, path: str):
