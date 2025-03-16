@@ -31,3 +31,7 @@ class EloAgentRankerConfig(AgentRankerConfig):
         default={"A": 1, "B": 0, "C": 0.5},
         description="The mapping of the evaluation answers to scores",
     )
+    tournament_per_query: bool = Field(
+        default=False,
+        description="Whether to play a tournament per query",
+    )
