@@ -509,7 +509,7 @@ class Experiment:
             return results
         per_query_results = {}
         for agent, run in runs.items():
-            for metric in ir_measures.iter_calc(measures, qrels, run):
+            for metric in ir_measures.iter_calc(measures, qrels, run):  # type: ignore
                 qid = metric.query_id
                 if qid not in per_query_results:
                     per_query_results[qid] = {}
@@ -942,7 +942,7 @@ class Experiment:
         return self.queries.keys()
 
     @staticmethod
-    def __infer_query_id_column(file_path: str, query_id_col: str | None = None) -> str:
+    def __infer_query_id_column(file_path: str, query_id_col: str | None = None) -> str | None:
         """Infer the column name with the query id from a CSV file."""
         if query_id_col is not None:
             return query_id_col
@@ -1030,7 +1030,7 @@ class Experiment:
         raise ValueError(f"Could not identify Document Text column for CSV file {file_path}")
 
     @staticmethod
-    def __infer_agent_column(file_path: str, agent_col: str | None = None) -> str:
+    def __infer_agent_column(file_path: str, agent_col: str | None = None) -> str | None:
         """Infer the column name with the agent name from a CSV file."""
         if agent_col is not None:
             return agent_col
@@ -1051,7 +1051,7 @@ class Experiment:
         return None
 
     @staticmethod
-    def __infer_answer_column(file_path: str, answer_col: str | None = None) -> str:
+    def __infer_answer_column(file_path: str, answer_col: str | None = None) -> str | None:
         """Infer the column name with the answer text from a CSV file."""
         if answer_col is not None:
             return answer_col
@@ -1071,7 +1071,7 @@ class Experiment:
         raise ValueError(f"Could not identify Agent Answer column for CSV file {file_path}")
 
     @staticmethod
-    def __infer_retrieval_score_column(file_path: str, retrieval_score_col: str | None = None) -> str:
+    def __infer_retrieval_score_column(file_path: str, retrieval_score_col: str | None = None) -> str | None:
         """Infer the column name with the retrieval score from a CSV file."""
         if retrieval_score_col is not None:
             return retrieval_score_col
