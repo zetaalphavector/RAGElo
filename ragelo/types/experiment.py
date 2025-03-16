@@ -507,16 +507,21 @@ class Experiment:
             print(results)
         if not return_per_query_results:
             return results
-        per_query_results = {}
+        per_query_results: dict[str, dict[str, dict[str, float]]] = {}
         for agent, run in runs.items():
-            for metric in ir_measures.iter_calc(measures, qrels, run):  # type: ignore
-                qid = metric.query_id
+            scored_docs = [
+                ir_measures.util.ScoredDoc(doc_id=did, score=score, query_id=qid)
+                for qid, run in run.items()
+                for did, score in run.items()
+            ]
+            for _metric in ir_measures.iter_calc(measures, qrels, scored_docs):
+                qid = _metric.query_id
                 if qid not in per_query_results:
                     per_query_results[qid] = {}
-                measure = metric.measure
-                if measure not in per_query_results[qid]:
-                    per_query_results[qid][measure] = {}
-                per_query_results[qid][measure][agent] = metric.value
+                _measure = str(_metric.measure)
+                if _measure not in per_query_results[qid]:
+                    per_query_results[qid][_measure] = {}
+                per_query_results[qid][_measure][agent] = _metric.value
         return per_query_results
 
     def get_qrels(
