@@ -146,7 +146,13 @@ and "C" for a tie.
 
     def _process_answer(self, llm_response: LLMResponseType) -> LLMResponseType:
         """Extracts the relevant part of an answer."""
+        if isinstance(llm_response.parsed_answer, dict):
+            answer = llm_response.parsed_answer["winner"]
+        elif isinstance(llm_response.parsed_answer, PairWiseAnswerAnswerFormat):
+            answer = llm_response.parsed_answer.winner
+        else:
+            answer = llm_response.parsed_answer
         return LLMResponseType(
             raw_answer=llm_response.raw_answer,
-            parsed_answer=llm_response.parsed_answer,
+            parsed_answer=answer,
         )
