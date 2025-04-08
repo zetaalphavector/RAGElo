@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import warnings
 from collections.abc import Iterator
-from typing import Any
+from typing import Any, overload
 
 from pydantic import BaseModel as PydanticBaseModel
 
@@ -11,7 +11,6 @@ from ragelo.types.evaluables import AgentAnswer, Document, PairwiseGame
 from ragelo.types.pydantic_models import BaseModel
 from ragelo.types.results import (
     AnswerEvaluatorResult,
-    EvaluatorResult,
     RetrievalEvaluatorResult,
 )
 
@@ -121,14 +120,28 @@ class Query(BaseModel):
             return
         self.answers[agent] = answer
 
+    @overload
     def add_evaluation(
         self,
-        evaluation: EvaluatorResult,
+        evaluation: RetrievalEvaluatorResult,
+        force: bool = False,
+        exist_ok: bool = False,
+    ) -> bool: ...
+
+    @overload
+    def add_evaluation(
+        self,
+        evaluation: AnswerEvaluatorResult,
+        force: bool = False,
+        exist_ok: bool = False,
+    ) -> bool: ...
+
+    def add_evaluation(
+        self,
+        evaluation: RetrievalEvaluatorResult | AnswerEvaluatorResult,
         force: bool = False,
         exist_ok: bool = False,
     ) -> bool:
-        if not isinstance(evaluation, RetrievalEvaluatorResult) and not isinstance(evaluation, AnswerEvaluatorResult):
-            raise ValueError("Evaluation must be a RetrievalEvaluatorResult or an AnswerEvaluatorResult")
         if isinstance(evaluation, RetrievalEvaluatorResult):
             did = evaluation.did
             if did not in self.retrieved_docs:

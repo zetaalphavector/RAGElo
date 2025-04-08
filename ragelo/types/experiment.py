@@ -13,7 +13,7 @@ import os
 import warnings
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, overload
 
 import rich
 from pydantic import BaseModel as PydanticBaseModel
@@ -289,23 +289,52 @@ class Experiment:
             raise ValueError(f"Query {query_id} not found in queries")
         self.queries[query_id].add_agent_answer(answer, force=force, exist_ok=exist_ok)
 
+    @overload
     def add_evaluation(
         self,
-        evaluation: EvaluatorResult | EloTournamentResult,
+        evaluation: RetrievalEvaluatorResult,
+        should_save: bool = True,
+        should_print: bool = True,
+        force: bool = False,
+        exist_ok: bool = False,
+    ): ...
+
+    @overload
+    def add_evaluation(
+        self,
+        evaluation: AnswerEvaluatorResult,
+        should_save: bool = True,
+        should_print: bool = True,
+        force: bool = False,
+        exist_ok: bool = False,
+    ): ...
+
+    @overload
+    def add_evaluation(
+        self,
+        evaluation: EloTournamentResult,
+        should_save: bool = True,
+        should_print: bool = True,
+        force: bool = False,
+        exist_ok: bool = False,
+    ): ...
+
+    def add_evaluation(
+        self,
+        evaluation: RetrievalEvaluatorResult | AnswerEvaluatorResult | EloTournamentResult,
         should_save: bool = True,
         should_print: bool = True,
         force: bool = False,
         exist_ok: bool = False,
     ):
         """
-        Adds an evaluation to the queries and optionally saves the result.
-
+        Add an evaluation to the queries and optionally save the result.
         Args:
-            evaluation (RetrievalEvaluatorResult | AnswerEvaluatorResult): The evaluation result to be added.
-            should_save (bool): Flag indicating whether the result should be persist to disk. Defaults to True.
-            should_print (bool): Flag indicating whether the result should be printed. Defaults to True.
-            exist_ok (bool): Flag indicating whether to warn if the evaluation already exists. Defaults to False.
-            force (bool): Whether to overwrite an evaluation if it already exists. Defaults to False.
+            evaluation (RetrievalEvaluatorResult | AnswerEvaluatorResult | EloTournamentResult): The evaluation result to be added.
+            should_save (bool): Whether to save the result to disk. Defaults to True.
+            should_print (bool): Whether to print the result. Defaults to True.
+            force (bool): Whether to overwrite an existing evaluation. Defaults to False.
+            exist_ok (bool): Whether to warn if an evaluation already exists. Defaults to False.
         """
         if isinstance(evaluation, EloTournamentResult):
             self.elo_tournaments.append(evaluation)
@@ -868,6 +897,16 @@ class Experiment:
         if read_experiment_name and read_experiment_name != self.experiment_name:
             logger.warning(f"Experiment name mismatch. Expected {self.experiment_name}. Found {read_experiment_name}")
         queries = {k: Query(**v) for k, v in data.get("queries").items()}
+        for q in queries.values():
+            for doc in q.retrieved_docs.values():
+                if doc.evaluation is not None and not isinstance(doc.evaluation, RetrievalEvaluatorResult):
+                    doc_eval_dict = doc.evaluation.model_dump()
+                    doc_eval_dict["did"] = doc.did
+                    doc.evaluation = RetrievalEvaluatorResult(**doc_eval_dict)
+            for answer in q.answers.values():
+                if answer.evaluation is not None and not isinstance(answer.evaluation, AnswerEvaluatorResult):
+                    answer_eval_dict = answer.evaluation.model_dump()
+                    answer.evaluation = AnswerEvaluatorResult(**answer_eval_dict)
         if "elo_tournaments" in data:
             self.elo_tournaments = [EloTournamentResult(**t) for t in data["elo_tournaments"]]
         return queries
