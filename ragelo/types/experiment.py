@@ -637,11 +637,11 @@ class Experiment:
         query_id, document_id, document_text, [agent], [metadata columns]
         Args:
             file_path (str): Path to the CSV file with the retrieved documents.
+            document_id_col (str): Name of the column with the document id. Defaults to 'did'.
             query_id_col (str): Name of the column with the query id to which the document was retrieved.
                 Defaults to 'qid'.
-            document_id_col (str): Name of the column with the document id. Defaults to 'did'.
             document_text_col (str): Name of the column with the document text. Defaults to 'document_text'.
-            agent (str): Name of the column with the agent name. If None, will not add the agent name.
+            agent_col (str): Name of the column with the agent name. If None, will not add the agent name.
                 Defaults to None.
         """
         documents_read = 0
@@ -655,7 +655,9 @@ class Experiment:
             did = line[document_id_col].strip()
             text = line[document_text_col].strip()
             agent = line.get(agent_col)
-            metadata = {k: v for k, v in line.items() if k not in [query_id_col, document_id_col, document_text_col]}
+            metadata = {
+                k: v for k, v in line.items() if k not in [query_id_col, document_id_col, document_text_col, agent_col]
+            }
             if qid not in self.queries:
                 logger.warning(f"Query {qid} found in {file_path} but not found in queries. Skipping")
                 continue
