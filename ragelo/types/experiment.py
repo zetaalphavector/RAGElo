@@ -137,7 +137,8 @@ class Experiment:
         self.save_path = save_path
         if verbose:
             logger.setLevel(logging.INFO)
-            logger.addHandler(CLILogHandler(use_rich=rich_print))
+            if len(logger.handlers) == 0:
+                logger.addHandler(CLILogHandler(use_rich=rich_print))
         if self.save_on_disk and not self.save_path:
             self.save_path = f"ragelo_cache/{self.experiment_name}.json"
             if not os.path.exists("ragelo_cache"):
@@ -348,7 +349,9 @@ class Experiment:
             return
         if should_save:
             self.save_results(evaluation)
-        if not self.verbose and not should_print:
+        if not should_print:
+            return
+        if not self.verbose:
             return
         if isinstance(evaluation, EloTournamentResult):
             self._print_elo_tournament_result(evaluation)
@@ -402,8 +405,6 @@ class Experiment:
                 )
             elif agent:
                 rich.print(f"[bold bright_cyan]🕵️ Agent[/bold bright_cyan]: {agent}")
-            if raw_answer != answer:
-                rich.print(f"[bold blue]Raw Answer[/bold blue]: {str(raw_answer)[:100]}...")
             rich.print(f"[bold blue]Parsed Answer[/bold blue]: {answer}")
             rich.print("")
             return
