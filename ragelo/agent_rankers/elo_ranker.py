@@ -58,7 +58,7 @@ class EloRanker(AgentRanker):
             total_games=self.total_games,
             total_tournaments=self.config.tournaments,
         )
-        experiment.add_evaluation(result)
+        experiment.add_evaluation(result, should_print=True)
         return result
 
     def get_agents_ratings(self):
@@ -76,7 +76,8 @@ class EloRanker(AgentRanker):
             games.append((agent_a, agent_b, score_val))
         random.shuffle(games)
         for agent_a, agent_b, score_val in games:
-            logger.info(f"Game: {agent_a} vs {agent_b} -> {score_val}")
+            if self.config.verbose:
+                logger.info(f"Game: {agent_a} vs {agent_b} -> {score_val}")
             if score_val == 1:
                 self.wins[agent_a] = self.wins.get(agent_a, 0) + 1
                 self.losses[agent_b] = self.losses.get(agent_b, 0) + 1

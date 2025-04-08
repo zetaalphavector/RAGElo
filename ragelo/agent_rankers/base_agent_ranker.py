@@ -40,11 +40,15 @@ class AgentRanker:
         for query in experiment:
             for game in query.pairwise_games:
                 if game.evaluation is not None:
+                    if isinstance(game.evaluation.answer, dict):
+                        winner = game.evaluation.answer["winner"]
+                    else:
+                        winner = game.evaluation.answer
                     evaluations.append(
                         (
                             game.agent_a_answer.agent,
                             game.agent_b_answer.agent,
-                            game.evaluation.answer,
+                            winner,
                         )
                     )
         return evaluations

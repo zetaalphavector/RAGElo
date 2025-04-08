@@ -15,7 +15,7 @@ class AgentRankerConfig(BaseConfig):
         default="agents_evaluations.csv",
         description="Path to the agents evaluations file",
     )
-    verbose: bool = Field(default=True, description="Whether to print the ranking")
+    verbose: bool = Field(default=False, description="Whether to print each game played")
     evaluations_file: str = Field(
         default="pairwise_answers_evaluations.csv",
         description="Path to the pairwise evaluations file",

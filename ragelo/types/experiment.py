@@ -323,7 +323,7 @@ class Experiment:
         self,
         evaluation: RetrievalEvaluatorResult | AnswerEvaluatorResult | EloTournamentResult,
         should_save: bool = True,
-        should_print: bool = True,
+        should_print: bool = False,
         force: bool = False,
         exist_ok: bool = False,
     ):
@@ -348,7 +348,7 @@ class Experiment:
             return
         if should_save:
             self.save_results(evaluation)
-        if not self.verbose or not should_print:
+        if not self.verbose and not should_print:
             return
         if isinstance(evaluation, EloTournamentResult):
             self._print_elo_tournament_result(evaluation)
