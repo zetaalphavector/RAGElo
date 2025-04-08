@@ -182,8 +182,8 @@ class Query(BaseModel):
                                 f"Query {self.qid} already has an evaluation for agents {agent_a} and {agent_b}. "
                                 "Overwriting."
                             )
-                game.evaluation = evaluation
-                return True
+                    game.evaluation = evaluation
+                    return True
             logger.info(
                 f"Trying to add a pairwise evaluation for a comparison between agents {agent_a} and {agent_b},"
                 f" but no game was found for query {self.qid}. Creating a new game."
