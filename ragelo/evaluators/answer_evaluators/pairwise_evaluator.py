@@ -100,11 +100,14 @@ and "C" for a tie.
         elif self.config.llm_answer_format != AnswerFormat.JSON:
             logger.warning("We are using a PairwiseAnswerEvaluator config. Forcing the LLM answer format to JSON.")
             self.config.llm_answer_format = AnswerFormat.JSON
-            self.config.llm_response_schema = {
-                "answer_a_reasoning": "Your reasoning wether the answer provided by agent A is correct or not.",
-                "answer_b_reasoning": "Your reasoning wether the answer provided by agent B is correct or not.",
-                "comparison_reasoning": "A short explanation of the differences between the two answers.",
-                "winner": "The winner of the pairwise comparison. Either 'A', 'B', or 'C' for a tie.",
+            self.config.llm_response_schema = self.config.llm_response_schema or {
+                "analysis_assistant_a": "A string with your analysis of assistant A's answer",
+                "analysis_assistant_b": "A string with your analysis of assistant B's answer",
+                "differences": "A string with your comparison between the two answers and their differences",
+                "winner": (
+                    "The winner of the comparison. "
+                    "'A' if assistant A is better, 'B' if assistant B is better, and 'C' for a tie"
+                ),
             }
 
     def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> str | list[dict[str, str]]:
@@ -143,14 +146,7 @@ and "C" for a tie.
 
     def _process_answer(self, llm_response: LLMResponseType) -> LLMResponseType:
         """Extracts the relevant part of an answer."""
-        if isinstance(llm_response.parsed_answer, PairWiseAnswerAnswerFormat):
-            return LLMResponseType(
-                raw_answer=llm_response.raw_answer,
-                parsed_answer=llm_response.parsed_answer.winner,
-            )
-        if isinstance(llm_response.parsed_answer, dict):
-            return LLMResponseType(
-                raw_answer=llm_response.raw_answer,
-                parsed_answer=llm_response.parsed_answer["winner"],
-            )
-        return llm_response
+        return LLMResponseType(
+            raw_answer=llm_response.raw_answer,
+            parsed_answer=llm_response.parsed_answer,
+        )

@@ -88,9 +88,9 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     )
     llm_response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = Field(
         default={
-            "analysis_assistant_a": "A string with your analysis of assistant A's answer",
-            "analysis_assistant_b": "A string with your analysis of assistant B's answer",
-            "differences": "A string with your comparison between the two answers and their differences",
+            "answer_a_reasoning": "A string with your analysis of assistant A's answer",
+            "answer_b_reasoning": "A string with your analysis of assistant B's answer",
+            "comparison_reasoning": "A string with your comparison between the two answers and their differences",
             "winner": (
                 "The winner of the comparison. "
                 "'A' if assistant A is better, 'B' if assistant B is better, and 'C' for a tie"
