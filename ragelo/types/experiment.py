@@ -149,6 +149,7 @@ class Experiment:
             else:
                 os.makedirs("ragelo_cache", exist_ok=True)
                 self.evaluations_cache_path = f"ragelo_cache/{self.experiment_name}_results.jsonl"
+            Path(self.evaluations_cache_path).parent.mkdir(parents=True, exist_ok=True)
             Path(self.evaluations_cache_path).touch()
 
         if self.save_path and os.path.isfile(self.save_path):
@@ -156,7 +157,7 @@ class Experiment:
         else:
             self.queries = {}
         if queries_csv_path:
-            self.add_queries_from_csv(queries_csv_path, csv_query_id_col, csv_query_text_col)
+            self.add_queries_from_csv(queries_csv_path, csv_query_id_col, csv_query_text_col, exist_ok=True)
         if documents_csv_path:
             self.add_documents_from_csv(
                 documents_csv_path,
@@ -598,6 +599,7 @@ class Experiment:
         file_path: str,
         query_id_column: str | None = None,
         query_text_column: str = "query",
+        exist_ok: bool = False,
     ):
         if not os.path.isfile(file_path):
             raise FileNotFoundError(f"CSV file with queries {file_path} not found")
@@ -613,7 +615,8 @@ class Experiment:
             else:
                 qid = row.get(query_id_column, f"query_{idx}")
             if qid in read_queries or qid in self.queries:
-                logger.warning(f"Query with ID {qid} already read. Skipping")
+                if not exist_ok:
+                    logger.warning(f"Query with ID {qid} already read. Skipping")
                 continue
             query_text = row[query_text_column].strip()
             metadata = {k: v for k, v in row.items() if k not in [query_id_column, query_text_column]}
