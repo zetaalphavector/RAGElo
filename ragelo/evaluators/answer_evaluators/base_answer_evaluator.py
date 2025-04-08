@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import itertools
 import random
-import warnings
 from typing import Any, Callable, Type, get_type_hints
 
 from tenacity import RetryError
@@ -309,7 +308,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
             }
             documents.append(self.config.document_template.format(**formatters))
         if len(documents) == 0:
-            warnings.warn("No relevant documents were retrieved for the answer evaluator")
+            logger.warning("No relevant documents were retrieved for the answer evaluator")
             return "NO DOCUMENTS WERE RETRIEVED"
         return "\n".join(documents)
 
