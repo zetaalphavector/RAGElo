@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import csv
 import json
+import logging
 import os
 import warnings
 from collections import defaultdict
@@ -17,7 +18,7 @@ from typing import Any, Literal
 import rich
 from pydantic import BaseModel as PydanticBaseModel
 
-from ragelo.logger import logger
+from ragelo.logger import CLILogHandler, logger
 from ragelo.types.evaluables import AgentAnswer, Document
 from ragelo.types.pydantic_models import _PYDANTIC_MAJOR_VERSION
 from ragelo.types.query import Query
@@ -134,7 +135,9 @@ class Experiment:
         self.rich_print = rich_print
         self.save_on_disk = save_on_disk
         self.save_path = save_path
-
+        if verbose:
+            logger.setLevel(logging.INFO)
+            logger.addHandler(CLILogHandler())
         if self.save_on_disk and not self.save_path:
             logger.info("Creating a save path for the experiment")
             os.makedirs("ragelo_cache", exist_ok=True)
@@ -288,7 +291,9 @@ class Experiment:
         Args:
             evaluation (RetrievalEvaluatorResult | AnswerEvaluatorResult): The evaluation result to be added.
             should_save (bool): Flag indicating whether the result should be persist to disk. Defaults to True.
-            force (bool): Whether to overwrite an evaluation if it already exists.
+            should_print (bool): Flag indicating whether the result should be printed. Defaults to True.
+            exist_ok (bool): Flag indicating whether to warn if the evaluation already exists. Defaults to False.
+            force (bool): Whether to overwrite an evaluation if it already exists. Defaults to False.
         """
         if isinstance(evaluation, EloTournamentResult):
             self.elo_tournaments.append(evaluation)
@@ -851,7 +856,7 @@ class Experiment:
                     continue
             elif result_type == "elo_tournament":
                 result = EloTournamentResult(**result["elo_tournament"])
-            self.add_evaluation(result, should_save=False, should_print=False)
+            self.add_evaluation(result, should_save=False, should_print=False, exist_ok=True)
 
     def __len__(self):
         return len(self.queries)
