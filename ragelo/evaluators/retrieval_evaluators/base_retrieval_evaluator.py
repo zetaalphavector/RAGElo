@@ -104,6 +104,9 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         )
 
     def _get_tuples_to_evaluate(self, experiment: Experiment) -> list[tuple[Query, Evaluable]]:
+        """
+        Creates the list of pairs (query, evaluable) to evaluate
+        """
         tuples_to_eval = []
         all_tuples = 0
         missing_evaluations = 0
@@ -114,12 +117,10 @@ class BaseRetrievalEvaluator(BaseEvaluator):
                 tuples_to_eval.append((q, d))
                 all_tuples += 1
         if missing_evaluations == 0:
-            logger.info("All documents have already been evaluated")
-            if self.config.verbose and not self.config.force:
-                logger.warning(
-                    f"All {all_tuples} documents are already evaluated.\n"
-                    "If you want to re-evaluate documents, use the --force flag."
-                )
+            logger.info(
+                f"All {all_tuples} documents are already evaluated.\n"
+                "If you want to re-evaluate them, use the --force flag"
+            )
         return tuples_to_eval
 
     def _build_message(

@@ -5,7 +5,7 @@ from __future__ import annotations
 import itertools
 import random
 import warnings
-from typing import Any, Callable, Sequence, Type, get_type_hints
+from typing import Any, Callable, Type, get_type_hints
 
 from tenacity import RetryError
 
@@ -204,11 +204,11 @@ class BaseAnswerEvaluator(BaseEvaluator):
             exception=exc,
         )
 
-    def _get_tuples_to_evaluate(self, experiment: Experiment) -> Sequence[tuple[Query, Evaluable]]:
+    def _get_tuples_to_evaluate(self, experiment: Experiment) -> list[tuple[Query, Evaluable]]:
         """
         Creates the list of pairs (query, evaluable) to evaluate
         """
-        tuples_to_eval: list[tuple[Query, PairwiseGame | AgentAnswer]] = []
+        tuples_to_eval: list[tuple[Query, Evaluable]] = []
         all_tuples = 0
         missing_evaluations = 0
         for q in experiment:
@@ -227,12 +227,10 @@ class BaseAnswerEvaluator(BaseEvaluator):
                         missing_evaluations += 1
 
         if missing_evaluations == 0:
-            logger.info("All answers have been evaluated")
-            if self.config.verbose and not self.config.force:
-                logger.warning(
-                    f"All {all_tuples} answers are already evaluated.\n"
-                    "If you want to re-evaluate them, use the --force flag"
-                )
+            logger.info(
+                f"All {all_tuples} answers are already evaluated.\n"
+                "If you want to re-evaluate them, use the --force flag"
+            )
 
         return tuples_to_eval
 
