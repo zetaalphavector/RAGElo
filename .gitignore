@@ -165,3 +165,4 @@ data/*
 .idea/*
 ragelo/.vscode/settings.json
 uv.lock
+docs/examples/notebooks/ragelo_cache/*
