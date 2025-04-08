@@ -90,7 +90,7 @@ answer
 ```
 Note that, in this example, we passed to the `evaluate` method two dictionaries with metadata for the query and the document. This metadata is injected into the prompt by matching their keys into the placeholders in the prompt.
 
-Other examples are available as notebooks in the [docs/examples/notebooks folder](https://github.com/zetaalphavector/RAGElo/tree/master/docs/examples/notebooks) of the repository.
+For a comprehensive example of how to use RAGElo, see the [docs/examples/notebooks/rag_eval.ipynb](https://github.com/zetaalphavector/RAGElo/blob/master/docs/examples/notebooks/rag_eval.ipynb) notebook.
 
 ## 🚀 CLI Quickstart
 After installing RAGElo as a CLI app, you can run it with the following command:
