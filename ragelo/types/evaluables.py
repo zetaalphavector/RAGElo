@@ -55,10 +55,11 @@ class Document(Evaluable):
     text: str
     retrieved_by: dict[str, float] = {}
 
-    def add_retrieved_by(self, agent: str, score: float | None = None, force: bool = False):
+    def add_retrieved_by(self, agent: str, score: float | None = None, force: bool = False, exist_ok: bool = False):
         """Adds the score of an agent that retrieved the document."""
         if agent in self.retrieved_by and not force:
-            logger.info(f"Document with did {self.did} already retrieved by agent {agent}")
+            if not exist_ok:
+                logger.info(f"Document with did {self.did} already retrieved by agent {agent}")
             return
         if score is None:
             score = 1.0

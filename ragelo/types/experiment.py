@@ -137,23 +137,28 @@ class Experiment:
         self.save_path = save_path
         if verbose:
             logger.setLevel(logging.INFO)
-            logger.addHandler(CLILogHandler())
+            logger.addHandler(CLILogHandler(use_rich=rich_print))
         if self.save_on_disk and not self.save_path:
-            logger.info("Creating a save path for the experiment")
-            os.makedirs("ragelo_cache", exist_ok=True)
             self.save_path = f"ragelo_cache/{self.experiment_name}.json"
+            if not os.path.exists("ragelo_cache"):
+                logger.info(f"Creating a cache file for the experiment at ragelo_cache/{self.experiment_name}.json")
+                Path("ragelo_cache").mkdir(parents=True, exist_ok=True)
+
         elif self.save_path is None and not self.save_on_disk:
             logger.info("No save path provided. Will not save the experiment to disk.")
 
         if self.cache_evaluations and not self.evaluations_cache_path:
-            logger.info("Creating a cache path for the evaluations cache")
             if self.save_path:
                 self.evaluations_cache_path = self.save_path.replace(".json", "_results.jsonl")
             else:
-                os.makedirs("ragelo_cache", exist_ok=True)
                 self.evaluations_cache_path = f"ragelo_cache/{self.experiment_name}_results.jsonl"
-            Path(self.evaluations_cache_path).parent.mkdir(parents=True, exist_ok=True)
-            Path(self.evaluations_cache_path).touch()
+                if not os.path.exists("ragelo_cache"):
+                    os.makedirs("ragelo_cache", exist_ok=True)
+            if not os.path.isfile(self.evaluations_cache_path):
+                logger.info(
+                    "Creating a cache file for the experiment's evaluations at" f"{self.evaluations_cache_path}"
+                )
+                Path(self.evaluations_cache_path).touch()
 
         if self.save_path and os.path.isfile(self.save_path):
             self.queries = self._load_from_cache(self.save_path)
@@ -168,9 +173,12 @@ class Experiment:
                 csv_document_text_col,
                 csv_query_id_col,
                 csv_agent_col,
+                exist_ok=True,
             )
         if answers_csv_path:
-            self.add_agent_answers_from_csv(answers_csv_path, csv_agent_col, csv_answer_text_col, csv_query_id_col)
+            self.add_agent_answers_from_csv(
+                answers_csv_path, csv_agent_col, csv_answer_text_col, csv_query_id_col, exist_ok=True
+            )
 
         if self.evaluations_cache_path and os.path.isfile(self.evaluations_cache_path):
             self._load_results_from_cache(self.evaluations_cache_path)
@@ -222,6 +230,7 @@ class Experiment:
         score: float | None = None,
         agent: str | None = None,
         force: bool = False,
+        exist_ok: bool = False,
     ):
         """
         Adds a retrieved document to a query.
@@ -232,6 +241,8 @@ class Experiment:
             score (Optional[float]): The score of the document. Defaults to None.
             agent (Optional[str]): The agent that retrieved the document. Defaults to None.
             force (bool): Whether to overwrite the document if it already exists. Defaults to False.
+            exist_ok (bool): If True, will not raise an error if the document already exists.
+                Defaults to False.
         """
         if isinstance(doc, Document):
             if doc.qid != query_id and query_id is not None:
@@ -249,7 +260,7 @@ class Experiment:
             doc = Document(qid=query_id, did=doc_id, text=doc)
         if query_id not in self.queries:
             raise ValueError(f"Query {query_id} not found in queries")
-        self.queries[query_id].add_retrieved_doc(doc, score, agent, force)
+        self.queries[query_id].add_retrieved_doc(doc, score, agent, force, exist_ok)
 
     def add_agent_answer(
         self,
@@ -257,6 +268,7 @@ class Experiment:
         agent: str | None = None,
         query_id: str | None = None,
         force: bool = False,
+        exist_ok: bool = False,
     ):
         if isinstance(answer, AgentAnswer):
             if answer.qid != query_id and query_id is not None:
@@ -275,7 +287,7 @@ class Experiment:
             answer = AgentAnswer(qid=query_id, agent=agent, text=answer)
         if query_id not in self.queries:
             raise ValueError(f"Query {query_id} not found in queries")
-        self.queries[query_id].add_agent_answer(answer, force=force)
+        self.queries[query_id].add_agent_answer(answer, force=force, exist_ok=exist_ok)
 
     def add_evaluation(
         self,
@@ -553,10 +565,9 @@ class Experiment:
         if not self.save_on_disk:
             return
         if output_path is None:
-            assert self.save_path is not None, "Cannot save experiment without a save path"
+            if self.save_path is None:
+                raise ValueError("Cannot save experiment without a save path")
             output_path = self.save_path
-        else:
-            assert self.save_path is not None, "Cannot save experiment without a save path"
         output_dict: dict[str, Any] = {}
 
         output_dict["queries"] = {qid: query.model_dump() for qid, query in self.queries.items()}
@@ -627,7 +638,8 @@ class Experiment:
             metadata = {k: v for k, v in row.items() if k not in [query_id_column, query_text_column]}
             self.queries[qid] = Query(qid=qid, query=query_text, metadata=metadata)
             read_queries.add(qid)
-        logger.info(f"Loaded {len(self.queries)} queries from {file_path}")
+        if len(read_queries) > 0:
+            logger.info(f"Loaded {len(read_queries)} queries from {file_path}")
 
     def add_documents_from_csv(
         self,
@@ -636,6 +648,7 @@ class Experiment:
         document_text_col: str = "document",
         query_id_col: str | None = "qid",
         agent_col: str | None = None,
+        exist_ok: bool = False,
     ):
         """
         Loads a list of retrieved documents from a csv file. The csv file should have the following columns:
@@ -648,12 +661,15 @@ class Experiment:
             document_text_col (str): Name of the column with the document text. Defaults to 'document_text'.
             agent_col (str): Name of the column with the agent name. If None, will not add the agent name.
                 Defaults to None.
+            exist_ok (bool): If True, will not raise an error if the document already exists.
+                Defaults to False.
         """
         documents_read = 0
         if not os.path.isfile(file_path):
             raise FileNotFoundError(f"CSV file {file_path} not found")
         query_id_col = self.__infer_query_id_column(file_path, query_id_col)
         document_id_col = self.__infer_document_id_column(file_path, document_id_col)
+        warned_queries = set()
 
         for line in csv.DictReader(open(file_path)):
             qid = line[query_id_col].strip()
@@ -664,16 +680,19 @@ class Experiment:
                 k: v for k, v in line.items() if k not in [query_id_col, document_id_col, document_text_col, agent_col]
             }
             if qid not in self.queries:
-                logger.warning(f"Query {qid} found in {file_path} but not found in queries. Skipping")
+                if qid not in warned_queries:
+                    warned_queries.add(qid)
+                    logger.warning(f"Query {qid} found in {file_path} but not found in queries. Skipping")
                 continue
             if (doc_obj := self.queries[qid].retrieved_docs.get(did)) is None:
                 doc_obj = Document(qid=qid, did=did, text=text)
                 doc_obj.add_metadata(metadata)
+                documents_read += 1
             if agent is not None:
-                doc_obj.add_retrieved_by(agent)
-            self.add_retrieved_doc(doc_obj)
-            documents_read += 1
-        logger.info(f"Loaded {documents_read} documents from {file_path}")
+                doc_obj.add_retrieved_by(agent, exist_ok=exist_ok)
+            self.add_retrieved_doc(doc_obj, exist_ok=exist_ok)
+        if documents_read > 0:
+            logger.info(f"Loaded {documents_read} new documents from {file_path}")
 
     def add_retrieved_docs_from_runfile(
         self,
@@ -735,6 +754,7 @@ class Experiment:
         agent_col: str = "agent",
         answer_col: str = "answer",
         query_id_col: str | None = None,
+        exist_ok: bool = False,
     ):
         """
         Adds agent answers from a CSV file to the queries.
@@ -746,10 +766,13 @@ class Experiment:
             answer_col (str): Name of the column with the answer text. Defaults to 'answer'.
             query_id_col (str): Name of the column with the query id.
                 If None, will try to infer the query id column. Defaults to None.
+            exist_ok (bool): If True, will not raise an error if the answer already exists.
+                Defaults to False.
         """
         if not os.path.isfile(file_path):
             raise FileNotFoundError(f"Answers file {file_path} not found")
         answers_read = 0
+        warned_queries = set()
         query_id_col = self.__infer_query_id_column(file_path, query_id_col)
         for line in csv.DictReader(open(file_path)):
             qid = line[query_id_col].strip()
@@ -757,12 +780,19 @@ class Experiment:
             answer = line[answer_col].strip()
             metadata = {k: v for k, v in line.items() if k not in [query_id_col, agent_col, answer_col]}
             if qid not in self.queries:
-                logger.warning(f"Query {qid} found in {file_path} but not found in queries. Skipping")
+                if qid not in warned_queries:
+                    warned_queries.add(qid)
+                    logger.warning(f"Query {qid} found in {file_path} but not found in queries. Skipping")
                 continue
-            answer_obj = AgentAnswer(qid=qid, agent=agent, text=answer)
-            answer_obj.add_metadata(metadata)
-            self.add_agent_answer(answer_obj)
-            answers_read += 1
+            if agent not in self.queries[qid].answers:
+                answer_obj = AgentAnswer(qid=qid, agent=agent, text=answer)
+                answer_obj.add_metadata(metadata)
+                self.add_agent_answer(answer_obj, exist_ok=exist_ok)
+                answers_read += 1
+            elif not exist_ok:
+                logger.info(f"Answer from agent {agent} already exists in query {qid}. Skipping")
+        if answers_read > 0:
+            logger.info(f"Loaded {answers_read} answers from {file_path}")
 
     def add_answers_from_multiple_csv(
         self,
@@ -831,6 +861,7 @@ class Experiment:
     def _load_from_cache(self, cache_path: str) -> dict[str, Query]:
         if not os.path.isfile(cache_path):
             raise FileNotFoundError(f"Cache file {cache_path} not found")
+        logger.info(f"Loading existing experiment from {cache_path}")
         with open(cache_path) as f:
             data = json.load(f)
         read_experiment_name = data.get("experiment_name")
