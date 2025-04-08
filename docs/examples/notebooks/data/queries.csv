@@ -1,0 +1,11 @@
+qid,query
+q_1,What is vaccum optimizer ?
+q_2,Tell me about ‘always_ram’ parameter?
+q_3,What is difference between scalar and product quantization?
+q_4,What is ‘best_score’ strategy?
+q_5,How does oversampling helps?
+q_6,What is the purpose of ‘CreatePayloadIndexAsync’?
+q_7,What is the purpose of ef_construct in HNSW ?
+q_8,How do you use ‘ordering’ parameter?
+q_9,What is significance of ‘on_disk_payload’ setting?
+q_10,What is the impact of ‘write_consistency_factor’ ?
