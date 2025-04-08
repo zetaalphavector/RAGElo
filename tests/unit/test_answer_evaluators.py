@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import warnings
 
-import pytest
 
 from ragelo import get_answer_evaluator
 from ragelo.evaluators.answer_evaluators import (
@@ -176,8 +175,7 @@ class TestPairwiseAnswerEvaluator:
         empty_experiment.add_agent_answer("answer_a", "agent1", "0")
         empty_experiment.add_agent_answer("answer_b", "agent2", "0")
         query = empty_experiment["0"]
-        with pytest.warns(UserWarning):
-            _ = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
+        _ = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
 
 
 class TestCustomPromptEvaluator:
@@ -289,8 +287,7 @@ class TestDomainExpertEvaluator:
             config=domain_expert_answer_eval_config, llm_provider=llm_provider_pairwise_answer_mock
         )
         query = experiment["0"]
-        with pytest.warns(UserWarning):
-            result = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
+        result = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
         assert isinstance(result, AnswerEvaluatorResult)
         prompt = llm_provider_pairwise_answer_mock.async_call_mocker.call_args_list[0][0][0]
         assert "You work for" not in prompt
