@@ -128,7 +128,13 @@ document given the particular query. The score meaning is as follows:
         reason_message = self.__build_reason_message(query, document)
         exc = None
         if document.evaluation is not None and not self.config.force:
-            return document.evaluation  # type: ignore
+            return RetrievalEvaluatorResult(
+                did=document.did,
+                qid=query.qid,
+                raw_answer=document.evaluation.raw_answer,
+                answer=document.evaluation.answer,
+                exception=document.evaluation.exception,
+            )
         messages = [
             {"role": "system", "content": self.system_prompt},
             {"role": "user", "content": reason_message},
