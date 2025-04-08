@@ -146,13 +146,13 @@ class Query(BaseModel):
             did = evaluation.did
             if did not in self.retrieved_docs:
                 logger.warning(f"Trying to add evaluation for non-retrieved document {did} in query {self.qid}")
-            if self.retrieved_docs[did].evaluation is not None and exist_ok:
-                return False
             if self.retrieved_docs[did].evaluation is not None and not force:
-                logger.warning(f"Document {did} in query {self.qid} already has an evaluation.")
+                if not exist_ok:
+                    logger.warning(f"Document {did} in query {self.qid} already has an evaluation.")
                 return False
             if self.retrieved_docs[did].evaluation is not None:
-                logger.info(f"Document {did} in query {self.qid} already has an evaluation. Overwriting.")
+                if not exist_ok:
+                    logger.info(f"Document {did} in query {self.qid} already has an evaluation. Overwriting.")
             self.retrieved_docs[did].evaluation = evaluation
             return True
         if evaluation.pairwise:
@@ -170,20 +170,20 @@ class Query(BaseModel):
                 )
             for game in self.pairwise_games:
                 if game.agent_a_answer.agent == agent_a and game.agent_b_answer.agent == agent_b:
-                    if game.evaluation is not None and exist_ok:
-                        return False
-                    if game.evaluation is not None and not force:
-                        logger.warning(
-                            f"Query {self.qid} already has an evaluation for agents {agent_a} and {agent_b}."
-                        )
-                        return False
                     if game.evaluation is not None:
-                        logger.info(
-                            f"Query {self.qid} already has an evaluation for agents {agent_a} and {agent_b}. "
-                            "Overwriting."
-                        )
-                    game.evaluation = evaluation
-                    return True
+                        if not force:
+                            if not exist_ok:
+                                logger.warning(
+                                    f"Query {self.qid} already has an evaluation for agents {agent_a} and {agent_b}."
+                                )
+                            return False
+                        if not exist_ok:
+                            logger.info(
+                                f"Query {self.qid} already has an evaluation for agents {agent_a} and {agent_b}. "
+                                "Overwriting."
+                            )
+                game.evaluation = evaluation
+                return True
             logger.info(
                 f"Trying to add a pairwise evaluation for a comparison between agents {agent_a} and {agent_b},"
                 f" but no game was found for query {self.qid}. Creating a new game."

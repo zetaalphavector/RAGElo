@@ -348,9 +348,7 @@ class Experiment:
             return
         if should_save:
             self.save_results(evaluation)
-        if not self.verbose:
-            return
-        if not should_print:
+        if not self.verbose or not should_print:
             return
         if isinstance(evaluation, EloTournamentResult):
             self._print_elo_tournament_result(evaluation)
@@ -404,8 +402,8 @@ class Experiment:
                 )
             elif agent:
                 rich.print(f"[bold bright_cyan]🕵️ Agent[/bold bright_cyan]: {agent}")
-                if raw_answer != answer:
-                    rich.print(f"[bold blue]Raw Answer[/bold blue]: {raw_answer}")
+            if raw_answer != answer:
+                rich.print(f"[bold blue]Raw Answer[/bold blue]: {str(raw_answer)[:100]}...")
             rich.print(f"[bold blue]Parsed Answer[/bold blue]: {answer}")
             rich.print("")
             return
@@ -892,7 +890,10 @@ class Experiment:
             raise FileNotFoundError(f"Cache file {cache_path} not found")
         logger.info(f"Loading existing experiment from {cache_path}")
         with open(cache_path) as f:
-            data = json.load(f)
+            try:
+                data = json.load(f)
+            except json.JSONDecodeError:
+                raise ValueError(f"Cache file {cache_path} is not a valid JSON file")
         read_experiment_name = data.get("experiment_name")
         if read_experiment_name and read_experiment_name != self.experiment_name:
             logger.warning(f"Experiment name mismatch. Expected {self.experiment_name}. Found {read_experiment_name}")

@@ -116,7 +116,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
                     missing_evaluations += 1
                 tuples_to_eval.append((q, d))
                 all_tuples += 1
-        if missing_evaluations == 0:
+        if missing_evaluations == 0 and not self.config.force:
             logger.info(
                 f"All {all_tuples} documents are already evaluated.\n"
                 "If you want to re-evaluate them, use the --force flag"

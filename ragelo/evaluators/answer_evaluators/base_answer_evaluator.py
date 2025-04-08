@@ -226,7 +226,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
                     if a.evaluation is None:
                         missing_evaluations += 1
 
-        if missing_evaluations == 0:
+        if missing_evaluations == 0 and not self.config.force:
             logger.info(
                 f"All {all_tuples} answers are already evaluated.\n"
                 "If you want to re-evaluate them, use the --force flag"
@@ -288,7 +288,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 score = d.evaluation.answer
                 if isinstance(score, str) and score.isdigit():
                     score = int(score)
-                if not isinstance(score, int):
+                if not isinstance(score, (int, float)):
                     continue
                 if score < self.config.document_relevance_threshold:
                     continue
@@ -309,7 +309,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
             }
             documents.append(self.config.document_template.format(**formatters))
         if len(documents) == 0:
-            warnings.warn("No documents were retrieved for the answer evaluator")
+            warnings.warn("No relevant documents were retrieved for the answer evaluator")
             return "NO DOCUMENTS WERE RETRIEVED"
         return "\n".join(documents)
 
