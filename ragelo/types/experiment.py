@@ -661,8 +661,9 @@ class Experiment:
             if qid not in self.queries:
                 logger.warning(f"Query {qid} found in {file_path} but not found in queries. Skipping")
                 continue
-            doc_obj = Document(qid=qid, did=did, text=text)
-            doc_obj.add_metadata(metadata)
+            if (doc_obj := self.queries[qid].retrieved_docs.get(did)) is None:
+                doc_obj = Document(qid=qid, did=did, text=text)
+                doc_obj.add_metadata(metadata)
             if agent is not None:
                 doc_obj.add_retrieved_by(agent)
             self.add_retrieved_doc(doc_obj)
