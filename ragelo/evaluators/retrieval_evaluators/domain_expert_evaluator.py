@@ -128,7 +128,13 @@ document given the particular query. The score meaning is as follows:
         reason_message = self.__build_reason_message(query, document)
         exc = None
         if document.evaluation is not None and not self.config.force:
-            return document.evaluation  # type: ignore
+            return RetrievalEvaluatorResult(
+                did=document.did,
+                qid=query.qid,
+                raw_answer=document.evaluation.raw_answer,
+                answer=document.evaluation.answer,
+                exception=document.evaluation.exception,
+            )
         messages = [
             {"role": "system", "content": self.system_prompt},
             {"role": "user", "content": reason_message},
@@ -164,10 +170,18 @@ document given the particular query. The score meaning is as follows:
             logger.warning(f"Failed to FETCH scores for qid: {query.qid}")
             logger.warning(f"document id: {document.did}")
             exc = str(e)
+        if not isinstance(score_answer.parsed_answer, dict) or "score" not in score_answer.parsed_answer:
+            logger.warning(f"LLM Failed to match the expected schema for qid: {query.qid}")
+            logger.warning(f"document id: {document.did}")
+            logger.warning(f"LLM response: {score_answer.parsed_answer}")
+            exc = "The LLM did not return a dictionary with a 'score' key"
+            answer = None
+        else:
+            answer = score_answer.parsed_answer["score"]
         return RetrievalEvaluatorResult(
             qid=query.qid,
             did=document.did,
             raw_answer=reasoning_answer,
-            answer=score_answer.parsed_answer,
+            answer=answer,
             exception=exc,
         )

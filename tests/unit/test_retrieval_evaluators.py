@@ -28,8 +28,8 @@ class TestRetrievalEvaluator:
         query = experiment["0"]
         doc = query.retrieved_docs["0"]
         result = evaluator.evaluate(query, doc)
-        assert result.raw_answer == '{"relevance": 1}'
-        assert result.answer == {"relevance": 1}
+        assert result.raw_answer == '{"score": 1.0}'
+        assert result.answer == {"score": 1.0}
 
         expected_prompt = f"Query: {query.query}\nDocument: {doc.text}"
         call_args = llm_provider_mock.async_call_mocker.call_args_list
@@ -59,7 +59,7 @@ class TestRetrievalEvaluator:
         call_args = llm_provider_mock.async_call_mocker.call_args_list
         assert call_args[0][0][0] == "Query: This is a query\nDocument: This is a document"
         assert isinstance(result.answer, dict)
-        assert result.answer["relevance"] == 1
+        assert result.answer["score"] == 1.0
 
     def test_rich_printing(
         self,
@@ -156,7 +156,7 @@ class TestCustomPromptEvaluator:
         response = evaluator.evaluate(query, doc)
         call_args = llm_provider_mock.async_call_mocker.call_args_list
 
-        assert response.answer == {"relevance": 1}
+        assert response.answer == {"score": 1}
         assert call_args[0][0][0] == formatted_prompt
 
     def test_process_with_custom_fields(self, llm_provider_mock, custom_prompt_retrieval_eval_config):

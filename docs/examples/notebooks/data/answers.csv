@@ -1,0 +1,264 @@
+qid,agent,answer
+q_1,agent_0,"The Vacuum Optimizer in Qdrant is used to address the accumulation of deleted records within a segment repository. Instead of immediately deleting entries after a query, Qdrant marks records as deleted and ignores them for future queries to minimize disk access. Over time, these deleted records can accumulate, occupy memory, and slow down the system. The Vacuum Optimizer is triggered when a segment has accumulated too many deleted records, as defined in the configuration file. You can set parameters such as the minimal fraction of deleted vectors and the minimal number of vectors in a segment required to perform segment optimization. This optimizer helps maintain system efficiency by managing deleted records effectively. For more details, you can refer to the documentation on Optimizer under the section ""Vacuum Optimizer"" from the source provided."
+q_2,agent_0,"The `always_ram` parameter in Qdrant determines whether quantized vectors are kept cached in RAM or not. By default, quantized vectors are loaded in the same way as the original vectors. However, setting `always_ram` to `true` stores quantized vectors in RAM, which can speed up the search process. You can find more information about this parameter in the documentation under the 'Setting up Product Quantization' section. Check the source document at `documentation/guides/quantization.md` for detailed information and examples on how to configure this parameter."
+q_3,agent_0,"Scalar quantization and product quantization are two different methods used in quantization for high-dimensional vectors in Qdrant.
+
+Scalar quantization, as described in the documentation, involves compressing vectors by reducing the number of bits used to represent each vector component. This method allows for a reduction in memory usage by a factor of 4 and speeds up the search process. However, it comes with a trade-off of a slight loss in accuracy due to the conversion process from float32 to uint8.
+
+On the other hand, product quantization offers a higher compression rate compared to scalar quantization. It may reduce memory usage and search time in certain scenarios, but it comes with significant trade-offs in accuracy and in-RAM search speed. Product quantization is recommended for specific situations like low-RAM environments, high-dimensional original vectors, and where indexing speed is not critical.
+
+In summary, scalar quantization is a more universal method that balances accuracy, speed, and compression, while product quantization provides a higher compression rate but with trade-offs in accuracy and search speed. For more detailed information, you can refer to the Qdrant documentation on [Product Quantization](/documentation/guides/quantization/#setting-up-product-quantization)."
+q_4,agent_0,"The 'best_score' strategy is a new recommendation strategy introduced in version 1.6.0. It focuses on finding similar vectors that are closer to a positive example while avoiding those closer to a negative one. This strategy calculates the best positive and best negative scores for each candidate point and selects the final score based on these values. The formula used to calculate the score is: 
+
+```rust
+if best_positive_score > best_negative_score {
+    score = best_positive_score;
+} else {
+    score = -(best_negative_score * best_negative_score);
+}
+```
+
+This strategy aims to penalize points closer to negative examples and prioritize those closer to positive examples during the search process. It is recommended to set `""strategy"": ""best_score""` in the recommendation request to utilize this algorithm effectively. For more details, you can refer to the documentation under the 'Best score strategy' section."
+q_5,agent_0,"Oversampling helps to control the precision of search results in real-time by internally retrieving more vectors than needed and assigning more precise scores during rescoring. This technique allows for improved accuracy without rebuilding the index, simply by adjusting a parameter in the search query itself. You can learn more about oversampling and its impact on model fairness and performance in the documentation provided on page [here](/blog/openai/Oversampling_Impact.png)."
+q_6,agent_0,The purpose of the 'CreatePayloadIndexAsync' function is to create a keyword payload index for a specific field in a collection. This function allows you to define the field name and field schema as 'keyword' for efficient indexing and retrieval of payload data associated with the field. You can refer to the documentation for more details on how to use this function and its parameters. (Source: documentation/guides/multiple-partitions.md)
+q_7,agent_0,The `ef_construct` parameter in HNSW (Hierarchical Navigable Small World) is used to specify the number of neighbors to consider during the index building process. A larger value for `ef_construct` leads to more accurate search results but requires more time to build the index. You can find more information about the `ef_construct` parameter in the documentation under the configuration parameters for the HNSW Index section. (Source: documentation/guides/configuration.md)
+q_8,agent_0,"To use the 'ordering' parameter, you can specify the type of ordering you want for your write operations. There are two options available: `medium` and `strong`. 
+
+- `medium` ordering serializes all write operations through a dynamically elected leader, which may cause minor inconsistencies in case of leader change.
+- `strong` ordering serializes all write operations through the permanent leader, providing strong consistency, but write operations may be unavailable if the leader is down.
+
+You can include the 'ordering' parameter in your API call or client code when performing write operations to specify the desired ordering type. For example, in the HTTP API call, you can include `ordering=strong` in the request URL. 
+
+For more detailed implementation examples in various programming languages, you can refer to the documentation under the 'source' field of the fetched context from the documentation."
+q_9,agent_0,"The 'on_disk_payload' setting in Qdrant determines whether the payload data associated with vectors is stored on disk or in memory. This setting impacts the memory footprint and search speed of the collection. When 'on_disk_payload' is set to true, the payload data is stored on disk, which can reduce memory usage but may slightly impact search speed. Conversely, setting 'on_disk_payload' to false stores the payload data in memory, potentially increasing search speed at the cost of higher memory consumption.
+
+You can configure the 'on_disk_payload' setting when creating a collection by specifying it in the vectors configuration. For example, in the Python code snippet provided in the documentation, you can set 'on_disk_payload' to true or false based on your requirements.
+
+For more detailed information on configuring storage options in Qdrant, you can refer to the documentation on storage [here](https://github.com/docs/documentation/concepts/storage.md)."
+q_10,agent_0,"The `write_consistency_factor` in Qdrant represents the number of replicas that must acknowledge a write operation before responding to the client. By increasing this value, you make write operations more tolerant to network partitions in the cluster. However, it will require a higher number of replicas to be active to perform write operations. This setting helps ensure data consistency and reliability during possible hardware instabilities or mass concurrent updates of the same documents. You can configure the `write_consistency_factor` at the collection's creation time as shown in the documentation snippet. For more details and examples, you can refer to the documentation on distributed deployment under the 'source' field provided."
+q_1,agent_1,"The Vacuum Optimizer in Qdrant is used to address the accumulation of deleted records in a segment repository. Instead of immediately deleting entries after a query, Qdrant marks records as deleted and ignores them for future queries to minimize disk access. However, over time, these deleted records can accumulate, occupy memory, and slow down the system. The Vacuum Optimizer is triggered when a segment has accumulated too many deleted records, as defined in the configuration file. You can find more details about the Vacuum Optimizer in the documentation under the ""Vacuum Optimizer"" section on page 1."
+q_2,agent_1,"The `always_ram` parameter in the context of quantization configuration determines whether quantized vectors are always cached in RAM or not. By default, quantized vectors are loaded in the same way as the original vectors. However, setting `always_ram` to `true` will store quantized vectors in RAM, which can speed up the search process. You can find more information about this parameter in the documentation under the 'Setting up Product Quantization' section on page 'documentation/guides/quantization.md'."
+q_3,agent_1,"Scalar quantization and product quantization are two different methods used for quantization in Qdrant.
+
+Scalar quantization is a more universal method that provides a good balance between accuracy, speed, and compression. It is recommended as the default quantization method if binary quantization is not applicable. Scalar quantization has a quantile value of 0.99, making it highly accurate, and it is memory-efficient.
+
+On the other hand, product quantization may offer a better compression ratio, but it comes with a significant loss of accuracy and is slower than scalar quantization. Product quantization is recommended when the memory footprint is a top priority and search speed is not critical. It is favored in specific scenarios such as deployment in low-RAM environments and situations with high-dimensional original vectors.
+
+For more detailed information on the differences between scalar and product quantization, you can refer to the Qdrant documentation on [Product Quantization](/documentation/guides/quantization/#setting-up-product-quantization) (source: articles/product-quantization.md)."
+q_4,agent_1,"The 'best_score' strategy is a new recommendation strategy introduced in version 1.6.0, as mentioned in the documentation. This strategy focuses on finding similar vectors that are closer to a positive example while avoiding those closer to a negative example. It calculates the best positive and best negative scores for each candidate point and then selects the final score based on these values. The formula used to calculate the score is: 
+
+```rust
+if best_positive_score > best_negative_score {
+    score = best_positive_score;
+} else {
+    score = -(best_negative_score * best_negative_score);
+}
+```
+
+This strategy is beneficial when you want to find vectors that are dissimilar to the ones provided, making it useful for outlier detection and data exploration. To use the 'best_score' strategy in your recommendation request, you need to set `""strategy"": ""best_score""`. Additionally, it's important to note that the performance of this strategy is impacted by the number of examples provided, so increasing the `ef` search parameter can improve accuracy. For more details, you can refer to the documentation under the 'Best score strategy' section in the 'new-recommendation-api.md' article."
+q_5,agent_1,"Oversampling helps in controlling the precision of search results in real-time by internally retrieving more vectors than needed from quantized storage. This allows for more precise rescoring with original vectors, resulting in a more accurate selection of vectors for the user without the need to rebuild the index or change parameters within stored data structures. It is a technique that enhances accuracy without significant computational requirements. You can find more information on oversampling and its impact on model fairness and performance in the documentation provided in the source: blog/binary-quantization-andrey-vasnetsov-vector-space-talk-001.md."
+q_6,agent_1,"The purpose of the 'CreatePayloadIndexAsync' function is to create a keyword payload index for a specific field in a collection. This function allows you to define the field name, field schema (in this case, keyword), and other relevant parameters for indexing the payload data associated with the specified field. You can refer to the documentation page 'documentation/guides/multiple-partitions.md' for more details on how to use this function and its limitations."
+q_7,agent_1,The `ef_construct` parameter in HNSW (Hierarchical Navigable Small World) is used to control the search efficiency and accuracy during the construction phase of the index. It specifies the number of candidate points to consider at each level of the graph when constructing the index. A higher value of `ef_construct` can lead to better search accuracy but may also increase the construction time and memory usage. You can find more information about the `ef_construct` parameter in the HNSW configuration in the documentation under the 'Collection info' section. (Source: documentation/concepts/collections.md)
+q_8,agent_1,"To use the 'ordering' parameter, you can specify the type of ordering you want for your write operations. There are two options available: 'medium' and 'strong'. 
+
+- 'medium' ordering serializes all write operations through a dynamically elected leader, which may cause minor inconsistencies in case of leader change.
+- 'strong' ordering serializes all write operations through the permanent leader, providing strong consistency, but write operations may be unavailable if the leader is down.
+
+You can set the 'ordering' parameter in your request when performing write operations, as shown in the examples provided in the documentation. For instance, in Python, you can use the 'ordering=""strong""' parameter in the 'client.upsert' function call.
+
+For more details and examples on how to use the 'ordering' parameter in different programming languages, you can refer to the documentation under the 'source' field of the fetched context."
+q_9,agent_1,"The 'on_disk_payload' setting in Qdrant determines whether the payload data associated with vectors is stored on disk or in memory. This setting impacts the memory footprint and search speed of the system. When 'on_disk_payload' is set to true, all payload data is stored on disk, which can reduce memory usage but may impact search speed. Conversely, setting 'on_disk_payload' to false stores payload data in memory, potentially increasing search speed at the cost of higher memory usage. You can configure this setting while creating a collection by specifying the 'on_disk_payload' option in the payload configuration. For more detailed information and examples on configuring storage options in Qdrant, you can refer to the documentation on storage at the following source: documentation/concepts/storage.md."
+q_10,agent_1,"The `write_consistency_factor` in Qdrant represents the number of replicas that must acknowledge a write operation before responding to the client. By increasing this value, write operations become more tolerant to network partitions in the cluster, ensuring data consistency even during hardware instabilities or mass concurrent updates of the same documents. This setting can be configured at the collection's creation time, as mentioned in the documentation under the 'Write consistency factor' section. You can refer to the source documentation at `/docs/concurrent-operations-replicas.png` for more details on configuring the `write_consistency_factor` parameter."
+q_1,agent_2,"The Vacuum Optimizer in Qdrant is used to address the accumulation of deleted records within a segment repository. Instead of immediately deleting entries after a query, Qdrant marks records as deleted and ignores them for future queries. Over time, these deleted records can accumulate, occupy memory, and slow down the system. The Vacuum Optimizer is triggered when a segment has accumulated too many deleted records, as defined in the configuration file. You can set parameters such as the minimal fraction of deleted vectors and the minimal number of vectors in a segment required to perform segment optimization. This optimizer helps maintain system efficiency by managing deleted records effectively. For more details, you can refer to the documentation on Optimizer under the section ""Vacuum Optimizer"" with the source page [here](../optimizer)."
+q_2,agent_2,"The `always_ram` parameter in Qdrant determines whether quantized vectors are kept cached in RAM or not. By default, quantized vectors are loaded in the same way as the original vectors. However, setting `always_ram` to `true` allows you to store quantized vectors in RAM, which can speed up the search process. This parameter is particularly useful in setups where you want to optimize search speed by keeping quantized vectors readily available in memory. You can find more information about this parameter in the documentation under the 'Setting up Product Quantization' section. (Source: documentation/guides/quantization.md)"
+q_3,agent_2,"Scalar quantization and product quantization are two different methods used in quantization for high-dimensional vectors in Qdrant.
+
+Scalar quantization, as described in the documentation, is a compression technique that converts floating point values into integers, specifically converting `float32` into `int8`. This conversion reduces the memory footprint by a factor of 4 and speeds up the search process. However, it comes with a trade-off of a slight loss in accuracy due to the conversion process.
+
+On the other hand, product quantization offers a higher compression rate compared to scalar quantization. It is favored in scenarios where memory footprint is a top priority and search speed is not critical. Product quantization may reduce memory usage and search time, but it also introduces trade-offs in accuracy and in-RAM search speed.
+
+In summary, scalar quantization is more balanced in terms of accuracy, speed, and compression, while product quantization is preferred when memory reduction is crucial and search speed is not a critical factor.
+
+For more detailed information, you can refer to the documentation on [Scalar Quantization](/documentation/guides/quantization/#setting-up-scalar-quantization) and [Product Quantization](/documentation/guides/quantization/#setting-up-product-quantization) in the Qdrant documentation."
+q_4,agent_2,"The 'best_score' strategy is a new recommendation strategy introduced in version 1.6.0. It focuses on finding similar vectors that are closer to a positive example while avoiding those closer to a negative example. This strategy calculates the best positive and best negative scores for each candidate point and selects the final score based on these scores. If the best positive score is higher than the best negative score, the candidate point is preferred. However, if the best negative score is higher, the candidate point is penalized by taking the negative squared value of the best negative score. This strategy aims to pull the traversal procedure away from negative examples, ultimately improving the quality of recommendations. You can set the strategy to 'best_score' in the recommendation request to utilize this approach (source: documentation/concepts/explore.md)."
+q_5,agent_2,"Oversampling helps to control the precision of search in real-time by internally retrieving more vectors than needed from quantized storage. This allows for a more precise score during rescoring with original vectors, leading to the selection of only those vectors that are good for the user. By oversampling, accuracy can be controlled without rebuilding the index, simply by adjusting a parameter in the search query itself. This technique is explained in detail by Andrey Vasnetsov in the documentation on binary quantization and vector space talk (source: blog/binary-quantization-andrey-vasnetsov-vector-space-talk-001.md)."
+q_6,agent_2,"The purpose of the 'CreatePayloadIndexAsync' function is to create a keyword payload index for a specific field in a collection. This function allows you to define the field name and field schema (in this case, keyword) for indexing purposes. By using this function, you can efficiently manage and index payload data within your collection. You can refer to the relevant source documentation for more details on how to use this function effectively. 
+[source: documentation/concepts/collections.md]"
+q_7,agent_2,"The `ef_construct` parameter in HNSW (Hierarchical Navigable Small World Graph) serves the purpose of specifying the number of neighbors to consider during the index building process. A higher value for `ef_construct` leads to more accurate search results but requires more time to build the index. This parameter can be configured in the HNSW section of the configuration file, as shown below:
+
+```yaml
+hnsw_index:
+  m: 16
+  ef_construct: 100
+  full_scan_threshold: 10000
+```
+
+You can adjust the `ef_construct` value based on your requirements for search accuracy and index building time. For more details, you can refer to the [Indexing documentation](documentation/concepts/indexing.md) page."
+q_8,agent_2,"To use the 'ordering' parameter, you can specify the ordering type for write operations in Qdrant. There are two options available:
+
+1. `medium` ordering: This option serializes all write operations through a dynamically elected leader, which might cause minor inconsistencies in case of leader change.
+2. `strong` ordering: This option serializes all write operations through the permanent leader, providing strong consistency. However, write operations may be unavailable if the leader is down.
+
+You can set the 'ordering' parameter when performing write operations in different programming languages like Python, TypeScript, Rust, Java, and C#. Here is an example in Python:
+
+```python
+client.upsert(
+    collection_name=""{collection_name}"",
+    points=models.Batch(
+        ids=[1, 2, 3],
+        payloads=[{""color"": ""red""}, {""color"": ""green""}, {""color"": ""blue""}],
+        vectors=[[0.9, 0.1, 0.1], [0.1, 0.9, 0.1], [0.1, 0.1, 0.9]],
+    ),
+    ordering=""strong"",
+)
+```
+
+This code snippet demonstrates how to use the 'ordering' parameter with the 'strong' option when upserting points in a collection. You can refer to the documentation for more details on using the 'ordering' parameter in different programming languages and scenarios."
+q_9,agent_2,"The 'on_disk_payload' setting in Qdrant determines whether the payload data associated with vectors is stored on disk or in memory. When this setting is enabled, it allows for the payload data to be stored on disk, reducing the memory footprint of the service. This can be particularly useful when dealing with large collections and limited memory resources.
+
+You can configure this setting by setting the 'on_disk_payload' option to 'true' in the collection create API. This feature is available as of version 1.2.0. For more detailed information on configuring this setting, you can refer to the documentation on [Storage](../storage) under the 'Storage' section."
+q_10,agent_2,"The `write_consistency_factor` in Qdrant represents the number of replicas that must acknowledge a write operation before responding to the client. By increasing this value, write operations become more tolerant to network partitions in the cluster, ensuring data consistency. However, it also requires a higher number of replicas to be active to perform write operations. You can configure the `write_consistency_factor` at the collection's creation time, as shown in the documentation on page [distributed_deployment.md](https://qdrant.tech/documentation/guides/distributed_deployment.md). This setting is crucial for maintaining consistency guarantees, especially during hardware instabilities or mass concurrent updates of the same documents."
+q_1,agent_3,"The Vacuum Optimizer in Qdrant is used to address the accumulation of deleted records within a segment repository. Instead of immediately deleting entries after a query, Qdrant marks records as deleted and ignores them for future queries. Over time, these deleted records can accumulate, occupy memory, and slow down the system. The Vacuum Optimizer is triggered when a segment has accumulated too many deleted records, as defined in the configuration file. You can set parameters such as the minimal fraction of deleted vectors and the minimal number of vectors in a segment required to perform segment optimization. This optimizer helps maintain system efficiency by managing deleted records effectively. You can find more details about the Vacuum Optimizer in the documentation under the 'Optimizer' section on page [Optimizer](../optimizer)."
+q_2,agent_3,"The `always_ram` parameter in Qdrant determines whether quantized vectors are kept cached in RAM or not. By default, quantized vectors are loaded in the same way as the original vectors. However, setting `always_ram` to `true` stores quantized vectors in RAM, which can speed up the search process. You can find more information about this parameter in the documentation under the 'Setting up Product Quantization' section. For detailed examples of how to configure this parameter in different programming languages, refer to the documentation source provided in the 'Setting up Product Quantization' section."
+q_3,agent_3,"Scalar quantization and product quantization are two different methods used in quantization for high-dimensional vectors in Qdrant.
+
+Scalar quantization, as described in the documentation, involves compressing vectors by reducing the number of bits used to represent each vector component. In Qdrant, it converts `float32` numbers to `uint8`, reducing the memory footprint by a factor of 4. This method speeds up the search process by using special SIMD CPU instructions for fast vector comparison. However, there is a trade-off in accuracy due to the conversion process, with a typical error of less than 1%.
+
+On the other hand, product quantization offers a higher compression rate compared to scalar quantization. It is favored in scenarios where memory usage is a top priority and search speed is not critical. Product quantization is suitable for high-dimensional vectors and low-RAM environments where disk reads are the limiting factor. However, it comes with trade-offs in accuracy and search speed.
+
+In summary, scalar quantization is more balanced in terms of accuracy, speed, and compression, making it a universal choice for quantization. Product quantization, while offering higher compression, is preferred when memory reduction is crucial and search speed is not a primary concern.
+
+For more detailed information, you can refer to the [Quantization documentation](/documentation/guides/quantization.md) in the Qdrant documentation."
+q_4,agent_3,"The 'best_score' strategy is a new recommendation strategy introduced in version 1.6.0. It focuses on finding similar vectors that are closer to a positive example while avoiding those closer to a negative one. This strategy calculates the best positive and best negative scores for each candidate point and selects the final score based on these values. The formula used to calculate the score is: 
+
+```rust
+if best_positive_score > best_negative_score {
+    score = best_positive_score;
+} else {
+    score = -(best_negative_score * best_negative_score);
+}
+```
+
+This strategy aims to penalize points closer to negative examples and prioritize those closer to positive examples during the search process. To use the 'best_score' strategy in a recommendation request, you need to set `""strategy"": ""best_score""`. For more details, you can refer to the documentation under the 'Best score strategy' section."
+q_5,agent_3,"Oversampling helps to control the precision of search in real-time by internally retrieving more vectors than needed from quantized storage. This allows for a more precise scoring during rescoring with original vectors, leading to the selection of only those vectors that are good for the user. This technique helps to improve accuracy without the need to rebuild the index or change parameters within stored data structures. You can find more information on oversampling and its benefits in the documentation under the section ""Leveraging Binary Quantization: Best Practices"" from the source: articles/binary-quantization-openai.md."
+q_6,agent_3,"The purpose of the 'CreatePayloadIndexAsync' function is to create a keyword payload index for a specific field in a collection. This function allows you to define the field name and field schema as keyword type, enabling efficient indexing and retrieval of keyword-based data within the collection. You can refer to the documentation for more details on how to use this function and its parameters. (Source: documentation/concepts/collections.md)"
+q_7,agent_3,The `ef_construct` parameter in HNSW (Hierarchical Navigable Small World) is used to specify the number of neighbors to consider during the index building process. A larger value for `ef_construct` leads to more accurate search results but requires more time to build the index. You can find more information about this in the documentation under the configuration parameters for the HNSW Index. (Source: documentation/guides/configuration.md)
+q_8,agent_3,"To use the 'ordering' parameter, you can specify the desired ordering type when performing write operations in Qdrant. There are two options available:
+
+1. `medium` ordering: This option serializes all write operations through a dynamically elected leader, which may cause minor inconsistencies in case of leader change.
+2. `strong` ordering: This option serializes all write operations through the permanent leader, providing strong consistency. However, write operations may be unavailable if the leader is down.
+
+You can set the 'ordering' parameter in your write operation requests to specify the desired ordering type. For example, in Python, you can use the following code snippet:
+
+```python
+client.upsert(
+    collection_name=""{collection_name}"",
+    points=models.Batch(
+        ids=[1, 2, 3],
+        payloads=[{""color"": ""red""}, {""color"": ""green""}, {""color"": ""blue""}],
+        vectors=[[0.9, 0.1, 0.1], [0.1, 0.9, 0.1], [0.1, 0.1, 0.9]],
+    ),
+    ordering=""strong"",
+)
+```
+
+This code snippet demonstrates how to perform an upsert operation with 'strong' ordering in Python. You can adjust the 'ordering' parameter based on your specific requirements for consistency and availability. For more details, you can refer to the documentation under the 'source' field of the fetched context."
+q_9,agent_3,"The 'on_disk_payload' setting in Qdrant determines whether the payload data associated with vectors is stored on disk or in memory. When this setting is enabled, the payload data is stored on disk, which can help reduce memory usage and optimize storage efficiency. This setting is particularly useful when dealing with large collections and fast storage devices like SSDs or NVMe drives. You can configure this setting by setting 'on_disk_payload' to 'true' in the collection create API, as shown in the documentation [here](../storage)."
+q_10,agent_3,"The `write_consistency_factor` in Qdrant represents the number of replicas that must acknowledge a write operation before responding to the client. By increasing this value, write operations become more tolerant to network partitions in the cluster, ensuring data consistency. However, it also requires a higher number of replicas to be active to perform write operations. This setting can be configured at the collection's creation time, as shown in the documentation snippet. For more details and examples, you can refer to the documentation page on distributed deployment under the 'source' field provided."
+q_1,agent_4,"The Vacuum Optimizer in Qdrant is used to address the accumulation of deleted records within a segment repository. Instead of immediately deleting entries after a query, Qdrant marks records as deleted and ignores them for future queries to minimize disk access. Over time, these deleted records can accumulate, occupy memory, and slow down the system. The Vacuum Optimizer is triggered when a segment has accumulated too many deleted records, as defined in the configuration file. You can set parameters such as the minimal fraction of deleted vectors and the minimal number of vectors in a segment required to perform segment optimization. This optimizer helps maintain system efficiency by managing deleted records effectively. You can find more details about the Vacuum Optimizer in the documentation under the ""Optimizer"" section, specifically in the ""Vacuum Optimizer"" subsection on page [source]."
+q_2,agent_4,"The `always_ram` parameter in the context of quantization configuration determines whether to keep quantized vectors always cached in RAM or not. By default, quantized vectors are loaded in the same way as the original vectors. However, in some setups where you might want to speed up the search process by keeping quantized vectors in RAM, you can set `always_ram` to `true`. This setting ensures that quantized vectors are stored in RAM for faster access during searches. You can find more information about this parameter in the documentation under the 'source' field of the fetched context from the 'quantization.md' guide."
+q_3,agent_4,"Scalar Quantization and Product Quantization are two different methods used for quantization in vector search systems like Qdrant. 
+
+Scalar Quantization involves converting floating-point values into integers, resulting in a significant reduction in memory usage. In Qdrant, `float32` values are converted to `int8`, leading to a 75% decrease in memory consumption. This method is reversible to some extent, allowing the conversion of integers back to floats with minimal loss of precision. Scalar Quantization is a good balance between accuracy, speed, and compression, making it a universal choice for quantization when binary quantization is not applicable (source: articles/scalar-quantization.md).
+
+On the other hand, Product Quantization offers a higher compression rate compared to Scalar Quantization. However, this increased compression comes with trade-offs in accuracy and search speed. Product Quantization is favored in scenarios where memory footprint is a top priority and search speed is not critical. It is suitable for high-dimensional vectors and low-RAM environments where disk reads are the limiting factor. In cases where indexing speed is crucial or the scenarios do not align with the above conditions, Scalar Quantization is recommended (source: articles/product-quantization.md).
+
+In summary, Scalar Quantization is more versatile and provides a good balance between accuracy and memory reduction, while Product Quantization offers higher compression but sacrifices accuracy and search speed. The choice between the two methods depends on the specific requirements of the use case, with Scalar Quantization being the default option in many scenarios."
+q_4,agent_4,"The 'best_score' strategy is a new recommendation strategy introduced in version 1.6.0. It focuses on finding similar vectors that are closer to a positive example while avoiding those closer to a negative one. This strategy calculates the best positive and best negative scores for each candidate point and chooses the final score based on these values. The formula used to calculate the score is: 
+
+```rust
+if best_positive_score > best_negative_score {
+    score = best_positive_score;
+} else {
+    score = -(best_negative_score * best_negative_score);
+}
+```
+
+This strategy aims to penalize points that are closer to negative examples and pulls the traversal procedure away from negative examples. It can be very powerful but may impact accuracy, especially with a large number of examples. To use the 'best_score' strategy, you need to set `""strategy"": ""best_score""` in the recommendation request. You can find more information about this strategy in the documentation under the 'Best score strategy' section. (Source: documentation/concepts/explore.md)"
+q_5,agent_4,"Oversampling helps to control the precision of search in real-time by internally retrieving more vectors than needed and assigning more precise scores during rescoring. This technique allows for better accuracy without rebuilding the index, as explained in the documentation on oversampling by Andrey Vasnetsov. You can find more details on oversampling and its benefits in the source document under the section discussing oversampling in model fairness and performance."
+q_6,agent_4,"The purpose of the `CreatePayloadIndexAsync` function is to create a keyword payload index for a specific field in a collection. This function allows you to define the field name, field schema (in this case, keyword), and any additional parameters related to the index creation. It is used to optimize search and retrieval operations based on the specified field in the collection. You can find more details about this function in the documentation under the 'source' field of fetched context from the documentation."
+q_7,agent_4,The `ef_construct` parameter in HNSW (Hierarchical Navigable Small World) is used to control the search performance and accuracy during the construction phase of the index. It specifies the number of neighbors to consider during the exploration of the graph structure. A higher value of `ef_construct` can lead to more accurate search results but may also increase the computational cost. You can find more information about the `ef_construct` parameter in the documentation under the 'Collection info' section. (source: documentation/concepts/collections.md)
+q_8,agent_4,"To use the 'ordering' parameter, you can specify the desired ordering type when performing write operations in Qdrant. There are two options available:
+
+1. `medium` ordering: This option serializes all write operations through a dynamically elected leader, which may cause minor inconsistencies in case of leader change.
+2. `strong` ordering: This option serializes all write operations through the permanent leader, providing strong consistency. However, write operations may be unavailable if the leader is down.
+
+You can set the 'ordering' parameter in your code when performing write operations. Here is an example in different programming languages:
+
+Python:
+```python
+http PUT /collections/{collection_name}/points?ordering=strong { ""batch"": { ""ids"": [1, 2, 3], ""payloads"": [ {""color"": ""red""}, {""color"": ""green""}, {""color"": ""blue""} ], ""vectors"": [ [0.9, 0.1, 0.1], [0.1, 0.9, 0.1], [0.1, 0.1, 0.9] ] } }
+```
+
+TypeScript:
+```typescript
+client.upsert(""{collection_name}"", { batch: { ids: [1, 2, 3], payloads: [{ color: ""red"" }, { color: ""green"" }, { color: ""blue"" }], vectors: [ [0.9, 0.1, 0.1], [0.1, 0.9, 0.1], [0.1, 0.1, 0.9], ], }, ordering: ""strong"", });
+```
+
+Rust:
+```rust
+client.upsert_points_blocking( ""{collection_name}"", None, vec![ PointStruct::new( 1, vec![0.9, 0.1, 0.1], json!({ ""color"": ""red"" }) .try_into() .unwrap(), ), PointStruct::new( 2, vec![0.1, 0.9, 0.1], json!({ ""color"": ""green"" }) .try_into() .unwrap(), ), PointStruct::new( 3, vec![0.1, 0.1, 0.9], json!({ ""color"": ""blue"" }) .try_into() .unwrap(), ), ], Some(WriteOrdering { r#type: WriteOrderingType::Strong.into(), }), ).await?;
+```
+
+Java:
+```java
+client .upsertAsync( UpsertPoints.newBuilder() .setCollectionName(""{collection_name}"") .addAllPoints( List.of( PointStruct.newBuilder() .setId(id(1)) .setVectors(vectors(0.9f, 0.1f, 0.1f)) .putAllPayload(Map.of(""color"", value(""red""))) .build(), PointStruct.newBuilder() .setId(id(2)) .setVectors(vectors(0.1f, 0.9f, 0.1f)) .putAllPayload(Map.of"
+q_9,agent_4,"The 'on_disk_payload' setting in Qdrant determines whether the payload data associated with vectors is stored on disk or in memory. When this setting is enabled, it allows for the payload data to be stored on disk, reducing the memory footprint of the service. This setting is particularly useful when dealing with large collections and fast storage devices like SSDs or NVMe.
+
+You can configure the 'on_disk_payload' setting by setting the 'on_disk' option for vectors in the collection create API. This feature is available as of version 1.2.0. For more detailed information on configuring memmap storage and the usage of 'on_disk' option, you can refer to the documentation on [Storage](/documentation/concepts/storage.md)."
+q_10,agent_4,"The `write_consistency_factor` in Qdrant represents the number of replicas that must acknowledge a write operation before responding to the client. By increasing this value, write operations become more tolerant to network partitions in the cluster but require a higher number of active replicas to perform write operations. This setting can be configured at the collection's creation time. You can refer to the documentation on distributed deployment for more details and examples on how to set the `write_consistency_factor` parameter (source: documentation/guides/distributed_deployment.md)."
+q_1,agent_5,"The Vacuum Optimizer in Qdrant is used to address the accumulation of deleted records within a segment repository. Instead of immediately deleting entries after a query, Qdrant marks records as deleted and ignores them for future queries to minimize disk access. However, over time, these deleted records can accumulate, occupy memory, and slow down the system. The Vacuum Optimizer is triggered when a segment has accumulated too many deleted records, as defined in the configuration file. You can set parameters such as the minimal fraction of deleted vectors and the minimal number of vectors in a segment required to perform segment optimization. This optimizer helps maintain system efficiency by managing deleted records within segments effectively. For more details, you can refer to the documentation on Optimizer under the section ""Vacuum Optimizer"" [here](../optimizer)."
+q_2,agent_5,"The `always_ram` parameter in Qdrant refers to whether to keep quantized vectors always cached in RAM or not. By default, quantized vectors are loaded in the same way as the original vectors. However, in some setups, you might want to keep quantized vectors in RAM to speed up the search process. You can set `always_ram` to `true` to store quantized vectors in RAM. This parameter can be configured in the `quantization_config` section of the collection configuration. You can find more information about this parameter in the documentation under the 'source' field of the fetched context from the documentation."
+q_3,agent_5,"Scalar quantization and product quantization are two different methods used in quantization for optimizing the search engine in Qdrant.
+
+Scalar quantization, as described in the documentation, involves compressing vectors by reducing the number of bits used to represent each vector component. This method allows for a reduction in memory usage by a factor of 4 and speeds up the search process. However, there is a trade-off in accuracy due to the conversion process, which introduces a slight error that may impact search quality, although usually negligible.
+
+On the other hand, product quantization offers a higher compression rate compared to scalar quantization. It may reduce memory usage and search time in certain scenarios, but it comes with significant trade-offs in accuracy and search speed. Product quantization is recommended for specific situations such as low-RAM environments, high-dimensional vectors, and where indexing speed is not critical.
+
+In summary, scalar quantization is a more universal method that balances accuracy, speed, and compression, while product quantization provides a higher compression rate but with trade-offs in accuracy and search speed. The choice between the two methods depends on the specific use case and priorities. For more detailed information, you can refer to the Qdrant documentation on [Product Quantization](/documentation/guides/quantization/#setting-up-product-quantization)."
+q_4,agent_5,"The 'best_score' strategy is a new recommendation strategy introduced in version 1.6.0. It focuses on finding similar vectors that are closer to a positive example while avoiding those closer to a negative example. This strategy calculates the best positive and best negative scores for each candidate point and selects the final score based on these values. The formula used to calculate the score is: 
+
+```rust
+if best_positive_score > best_negative_score {
+    score = best_positive_score;
+} else {
+    score = -(best_negative_score * best_negative_score);
+}
+```
+
+This strategy aims to penalize points that are closer to negative examples, pulling the traversal procedure away from negative examples. It allows for more flexibility by not relying on averages and can be used with only negative examples to find the most dissimilar vectors. To use the 'best_score' strategy, you need to set `""strategy"": ""best_score""` in the recommendation request. You can find more information about this strategy in the documentation under the 'Best score strategy' section."
+q_5,agent_5,"Oversampling helps to control the precision of search in real-time by internally retrieving more vectors than needed and assigning more precise scores during rescoring. This technique allows for improved accuracy without rebuilding the index, simply by adjusting a parameter in the search query itself. You can learn more about oversampling and its impact on model fairness and performance in the documentation provided on page [here](/blog/openai/Oversampling_Impact.png)."
+q_6,agent_5,The purpose of the 'CreatePayloadIndexAsync' function is to create a keyword payload index for a specific field in a collection. This function allows you to define the field name and field schema as 'keyword' for efficient indexing and retrieval of payload data associated with the records in the collection. You can refer to the documentation for more details on how to use this function and its parameters (source: documentation/guides/multiple-partitions.md).
+q_7,agent_5,"The `ef_construct` parameter in HNSW (Hierarchical Navigable Small World Graph) serves the purpose of specifying a search range during the index building process. It determines the number of neighbors to consider when constructing the index, impacting the accuracy of the search and the time required to build the index. By setting `ef_construct`, you can fine-tune the search performance of the HNSW algorithm. You can configure this parameter in the configuration file as mentioned in the documentation under the `hnsw_index` section on page [indexing.md](../indexing/#vector-index)."
+q_8,agent_5,"To use the 'ordering' parameter in Qdrant, you can specify the ordering type as either 'medium' or 'strong' when performing write operations. 
+
+- When using the 'medium' ordering, all write operations are serialized through a dynamically elected leader, which may cause minor inconsistencies in case of leader change.
+- On the other hand, the 'strong' ordering serializes all write operations through the permanent leader, providing strong consistency but may lead to write operations being unavailable if the leader is down.
+
+You can set the 'ordering' parameter in your API calls or client functions to specify the desired ordering type. For example, in Python, you can set the 'ordering' parameter to 'strong' when calling the `upsert` function:
+
+```python
+client.upsert(
+    collection_name=""{collection_name}"",
+    points=models.Batch(
+        ids=[1, 2, 3],
+        payloads=[{""color"": ""red""}, {""color"": ""green""}, {""color"": ""blue""}],
+        vectors=[[0.9, 0.1, 0.1], [0.1, 0.9, 0.1], [0.1, 0.1, 0.9]],
+    ),
+    ordering=""strong"",
+)
+```
+
+This ensures that the write operations are serialized through the permanent leader, providing strong consistency. For more details on the 'ordering' parameter and its usage, you can refer to the documentation [here](https://qdrant.github.io/qdrant/redoc/index.html#tag/collections/operation/update_collection)."
+q_9,agent_5,"The 'on_disk_payload' setting in Qdrant determines whether the payload data associated with vectors is stored on disk or in memory. This setting impacts the memory footprint and search speed of the collection. When 'on_disk_payload' is set to true, all payload data is stored on disk, which can reduce memory usage but may impact search speed. Conversely, setting it to false stores payload data in memory, potentially increasing search speed at the cost of higher memory usage. You can configure this setting while creating a collection using the appropriate API calls as outlined in the documentation under the 'Storage' section. For more detailed information and examples, you can refer to the documentation source at 'documentation/concepts/storage.md'."
+q_10,agent_5,"The `write_consistency_factor` in Qdrant represents the number of replicas that must acknowledge a write operation before responding to the client. By increasing this value, write operations become more tolerant to network partitions in the cluster, ensuring data consistency. However, a higher number of replicas need to be active to perform write operations. This setting provides additional guarantees during hardware instabilities and mass concurrent updates of the same documents. You can configure the `write_consistency_factor` at the collection's creation time as shown in the documentation [here](/docs/concurrent-operations-replicas.png)."

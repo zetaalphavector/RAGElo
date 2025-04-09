@@ -8,16 +8,17 @@ from __future__ import annotations
 
 import csv
 import json
+import logging
 import os
 import warnings
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, overload
 
 import rich
 from pydantic import BaseModel as PydanticBaseModel
 
-from ragelo.logger import logger
+from ragelo.logger import CLILogHandler, logger
 from ragelo.types.evaluables import AgentAnswer, Document
 from ragelo.types.pydantic_models import _PYDANTIC_MAJOR_VERSION
 from ragelo.types.query import Query
@@ -134,23 +135,31 @@ class Experiment:
         self.rich_print = rich_print
         self.save_on_disk = save_on_disk
         self.save_path = save_path
-
+        if verbose:
+            logger.setLevel(logging.INFO)
+            if len(logger.handlers) == 0:
+                logger.addHandler(CLILogHandler(use_rich=rich_print))
         if self.save_on_disk and not self.save_path:
-            logger.info("Creating a save path for the experiment")
-            os.makedirs("ragelo_cache", exist_ok=True)
             self.save_path = f"ragelo_cache/{self.experiment_name}.json"
+            if not os.path.exists("ragelo_cache"):
+                logger.info(f"Creating a cache file for the experiment at ragelo_cache/{self.experiment_name}.json")
+                Path("ragelo_cache").mkdir(parents=True, exist_ok=True)
+
         elif self.save_path is None and not self.save_on_disk:
             logger.info("No save path provided. Will not save the experiment to disk.")
 
         if self.cache_evaluations and not self.evaluations_cache_path:
-            logger.info("Creating a cache path for the evaluations cache")
             if self.save_path:
                 self.evaluations_cache_path = self.save_path.replace(".json", "_results.jsonl")
             else:
-                os.makedirs("ragelo_cache", exist_ok=True)
                 self.evaluations_cache_path = f"ragelo_cache/{self.experiment_name}_results.jsonl"
-            Path(self.evaluations_cache_path).parent.mkdir(parents=True, exist_ok=True)
-            Path(self.evaluations_cache_path).touch()
+                if not os.path.exists("ragelo_cache"):
+                    os.makedirs("ragelo_cache", exist_ok=True)
+            if not os.path.isfile(self.evaluations_cache_path):
+                logger.info(
+                    "Creating a cache file for the experiment's evaluations at" f"{self.evaluations_cache_path}"
+                )
+                Path(self.evaluations_cache_path).touch()
 
         if self.save_path and os.path.isfile(self.save_path):
             self.queries = self._load_from_cache(self.save_path)
@@ -165,9 +174,12 @@ class Experiment:
                 csv_document_text_col,
                 csv_query_id_col,
                 csv_agent_col,
+                exist_ok=True,
             )
         if answers_csv_path:
-            self.add_agent_answers_from_csv(answers_csv_path, csv_agent_col, csv_answer_text_col, csv_query_id_col)
+            self.add_agent_answers_from_csv(
+                answers_csv_path, csv_agent_col, csv_answer_text_col, csv_query_id_col, exist_ok=True
+            )
 
         if self.evaluations_cache_path and os.path.isfile(self.evaluations_cache_path):
             self._load_results_from_cache(self.evaluations_cache_path)
@@ -219,6 +231,7 @@ class Experiment:
         score: float | None = None,
         agent: str | None = None,
         force: bool = False,
+        exist_ok: bool = False,
     ):
         """
         Adds a retrieved document to a query.
@@ -229,6 +242,8 @@ class Experiment:
             score (Optional[float]): The score of the document. Defaults to None.
             agent (Optional[str]): The agent that retrieved the document. Defaults to None.
             force (bool): Whether to overwrite the document if it already exists. Defaults to False.
+            exist_ok (bool): If True, will not raise an error if the document already exists.
+                Defaults to False.
         """
         if isinstance(doc, Document):
             if doc.qid != query_id and query_id is not None:
@@ -246,7 +261,7 @@ class Experiment:
             doc = Document(qid=query_id, did=doc_id, text=doc)
         if query_id not in self.queries:
             raise ValueError(f"Query {query_id} not found in queries")
-        self.queries[query_id].add_retrieved_doc(doc, score, agent, force)
+        self.queries[query_id].add_retrieved_doc(doc, score, agent, force, exist_ok)
 
     def add_agent_answer(
         self,
@@ -254,6 +269,7 @@ class Experiment:
         agent: str | None = None,
         query_id: str | None = None,
         force: bool = False,
+        exist_ok: bool = False,
     ):
         if isinstance(answer, AgentAnswer):
             if answer.qid != query_id and query_id is not None:
@@ -272,23 +288,54 @@ class Experiment:
             answer = AgentAnswer(qid=query_id, agent=agent, text=answer)
         if query_id not in self.queries:
             raise ValueError(f"Query {query_id} not found in queries")
-        self.queries[query_id].add_agent_answer(answer, force=force)
+        self.queries[query_id].add_agent_answer(answer, force=force, exist_ok=exist_ok)
 
+    @overload
     def add_evaluation(
         self,
-        evaluation: EvaluatorResult | EloTournamentResult,
+        evaluation: RetrievalEvaluatorResult,
         should_save: bool = True,
         should_print: bool = True,
         force: bool = False,
         exist_ok: bool = False,
+    ): ...
+
+    @overload
+    def add_evaluation(
+        self,
+        evaluation: AnswerEvaluatorResult,
+        should_save: bool = True,
+        should_print: bool = True,
+        force: bool = False,
+        exist_ok: bool = False,
+    ): ...
+
+    @overload
+    def add_evaluation(
+        self,
+        evaluation: EloTournamentResult,
+        should_save: bool = True,
+        should_print: bool = True,
+        force: bool = False,
+        exist_ok: bool = False,
+    ): ...
+
+    def add_evaluation(
+        self,
+        evaluation: RetrievalEvaluatorResult | AnswerEvaluatorResult | EloTournamentResult,
+        should_save: bool = True,
+        should_print: bool = False,
+        force: bool = False,
+        exist_ok: bool = False,
     ):
         """
-        Adds an evaluation to the queries and optionally saves the result.
-
+        Add an evaluation to the queries and optionally save the result.
         Args:
-            evaluation (RetrievalEvaluatorResult | AnswerEvaluatorResult): The evaluation result to be added.
-            should_save (bool): Flag indicating whether the result should be persist to disk. Defaults to True.
-            force (bool): Whether to overwrite an evaluation if it already exists.
+            evaluation (RetrievalEvaluatorResult | AnswerEvaluatorResult | EloTournamentResult): The evaluation result to be added.
+            should_save (bool): Whether to save the result to disk. Defaults to True.
+            should_print (bool): Whether to print the result. Defaults to True.
+            force (bool): Whether to overwrite an existing evaluation. Defaults to False.
+            exist_ok (bool): Whether to warn if an evaluation already exists. Defaults to False.
         """
         if isinstance(evaluation, EloTournamentResult):
             self.elo_tournaments.append(evaluation)
@@ -302,9 +349,9 @@ class Experiment:
             return
         if should_save:
             self.save_results(evaluation)
-        if not self.verbose:
-            return
         if not should_print:
+            return
+        if not self.verbose:
             return
         if isinstance(evaluation, EloTournamentResult):
             self._print_elo_tournament_result(evaluation)
@@ -358,8 +405,6 @@ class Experiment:
                 )
             elif agent:
                 rich.print(f"[bold bright_cyan]🕵️ Agent[/bold bright_cyan]: {agent}")
-                if raw_answer != answer:
-                    rich.print(f"[bold blue]Raw Answer[/bold blue]: {raw_answer}")
             rich.print(f"[bold blue]Parsed Answer[/bold blue]: {answer}")
             rich.print("")
             return
@@ -548,10 +593,9 @@ class Experiment:
         if not self.save_on_disk:
             return
         if output_path is None:
-            assert self.save_path is not None, "Cannot save experiment without a save path"
+            if self.save_path is None:
+                raise ValueError("Cannot save experiment without a save path")
             output_path = self.save_path
-        else:
-            assert self.save_path is not None, "Cannot save experiment without a save path"
         output_dict: dict[str, Any] = {}
 
         output_dict["queries"] = {qid: query.model_dump() for qid, query in self.queries.items()}
@@ -622,7 +666,8 @@ class Experiment:
             metadata = {k: v for k, v in row.items() if k not in [query_id_column, query_text_column]}
             self.queries[qid] = Query(qid=qid, query=query_text, metadata=metadata)
             read_queries.add(qid)
-        logger.info(f"Loaded {len(self.queries)} queries from {file_path}")
+        if len(read_queries) > 0:
+            logger.info(f"Loaded {len(read_queries)} queries from {file_path}")
 
     def add_documents_from_csv(
         self,
@@ -631,41 +676,51 @@ class Experiment:
         document_text_col: str = "document",
         query_id_col: str | None = "qid",
         agent_col: str | None = None,
+        exist_ok: bool = False,
     ):
         """
         Loads a list of retrieved documents from a csv file. The csv file should have the following columns:
         query_id, document_id, document_text, [agent], [metadata columns]
         Args:
             file_path (str): Path to the CSV file with the retrieved documents.
+            document_id_col (str): Name of the column with the document id. Defaults to 'did'.
             query_id_col (str): Name of the column with the query id to which the document was retrieved.
                 Defaults to 'qid'.
-            document_id_col (str): Name of the column with the document id. Defaults to 'did'.
             document_text_col (str): Name of the column with the document text. Defaults to 'document_text'.
-            agent (str): Name of the column with the agent name. If None, will not add the agent name.
+            agent_col (str): Name of the column with the agent name. If None, will not add the agent name.
                 Defaults to None.
+            exist_ok (bool): If True, will not raise an error if the document already exists.
+                Defaults to False.
         """
         documents_read = 0
         if not os.path.isfile(file_path):
             raise FileNotFoundError(f"CSV file {file_path} not found")
         query_id_col = self.__infer_query_id_column(file_path, query_id_col)
         document_id_col = self.__infer_document_id_column(file_path, document_id_col)
+        warned_queries = set()
 
         for line in csv.DictReader(open(file_path)):
             qid = line[query_id_col].strip()
             did = line[document_id_col].strip()
             text = line[document_text_col].strip()
             agent = line.get(agent_col)
-            metadata = {k: v for k, v in line.items() if k not in [query_id_col, document_id_col, document_text_col]}
+            metadata = {
+                k: v for k, v in line.items() if k not in [query_id_col, document_id_col, document_text_col, agent_col]
+            }
             if qid not in self.queries:
-                logger.warning(f"Query {qid} found in {file_path} but not found in queries. Skipping")
+                if qid not in warned_queries:
+                    warned_queries.add(qid)
+                    logger.warning(f"Query {qid} found in {file_path} but not found in queries. Skipping")
                 continue
-            doc_obj = Document(qid=qid, did=did, text=text)
-            doc_obj.add_metadata(metadata)
+            if (doc_obj := self.queries[qid].retrieved_docs.get(did)) is None:
+                doc_obj = Document(qid=qid, did=did, text=text)
+                doc_obj.add_metadata(metadata)
+                documents_read += 1
             if agent is not None:
-                doc_obj.add_retrieved_by(agent)
-            self.add_retrieved_doc(doc_obj)
-            documents_read += 1
-        logger.info(f"Loaded {documents_read} documents from {file_path}")
+                doc_obj.add_retrieved_by(agent, exist_ok=exist_ok)
+            self.add_retrieved_doc(doc_obj, exist_ok=exist_ok)
+        if documents_read > 0:
+            logger.info(f"Loaded {documents_read} new documents from {file_path}")
 
     def add_retrieved_docs_from_runfile(
         self,
@@ -727,6 +782,7 @@ class Experiment:
         agent_col: str = "agent",
         answer_col: str = "answer",
         query_id_col: str | None = None,
+        exist_ok: bool = False,
     ):
         """
         Adds agent answers from a CSV file to the queries.
@@ -738,10 +794,13 @@ class Experiment:
             answer_col (str): Name of the column with the answer text. Defaults to 'answer'.
             query_id_col (str): Name of the column with the query id.
                 If None, will try to infer the query id column. Defaults to None.
+            exist_ok (bool): If True, will not raise an error if the answer already exists.
+                Defaults to False.
         """
         if not os.path.isfile(file_path):
             raise FileNotFoundError(f"Answers file {file_path} not found")
         answers_read = 0
+        warned_queries = set()
         query_id_col = self.__infer_query_id_column(file_path, query_id_col)
         for line in csv.DictReader(open(file_path)):
             qid = line[query_id_col].strip()
@@ -749,12 +808,19 @@ class Experiment:
             answer = line[answer_col].strip()
             metadata = {k: v for k, v in line.items() if k not in [query_id_col, agent_col, answer_col]}
             if qid not in self.queries:
-                logger.warning(f"Query {qid} found in {file_path} but not found in queries. Skipping")
+                if qid not in warned_queries:
+                    warned_queries.add(qid)
+                    logger.warning(f"Query {qid} found in {file_path} but not found in queries. Skipping")
                 continue
-            answer_obj = AgentAnswer(qid=qid, agent=agent, text=answer)
-            answer_obj.add_metadata(metadata)
-            self.add_agent_answer(answer_obj)
-            answers_read += 1
+            if agent not in self.queries[qid].answers:
+                answer_obj = AgentAnswer(qid=qid, agent=agent, text=answer)
+                answer_obj.add_metadata(metadata)
+                self.add_agent_answer(answer_obj, exist_ok=exist_ok)
+                answers_read += 1
+            elif not exist_ok:
+                logger.info(f"Answer from agent {agent} already exists in query {qid}. Skipping")
+        if answers_read > 0:
+            logger.info(f"Loaded {answers_read} answers from {file_path}")
 
     def add_answers_from_multiple_csv(
         self,
@@ -823,12 +889,26 @@ class Experiment:
     def _load_from_cache(self, cache_path: str) -> dict[str, Query]:
         if not os.path.isfile(cache_path):
             raise FileNotFoundError(f"Cache file {cache_path} not found")
+        logger.info(f"Loading existing experiment from {cache_path}")
         with open(cache_path) as f:
-            data = json.load(f)
+            try:
+                data = json.load(f)
+            except json.JSONDecodeError:
+                raise ValueError(f"Cache file {cache_path} is not a valid JSON file")
         read_experiment_name = data.get("experiment_name")
         if read_experiment_name and read_experiment_name != self.experiment_name:
             logger.warning(f"Experiment name mismatch. Expected {self.experiment_name}. Found {read_experiment_name}")
         queries = {k: Query(**v) for k, v in data.get("queries").items()}
+        for q in queries.values():
+            for doc in q.retrieved_docs.values():
+                if doc.evaluation is not None and not isinstance(doc.evaluation, RetrievalEvaluatorResult):
+                    doc_eval_dict = doc.evaluation.model_dump()
+                    doc_eval_dict["did"] = doc.did
+                    doc.evaluation = RetrievalEvaluatorResult(**doc_eval_dict)
+            for answer in q.answers.values():
+                if answer.evaluation is not None and not isinstance(answer.evaluation, AnswerEvaluatorResult):
+                    answer_eval_dict = answer.evaluation.model_dump()
+                    answer.evaluation = AnswerEvaluatorResult(**answer_eval_dict)
         if "elo_tournaments" in data:
             self.elo_tournaments = [EloTournamentResult(**t) for t in data["elo_tournaments"]]
         return queries
@@ -848,7 +928,7 @@ class Experiment:
                     continue
             elif result_type == "elo_tournament":
                 result = EloTournamentResult(**result["elo_tournament"])
-            self.add_evaluation(result, should_save=False, should_print=False)
+            self.add_evaluation(result, should_save=False, should_print=False, exist_ok=True)
 
     def __len__(self):
         return len(self.queries)

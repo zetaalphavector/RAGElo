@@ -95,8 +95,8 @@ def answer_model_factory(prompt, answer_format, response_schema, **kwargs):
         )
     elif answer_format == AnswerFormat.JSON:
         return LLMResponseType(
-            raw_answer='{"relevance": 1}',
-            parsed_answer={"relevance": 1},
+            raw_answer='{"score": 1.0}',
+            parsed_answer={"score": 1.0},
         )
     elif answer_format == AnswerFormat.TEXT:
         return LLMResponseType(
