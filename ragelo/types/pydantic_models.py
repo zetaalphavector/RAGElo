@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from importlib import metadata
-from typing import TypeAlias
 
 from pydantic import BaseModel as PydanticBaseModel
+from typing_extensions import TypeAlias
 
 _PYDANTIC_MAJOR_VERSION: int = int(metadata.version("pydantic").split(".")[0])
 ValidationError: type[TypeError] | type[ValueError]
