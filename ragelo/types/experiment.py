@@ -139,6 +139,10 @@ class Experiment:
             logger.setLevel(logging.INFO)
             if len(logger.handlers) == 0:
                 logger.addHandler(CLILogHandler(use_rich=rich_print))
+        elif len(logger.handlers) > 0:
+            logger.setLevel(logging.WARNING)
+            logger.handlers = []
+            logger.addHandler(CLILogHandler(use_rich=rich_print))
         if self.save_on_disk and not self.save_path:
             self.save_path = f"ragelo_cache/{self.experiment_name}.json"
             if not os.path.exists("ragelo_cache"):
