@@ -80,7 +80,8 @@ class LLMProviderFactory:
         if config is None:
             class_ = cls.registry[name]
             type_config = class_.get_config_class()
-            valid_keys = [field for field in type_config.get_model_fields()]
+
+            # Handle api_key if not provided
             if "api_key" not in kwargs:
                 api_key = os.environ.get(class_.api_key_env_var)
                 if not api_key:
@@ -95,8 +96,10 @@ class LLMProviderFactory:
                     else:
                         api_key = api_key_field.default
                 kwargs["api_key"] = api_key
-            valid_args = {k: v for k, v in kwargs.items() if k in valid_keys}
-            config = type_config(**valid_args)
+
+            # Pass all parameters to the config, including arbitrary ones
+            config = type_config(**kwargs)
+
         return cls.registry[name].from_config(config)
 
 
