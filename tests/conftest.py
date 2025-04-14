@@ -67,11 +67,14 @@ def pytest_collection_modifyitems(config, items):
 def openai_client_config():
     return OpenAIConfiguration(
         api_key="fake key",
-        org="fake org",
+        organization="fake org",
         api_type="open_ai",
         api_base=None,
         api_version=None,
         model="fake model",
+        temperature=0.2,
+        max_tokens=1000,
+        seed=42,
     )
 
 
@@ -194,6 +197,16 @@ def openai_client_mock(mocker, chat_completion_mock):
     type(openai_client.beta).chat = mocker.AsyncMock(AsyncChat)
     type(openai_client.beta.chat).completions = mocker.PropertyMock(return_value=chat_completion_mock)
     return openai_client
+
+
+@pytest.fixture
+def async_openai_mock(mocker):
+    return mocker.patch("ragelo.llm_providers.openai_client.AsyncOpenAI")
+
+
+@pytest.fixture
+def async_azure_openai_mock(mocker):
+    return mocker.patch("ragelo.llm_providers.openai_client.AsyncAzureOpenAI")
 
 
 @pytest.fixture
@@ -537,3 +550,12 @@ def llm_provider_pairwise_answer_mock(llm_provider_config):
     provider.async_call_mocker = AsyncMock(side_effect=side_effect)
 
     return provider
+
+
+class MockOpenAI(AsyncOpenAI):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.call_args = None
+
+    def __call__(self, *args, **kwargs):
+        self.call_args = (args, kwargs)

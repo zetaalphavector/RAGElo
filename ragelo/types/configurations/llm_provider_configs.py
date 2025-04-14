@@ -11,15 +11,23 @@ class LLMProviderConfig(BaseModel):
 
 
 class OpenAIConfiguration(LLMProviderConfig):
-    org: str | None = None
+    organization: str | None = None
     api_type: str | None = None
     api_base: str | None = None
     api_version: str | None = None
     model: str = "gpt-4o-mini"
+    azure_endpoint: str | None = None
+    azure_deployment: str | None = None
+    project: str | None = None
+    base_url: str | None = None
+    timeout: float | None = None
+    max_retries: int | None = None
+    default_headers: dict[str, str] | None = None
+    default_query: dict[str, str] | None = None
 
 
 class OllamaConfiguration(LLMProviderConfig):
-    org: str | None = None
+    organization: str | None = None
     api_base: str | None = "http://localhost:11434/v1/"
     api_version: str | None = None
     api_key: str | None = "NoKeyNeeded"
