@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import jinja2
+
 from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     BaseRetrievalEvaluator,
     RetrievalEvaluatorFactory,
@@ -14,6 +16,8 @@ from ragelo.types.types import RetrievalEvaluatorTypes
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.CUSTOM_PROMPT)
 class CustomPromptEvaluator(BaseRetrievalEvaluator):
     config: CustomPromptEvaluatorConfig
+    template: jinja2.Template
+    prompt: str
 
     def __init__(
         self,
@@ -22,6 +26,7 @@ class CustomPromptEvaluator(BaseRetrievalEvaluator):
     ):
         super().__init__(config, llm_provider)
         self.prompt = config.prompt
+        self.template = jinja2.Template(self.prompt)
 
     def _build_message(self, query: Query, document: Document) -> str:
         query_metadata = self._get_usable_fields_from_metadata(
@@ -39,4 +44,4 @@ class CustomPromptEvaluator(BaseRetrievalEvaluator):
             **document_metadata,
         }
 
-        return self.prompt.format(**formatters)
+        return self.template.render(**formatters)

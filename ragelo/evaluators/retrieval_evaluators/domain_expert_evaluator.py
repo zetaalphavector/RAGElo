@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import jinja2
+
 from ragelo.evaluators.retrieval_evaluators import (
     BaseRetrievalEvaluator,
     RetrievalEvaluatorFactory,
@@ -17,11 +19,11 @@ from ragelo.types.types import RetrievalEvaluatorTypes
 
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.DOMAIN_EXPERT)
 class DomainExpertEvaluator(BaseRetrievalEvaluator):
-    system_prompt = """
-You are a domain expert in {expert_in}.{company_prompt_1} You are tasked \
+    _system_template_str = """
+You are a domain expert in {{ expert_in }}.{% if company %} You work for {{ company }}.{% endif %} You are tasked \
 with evaluating the performance of a retrieval system for question \
 answering in this domain. The question answering system will be used \
-by internal users{company_prompt_2}{domain_short}. They are interested \
+by internal users{% if company %} of {{ company }}{% endif %}{% if domain_short %} but it also serves some of your external users like {{ domain_short }}{% endif %}. They are interested \
 in a retrieval system that provides relevant passages based on their questions.
 
 Given a query and a passage, you must provide a reasoning wether the document is not \
@@ -59,17 +61,19 @@ or only peripheral topics.
 personal opinions or biases.
     - Uncertainty: If uncertain about a relevance judgement, annotators default to a \
 lower relevance.
-    {extra_guidelines}
+{% if extra_guidelines %}
+    {{ extra_guidelines }}
+{% endif %}
 """.strip()
 
-    user_prompt = """ 
+    _user_template_str = """
 Given the following query and passage:
 
 [[USER QUERY]]
-{query}
+{{ query }}
 
 [[PASSAGE CONTENT]]
-{doc_content}
+{{ doc_content }}
 
 Please think in steps about the relevance of the passage given the \
 original query. You should reason about the relevance of the passage to the query and, \
@@ -80,10 +84,9 @@ particular query. The score meaning is as follows:
 - 2: the passage is highly relevant to the query
 """.strip()
 
-    COMPANY_PROMPT_1 = " You work for {company}."
-    COMPANY_PROMPT_2 = " of {company}"
-    DOMAIN_SHORT = " but it also serves some of your external users like {domain_short}"
     config: DomainExpertEvaluatorConfig
+    system_template: jinja2.Template
+    user_template: jinja2.Template
 
     def __init__(
         self,
@@ -92,28 +95,22 @@ particular query. The score meaning is as follows:
     ):
         super().__init__(config, llm_provider)
         extra_guidelines = self.config.extra_guidelines if self.config.extra_guidelines else []
-        guidelines = "\n".join([f"- {guideline}" for guideline in extra_guidelines])
+        guidelines_str = "\n".join([f"- {guideline}" for guideline in extra_guidelines]) if extra_guidelines else ""
         if self.config.llm_answer_format != AnswerFormat.JSON:
             logger.warning("We are using the Domain Expert Evaluator config. Forcing the LLM answer format to JSON.")
             self.config.llm_answer_format = AnswerFormat.JSON
-        self.expert_in = self.config.expert_in
-        self.domain_short = f" {self.config.domain_short}" if self.config.domain_short else ""
-        self.system_prompt = self.system_prompt.format(
-            expert_in=self.expert_in,
-            company_prompt_1=(
-                self.COMPANY_PROMPT_1.format(company=self.config.company) if self.config.company else ""
-            ),
-            company_prompt_2=(
-                self.COMPANY_PROMPT_2.format(company=self.config.company) if self.config.company else ""
-            ),
-            domain_short=(
-                self.DOMAIN_SHORT.format(domain_short=self.config.domain_short) if self.config.domain_short else ""
-            ),
-            extra_guidelines=guidelines,
+        self.system_template = jinja2.Template(self._system_template_str)
+        self.user_template = jinja2.Template(self._user_template_str)
+
+        self.system_prompt = self.system_template.render(
+            expert_in=self.config.expert_in,
+            company=self.config.company,
+            domain_short=self.config.domain_short,
+            extra_guidelines=guidelines_str,
         )
 
     def _build_message(self, query: Query, document: Document) -> str:
-        user_prompt = self.user_prompt.format(
+        user_prompt = self.user_template.render(
             query=query.query,
             doc_content=document.text,
         )
@@ -123,5 +120,5 @@ particular query. The score meaning is as follows:
         assert isinstance(llm_response.parsed_answer, dict)
         return LLMResponseType(
             raw_answer=llm_response.raw_answer,
-            parsed_answer=llm_response.parsed_answer["score"],
+            parsed_answer=llm_response.parsed_answer,
         )
