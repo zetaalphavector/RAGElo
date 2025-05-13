@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Type, get_type_hints
 
+import jinja2
 from tenacity import RetryError
 
 from ragelo.evaluators.base_evaluator import BaseEvaluator
@@ -24,6 +25,7 @@ from ragelo.utils import call_async_fn
 class BaseRetrievalEvaluator(BaseEvaluator):
     config: BaseRetrievalEvaluatorConfig
     evaluable_name: str = "Retrieved document"
+    template: jinja2.Template
 
     def __init__(
         self,
@@ -76,32 +78,33 @@ class BaseRetrievalEvaluator(BaseEvaluator):
                 answer_format=self.config.llm_answer_format,
                 response_schema=self.config.llm_response_schema,
             )
-            llm_response = self._process_answer(llm_response)
-        except ValueError as e:
-            logger.warning(f"Failed to PARSE answer for qid: {query.qid} document id: {document.did}")
-            try:
-                llm_response = LLMResponseType(raw_answer=llm_response.raw_answer, parsed_answer=None)
-            except Exception:
-                llm_response = LLMResponseType(raw_answer="", parsed_answer=None)
-            exc = str(e)
         except Exception as e:
-            logger.warning(f"Failed to FETCH answers for qid: {query.qid}")
-            logger.warning(f"document id: {document.did}")
+            logger.warning(f"LLM Failed to fetch answers for qid: {query.qid} document id: {document.did}")
             if isinstance(e, RetryError):
                 exc = str(e.last_attempt.exception())
             else:
                 exc = str(e)
-            try:
-                llm_response = LLMResponseType(raw_answer=llm_response.raw_answer, parsed_answer=None)
-            except Exception:
-                llm_response = LLMResponseType(raw_answer="", parsed_answer=None)
-        return RetrievalEvaluatorResult(
-            qid=query.qid,
-            did=document.did,
-            raw_answer=llm_response.raw_answer,
-            answer=llm_response.parsed_answer,
-            exception=exc,
-        )
+            return RetrievalEvaluatorResult(
+                qid=query.qid,
+                did=document.did,
+                raw_answer="",
+                exception=exc,
+            )
+        try:
+            evaluator_result = self._process_answer(llm_response, query.qid)
+        except Exception as e:
+            logger.warning(f"Failed to parse LLM response for qid: {query.qid} document id: {document.did}")
+            return RetrievalEvaluatorResult(
+                qid=query.qid,
+                did=document.did,
+                raw_answer=llm_response,
+                exception=str(e),
+            )
+        return evaluator_result
+
+    def _process_answer(self, llm_response: LLMResponseType, qid: str) -> RetrievalEvaluatorResult:
+        """Processes the raw answer returned by the LLM. Should be implemented by each subclass."""
+        raise NotImplementedError
 
     def _get_tuples_to_evaluate(self, experiment: Experiment) -> list[tuple[Query, Evaluable]]:
         """
