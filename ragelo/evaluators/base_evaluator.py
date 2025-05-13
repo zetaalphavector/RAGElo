@@ -99,9 +99,15 @@ class BaseEvaluator(ABC):
     def _get_tuples_to_evaluate(self, queries: Experiment) -> Sequence[tuple[Query, Evaluable]]:
         raise NotImplementedError
 
-    def _process_answer(self, llm_response: LLMResponseType) -> LLMResponseType:
-        """Processes the raw answer returned by the LLM. Should be implemented by the subclass if needed."""
-        return llm_response
+    @abstractmethod
+    def _process_answer(
+        self,
+        llm_response: LLMResponseType,
+        qid: str,
+        agent: str | None = None,
+    ) -> EvaluatorResult:
+        """Processes the raw answer returned by the LLM. Should be implemented by each subclass."""
+        raise NotImplementedError
 
     @staticmethod
     def _get_fields_from_string(s: str) -> list[str]:
