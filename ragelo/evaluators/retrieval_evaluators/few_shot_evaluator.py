@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import jinja2
+
 from ragelo.evaluators.retrieval_evaluators import (
     BaseRetrievalEvaluator,
     RetrievalEvaluatorFactory,
@@ -14,6 +16,8 @@ from ragelo.types.types import RetrievalEvaluatorTypes
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.FEW_SHOT)
 class FewShotEvaluator(BaseRetrievalEvaluator):
     config: FewShotEvaluatorConfig
+    user_template: jinja2.Template
+    assistant_template: jinja2.Template
 
     def __init__(
         self,
@@ -23,8 +27,10 @@ class FewShotEvaluator(BaseRetrievalEvaluator):
         super().__init__(config, llm_provider)
 
         self.user_prompt = config.few_shot_user_prompt
+        self.user_template = jinja2.Template(self.user_prompt)
         self.system_prompt = config.system_prompt
         self.assistant_prompt = config.few_shot_assistant_answer
+        self.assistant_template = jinja2.Template(self.assistant_prompt)
         self.few_shots = config.few_shots
 
     def _build_message(self, query: Query, document: Document) -> list[dict[str, str]]:
@@ -34,7 +40,7 @@ class FewShotEvaluator(BaseRetrievalEvaluator):
             self.config.query_placeholder: query.query,
             self.config.document_placeholder: document.text,
         }
-        user_message = self.user_prompt.format(**formatters)
+        user_message = self.user_template.render(**formatters)
 
         messages.append({"role": "user", "content": user_message})
         return messages
@@ -46,15 +52,13 @@ class FewShotEvaluator(BaseRetrievalEvaluator):
                 self.config.query_placeholder: few_shot.query,
                 self.config.document_placeholder: few_shot.passage,
             }
-            user_message = {
-                "role": "user",
-                "content": self.user_prompt.format(**formatters),
-            }
+            user_message_content = self.user_template.render(**formatters)
+            user_message = {"role": "user", "content": user_message_content}
             formatters = {
                 self.config.reasoning_placeholder: few_shot.reasoning,
                 self.config.relevance_placeholder: str(few_shot.relevance),
             }
-            answer_text = self.assistant_prompt.format(**formatters)
+            answer_text = self.assistant_template.render(**formatters)
             answer = {"role": "assistant", "content": answer_text}
             few_shot_messages.append(user_message)
             few_shot_messages.append(answer)
