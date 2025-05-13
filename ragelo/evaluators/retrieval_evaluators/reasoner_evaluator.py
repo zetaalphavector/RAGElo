@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import jinja2
+
 from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     BaseRetrievalEvaluator,
     RetrievalEvaluatorFactory,
 )
+from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.types.configurations import ReasonerEvaluatorConfig
 from ragelo.types.evaluables import Document
 from ragelo.types.formats import LLMResponseType
@@ -19,7 +22,7 @@ class ReasonerEvaluator(BaseRetrievalEvaluator):
     """
 
     config: ReasonerEvaluatorConfig
-    prompt = """
+    _template_str = """
 You are an expert document annotator, evaluating if a document contains relevant \
 information to answer a question submitted by a user. \
 Please act as an impartial relevance annotator for a search engine. \
@@ -32,18 +35,19 @@ the user question. A document can be:
 user question.
     - Very relevant: The document is on topic and answers the user question.
     [user question]
-    {query}
+    {{ query }}
 
     [document content]
-    {document}
+    {{ document }}
 """.strip()
+    template: jinja2.Template
+
+    def __init__(self, config: ReasonerEvaluatorConfig, llm_provider: BaseLLMProvider):
+        super().__init__(config, llm_provider)
+        self.template = jinja2.Template(self._template_str)
 
     def _build_message(self, query: Query, document: Document) -> str:
-        formatters = {
-            self.config.query_placeholder: query.query,
-            self.config.document_placeholder: document.text,
-        }
-        return self.prompt.format(**formatters)
+        return self.template.render(query=query.query, document=document.text)
 
     def _process_answer(self, llm_response: LLMResponseType) -> LLMResponseType:
         assert isinstance(llm_response.parsed_answer, str)
