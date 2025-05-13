@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from importlib import metadata
+from typing import Any
 
 from pydantic import BaseModel as PydanticBaseModel
 from typing_extensions import TypeAlias
@@ -47,3 +48,10 @@ class BaseModel(PydanticBaseModel):
             return pydantic_model.dict()  # type: ignore
         else:
             return pydantic_model.model_dump()  # type: ignore
+
+    @classmethod
+    def model_json_schema(cls, *args, **kwargs) -> dict[str, Any]:
+        if _PYDANTIC_MAJOR_VERSION == 1:
+            return cls.schema()  # type: ignore
+        else:
+            return super().model_json_schema(*args, **kwargs)  # type: ignore
