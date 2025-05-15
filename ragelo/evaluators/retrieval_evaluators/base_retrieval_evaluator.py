@@ -196,6 +196,7 @@ class RetrievalEvaluatorFactory:
         return evaluator_class.from_config(config, llm_provider_instance)
 
 
+# TODO: docstring!
 def get_retrieval_evaluator(
     evaluator_name: RetrievalEvaluatorTypes | str | None = None,
     llm_provider: BaseLLMProvider | str = "openai",
