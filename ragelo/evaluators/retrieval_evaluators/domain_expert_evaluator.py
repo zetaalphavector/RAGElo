@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import textwrap
+
 import jinja2
 
 from ragelo.evaluators.retrieval_evaluators import (
@@ -14,12 +16,14 @@ from ragelo.types.configurations import DomainExpertEvaluatorConfig
 from ragelo.types.evaluables import Document
 from ragelo.types.formats import AnswerFormat, LLMResponseType
 from ragelo.types.query import Query
+from ragelo.types.results import RetrievalEvaluatorResult
 from ragelo.types.types import RetrievalEvaluatorTypes
 
 
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.DOMAIN_EXPERT)
 class DomainExpertEvaluator(BaseRetrievalEvaluator):
-    _system_template_str = """
+    system_prompt: jinja2.Template = jinja2.Template(
+        textwrap.dedent("""
 You are a domain expert in {{ expert_in }}.{% if company %} You work for {{ company }}.{% endif %} You are tasked \
 with evaluating the performance of a retrieval system for question \
 answering in this domain. The question answering system will be used \
@@ -64,16 +68,24 @@ lower relevance.
 {% if extra_guidelines %}
     {{ extra_guidelines }}
 {% endif %}
-""".strip()
+""")
+    )
 
-    _user_template_str = """
+    evaluation_prompt = jinja2.Template(
+        textwrap.dedent("""
 Given the following query and passage:
 
 [[USER QUERY]]
-{{ query }}
+{{query.query}}
+{% for key, value in (query.metadata or {}).items() %}
+[{{key}}]: {{value}}
+{% endfor %}
 
 [[PASSAGE CONTENT]]
-{{ doc_content }}
+{{document.text}}
+{% for key, value in (document.metadata or {}).items() %}
+[{{key}}]: {{value}}
+{% endfor %}
 
 Please think in steps about the relevance of the passage given the \
 original query. You should reason about the relevance of the passage to the query and, \
@@ -82,11 +94,10 @@ particular query. The score meaning is as follows:
 - 0: indicates that the retrieved passage is not relevant to the query
 - 1: the passage is somewhat relevant to the query
 - 2: the passage is highly relevant to the query
-""".strip()
+""")
+    )
 
     config: DomainExpertEvaluatorConfig
-    system_template: jinja2.Template
-    user_template: jinja2.Template
 
     def __init__(
         self,
@@ -99,26 +110,26 @@ particular query. The score meaning is as follows:
         if self.config.llm_answer_format != AnswerFormat.JSON:
             logger.warning("We are using the Domain Expert Evaluator config. Forcing the LLM answer format to JSON.")
             self.config.llm_answer_format = AnswerFormat.JSON
-        self.system_template = jinja2.Template(self._system_template_str)
-        self.user_template = jinja2.Template(self._user_template_str)
 
-        self.system_prompt = self.system_template.render(
+        self.rendered_system_prompt = self.system_prompt.render(
             expert_in=self.config.expert_in,
             company=self.config.company,
             domain_short=self.config.domain_short,
             extra_guidelines=guidelines_str,
         )
 
-    def _build_message(self, query: Query, document: Document) -> str:
-        user_prompt = self.user_template.render(
-            query=query.query,
-            doc_content=document.text,
-        )
-        return user_prompt
+    def _build_message(self, query: Query, document: Document) -> list[dict[str, str]]:
+        messages = []
+        messages.append({"role": "system", "content": self.rendered_system_prompt})
+        messages.append({"role": "user", "content": self.evaluation_prompt.render(query=query, document=document)})
+        return messages
 
-    def _process_answer(self, llm_response: LLMResponseType) -> LLMResponseType:
-        assert isinstance(llm_response.parsed_answer, dict)
-        return LLMResponseType(
-            raw_answer=llm_response.raw_answer,
-            parsed_answer=llm_response.parsed_answer,
+    def _process_answer(self, llm_response: LLMResponseType, qid: str, did: str) -> RetrievalEvaluatorResult:
+        assert isinstance(llm_response, dict)
+        return RetrievalEvaluatorResult(
+            qid=qid,
+            did=did,
+            raw_answer=llm_response,
+            reasoning=llm_response["reasoning"],
+            answer=int(llm_response["score"]),
         )

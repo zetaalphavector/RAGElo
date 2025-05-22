@@ -5,6 +5,8 @@ https://arxiv.org/abs/2309.10621
 
 from __future__ import annotations
 
+import textwrap
+
 import jinja2
 import numpy as np
 
@@ -17,12 +19,15 @@ from ragelo.types.configurations import RDNAMEvaluatorConfig
 from ragelo.types.evaluables import Document
 from ragelo.types.formats import LLMResponseType
 from ragelo.types.query import Query
+from ragelo.types.results import RetrievalEvaluatorResult
 from ragelo.types.types import RetrievalEvaluatorTypes
 
 
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.RDNAM)
 class RDNAMEvaluator(BaseRetrievalEvaluator):
-    _template_str = """
+    evaluation_prompt = jinja2.Template(
+        textwrap.dedent(
+            """
 {%- if role %}
 {{ role }}
 {%- endif %}
@@ -64,9 +69,12 @@ We asked five search engine raters to evaluate \
 the relevance of the web page for the query.
 Each rater used their own independent judgement.
 {%- endif %}
-Produce a JSON with the scores without providing any reasoning. Example: \{% if use_aspects %}{{"{\\"intent_match\\": 2, \\"trustworthiness\\": 1, \\"overall\\": 1}"}}{% else %}{{"{\\"overall\\": 1}"}}{% endif %}
+Produce a JSON with the scores without providing any reasoning. Example: \
+{% if use_aspects %}{{"{\\"intent_match\\": 2, \\"trustworthiness\\": 1, \\"overall\\": 1}"}}{% else %}{{"{\\"overall\\": 1}"}}{% endif %}
 
 """.strip()
+        )
+    )
 
     config: RDNAMEvaluatorConfig
     template: jinja2.Template
@@ -78,15 +86,13 @@ Produce a JSON with the scores without providing any reasoning. Example: \{% if 
     ):
         """Initializes an evaluator based on RDNAM framework."""
         super().__init__(config, llm_provider)
-        self.config.llm_response_schema = {
-            "overall": "An integer between 0 and 2 representing the score of the document."
-        }
+        self.llm_response_schema = {"overall": "An integer between 0 and 2 representing the score of the document."}
 
         self._role = self.config.annotator_role if self.config.annotator_role else ""
 
         # Schema updates based on config flags (aspects/multiple annotators)
         if self.config.use_aspects:
-            self.config.llm_response_schema.update(
+            self.llm_response_schema.update(
                 {
                     "intent_match": "An integer between 0 and 2 representing the match of the document to the query intent.",
                     "trustworthiness": "An integer between 0 and 2 representing the trustworthiness of the document.",
@@ -94,13 +100,11 @@ Produce a JSON with the scores without providing any reasoning. Example: \{% if 
             )
 
         if self.config.use_multiple_annotators:
-            base_schema = self.config.llm_response_schema.copy()
-            self.config.llm_response_schema = {f"annotator_{i+1}": base_schema for i in range(5)}
+            base_schema = self.llm_response_schema.copy()
+            self.llm_response_schema = {f"annotator_{i+1}": base_schema for i in range(5)}
             self.multiple = True  # Keep track if we need to aggregate results
         else:
             self.multiple = False
-
-        self.template = jinja2.Template(self._template_str)
 
     def _build_message(self, query: Query, document: Document) -> str:
         narrative = ""
@@ -119,16 +123,16 @@ Produce a JSON with the scores without providing any reasoning. Example: \{% if 
         )
         return formatted_prompt
 
-    def _process_answer(self, llm_response: LLMResponseType) -> LLMResponseType:
-        assert isinstance(llm_response.parsed_answer, dict)
+    def _process_answer(self, llm_response: LLMResponseType, qid: str, did: str) -> RetrievalEvaluatorResult:
+        assert isinstance(llm_response, dict)
         if not self.multiple:
-            return llm_response
+            return RetrievalEvaluatorResult(qid=qid, did=did, raw_answer=llm_response, answer=llm_response)
         answer: dict[str, list[float]] = {"overall": []}
         if self.config.use_aspects:
             answer["intent_match"] = []
             answer["trustworthiness"] = []
 
-        for v in llm_response.parsed_answer.values():
+        for v in llm_response.values():
             if self.config.use_aspects:
                 answer["intent_match"].append(int(v["intent_match"]))
                 answer["trustworthiness"].append(int(v["trustworthiness"]))
@@ -136,11 +140,15 @@ Produce a JSON with the scores without providing any reasoning. Example: \{% if 
             else:
                 answer["overall"].append(int(v["overall"]))
         if self.config.use_aspects:
-            return LLMResponseType(
-                raw_answer=llm_response.raw_answer,
-                parsed_answer={k: float(np.mean(v)) for k, v in answer.items()},
+            return RetrievalEvaluatorResult(
+                qid=qid,
+                did=did,
+                raw_answer=llm_response,
+                answer={k: float(np.mean(v)) for k, v in answer.items()},
             )
-        return LLMResponseType(
-            raw_answer=llm_response.raw_answer,
-            parsed_answer=float(np.mean(answer["overall"])),
+        return RetrievalEvaluatorResult(
+            qid=qid,
+            did=did,
+            raw_answer=llm_response,
+            answer=float(np.mean(answer["overall"])),
         )
