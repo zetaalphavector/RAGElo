@@ -4,6 +4,7 @@ and returns a score or a label for each document."""
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from typing import Any, Callable, Type, get_type_hints
 
 from tenacity import RetryError
@@ -30,8 +31,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         config: BaseRetrievalEvaluatorConfig,
         llm_provider: BaseLLMProvider,
     ):
-        self.config = config
-        self.llm_provider = llm_provider
+        super().__init__(config, llm_provider)
 
     def evaluate(
         self,
@@ -61,7 +61,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             type_name = type(document).__name__
             raise ValueError(f"can't evaluate a {type_name} in a Retrieval Evaluator")
         exc = None
-        if document.evaluation is not None and not self.config.force:
+        if document.evaluation is not None and not self.force:
             return RetrievalEvaluatorResult(
                 did=document.did,
                 qid=query.qid,
@@ -73,35 +73,37 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         try:
             llm_response = await self.llm_provider.call_async(
                 prompt,
-                answer_format=self.config.llm_answer_format,
-                response_schema=self.config.llm_response_schema,
+                answer_format=self.answer_format,
+                answer_shema=self.llm_answer_schema,
             )
-            llm_response = self._process_answer(llm_response)
-        except ValueError as e:
-            logger.warning(f"Failed to PARSE answer for qid: {query.qid} document id: {document.did}")
-            try:
-                llm_response = LLMResponseType(raw_answer=llm_response.raw_answer, parsed_answer=None)
-            except Exception:
-                llm_response = LLMResponseType(raw_answer="", parsed_answer=None)
-            exc = str(e)
         except Exception as e:
-            logger.warning(f"Failed to FETCH answers for qid: {query.qid}")
-            logger.warning(f"document id: {document.did}")
+            logger.warning(f"LLM Failed to fetch answers for qid: {query.qid} document id: {document.did}")
             if isinstance(e, RetryError):
                 exc = str(e.last_attempt.exception())
             else:
                 exc = str(e)
-            try:
-                llm_response = LLMResponseType(raw_answer=llm_response.raw_answer, parsed_answer=None)
-            except Exception:
-                llm_response = LLMResponseType(raw_answer="", parsed_answer=None)
-        return RetrievalEvaluatorResult(
-            qid=query.qid,
-            did=document.did,
-            raw_answer=llm_response.raw_answer,
-            answer=llm_response.parsed_answer,
-            exception=exc,
-        )
+            return RetrievalEvaluatorResult(
+                qid=query.qid,
+                did=document.did,
+                raw_answer="",
+                exception=exc,
+            )
+        try:
+            evaluator_result = self._process_answer(llm_response, query.qid, document.did)
+        except Exception as e:
+            logger.warning(f"Failed to parse LLM response for qid: {query.qid} document id: {document.did}")
+            return RetrievalEvaluatorResult(
+                qid=query.qid,
+                did=document.did,
+                raw_answer=llm_response,
+                exception=str(e),
+            )
+        return evaluator_result
+
+    @abstractmethod
+    def _process_answer(self, llm_response: LLMResponseType, qid: str, did: str) -> RetrievalEvaluatorResult:
+        """Processes the raw answer returned by the LLM. Should be implemented by each subclass."""
+        raise NotImplementedError
 
     def _get_tuples_to_evaluate(self, experiment: Experiment) -> list[tuple[Query, Evaluable]]:
         """
@@ -116,7 +118,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
                     missing_evaluations += 1
                 tuples_to_eval.append((q, d))
                 all_tuples += 1
-        if missing_evaluations == 0 and not self.config.force:
+        if missing_evaluations == 0 and not self.force:
             logger.info(
                 f"All {all_tuples} documents are already evaluated.\n"
                 "If you want to re-evaluate them, use the --force flag"
@@ -127,9 +129,13 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         self,
         query: Query,
         document: Document,
-    ) -> str | list[dict[str, str]]:
+    ) -> list[dict[str, str]]:
         """Builds the prompt to send to the LLM."""
-        raise NotImplementedError
+        messages = []
+        if self.system_prompt is not None:
+            messages.append({"role": "system", "content": self.system_prompt.render(query=query, document=document)})
+        messages.append({"role": "user", "content": self.evaluation_prompt.render(query=query, document=document)})
+        return messages
 
     @classmethod
     def from_config(cls, config: BaseRetrievalEvaluatorConfig, llm_provider: BaseLLMProvider):
@@ -158,48 +164,104 @@ class RetrievalEvaluatorFactory:
     @classmethod
     def create(
         cls,
-        evaluator_name: RetrievalEvaluatorTypes,
-        llm_provider: BaseLLMProvider | str,
-        config: BaseRetrievalEvaluatorConfig | None = None,
+        config: BaseRetrievalEvaluatorConfig,
+        llm_provider_instance: BaseLLMProvider,
         **kwargs,
     ) -> BaseRetrievalEvaluator:
-        if evaluator_name not in cls.registry:
+        evaluator_name_from_config = getattr(config, "evaluator_name", None)
+        if not evaluator_name_from_config:
+            raise ValueError(f"Config object of type {type(config).__name__} must have an 'evaluator_name' attribute.")
+
+        evaluator_type = (
+            RetrievalEvaluatorTypes(evaluator_name_from_config)
+            if isinstance(evaluator_name_from_config, str)
+            else evaluator_name_from_config
+        )
+
+        if evaluator_type not in cls.registry:
             raise ValueError(
-                f"Unknown retrieval evaluator {evaluator_name}\n" f"Valid options are {list(cls.registry.keys())}"
+                f"Unknown retrieval evaluator type '{evaluator_type}' found in config.\n"
+                f"Valid options are {list(cls.registry.keys())}"
             )
-        if isinstance(llm_provider, str):
-            llm_provider_instance = get_llm_provider(llm_provider, **kwargs)
-        else:
-            llm_provider_instance = llm_provider
-        if config is None:
-            class_ = cls.registry[evaluator_name]
-            type_config = class_.get_config_class()
-            valid_keys = [field for field in type_config.get_model_fields()]
-            valid_args = {k: v for k, v in kwargs.items() if k in valid_keys}
-            required_fields = [arg for arg, info in type_config.get_model_fields().items() if info.is_required()]
-            for field in required_fields:
-                if field not in valid_args:
-                    raise ValueError(f"Required argument {field} for evaluator {evaluator_name} not provided")
-            config = type_config(**valid_args)
-        return cls.registry[evaluator_name].from_config(config, llm_provider_instance)
+        evaluator_class = cls.registry[evaluator_type]
+
+        # Check if the config type is matching the evaluator's expected config
+        expected_config_type = evaluator_class.get_config_class()
+        if not isinstance(config, expected_config_type):
+            raise TypeError(
+                f"Evaluator '{evaluator_type}' expects config type '{expected_config_type.__name__}', "
+                f"but got '{type(config).__name__}'."
+            )
+
+        return evaluator_class.from_config(config, llm_provider_instance)
 
 
+# TODO: docstring!
 def get_retrieval_evaluator(
     evaluator_name: RetrievalEvaluatorTypes | str | None = None,
     llm_provider: BaseLLMProvider | str = "openai",
     config: BaseRetrievalEvaluatorConfig | None = None,
-    **kwargs,
+    llm_provider_kwargs: dict = {},
+    **evaluator_config_params,
 ) -> BaseRetrievalEvaluator:
-    if evaluator_name is None:
-        # get the name from the config
-        if config is None:
-            raise ValueError("Either the evaluator_name or a config object must be provided")
-        evaluator_name = config.evaluator_name
-    if isinstance(evaluator_name, str):
-        evaluator_name = RetrievalEvaluatorTypes(evaluator_name)
+    final_config: BaseRetrievalEvaluatorConfig
+    llm_provider_instance: BaseLLMProvider
+    if isinstance(llm_provider, str):
+        llm_provider_instance = get_llm_provider(llm_provider, **llm_provider_kwargs)
+    else:
+        if llm_provider_kwargs:
+            logger.warning(
+                "llm_provider_kwargs were provided, but llm_provider is already an instance. "
+                "These kwargs will be ignored."
+            )
+        llm_provider_instance = llm_provider
+
+    if config is not None:
+        user_params = list(evaluator_config_params.keys())
+        if evaluator_config_params:
+            logger.warning(
+                "A config object was provided directly. "
+                f"Additional keyword arguments for config creation (e.g., {user_params}) will be ignored."
+            )
+        final_config = config
+
+        config_eval_name_val = getattr(final_config, "evaluator_name", None)
+        if evaluator_name and config_eval_name_val:
+            # Normalize to string for comparison if one is Enum and other is str
+            str_eval_name = str(evaluator_name)
+            str_config_eval_name = str(config_eval_name_val)
+            if str_eval_name != str_config_eval_name:
+                raise ValueError(
+                    f"Mismatch: explicit evaluator_name '{evaluator_name}' "
+                    f"does not match evaluator_name in provided config ('{config_eval_name_val}')."
+                )
+
+    else:  # No config passed. Let's create it based on the params.
+        if evaluator_name is None:
+            raise ValueError(
+                "If a config object is not provided, 'evaluator_name' must be specified "
+                "to determine the type of evaluator and its configuration."
+            )
+
+        current_evaluator_type = (
+            RetrievalEvaluatorTypes(evaluator_name) if isinstance(evaluator_name, str) else evaluator_name
+        )
+        if current_evaluator_type not in RetrievalEvaluatorFactory.registry:
+            raise ValueError(
+                f"Unknown retrieval evaluator type: {current_evaluator_type}.\n"
+                f"Valid options are {list(RetrievalEvaluatorFactory.registry.keys())}"
+            )
+    evaluator_class = RetrievalEvaluatorFactory.registry[current_evaluator_type]
+    config_class = evaluator_class.get_config_class()
+
+    try:
+        final_config = config_class(**evaluator_config_params)
+    except TypeError as e:
+        raise ValueError(
+            f"Error creating config {config_class.__name__} for evaluator '{current_evaluator_type}': {e}"
+        )
+
     return RetrievalEvaluatorFactory.create(
-        evaluator_name,
-        llm_provider=llm_provider,
-        config=config,
-        **kwargs,
+        config=final_config,
+        llm_provider_instance=llm_provider_instance,
     )

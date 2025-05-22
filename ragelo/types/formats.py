@@ -3,7 +3,9 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
-from ragelo.types.pydantic_models import BaseModel, PydanticBaseModel
+from typing_extensions import TypeAlias
+
+from ragelo.types.pydantic_models import BaseModel
 
 
 class AnswerFormat(str, Enum):
@@ -14,6 +16,4 @@ class AnswerFormat(str, Enum):
     JSON = "json"
 
 
-class LLMResponseType(BaseModel):
-    raw_answer: str
-    parsed_answer: float | str | dict[str, Any] | PydanticBaseModel | None
+LLMResponseType: TypeAlias = BaseModel | str | dict[str, Any]

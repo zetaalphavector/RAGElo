@@ -31,6 +31,7 @@ dependencies = [
     "numpy>=1.24",
     "pydantic>=1.9",
     "eval-type-backport>=0.2.0",
+    "jinja2",
 ]
 
 [project.optional-dependencies]

@@ -68,14 +68,15 @@ class OllamaProvider(BaseLLMProvider):
         if not answers.choices or not answers.choices[0].message or not answers.choices[0].message.content:
             raise ValueError("Ollama did not return any completions.")
         if answer_format == AnswerFormat.JSON:
-            return LLMResponseType(
-                raw_answer=answers.choices[0].message.content,
-                parsed_answer=json.loads(answers.choices[0].message.content),
-            )
-        return LLMResponseType(
-            raw_answer=answers.choices[0].message.content,
-            parsed_answer=answers.choices[0].message.content,
-        )
+            try:
+                parsed_answer = json.loads(answers.choices[0].message.content)
+            except json.JSONDecodeError as e:
+                raise ValueError(
+                    f"Failed to parse raw JSON answer {answers.choices[0].message.content} as JSON: {e}"
+                ) from e
+        else:
+            parsed_answer = str(answers.choices[0].message.content)
+        return parsed_answer
 
     @staticmethod
     def __get_ollama_client(ollama_config: OllamaConfiguration) -> AsyncOpenAI:

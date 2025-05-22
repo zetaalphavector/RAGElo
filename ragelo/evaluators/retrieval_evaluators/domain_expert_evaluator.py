@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from tenacity import RetryError
+import textwrap
+
+import jinja2
 
 from ragelo.evaluators.retrieval_evaluators import (
     BaseRetrievalEvaluator,
@@ -11,8 +13,8 @@ from ragelo.evaluators.retrieval_evaluators import (
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.logger import logger
 from ragelo.types.configurations import DomainExpertEvaluatorConfig
-from ragelo.types.evaluables import Document, Evaluable
-from ragelo.types.formats import AnswerFormat
+from ragelo.types.evaluables import Document
+from ragelo.types.formats import AnswerFormat, LLMResponseType
 from ragelo.types.query import Query
 from ragelo.types.results import RetrievalEvaluatorResult
 from ragelo.types.types import RetrievalEvaluatorTypes
@@ -20,25 +22,17 @@ from ragelo.types.types import RetrievalEvaluatorTypes
 
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.DOMAIN_EXPERT)
 class DomainExpertEvaluator(BaseRetrievalEvaluator):
-    system_prompt = """
-You are a domain expert in {expert_in}.{company_prompt_1} You are tasked \
+    system_prompt: jinja2.Template = jinja2.Template(
+        textwrap.dedent("""
+You are a domain expert in {{ expert_in }}.{% if company %} You work for {{ company }}.{% endif %} You are tasked \
 with evaluating the performance of a retrieval system for question \
 answering in this domain. The question answering system will be used \
-by internal users{company_prompt_2}{domain_short}. They are interested \
+by internal users{% if company %} of {{ company }}{% endif %}{% if domain_short %} but it also serves some of your external users like {{ domain_short }}{% endif %}. They are interested \
 in a retrieval system that provides relevant passages based on their questions.
-""".strip()
 
-    reason_prompt = """
-User query:
-{query}
-
-Document passage:
-{doc_content}
-
-Please think in steps about the relevance of the retrieved document given the \
-original query. Consider the query, the document title, and the document \
-passage. Reason whether the document is not relevant to the query, somewhat relevant \
-to the query, or highly relevant to the query.
+Given a query and a passage, you must provide a reasoning wether the document is not \
+relevant to the query, somewhat relevant to the query or highly relevant to the query. \
+Consider the query, the passage title, and its content in your reasoning. \
 Use the following guidelines to reason about the relevance of the retrieved document:
 - Not Relevant:
     The document contains information that is unrelated, outdated, or completely \
@@ -71,20 +65,38 @@ or only peripheral topics.
 personal opinions or biases.
     - Uncertainty: If uncertain about a relevance judgement, annotators default to a \
 lower relevance.
-    {extra_guidelines}
-""".strip()
+{% if extra_guidelines %}
+    {{ extra_guidelines }}
+{% endif %}
+""")
+    )
 
-    score_prompt = """
-Given the previous reasoning, please assign a score of 0, 1, or 2 to the retrieved \
-document given the particular query. The score meaning is as follows:
-- 0: indicates that the retrieved document is not relevant to the query
-- 1: the document is somewhat relevant to the query
-- 2: the document is highly relevant to the query
-""".strip()
+    evaluation_prompt = jinja2.Template(
+        textwrap.dedent("""
+Given the following query and passage:
 
-    COMPANY_PROMPT_1 = " You work for {company}."
-    COMPANY_PROMPT_2 = " of {company}"
-    DOMAIN_SHORT = " but it also serves some of your external users like {domain_short}"
+[[USER QUERY]]
+{{query.query}}
+{% for key, value in (query.metadata or {}).items() %}
+[{{key}}]: {{value}}
+{% endfor %}
+
+[[PASSAGE CONTENT]]
+{{document.text}}
+{% for key, value in (document.metadata or {}).items() %}
+[{{key}}]: {{value}}
+{% endfor %}
+
+Please think in steps about the relevance of the passage given the \
+original query. You should reason about the relevance of the passage to the query and, \
+after that, provide a score of 0, 1, or 2 to the passage given the \
+particular query. The score meaning is as follows:
+- 0: indicates that the retrieved passage is not relevant to the query
+- 1: the passage is somewhat relevant to the query
+- 2: the passage is highly relevant to the query
+""")
+    )
+
     config: DomainExpertEvaluatorConfig
 
     def __init__(
@@ -93,95 +105,31 @@ document given the particular query. The score meaning is as follows:
         llm_provider: BaseLLMProvider,
     ):
         super().__init__(config, llm_provider)
+        extra_guidelines = self.config.extra_guidelines if self.config.extra_guidelines else []
+        guidelines_str = "\n".join([f"- {guideline}" for guideline in extra_guidelines]) if extra_guidelines else ""
         if self.config.llm_answer_format != AnswerFormat.JSON:
             logger.warning("We are using the Domain Expert Evaluator config. Forcing the LLM answer format to JSON.")
             self.config.llm_answer_format = AnswerFormat.JSON
-        self.expert_in = self.config.expert_in
-        self.domain_short = f" {self.config.domain_short}" if self.config.domain_short else ""
-        self.system_prompt = self.system_prompt.format(
-            expert_in=self.expert_in,
-            company_prompt_1=(
-                self.COMPANY_PROMPT_1.format(company=self.config.company) if self.config.company else ""
-            ),
-            company_prompt_2=(
-                self.COMPANY_PROMPT_2.format(company=self.config.company) if self.config.company else ""
-            ),
-            domain_short=(
-                self.DOMAIN_SHORT.format(domain_short=self.config.domain_short) if self.config.domain_short else ""
-            ),
-        )
-        self.extra_guidelines = self.config.extra_guidelines if self.config.extra_guidelines else []
 
-    def __build_reason_message(self, query: Query, document: Document) -> str:
-        guidelines = "\n".join([f"- {guideline}" for guideline in self.extra_guidelines])
-        reason_prompt = self.reason_prompt.format(
-            query=query.query,
-            doc_content=document.text,
-            domain_short=self.domain_short if self.domain_short else "",
-            extra_guidelines=guidelines,
+        self.rendered_system_prompt = self.system_prompt.render(
+            expert_in=self.config.expert_in,
+            company=self.config.company,
+            domain_short=self.config.domain_short,
+            extra_guidelines=guidelines_str,
         )
-        return reason_prompt
 
-    async def evaluate_async(self, eval_sample: tuple[Query, Evaluable]) -> RetrievalEvaluatorResult:
-        query, document = eval_sample
-        assert isinstance(document, Document)
-        reason_message = self.__build_reason_message(query, document)
-        exc = None
-        if document.evaluation is not None and not self.config.force:
-            return RetrievalEvaluatorResult(
-                did=document.did,
-                qid=query.qid,
-                raw_answer=document.evaluation.raw_answer,
-                answer=document.evaluation.answer,
-                exception=document.evaluation.exception,
-            )
-        messages = [
-            {"role": "system", "content": self.system_prompt},
-            {"role": "user", "content": reason_message},
-        ]
-        try:
-            return_answer = await self.llm_provider.call_async(messages, answer_format=AnswerFormat.TEXT)
-            reasoning_answer = return_answer.parsed_answer
-            assert isinstance(reasoning_answer, str)
-        except Exception as e:
-            logger.warning(f"Failed to FETCH reasonings for qid: {query.qid}")
-            logger.warning(f"document id: {document.did}")
-            if isinstance(e, RetryError):
-                exc = str(e.last_attempt.exception())
-            else:
-                exc = str(e)
-            return RetrievalEvaluatorResult(
-                qid=query.qid,
-                did=document.did,
-                raw_answer=None,
-                answer=None,
-                exception=exc,
-            )
-        messages_score = messages.copy()
-        messages_score.append({"role": "assistant", "content": reasoning_answer})
-        messages_score.append({"role": "user", "content": self.score_prompt})
-        try:
-            score_answer = await self.llm_provider.call_async(
-                messages_score,
-                answer_format=AnswerFormat.JSON,
-                response_schema=self.config.llm_response_schema,
-            )
-        except Exception as e:
-            logger.warning(f"Failed to FETCH scores for qid: {query.qid}")
-            logger.warning(f"document id: {document.did}")
-            exc = str(e)
-        if not isinstance(score_answer.parsed_answer, dict) or "score" not in score_answer.parsed_answer:
-            logger.warning(f"LLM Failed to match the expected schema for qid: {query.qid}")
-            logger.warning(f"document id: {document.did}")
-            logger.warning(f"LLM response: {score_answer.parsed_answer}")
-            exc = "The LLM did not return a dictionary with a 'score' key"
-            answer = None
-        else:
-            answer = score_answer.parsed_answer["score"]
+    def _build_message(self, query: Query, document: Document) -> list[dict[str, str]]:
+        messages = []
+        messages.append({"role": "system", "content": self.rendered_system_prompt})
+        messages.append({"role": "user", "content": self.evaluation_prompt.render(query=query, document=document)})
+        return messages
+
+    def _process_answer(self, llm_response: LLMResponseType, qid: str, did: str) -> RetrievalEvaluatorResult:
+        assert isinstance(llm_response, dict)
         return RetrievalEvaluatorResult(
-            qid=query.qid,
-            did=document.did,
-            raw_answer=reasoning_answer,
-            answer=answer,
-            exception=exc,
+            qid=qid,
+            did=did,
+            raw_answer=llm_response,
+            reasoning=llm_response["reasoning"],
+            answer=int(llm_response["score"]),
         )

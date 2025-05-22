@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from typing import Any, Type
 
+import jinja2
 from pydantic import BaseModel as PydanticBaseModel
 from pydantic import Field
 
 from ragelo.types.formats import AnswerFormat
-from ragelo.types.pydantic_models import BaseModel
+from ragelo.types.pydantic_models import BaseModel, validator
 from ragelo.types.types import AnswerEvaluatorTypes
 
 
@@ -51,3 +52,23 @@ class BaseEvaluatorConfig(BaseConfig):
             "Required if the llm_answer_format is structured and recommended for JSON."
         ),
     )
+    system_prompt: jinja2.Template | None = Field(
+        default=None,
+        description="The system prompt to be used on this evaluator.",
+    )
+    evaluation_prompt: jinja2.Template = Field(
+        default=jinja2.Template(""),
+        description="The prompt to be used on this evaluator.",
+    )
+
+    @validator
+    @classmethod
+    def check_prompts(cls, values):
+        if isinstance(values.evaluation_prompt, str):
+            values.evaluation_prompt = jinja2.Template(values.evaluation_prompt)
+        if isinstance(values.system_prompt, str):
+            values.system_prompt = jinja2.Template(values.system_prompt)
+        return values
+
+    class Config:
+        arbitrary_types_allowed = True

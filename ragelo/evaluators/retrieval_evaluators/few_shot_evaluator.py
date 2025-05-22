@@ -22,40 +22,34 @@ class FewShotEvaluator(BaseRetrievalEvaluator):
     ):
         super().__init__(config, llm_provider)
 
-        self.user_prompt = config.few_shot_user_prompt
-        self.system_prompt = config.system_prompt
-        self.assistant_prompt = config.few_shot_assistant_answer
+        self.few_shot_user_prompt = config.few_shot_user_prompt
+        self.few_shot_assistant_answer = config.few_shot_assistant_answer
         self.few_shots = config.few_shots
 
     def _build_message(self, query: Query, document: Document) -> list[dict[str, str]]:
-        system_prompt_msg = {"role": "system", "content": self.system_prompt}
-        messages = [system_prompt_msg] + self.__build_few_shot_samples()
-        formatters = {
-            self.config.query_placeholder: query.query,
-            self.config.document_placeholder: document.text,
-        }
-        user_message = self.user_prompt.format(**formatters)
+        if self.system_prompt:
+            system_prompt_msg = {"role": "system", "content": self.system_prompt.render()}
+            messages = [system_prompt_msg] + self.__build_few_shot_samples()
+        else:
+            messages = self.__build_few_shot_samples()
 
-        messages.append({"role": "user", "content": user_message})
+        messages.append(
+            {
+                "role": "user",
+                "content": self.few_shot_user_prompt.render(query=query, document=document),
+            }
+        )
         return messages
 
     def __build_few_shot_samples(self) -> list[dict[str, str]]:
         few_shot_messages = []
         for few_shot in self.few_shots:
-            formatters = {
-                self.config.query_placeholder: few_shot.query,
-                self.config.document_placeholder: few_shot.passage,
-            }
-            user_message = {
-                "role": "user",
-                "content": self.user_prompt.format(**formatters),
-            }
-            formatters = {
-                self.config.reasoning_placeholder: few_shot.reasoning,
-                self.config.relevance_placeholder: str(few_shot.relevance),
-            }
-            answer_text = self.assistant_prompt.format(**formatters)
-            answer = {"role": "assistant", "content": answer_text}
+            user_message_content = self.few_shot_user_prompt.render(query=few_shot.query, document=few_shot.passage)
+            user_message = {"role": "user", "content": user_message_content}
             few_shot_messages.append(user_message)
+            assistant_message_content = self.few_shot_assistant_answer.render(
+                reasoning=few_shot.reasoning, relevance=str(few_shot.relevance)
+            )
+            answer = {"role": "assistant", "content": assistant_message_content}
             few_shot_messages.append(answer)
         return few_shot_messages

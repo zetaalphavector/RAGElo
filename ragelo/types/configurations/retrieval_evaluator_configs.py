@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import textwrap
 from typing import Any, Type
 
+import jinja2
 from pydantic import BaseModel as PydanticBaseModel
 from pydantic import Field
 
 from ragelo.logger import logger
 from ragelo.types.configurations.base_configs import AnswerFormat, BaseEvaluatorConfig
-from ragelo.types.pydantic_models import BaseModel, post_validator
+from ragelo.types.pydantic_models import BaseModel, post_validator, validator
 from ragelo.types.types import RetrievalEvaluatorTypes
 
 
@@ -28,10 +30,35 @@ class FewShotExample(BaseModel):
 
 class BaseRetrievalEvaluatorConfig(BaseEvaluatorConfig):
     evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.CUSTOM_PROMPT
-    document_placeholder: str = Field(
-        default="document",
-        description="The placeholder for the document in the prompt",
+    evaluation_prompt: jinja2.Template = Field(
+        default=jinja2.Template(
+            textwrap.dedent("""[USER'S QUERY]
+            {{query.query}}
+            {% for key, value in (query.metadata or {}).items() %}
+            [{{key}}]: {{value}}
+            {% endfor %}
+            [END OF USER'S QUERY]
+            [START OF DOCUMENT]
+            {{document.text}}
+            {% for key, value in (document.metadata or {}).items() %}
+            [{{key}}]: {{value}}
+            {% endfor %}
+            [END OF DOCUMENT]""")
+        ),
+        description=(
+            "The prompt to be used to evaluate the documents. "
+            "It should be a jinja2 template that can be rendered with a query and a document."
+        ),
     )
+
+    @post_validator
+    @classmethod
+    def check_prompts(cls, values):
+        if isinstance(values.evaluation_prompt, str):
+            values.evaluation_prompt = jinja2.Template(values.evaluation_prompt)
+        if isinstance(values.system_prompt, str):
+            values.system_prompt = jinja2.Template(values.system_prompt)
+        return values
 
 
 class ReasonerEvaluatorConfig(BaseRetrievalEvaluatorConfig):
@@ -73,56 +100,65 @@ class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     )
     llm_response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = Field(
         default={
+            "reasoning": "The reasoning behind the relevance of the document",
             "score": (
                 "An integer between 0 and 2 representing the score of the document, "
                 "where 0 means the document is not relevant to the query, 1 means the document is somewhat relevant, "
                 "and 2 means the document is highly relevant."
-            )
+            ),
         },
     )
 
 
 class CustomPromptEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.CUSTOM_PROMPT
-    prompt: str = Field(
-        default="query: {query} document: {document}",
-        description=(
-            "The prompt to be used to evaluate the documents. "
-            "It should contain a {query} and a {document} placeholder"
-        ),
-    )
 
 
 class FewShotEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.FEW_SHOT
-    system_prompt: str = Field(
-        default="You are a helpful assistant.",
-        description="The system prompt to be used to evaluate the documents.",
-    )
     few_shots: list[FewShotExample] = Field(
         default_factory=list,
         description="A list of few-shot examples to be used in the prompt",
     )
-    few_shot_user_prompt: str = Field(
-        default="Query: {query}\n\nPassage:{passage}",
+    few_shot_user_prompt: jinja2.Template = Field(
+        default=jinja2.Template(
+            textwrap.dedent("""[USER'S QUERY]
+            {{query.query}}
+            {% for key, value in (query.metadata or {}).items() %}
+            [{{key}}]: {{value}}
+            {% endfor %}
+            [END OF USER'S QUERY]
+            [START OF DOCUMENT]
+            {{document.text}}
+            {% for key, value in (document.metadata or {}).items() %}
+            [{{key}}]: {{value}}
+            {% endfor %}
+            [END OF DOCUMENT]""")
+        ),
         description=(
             "The individual prompt to be used to evaluate the documents. "
             "It should contain a {query} and a {passage} placeholder"
         ),
     )
-    few_shot_assistant_answer: str = Field(
-        default='{reasoning}\n\n{{"relevance": {relevance}}}',
+    few_shot_assistant_answer: jinja2.Template = Field(
+        default=jinja2.Template(
+            textwrap.dedent("""
+            reasoning: {{reasoning}}
+            relevance: {{relevance}}
+            """)
+        ),
         description="The expected answer format from the LLM for each evaluated document "
         "It should contain a {reasoning} and a {relevance} placeholder",
     )
-    reasoning_placeholder: str = Field(
-        default="reasoning",
-        description="The placeholder for the reasoning in the prompt",
-    )
-    relevance_placeholder: str = Field(
-        default="relevance",
-        description="The placeholder for the relevance in the prompt",
-    )
+
+    @validator
+    @classmethod
+    def check_prompts(cls, values):
+        if isinstance(values.few_shot_user_prompt, str):
+            values.few_shot_user_prompt = jinja2.Template(values.few_shot_user_prompt)
+        if isinstance(values.few_shot_assistant_answer, str):
+            values.few_shot_assistant_answer = jinja2.Template(values.few_shot_assistant_answer)
+        return values
 
 
 class RDNAMEvaluatorConfig(BaseRetrievalEvaluatorConfig):
