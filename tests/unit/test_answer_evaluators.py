@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import warnings
 
-
 from ragelo import get_answer_evaluator
 from ragelo.evaluators.answer_evaluators import (
     BaseAnswerEvaluator,
@@ -134,14 +133,14 @@ class TestPairwiseAnswerEvaluator:
     def test_evaluate_single_game(
         self,
         llm_provider_pairwise_answer_mock,
-        experiment_with_conversations_and_reasonings,
+        experiment,
         pairwise_answer_eval_config,
     ):
         evaluator = PairwiseAnswerEvaluator.from_config(
             config=pairwise_answer_eval_config,
             llm_provider=llm_provider_pairwise_answer_mock,
         )
-        query = experiment_with_conversations_and_reasonings["0"]
+        query = experiment["0"]
         result = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
         assert isinstance(result, AnswerEvaluatorResult)
         assert isinstance(result.answer, str)

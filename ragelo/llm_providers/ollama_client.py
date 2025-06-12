@@ -4,7 +4,7 @@ import json
 from typing import Any, Type
 
 from openai import AsyncOpenAI
-from pydantic import BaseModel as PydanticBaseModel
+from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, wait_random_exponential
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, LLMProviderFactory
@@ -31,7 +31,7 @@ class OllamaProvider(BaseLLMProvider):
         self,
         prompt: str | list[dict[str, str]],
         answer_format: AnswerFormat = AnswerFormat.TEXT,
-        response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = None,
+        response_schema: Type[BaseModel] | dict[str, Any] | None = None,
     ) -> LLMResponseType:
         """Calls the Ollama Local API asynchronously.
 

@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel as PydanticBaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
     AnswerEvaluatorFactory,
@@ -18,7 +17,7 @@ from ragelo.types.query import Query
 from ragelo.types.types import AnswerEvaluatorTypes
 
 
-class PairWiseAnswerAnswerFormat(PydanticBaseModel):
+class PairWiseAnswerAnswerFormat(BaseModel):
     winner: Literal["A", "B", "C"] = Field(..., description="The winner of the pairwise comparison.")
 
 

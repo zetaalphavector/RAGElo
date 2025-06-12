@@ -2,12 +2,10 @@ from __future__ import annotations
 
 from typing import Any, Callable, Type
 
-from pydantic import BaseModel as PydanticBaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from ragelo.types.configurations.base_configs import BaseEvaluatorConfig
 from ragelo.types.formats import AnswerFormat
-from ragelo.types.pydantic_models import ValidationError, validator
 from ragelo.types.types import AnswerEvaluatorTypes
 
 
@@ -86,7 +84,7 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
         default=AnswerFormat.JSON,
         description="The format of the answer returned by the LLM",
     )
-    llm_response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = Field(
+    llm_response_schema: Type[BaseModel] | dict[str, Any] | None = Field(
         default={
             "answer_a_reasoning": "A string with your analysis of assistant A's answer",
             "answer_b_reasoning": "A string with your analysis of assistant B's answer",
@@ -102,7 +100,7 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
         ),
     )
 
-    @validator
+    @model_validator(mode="before")
     @classmethod
     def check_annotations_or_raw_documents(cls, v):
         if v is None and cls.include_annotations is False and cls.include_raw_documents is False:
@@ -123,7 +121,7 @@ class CustomPairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
         default=AnswerFormat.JSON,
         description="The format of the answer returned by the LLM",
     )
-    llm_response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = Field(
+    llm_response_schema: Type[BaseModel] | dict[str, Any] | None = Field(
         default={
             "analysis_assistant_a": "A string with your analysis of assistant A's answer",
             "analysis_assistant_b": "A string with your analysis of assistant B's answer",
