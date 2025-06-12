@@ -208,7 +208,14 @@ def get_retrieval_evaluator(
                 "These kwargs will be ignored."
             )
         llm_provider_instance = llm_provider
-
+    current_evaluator_type = (
+        RetrievalEvaluatorTypes(evaluator_name) if isinstance(evaluator_name, str) else evaluator_name
+    )
+    if current_evaluator_type not in RetrievalEvaluatorFactory.registry:
+        raise ValueError(
+            f"Unknown retrieval evaluator type: {current_evaluator_type}.\n"
+            f"Valid options are {list(RetrievalEvaluatorFactory.registry.keys())}"
+        )
     if config is not None:
         user_params = list(evaluator_config_params.keys())
         if evaluator_config_params:
@@ -236,14 +243,6 @@ def get_retrieval_evaluator(
                 "to determine the type of evaluator and its configuration."
             )
 
-        current_evaluator_type = (
-            RetrievalEvaluatorTypes(evaluator_name) if isinstance(evaluator_name, str) else evaluator_name
-        )
-        if current_evaluator_type not in RetrievalEvaluatorFactory.registry:
-            raise ValueError(
-                f"Unknown retrieval evaluator type: {current_evaluator_type}.\n"
-                f"Valid options are {list(RetrievalEvaluatorFactory.registry.keys())}"
-            )
     evaluator_class = RetrievalEvaluatorFactory.registry[current_evaluator_type]
     config_class = evaluator_class.get_config_class()
 

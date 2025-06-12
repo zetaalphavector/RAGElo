@@ -379,6 +379,14 @@ def get_answer_evaluator(
                 "These kwargs will be ignored."
             )
             llm_provider_instance = llm_provider
+    current_evaluator_type = (
+        AnswerEvaluatorTypes(evaluator_name) if isinstance(evaluator_name, str) else evaluator_name
+    )
+    if current_evaluator_type not in AnswerEvaluatorFactory.registry:
+        raise ValueError(
+            f"Unknown answer evaluator type: {current_evaluator_type}.\n"
+            f"Valid options are {list(AnswerEvaluatorFactory.registry.keys())}"
+        )
     if config is not None:
         user_params = list(evaluator_config_params.keys())
         if evaluator_config_params:
@@ -405,14 +413,6 @@ def get_answer_evaluator(
                 "to determine the type of evaluator and its configuration."
             )
 
-        current_evaluator_type = (
-            AnswerEvaluatorTypes(evaluator_name) if isinstance(evaluator_name, str) else evaluator_name
-        )
-        if current_evaluator_type not in AnswerEvaluatorFactory.registry:
-            raise ValueError(
-                f"Unknown answer evaluator type: {current_evaluator_type}.\n"
-                f"Valid options are {list(AnswerEvaluatorFactory.registry.keys())}"
-            )
     evaluator_class = AnswerEvaluatorFactory.registry[current_evaluator_type]
     config_class = evaluator_class.get_config_class()
 
