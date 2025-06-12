@@ -25,12 +25,13 @@ classifiers = [
     "Topic :: System :: Benchmark",
 ]
 dependencies = [
-    "openai>=1.10",
+    "openai>=1.82.0",
     "tenacity==9.0.0",
     "typer==0.12.5",
     "numpy>=1.24",
-    "pydantic>=1.9",
+    "pydantic>=2.0.0",
     "eval-type-backport>=0.2.0",
+    "jinja2",
 ]
 
 [project.optional-dependencies]
@@ -39,7 +40,6 @@ eval = ["ir-measures>=0.3.4"]
 [dependency-groups]
 dev = [
     "mypy>=1.9.0",
-    "pydantic>=2.0.0",
     "pytest>=8.3.3",
     "ruff>=0.7.4",
     "types-tqdm==4.66.0",

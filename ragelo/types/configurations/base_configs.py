@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from typing import Any, Type
+from typing import Any, Literal, Type
 
-from pydantic import BaseModel as PydanticBaseModel
-from pydantic import Field
+import jinja2
+from pydantic import BaseModel, Field, field_validator
 
-from ragelo.types.formats import AnswerFormat
-from ragelo.types.pydantic_models import BaseModel
 from ragelo.types.types import AnswerEvaluatorTypes
 
 
@@ -20,7 +18,9 @@ class BaseConfig(BaseModel):
         default=False,
         description="Whether or not to be verbose and print all intermediate steps.",
     )
-    llm_provider_name: str = Field(default="openai", description="The name of the LLM provider to be used.")
+    llm_provider_name: Literal["openai", "ollama"] = Field(
+        default="openai", description="The name of the LLM provider to be used."
+    )
     use_progress_bar: bool = Field(
         default=True,
         description="Whether or not to show a progress bar while running the evaluations.",
@@ -36,18 +36,40 @@ class BaseEvaluatorConfig(BaseConfig):
         default=None,
         description="The name of the evaluator to use.",
     )
-    query_placeholder: str = Field(
-        default="query",
-        description="The placeholder for the query in the prompt.",
-    )
-    llm_answer_format: AnswerFormat = Field(
-        default=AnswerFormat.JSON,
-        description="The format of the answer returned by the LLM.",
-    )
-    llm_response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = Field(
+    llm_response_schema: Type[BaseModel] | dict[str, Any] | None = Field(
         default=None,
-        description=(
-            "The response schema for the LLM. "
-            "Required if the llm_answer_format is structured and recommended for JSON."
-        ),
+        description="The response schema for the LLM.",
     )
+    system_prompt: jinja2.Template | None = Field(
+        default=None,
+        description="The system prompt to be used on this evaluator.",
+    )
+    evaluation_prompt: jinja2.Template = Field(
+        default=jinja2.Template(""),
+        description="The evaluation prompt to be used on this evaluator.",
+    )
+
+    @field_validator("evaluator_name", mode="before")
+    @classmethod
+    def check_evaluator_exists(cls, value: str | AnswerEvaluatorTypes):
+        if value.lower() not in AnswerEvaluatorTypes.__members__:
+            raise ValueError(f"Evaluator {value} does not exist")
+        else:
+            return AnswerEvaluatorTypes(value.lower())
+
+    @field_validator("evaluation_prompt", mode="before")
+    @classmethod
+    def evaluation_prompt_to_template(cls, value: str | jinja2.Template):
+        if isinstance(value, str):
+            return jinja2.Template(value)
+        return value
+
+    @field_validator("system_prompt", mode="before")
+    @classmethod
+    def system_prompt_to_template(cls, value: str | jinja2.Template | None):
+        if isinstance(value, str):
+            return jinja2.Template(value)
+        return value
+
+    class Config:
+        arbitrary_types_allowed = True
