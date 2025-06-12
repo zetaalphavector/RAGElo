@@ -308,7 +308,10 @@ class BaseAnswerEvaluator(BaseEvaluator):
             }
             documents.append(self.config.document_template.format(**formatters))
         if len(documents) == 0:
-            logger.warning("No relevant documents were retrieved for the answer evaluator")
+            logger.warning(
+                f"No relevant documents were retrieved for the query {query.qid}."
+                "No documents will be provided to the Answer Evaluator."
+            )
             return "NO DOCUMENTS WERE RETRIEVED"
         return "\n".join(documents)
 
