@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ragelo.types.configurations.base_configs import BaseModel
+from pydantic import BaseModel
 
 
 class LLMProviderConfig(BaseModel):

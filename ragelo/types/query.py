@@ -4,11 +4,10 @@ import warnings
 from collections.abc import Iterator
 from typing import Any, overload
 
-from pydantic import BaseModel as PydanticBaseModel
+from pydantic import BaseModel
 
 from ragelo.logger import logger
 from ragelo.types.evaluables import AgentAnswer, Document, PairwiseGame
-from ragelo.types.pydantic_models import BaseModel
 from ragelo.types.results import (
     AnswerEvaluatorResult,
     RetrievalEvaluatorResult,
@@ -249,8 +248,8 @@ class Query(BaseModel):
                 docs_without_relevance += 1
                 continue
             answer = document.evaluation.answer
-            if isinstance(answer, PydanticBaseModel):
-                answer = BaseModel.dump_pydantic(answer)
+            if isinstance(answer, BaseModel):
+                answer = answer.model_dump()
             if isinstance(answer, int):
                 relevance = answer
             elif isinstance(answer, str):

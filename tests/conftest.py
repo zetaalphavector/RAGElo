@@ -15,7 +15,7 @@ from openai.types.chat.parsed_chat_completion import (
     ParsedChatCompletionMessage,
     ParsedChoice,
 )
-from pydantic import BaseModel as PydanticBaseModel
+from pydantic import BaseModel
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.llm_providers.openai_client import OpenAIConfiguration
@@ -85,7 +85,7 @@ def llm_provider_config():
     )
 
 
-class AnswerModel(PydanticBaseModel):
+class AnswerModel(BaseModel):
     keyA: str
     keyB: str
 
@@ -127,7 +127,7 @@ class MockLLMProvider(BaseLLMProvider):
         self,
         prompt: str | list[dict[str, str]],
         answer_format: AnswerFormat = AnswerFormat.TEXT,
-        response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = None,
+        response_schema: Type[BaseModel] | dict[str, Any] | None = None,
     ) -> LLMResponseType:
         return await self.async_call_mocker(prompt, answer_format, response_schema)
 
