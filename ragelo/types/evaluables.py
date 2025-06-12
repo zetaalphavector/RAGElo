@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from pydantic import BaseModel, model_validator
+from typing_extensions import Self
 
 from ragelo.logger import logger
 from ragelo.types.results import EvaluatorResult
@@ -126,16 +127,15 @@ class AgentAnswer(Evaluable):
     conversation: list[ChatMessage] | None = None
 
     @model_validator(mode="after")
-    @classmethod
-    def one_of_text_or_conversation(cls, values):
-        text = values.get("text")
-        conversation = values.get("conversation")
+    def one_of_text_or_conversation(self) -> Self:
+        text = self.text
+        conversation = self.conversation
         if text is None and conversation is None:
             raise ValueError("Either text or conversation must be provided")
 
         if text is not None and conversation is not None:
             raise ValueError("Only one of text or conversation must be provided")
-        return values
+        return self
 
     @classmethod
     def assemble_answer(

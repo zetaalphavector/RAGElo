@@ -238,6 +238,7 @@ def experiment_with_conversations_and_reasonings(experiment):
             content="Brasília is the capital of Brazil, according to [0].",
         ),
     ]
+    experiment.queries["0"].answers["agent1"].text = None
     experiment.queries["0"].answers["agent2"].conversation = [
         ChatMessage(sender="user", content="What is the capital of Brazil?"),
         ChatMessage(
@@ -245,10 +246,12 @@ def experiment_with_conversations_and_reasonings(experiment):
             content="According to [1], Rio de Janeiro used to be the capital of Brazil, until the 60s.",
         ),
     ]
+    experiment.queries["0"].answers["agent2"].text = None
     experiment.queries["1"].answers["agent1"].conversation = [
         ChatMessage(sender="user", content="What is the capital of France?"),
         ChatMessage(sender="agent1", content="Paris is the capital of France, according to [2]."),
     ]
+    experiment.queries["1"].answers["agent1"].text = None
     experiment.queries["1"].answers["agent2"].conversation = [
         ChatMessage(sender="user", content="What is the capital of France?"),
         ChatMessage(
