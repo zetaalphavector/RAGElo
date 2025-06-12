@@ -413,14 +413,14 @@ def get_answer_evaluator(
                 "to determine the type of evaluator and its configuration."
             )
 
-    evaluator_class = AnswerEvaluatorFactory.registry[current_evaluator_type]
-    config_class = evaluator_class.get_config_class()
+        evaluator_class = AnswerEvaluatorFactory.registry[current_evaluator_type]
+        config_class = evaluator_class.get_config_class()
 
-    try:
-        final_config = config_class(**evaluator_config_params)
-    except TypeError as e:
-        raise ValueError(
-            f"Error creating config {config_class.__name__} for evaluator '{current_evaluator_type}': {e}"
-        )
+        try:
+            final_config = config_class(**evaluator_config_params)
+        except TypeError as e:
+            raise ValueError(
+                f"Error creating config {config_class.__name__} for evaluator '{current_evaluator_type}': {e}"
+            )
 
     return AnswerEvaluatorFactory.create(config=final_config, llm_provider_instance=llm_provider_instance)
