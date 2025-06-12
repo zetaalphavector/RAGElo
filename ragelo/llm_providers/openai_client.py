@@ -49,8 +49,10 @@ class OpenAIProvider(BaseLLMProvider):
         """
         if isinstance(prompt, str):
             prompt = [{"role": "system", "content": prompt}]
-        call_kwargs = self.__call_kwargs
-        call_kwargs["messages"] = prompt
+        # Start with a fresh copy of the static kwargs so mutations
+        # (e.g. adding `messages` or `response_format`) do not leak to
+        # subsequent calls.
+        call_kwargs = {**self.__call_kwargs, "messages": prompt}
 
         call_fn: Callable
         if answer_format == AnswerFormat.STRUCTURED:
@@ -103,7 +105,7 @@ class OpenAIProvider(BaseLLMProvider):
     def __get_openai_client(openai_config: OpenAIConfiguration) -> tuple[AsyncOpenAI, dict[str, Any]]:
         # Get all attributes as a dictionary and filter out None values
         api_type = openai_config.api_type
-        call_kwargs = {}
+        call_kwargs: dict[str, Any] = {}
         call_kwargs["model"] = openai_config.model
         call_kwargs["temperature"] = openai_config.temperature
         call_kwargs["max_tokens"] = openai_config.max_tokens

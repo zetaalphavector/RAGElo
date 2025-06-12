@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from pydantic import BaseModel as PydanticBaseModel
@@ -80,6 +80,46 @@ class TestOpenAIProvider:
         assert call_args[1][1]["temperature"] == 0.2
         assert call_args[1][1]["max_tokens"] == 1000
         assert call_args[1][1]["seed"] == 42
+
+    def test_call_kwargs_not_mutated(self, monkeypatch):
+        """Ensure that response_format from a JSON call is not leaked into a subsequent TEXT call."""
+
+        # Dummy OpenAI client with an async create method that just returns minimal fake response
+        class _DummyMessage:
+            def __init__(self, content: str):
+                self.content = content
+
+        class _DummyChoice:
+            def __init__(self, content: str):
+                self.message = _DummyMessage(content)
+
+        class _DummyResponse:
+            def __init__(self, content: str):
+                self.choices = [_DummyChoice(content)]
+
+        dummy_client = MagicMock()
+        create_mock = AsyncMock(return_value=_DummyResponse("{}"))
+        dummy_client.chat.completions.create = create_mock  # type: ignore
+        # structured path (not used but must exist)
+        dummy_client.beta.chat.completions.parse = AsyncMock(return_value=_DummyResponse("{}"))  # type: ignore
+
+        from ragelo.types.configurations import OpenAIConfiguration
+
+        cfg = OpenAIConfiguration(api_key="key", api_type="open_ai", model="gpt-4o-mini")
+        provider = OpenAIProvider(cfg)
+
+        # Patch provider's internal client
+        monkeypatch.setattr(provider, "_OpenAIProvider__openai_client", dummy_client)
+
+        prompt = "Hello"
+
+        # First call: JSON format
+        provider(prompt, answer_format=AnswerFormat.JSON)
+        assert "response_format" in create_mock.call_args_list[0][1]
+
+        # Second call: TEXT format – must not contain response_format
+        provider(prompt, answer_format=AnswerFormat.TEXT)
+        assert "response_format" not in create_mock.call_args_list[1][1]
 
 
 class TestLLMProviderFactory:
