@@ -220,10 +220,10 @@ class Experiment:
         else:
             query_obj = Query(qid=query_id, query=query, metadata=metadata)
         if query_id in self.queries and not force:
-            warnings.warn(f"Query {query_id} already exists. Use force=True to overwrite")
+            logger.warning(f'Query with ID "{query_id}" already exists. Use force=True to overwrite')
             return query_id
         if query_id in self.queries and force:
-            logger.info(f"Query {query_id} already exists, but force was set to True. Overwriting.")
+            logger.info(f'Query with ID "{query_id}" already exists, but force was set to True. Overwriting.')
         self.queries[query_id] = query_obj
         return query_id
 

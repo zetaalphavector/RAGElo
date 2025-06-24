@@ -301,11 +301,17 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 continue
             if self.config.include_raw_documents and d.text is None:
                 continue
+            if d.evaluation is None:
+                annotation = None
+            elif self.config.use_raw_document_evaluation:
+                annotation = d.evaluation.raw_answer
+            else:
+                annotation = d.evaluation.answer
 
             formatters = {
                 "did": did,
                 "doc": d.text,
-                "annotation": d.evaluation.answer if d.evaluation else None,
+                "annotation": annotation,
             }
             documents.append(self.config.document_template.format(**formatters))
         if len(documents) == 0:

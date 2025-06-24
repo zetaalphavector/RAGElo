@@ -96,7 +96,8 @@ and "C" for a tie.
         if config.prompt:
             self.prompt = config.prompt
         if config.llm_answer_format == AnswerFormat.STRUCTURED:
-            self.config.llm_response_schema = PairWiseAnswerAnswerFormat
+            if not config.llm_response_schema:
+                self.config.llm_response_schema = PairWiseAnswerAnswerFormat
         elif self.config.llm_answer_format != AnswerFormat.JSON:
             logger.warning("We are using a PairwiseAnswerEvaluator config. Forcing the LLM answer format to JSON.")
             self.config.llm_answer_format = AnswerFormat.JSON
@@ -148,8 +149,8 @@ and "C" for a tie.
         """Extracts the relevant part of an answer."""
         if isinstance(llm_response.parsed_answer, dict):
             answer = llm_response.parsed_answer["winner"]
-        elif isinstance(llm_response.parsed_answer, PairWiseAnswerAnswerFormat):
-            answer = llm_response.parsed_answer.winner
+        elif isinstance(llm_response.parsed_answer, PydanticBaseModel):
+            answer = llm_response.parsed_answer.winner  # type: ignore
         else:
             answer = llm_response.parsed_answer
         return LLMResponseType(

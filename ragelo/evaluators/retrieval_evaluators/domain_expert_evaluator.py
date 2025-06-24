@@ -177,7 +177,7 @@ document given the particular query. The score meaning is as follows:
             exc = "The LLM did not return a dictionary with a 'score' key"
             answer = None
         else:
-            answer = score_answer.parsed_answer["score"]
+            answer = float(score_answer.parsed_answer["score"])
         return RetrievalEvaluatorResult(
             qid=query.qid,
             did=document.did,
