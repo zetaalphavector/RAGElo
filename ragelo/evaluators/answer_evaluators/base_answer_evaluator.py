@@ -26,6 +26,7 @@ from ragelo.utils import call_async_fn
 class BaseAnswerEvaluator(BaseEvaluator):
     config: BaseAnswerEvaluatorConfig
     evaluable_name: str = "Agent Answer"
+    _warned_queries: set[str] = set()
 
     def __init__(
         self,
@@ -308,10 +309,12 @@ class BaseAnswerEvaluator(BaseEvaluator):
             }
             documents.append(self.config.document_template.format(**formatters))
         if len(documents) == 0:
-            logger.warning(
-                f"No relevant documents were retrieved for the query {query.qid}."
-                "No documents will be provided to the Answer Evaluator."
-            )
+            if query.qid not in self._warned_queries:
+                logger.warning(
+                    f"No relevant documents were retrieved for the query {query.qid}. "
+                    "No documents will be provided to the Answer Evaluator."
+                )
+                self._warned_queries.add(query.qid)
             return "NO DOCUMENTS WERE RETRIEVED"
         return "\n".join(documents)
 
