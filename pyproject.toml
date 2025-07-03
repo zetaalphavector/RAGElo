@@ -25,7 +25,7 @@ classifiers = [
     "Topic :: System :: Benchmark",
 ]
 dependencies = [
-    "openai>=1.10",
+    "openai>=1.78.0",
     "tenacity==9.0.0",
     "typer==0.12.5",
     "numpy>=1.24",
