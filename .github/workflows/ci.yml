@@ -13,11 +13,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: [3.10, 3.11, 3.12, 3.13]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
@@ -27,4 +27,4 @@ jobs:
           pip install .
           pip install pytest pytest-asyncio pytest-mock
       - name: Run tests
-        run: pytest -q --maxfail=1
+        run: pytest -q --disable-warnings --maxfail=1
