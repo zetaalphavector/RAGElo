@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 from openai import AsyncOpenAI
+from openai.resources import AsyncChat
 from openai.resources.beta import AsyncBeta
-from openai.resources.beta.chat import AsyncChat
 from openai.types.chat.chat_completion import ChatCompletion, Choice
 from openai.types.chat.chat_completion_message import ChatCompletionMessage
 from openai.types.chat.parsed_chat_completion import (
