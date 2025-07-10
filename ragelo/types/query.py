@@ -1,6 +1,11 @@
 import warnings
 from collections.abc import Iterator
-from typing import Any, Self, overload
+from typing import Any, overload
+
+try:
+    from typing import Self
+except ImportError:
+    from typing_extensions import Self
 
 from pydantic import BaseModel
 
