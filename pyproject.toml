@@ -25,7 +25,7 @@ classifiers = [
     "Topic :: System :: Benchmark",
 ]
 dependencies = [
-    "openai>=1.10",
+    "openai>=1.78.0",
     "tenacity==9.0.0",
     "typer==0.12.5",
     "numpy>=1.24",
@@ -77,8 +77,6 @@ exclude = ["docs/examples/notebooks"]
 line-length = 119
 fix = true
 
-[tool.ruff.lint.isort]
-required-imports = ["from __future__ import annotations"]
 
 [tool.setuptools-git-versioning]
 enabled = true
