@@ -1,14 +1,11 @@
-from __future__ import annotations
-
 import os
 from abc import ABC, abstractmethod
 from typing import Any, Type, get_type_hints
 
-from pydantic import BaseModel as PydanticBaseModel
+from pydantic import BaseModel
 
 from ragelo.types.configurations import LLMProviderConfig
 from ragelo.types.formats import AnswerFormat, LLMResponseType
-from ragelo.types.pydantic_models import _PYDANTIC_MAJOR_VERSION
 from ragelo.types.types import LLMProviderTypes
 from ragelo.utils import call_async_fn
 
@@ -24,7 +21,7 @@ class BaseLLMProvider(ABC):
         self,
         prompt: str | list[dict[str, str]],
         answer_format: AnswerFormat = AnswerFormat.TEXT,
-        response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = None,
+        response_schema: Type[BaseModel] | dict[str, Any] | None = None,
     ) -> LLMResponseType:
         """Submits a single query-document pair to the LLM and returns the answer."""
         return call_async_fn(self.call_async, prompt, answer_format, response_schema)
@@ -34,7 +31,7 @@ class BaseLLMProvider(ABC):
         self,
         prompt: str | list[dict[str, str]],
         answer_format: AnswerFormat = AnswerFormat.TEXT,
-        response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = None,
+        response_schema: Type[BaseModel] | dict[str, Any] | None = None,
     ) -> LLMResponseType:
         """Submits a single query-document pair to the LLM and returns the answer."""
         raise NotImplementedError
@@ -86,10 +83,7 @@ class LLMProviderFactory:
                 if not api_key:
                     # Check if the key is actually required
                     api_key_field = type_config.get_model_fields()["api_key"]
-                    if _PYDANTIC_MAJOR_VERSION == 2:
-                        is_required = api_key_field.is_required()
-                    else:
-                        is_required = api_key_field.required  # type: ignore
+                    is_required = api_key_field.is_required()
                     if is_required:
                         raise ValueError(f"API key not found in environment variable {class_.api_key_env_var}")
                     else:

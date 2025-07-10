@@ -1,17 +1,14 @@
-from __future__ import annotations
-
 import json
 from typing import Any, Callable, Type
 
 from openai import AsyncAzureOpenAI, AsyncOpenAI
-from pydantic import BaseModel as PydanticBaseModel
+from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, wait_random_exponential
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, LLMProviderFactory
 from ragelo.logger import logger
 from ragelo.types.configurations import OpenAIConfiguration
 from ragelo.types.formats import AnswerFormat, LLMResponseType
-from ragelo.types.pydantic_models import _PYDANTIC_MAJOR_VERSION
 from ragelo.types.types import LLMProviderTypes
 
 
@@ -34,7 +31,7 @@ class OpenAIProvider(BaseLLMProvider):
         self,
         prompt: str | list[dict[str, str]],
         answer_format: AnswerFormat = AnswerFormat.TEXT,
-        response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = None,
+        response_schema: Type[BaseModel] | dict[str, Any] | None = None,
     ) -> LLMResponseType:
         """Calls the OpenAI API asynchronously.
 
@@ -58,22 +55,19 @@ class OpenAIProvider(BaseLLMProvider):
         }
         call_fn: Callable
         if answer_format == AnswerFormat.STRUCTURED:
-            if not isinstance(response_schema, type(PydanticBaseModel)):
+            if not isinstance(response_schema, type(BaseModel)):
                 raise ValueError("response_schema must be a PydanticBaseModel Class when using structured output.")
             call_fn = self.__openai_client.beta.chat.completions.parse
             call_kwargs["response_format"] = response_schema
         else:
             call_fn = self.__openai_client.chat.completions.create
             if answer_format == AnswerFormat.JSON:
-                if isinstance(response_schema, type(PydanticBaseModel)):
+                if isinstance(response_schema, type(BaseModel)):
                     logger.info(
                         "You provided a PydanticBaseModel class for the response_schema. "
                         "Using JSON as the desired answer format. Dumping the schema to JSON."
                     )
-                    if _PYDANTIC_MAJOR_VERSION >= 2:
-                        response_schema = response_schema.model_json_schema()  # type: ignore
-                    else:
-                        response_schema = response_schema.schema()  # type: ignore
+                    response_schema = response_schema.model_json_schema()  # type: ignore
                 elif isinstance(response_schema, dict):
                     schema = json.dumps(response_schema, indent=4)
                     prompt[0]["content"] += (
@@ -87,7 +81,7 @@ class OpenAIProvider(BaseLLMProvider):
             raise ValueError("OpenAI did not return any completions.")
         if answer_format == AnswerFormat.STRUCTURED:
             parsed_answer = answers.choices[0].message.parsed
-            if not isinstance(parsed_answer, PydanticBaseModel):
+            if not isinstance(parsed_answer, BaseModel):
                 raise ValueError(f"OpenAI did not return a valid structured answer: {parsed_answer}")
         elif answer_format == AnswerFormat.JSON:
             try:

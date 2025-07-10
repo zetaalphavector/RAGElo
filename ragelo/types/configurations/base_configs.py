@@ -1,12 +1,8 @@
-from __future__ import annotations
-
 from typing import Any, Type
 
-from pydantic import BaseModel as PydanticBaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from ragelo.types.formats import AnswerFormat
-from ragelo.types.pydantic_models import BaseModel
 from ragelo.types.types import AnswerEvaluatorTypes
 
 
@@ -44,7 +40,7 @@ class BaseEvaluatorConfig(BaseConfig):
         default=AnswerFormat.JSON,
         description="The format of the answer returned by the LLM.",
     )
-    llm_response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = Field(
+    llm_response_schema: Type[BaseModel] | dict[str, Any] | None = Field(
         default=None,
         description=(
             "The response schema for the LLM. "

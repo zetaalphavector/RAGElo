@@ -1,14 +1,11 @@
-from __future__ import annotations
-
 import warnings
 from collections.abc import Iterator
-from typing import Any, overload
+from typing import Any, Self, overload
 
-from pydantic import BaseModel as PydanticBaseModel
+from pydantic import BaseModel
 
 from ragelo.logger import logger
 from ragelo.types.evaluables import AgentAnswer, Document, PairwiseGame
-from ragelo.types.pydantic_models import BaseModel
 from ragelo.types.results import (
     AnswerEvaluatorResult,
     RetrievalEvaluatorResult,
@@ -249,8 +246,8 @@ class Query(BaseModel):
                 docs_without_relevance += 1
                 continue
             answer = document.evaluation.answer
-            if isinstance(answer, PydanticBaseModel):
-                answer = BaseModel.dump_pydantic(answer)
+            if hasattr(answer, "model_dump"):
+                answer = answer.model_dump()
             if isinstance(answer, int):
                 relevance = answer
             elif isinstance(answer, str):
@@ -267,8 +264,7 @@ class Query(BaseModel):
             elif isinstance(answer, dict):
                 if relevance_key is None or relevance_key not in answer:
                     logger.warning(
-                        f"Document {did} does not have a relevance key ({relevance_key})"
-                        " in the evaluation. Skipping."
+                        f"Document {did} does not have a relevance key ({relevance_key}) in the evaluation. Skipping."
                     )
                     docs_without_relevance += 1
                     continue
@@ -287,7 +283,7 @@ class Query(BaseModel):
                 relevance = int(answer[relevance_key])
             else:
                 logger.warning(
-                    f"Unsupported relevance type {type(answer)} for document {did} " f"in query {self.qid}. Skipping."
+                    f"Unsupported relevance type {type(answer)} for document {did} in query {self.qid}. Skipping."
                 )
                 docs_without_relevance += 1
                 continue
@@ -321,7 +317,7 @@ class Query(BaseModel):
         return iter(self.retrieved_docs.values())
 
     @classmethod
-    def assemble_query(cls, query: Query | str, metadata: dict[str, Any] | None = None) -> Query:
+    def assemble_query(cls, query: Self | str, metadata: dict[str, Any] | None = None) -> Self:
         """Assembles a Query object from a Query object or a query text.
         Args:
             query Query | str: The query object or the query text.

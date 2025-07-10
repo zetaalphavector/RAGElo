@@ -1,13 +1,9 @@
-from __future__ import annotations
-
 from typing import Any, Type
 
-from pydantic import BaseModel as PydanticBaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field, model_validator
 
 from ragelo.logger import logger
 from ragelo.types.configurations.base_configs import AnswerFormat, BaseEvaluatorConfig
-from ragelo.types.pydantic_models import BaseModel, post_validator
 from ragelo.types.types import RetrievalEvaluatorTypes
 
 
@@ -41,7 +37,7 @@ class ReasonerEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         description="The format of the answer returned by the LLM",
     )
 
-    @post_validator
+    @model_validator(mode="after")
     @classmethod
     def check_answer_format(cls, values):
         if values.llm_answer_format != AnswerFormat.TEXT:
@@ -71,7 +67,7 @@ class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default=AnswerFormat.JSON,
         description="The format of the answer returned by the LLM",
     )
-    llm_response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = Field(
+    llm_response_schema: Type[BaseModel] | dict[str, Any] | None = Field(
         default={
             "score": (
                 "An integer between 0 and 2 representing the score of the document, "
@@ -148,7 +144,7 @@ class RDNAMEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         description="The format of the answer returned by the LLM",
     )
 
-    @post_validator
+    @model_validator(mode="after")
     @classmethod
     def check_answer_format(cls, values):
         if values.llm_answer_format != AnswerFormat.JSON:

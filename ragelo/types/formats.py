@@ -1,9 +1,7 @@
-from __future__ import annotations
-
 from enum import Enum
 from typing import Any
 
-from ragelo.types.pydantic_models import BaseModel, PydanticBaseModel
+from pydantic import BaseModel
 
 
 class AnswerFormat(str, Enum):
@@ -16,4 +14,4 @@ class AnswerFormat(str, Enum):
 
 class LLMResponseType(BaseModel):
     raw_answer: str
-    parsed_answer: float | str | dict[str, Any] | PydanticBaseModel | None
+    parsed_answer: float | str | dict[str, Any] | BaseModel | None

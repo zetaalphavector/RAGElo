@@ -1,7 +1,5 @@
 """Parse arguments for the cli app"""
 
-from __future__ import annotations
-
 import collections.abc
 import inspect
 import sys
@@ -10,7 +8,6 @@ from typing import Any, Callable, Dict, get_args, get_origin, get_type_hints
 from typer.models import ArgumentInfo, OptionInfo, ParameterInfo, ParamMeta
 
 from ragelo.types import BaseConfig
-from ragelo.types.pydantic_models import _PYDANTIC_MAJOR_VERSION
 
 arguments = {
     "queries_csv_file",
@@ -43,16 +40,10 @@ def get_params_from_function(func: Callable[..., Any]) -> Dict[str, ParamMeta]:
             for k, v in fields.items():
                 if k in ignore_args:
                     continue
-                if _PYDANTIC_MAJOR_VERSION == 2:
-                    description = v.description  # type: ignore
-                    _type = v.annotation  # type: ignore
-                    _outer_type = v.annotation  # type: ignore
-                    t_args = get_args(_type)
-                else:
-                    description = v.field_info.description  # type: ignore
-                    _type = v.type_  # type: ignore
-                    _outer_type = v.outer_type_  # type: ignore
-                    t_args = get_args(_outer_type)
+                description = v.description
+                _type = v.annotation
+                _outer_type = v.annotation
+                t_args = get_args(_type)
                 if get_origin(_outer_type) is list:
                     _type = _outer_type
                 if get_origin(_outer_type) is type(None) or _type is type(None):

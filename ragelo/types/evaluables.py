@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from pydantic import BaseModel, model_validator
+
 from ragelo.logger import logger
-from ragelo.types.pydantic_models import BaseModel, validator
 from ragelo.types.results import EvaluatorResult
 
 
@@ -55,7 +56,13 @@ class Document(Evaluable):
     text: str
     retrieved_by: dict[str, float] = {}
 
-    def add_retrieved_by(self, agent: str, score: float | None = None, force: bool = False, exist_ok: bool = False):
+    def add_retrieved_by(
+        self,
+        agent: str,
+        score: float | None = None,
+        force: bool = False,
+        exist_ok: bool = False,
+    ):
         """Adds the score of an agent that retrieved the document."""
         if agent in self.retrieved_by and not force:
             if not exist_ok:
@@ -124,7 +131,7 @@ class AgentAnswer(Evaluable):
     text: str | None = None
     conversation: list[ChatMessage] | None = None
 
-    @validator
+    @model_validator(mode="before")
     @classmethod
     def one_of_text_or_conversation(cls, values):
         text = values.get("text")
