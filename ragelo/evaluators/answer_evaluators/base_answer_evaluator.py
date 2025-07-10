@@ -1,7 +1,5 @@
 """Base model for dealing with answer evaluators"""
 
-from __future__ import annotations
-
 import itertools
 import random
 from typing import Any, Callable, Type, get_type_hints
