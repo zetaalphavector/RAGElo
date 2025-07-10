@@ -189,45 +189,8 @@ class Query(BaseModel):
                                 f"Query {self.qid} already has an evaluation for agents {agent_a} and {agent_b}. "
                                 "Overwriting."
                             )
-                # If we are running pairwise games with bidirectional, we need to be more strict on what a tie means.
-                # In this case, we should go over all results and combine the pairs into a single evaluation.
-                # If the evaluation agrees in both directions or if there is a single tie, keep it like this.
-                # If there are two ties OR the evaluatios are _reversed_ in each direction, we change it into a tie.
-                if (
-                    game.agent_a_answer.agent == agent_b
-                    and game.agent_b_answer.agent == agent_a
-                    and game.evaluation is not None
-                ):
-                    current_winner = self._get_winner_from_pairwise_game(game)
-                    new_winner = self._get_winner_from_pairwise_game(evaluation)
-                    if current_winner != new_winner:
-                        # Pick the one that is not a tie
-                        if current_winner == "TIE" and new_winner != "TIE":
-                            logger.info(
-                                f"Query {self.qid} already has an evaluation for agents {agent_a} and {agent_b} "
-                                f"with a tie. New evaluation has {new_winner} as winner. Will overwrite the current tie with the new winner."
-                            )
-                            game.evaluation = evaluation
-                            return True
-                        if new_winner == "TIE" and current_winner != "TIE":
-                            logger.info(
-                                f"Query {self.qid} already has an evaluation for agents {agent_a} and {agent_b} "
-                                f"with a tie. New evaluation has {current_winner} as winner. We will keep the current winner as is."
-                            )
-                            return False
-                        # Here, neither of them are a tie, but they are different. We should change the current evaluation into a tie.
-                        logger.info(
-                            f"Query {self.qid} already has an evaluation for agents {agent_a} and {agent_b} "
-                            f"with winner {current_winner}. But the new evaluation has {new_winner} as winner. "
-                            "Changing the current evaluation into a tie."
-                        )
-                        game.evaluation["winner"] = "C"
-                        game.evaluation["answer_a_reasoning"] += "\n ----\n" + evaluation.answer["answer_a_reasoning"]
-                        game.evaluation["answer_b_reasoning"] += "\n ----\n" + evaluation.answer["answer_b_reasoning"]
-                        game.evaluation["comparison_reasoning"] += (
-                            "\n ----\n" + evaluation.answer["comparison_reasoning"]
-                        )
-                        return True
+                    game.evaluation = evaluation
+                    return True
 
             logger.info(
                 f"Trying to add a pairwise evaluation for a comparison between agents {agent_a} and {agent_b},"
@@ -272,13 +235,6 @@ class Query(BaseModel):
             logger.info(f"Agent {agent} in query {self.qid} already has an evaluation. Overwriting.")
         self.answers[agent].evaluation = evaluation
         return True
-
-    def _get_winner_from_pairwise_game(self, game: PairwiseGame) -> str:
-        winner_id = game.evaluation.answer.get("winner")
-        winner = (
-            game.agent_a_answer.agent if winner_id == "A" else game.agent_b_answer.agent if winner_id == "B" else "TIE"
-        )
-        return winner
 
     def get_qrels(
         self,
