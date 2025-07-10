@@ -1,4 +1,3 @@
-import warnings
 from collections.abc import Iterator
 from typing import Any, overload
 
@@ -118,7 +117,7 @@ class Query(BaseModel):
         answer = self.answers.get(agent, answer)
         if answer.agent in self.answers and not force:
             if not exist_ok:
-                warnings.warn(f"Answer from agent {answer.agent} already exists in query {self.qid}")
+                logger.warning(f"Answer from agent {answer.agent} already exists in query {self.qid}")
             return
         self.answers[agent] = answer
 
@@ -255,6 +254,8 @@ class Query(BaseModel):
                 answer = answer.model_dump()
             if isinstance(answer, int):
                 relevance = answer
+            if isinstance(answer, float):
+                relevance = int(answer)
             elif isinstance(answer, str):
                 try:
                     relevance = int(answer)

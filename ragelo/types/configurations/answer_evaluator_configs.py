@@ -43,6 +43,10 @@ class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
             "By default, all documents are included."
         ),
     )
+    use_raw_document_evaluation: bool = Field(
+        default=False,
+        description="Whether or not to use the raw document evaluation when templating documents in the prompt",
+    )
 
 
 class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
@@ -67,16 +71,13 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     )
     prompt: str | None = Field(
         default=None,
-        description="Prompt to use for the evaluator. If not provided, a default prompt will be used",
+        description="Prompt to use for the evaluator.",
     )
     factors: str = Field(
         default=(
-            "the correctness, helpfulness, completeness, accuracy, depth, and " "level of detail of their responses"
+            "the correctness, helpfulness, completeness, accuracy, depth, and level of detail of their responses"
         ),
-        description=(
-            "A string containing the factors to be used when evaluating an answer. "
-            "If not provided, a default string will be used"
-        ),
+        description=("A string containing the factors to be used when evaluating an answer. "),
     )
     llm_answer_format: AnswerFormat = Field(
         default=AnswerFormat.JSON,
