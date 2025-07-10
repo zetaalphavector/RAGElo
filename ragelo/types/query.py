@@ -201,15 +201,15 @@ class Query(BaseModel):
                     current_winner = self._get_winner_from_pairwise_game(game)
                     new_winner = self._get_winner_from_pairwise_game(evaluation)
                     if current_winner != new_winner:
-                        if current_winner == "TIE" or new_winner == "TIE":
-                            # Pick the one that is not a tie
-                            if current_winner == "TIE":
-                                logger.info(
-                                    f"Query {self.qid} already has an evaluation for agents {agent_a} and {agent_b} "
-                                    f"with a tie. New evaluation has {new_winner} as winner. Will overwrite the current tie with the new winner."
-                                )
-                                game.evaluation = evaluation
-                                return True
+                        # Pick the one that is not a tie
+                        if current_winner == "TIE" and new_winner != "TIE":
+                            logger.info(
+                                f"Query {self.qid} already has an evaluation for agents {agent_a} and {agent_b} "
+                                f"with a tie. New evaluation has {new_winner} as winner. Will overwrite the current tie with the new winner."
+                            )
+                            game.evaluation = evaluation
+                            return True
+                        if new_winner == "TIE" and current_winner != "TIE":
                             logger.info(
                                 f"Query {self.qid} already has an evaluation for agents {agent_a} and {agent_b} "
                                 f"with a tie. New evaluation has {current_winner} as winner. We will keep the current winner as is."
