@@ -1,5 +1,3 @@
-"""Base model for dealing with answer evaluators"""
-
 import itertools
 import random
 from typing import Any, Callable, Type, get_type_hints
@@ -303,7 +301,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
             elif self.config.use_raw_document_evaluation:
                 annotation = d.evaluation.raw_answer
             else:
-                annotation = d.evaluation.answer
+                annotation = str(d.evaluation.answer)
 
             formatters = {
                 "did": did,
