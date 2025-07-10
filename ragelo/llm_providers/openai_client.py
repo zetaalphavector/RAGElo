@@ -1,5 +1,5 @@
 import json
-from typing import Any, Callable, Type
+from typing import Any, Callable, Type, cast
 
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 from pydantic import BaseModel
@@ -75,7 +75,7 @@ class OpenAIProvider(BaseLLMProvider):
                         f"adheres to the following schema:\n{schema}"
                     )
                 call_kwargs["response_format"] = {"type": "json_object"}
-        answers = await call_fn(**call_kwargs)
+        answers = await call_fn(**cast(dict[str, Any], call_kwargs))
 
         if not answers.choices or not answers.choices[0].message or not answers.choices[0].message.content:
             raise ValueError("OpenAI did not return any completions.")
