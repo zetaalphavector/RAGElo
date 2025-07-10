@@ -329,6 +329,15 @@ class Query(BaseModel):
             metadata dict[str, Any]: Metadata to add to the query.
         """
         if isinstance(query, Query):
-            query.add_metadata(metadata)
-            return query
+            # If it's already the right type and has no additional metadata, return as-is
+            if type(query) is cls and not metadata:
+                return query
+            # Otherwise, create a new instance of the correct class with the data
+            query_data = query.model_dump()
+            if metadata:
+                if query_data.get("metadata"):
+                    query_data["metadata"].update(metadata)
+                else:
+                    query_data["metadata"] = metadata
+            return cls(**query_data)
         return cls(qid="<no_qid>", query=query, metadata=metadata)
