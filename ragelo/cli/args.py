@@ -36,7 +36,7 @@ def get_params_from_function(func: Callable[..., Any]) -> Dict[str, ParamMeta]:
         if param.name in type_hints:
             annotation = type_hints[param.name]
         if inspect.isclass(annotation) and issubclass(annotation, BaseConfig):
-            fields = annotation.get_model_fields()
+            fields = annotation.model_fields
             for k, v in fields.items():
                 if k in ignore_args:
                     continue

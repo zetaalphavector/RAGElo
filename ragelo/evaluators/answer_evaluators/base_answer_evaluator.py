@@ -173,8 +173,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
             llm_response = self._process_answer(llm_response)
         except ValueError as e:
             logger.warning(
-                f"Failed to PARSE answer for qid: {query.qid} agent(s): {agent}\n"
-                f"Raw answer: {llm_response.raw_answer}"
+                f"Failed to PARSE answer for qid: {query.qid} agent(s): {agent}\nRaw answer: {llm_response.raw_answer}"
             )
             exc = str(e)
         except Exception as e:
@@ -342,7 +341,7 @@ class AnswerEvaluatorFactory:
     ) -> BaseAnswerEvaluator:
         if evaluator_name not in cls.registry:
             raise ValueError(
-                f"Unknown answer evaluator {evaluator_name}\n" f"Valid options are {list(cls.registry.keys())}"
+                f"Unknown answer evaluator {evaluator_name}\nValid options are {list(cls.registry.keys())}"
             )
         if isinstance(llm_provider, str):
             llm_provider_instance = get_llm_provider(llm_provider, **kwargs)
@@ -351,9 +350,9 @@ class AnswerEvaluatorFactory:
         if config is None:
             class_ = cls.registry[evaluator_name]
             type_config = class_.get_config_class()
-            valid_keys = [field for field in type_config.get_model_fields()]
+            valid_keys = [field for field in type_config.model_fields()]
             valid_args = {k: v for k, v in kwargs.items() if k in valid_keys}
-            required_fields = [arg for arg, info in type_config.get_model_fields().items() if info.is_required()]
+            required_fields = [arg for arg, info in type_config.model_fields().items() if info.is_required()]
             for field in required_fields:
                 if field not in valid_args:
                     raise ValueError(f"Required argument {field} for evaluator {evaluator_name} not provided")
