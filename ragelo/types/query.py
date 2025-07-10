@@ -246,7 +246,7 @@ class Query(BaseModel):
                 docs_without_relevance += 1
                 continue
             answer = document.evaluation.answer
-            if hasattr(answer, "model_dump"):
+            if isinstance(answer, BaseModel):
                 answer = answer.model_dump()
             if isinstance(answer, int):
                 relevance = answer
