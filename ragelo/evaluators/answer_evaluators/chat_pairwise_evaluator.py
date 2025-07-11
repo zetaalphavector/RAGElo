@@ -10,6 +10,7 @@ from ragelo.evaluators.answer_evaluators.pairwise_evaluator import (
 )
 from ragelo.types.configurations import PairwiseEvaluatorConfig
 from ragelo.types.evaluables import PairwiseGame
+from ragelo.types.formats import LLMInputPrompt
 from ragelo.types.query import Query
 from ragelo.types.types import AnswerEvaluatorTypes
 
@@ -56,7 +57,7 @@ and 'C' for a tie.
 [The End of Conversation with Assistant B]
 """.strip()
 
-    def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> str | list[dict[str, str]]:
+    def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> LLMInputPrompt:
         documents = self._prepare_documents(query)
         query_metadata = self._get_usable_fields_from_metadata(
             self.prompt, query.metadata, skip_fields=[self.config.query_placeholder]
@@ -92,4 +93,6 @@ and 'C' for a tie.
             **answer_a_metadata,
             **answer_b_metadata,
         }
-        return self.prompt.format(**formatters)
+        return LLMInputPrompt(
+            user_message=self.prompt.format(**formatters),
+        )

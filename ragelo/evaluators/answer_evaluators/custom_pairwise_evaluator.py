@@ -7,6 +7,7 @@ from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.types.configurations import CustomPairwiseEvaluatorConfig
 from ragelo.types.evaluables import PairwiseGame
+from ragelo.types.formats import LLMInputPrompt
 from ragelo.types.query import Query
 from ragelo.types.types import AnswerEvaluatorTypes
 
@@ -28,9 +29,7 @@ class CustomPairwiseEvaluator(BaseAnswerEvaluator):
         self.system_prompt = config.system_prompt
         self.user_prompt = config.user_prompt
 
-    def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> str | list[dict[str, str]]:
-        system_prompt_msg = {"role": "system", "content": self.system_prompt}
-        messages = [system_prompt_msg]
+    def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> LLMInputPrompt:
         documents = self._prepare_documents(query)
         query_metadata = self._get_usable_fields_from_metadata(
             self.user_prompt,
@@ -56,6 +55,7 @@ class CustomPairwiseEvaluator(BaseAnswerEvaluator):
             **answer_a_metadata,
             **answer_b_metadata,
         }
-        user_message = self.user_prompt.format(**formatters)
-        messages.append({"role": "user", "content": user_message})
-        return messages
+        return LLMInputPrompt(
+            system_prompt=self.system_prompt,
+            user_message=self.user_prompt.format(**formatters),
+        )

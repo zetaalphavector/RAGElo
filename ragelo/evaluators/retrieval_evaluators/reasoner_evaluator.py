@@ -1,12 +1,10 @@
-from __future__ import annotations
-
 from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     BaseRetrievalEvaluator,
     RetrievalEvaluatorFactory,
 )
 from ragelo.types.configurations import ReasonerEvaluatorConfig
 from ragelo.types.evaluables import Document
-from ragelo.types.formats import LLMResponseType
+from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.query import Query
 from ragelo.types.types import RetrievalEvaluatorTypes
 
@@ -38,12 +36,14 @@ user question.
     {document}
 """.strip()
 
-    def _build_message(self, query: Query, document: Document) -> str:
+    def _build_message(self, query: Query, document: Document) -> LLMInputPrompt:
         formatters = {
             self.config.query_placeholder: query.query,
             self.config.document_placeholder: document.text,
         }
-        return self.prompt.format(**formatters)
+        return LLMInputPrompt(
+            user_message=self.prompt.format(**formatters),
+        )
 
     def _process_answer(self, llm_response: LLMResponseType) -> LLMResponseType:
         assert isinstance(llm_response.parsed_answer, str)

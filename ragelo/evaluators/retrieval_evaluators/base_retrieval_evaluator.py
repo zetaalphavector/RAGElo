@@ -14,7 +14,7 @@ from ragelo.logger import logger
 from ragelo.types.configurations import BaseRetrievalEvaluatorConfig
 from ragelo.types.evaluables import Document, Evaluable
 from ragelo.types.experiment import Experiment
-from ragelo.types.formats import LLMResponseType
+from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.query import Query
 from ragelo.types.results import RetrievalEvaluatorResult
 from ragelo.types.types import RetrievalEvaluatorTypes
@@ -72,8 +72,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         prompt = self._build_message(query, document)
         try:
             llm_response = await self.llm_provider.call_async(
-                prompt,
-                answer_format=self.config.llm_answer_format,
+                input=prompt,
                 response_schema=self.config.llm_response_schema,
             )
             llm_response = self._process_answer(llm_response)
@@ -123,11 +122,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             )
         return tuples_to_eval
 
-    def _build_message(
-        self,
-        query: Query,
-        document: Document,
-    ) -> str | list[dict[str, str]]:
+    def _build_message(self, query: Query, document: Document) -> LLMInputPrompt:
         """Builds the prompt to send to the LLM."""
         raise NotImplementedError
 

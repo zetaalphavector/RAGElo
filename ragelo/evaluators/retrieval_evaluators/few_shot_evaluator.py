@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from ragelo.evaluators.retrieval_evaluators import (
     BaseRetrievalEvaluator,
     RetrievalEvaluatorFactory,
@@ -7,6 +5,7 @@ from ragelo.evaluators.retrieval_evaluators import (
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.types.configurations import FewShotEvaluatorConfig
 from ragelo.types.evaluables import Document
+from ragelo.types.formats import LLMInputPrompt
 from ragelo.types.query import Query
 from ragelo.types.types import RetrievalEvaluatorTypes
 
@@ -27,7 +26,7 @@ class FewShotEvaluator(BaseRetrievalEvaluator):
         self.assistant_prompt = config.few_shot_assistant_answer
         self.few_shots = config.few_shots
 
-    def _build_message(self, query: Query, document: Document) -> list[dict[str, str]]:
+    def _build_message(self, query: Query, document: Document) -> LLMInputPrompt:
         system_prompt_msg = {"role": "system", "content": self.system_prompt}
         messages = [system_prompt_msg] + self.__build_few_shot_samples()
         formatters = {
@@ -37,9 +36,11 @@ class FewShotEvaluator(BaseRetrievalEvaluator):
         user_message = self.user_prompt.format(**formatters)
 
         messages.append({"role": "user", "content": user_message})
-        return messages
+        return LLMInputPrompt(
+            messages=messages,
+        )
 
-    def __build_few_shot_samples(self) -> list[dict[str, str]]:
+    def __build_few_shot_samples(self) -> LLMInputPrompt:
         few_shot_messages = []
         for few_shot in self.few_shots:
             formatters = {
@@ -58,4 +59,6 @@ class FewShotEvaluator(BaseRetrievalEvaluator):
             answer = {"role": "assistant", "content": answer_text}
             few_shot_messages.append(user_message)
             few_shot_messages.append(answer)
-        return few_shot_messages
+        return LLMInputPrompt(
+            messages=self.user_prompt.format(**formatters),
+        )

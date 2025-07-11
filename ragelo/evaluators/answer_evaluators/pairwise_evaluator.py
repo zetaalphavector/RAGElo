@@ -1,9 +1,6 @@
-from __future__ import annotations
-
 from typing import Literal
 
-from pydantic import BaseModel as PydanticBaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
     AnswerEvaluatorFactory,
@@ -13,12 +10,12 @@ from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.logger import logger
 from ragelo.types.configurations import PairwiseEvaluatorConfig
 from ragelo.types.evaluables import PairwiseGame
-from ragelo.types.formats import AnswerFormat, LLMResponseType
+from ragelo.types.formats import AnswerFormat, LLMInputPrompt, LLMResponseType
 from ragelo.types.query import Query
 from ragelo.types.types import AnswerEvaluatorTypes
 
 
-class PairWiseAnswerAnswerFormat(PydanticBaseModel):
+class PairWiseAnswerAnswerFormat(BaseModel):
     winner: Literal["A", "B", "C"] = Field(..., description="The winner of the pairwise comparison.")
 
 
@@ -111,7 +108,7 @@ and "C" for a tie.
                 ),
             }
 
-    def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> str | list[dict[str, str]]:
+    def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> LLMInputPrompt:
         documents = self._prepare_documents(query)
 
         query_metadata = self._get_usable_fields_from_metadata(
@@ -143,13 +140,15 @@ and "C" for a tie.
             **answer_a_metadata,
             **answer_b_metadata,
         }
-        return self.prompt.format(**formatters)
+        return LLMInputPrompt(
+            user_message=self.prompt.format(**formatters),
+        )
 
     def _process_answer(self, llm_response: LLMResponseType) -> LLMResponseType:
         """Extracts the relevant part of an answer."""
         if isinstance(llm_response.parsed_answer, dict):
             answer = llm_response.parsed_answer["winner"]
-        elif isinstance(llm_response.parsed_answer, PydanticBaseModel):
+        elif isinstance(llm_response.parsed_answer, BaseModel):
             answer = llm_response.parsed_answer.winner  # type: ignore
         else:
             answer = llm_response.parsed_answer

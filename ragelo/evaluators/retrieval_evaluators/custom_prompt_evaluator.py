@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     BaseRetrievalEvaluator,
     RetrievalEvaluatorFactory,
@@ -7,6 +5,7 @@ from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.types.configurations import CustomPromptEvaluatorConfig
 from ragelo.types.evaluables import Document
+from ragelo.types.formats import LLMInputPrompt
 from ragelo.types.query import Query
 from ragelo.types.types import RetrievalEvaluatorTypes
 
@@ -23,7 +22,7 @@ class CustomPromptEvaluator(BaseRetrievalEvaluator):
         super().__init__(config, llm_provider)
         self.prompt = config.prompt
 
-    def _build_message(self, query: Query, document: Document) -> str:
+    def _build_message(self, query: Query, document: Document) -> LLMInputPrompt:
         query_metadata = self._get_usable_fields_from_metadata(
             self.prompt, query.metadata, skip_fields=[self.config.query_placeholder]
         )
@@ -39,4 +38,6 @@ class CustomPromptEvaluator(BaseRetrievalEvaluator):
             **document_metadata,
         }
 
-        return self.prompt.format(**formatters)
+        return LLMInputPrompt(
+            user_message=self.prompt.format(**formatters),
+        )

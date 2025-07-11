@@ -3,8 +3,6 @@ Bhaskar Mitra. Large language models can accurately predict searcher preferences
 https://arxiv.org/abs/2309.10621
 """
 
-from __future__ import annotations
-
 import numpy as np
 
 from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
@@ -14,7 +12,7 @@ from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.types.configurations import RDNAMEvaluatorConfig
 from ragelo.types.evaluables import Document
-from ragelo.types.formats import LLMResponseType
+from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.query import Query
 from ragelo.types.types import RetrievalEvaluatorTypes
 
@@ -102,7 +100,7 @@ Each rater used their own independent judgement."""
             self._multiple_prompt = ""
             self.multiple = False
 
-    def _build_message(self, query: Query, document: Document) -> str:
+    def _build_message(self, query: Query, document: Document) -> LLMInputPrompt:
         narrative_description_str = ""
         if query.metadata:
             description = query.metadata.get("description", "")
@@ -123,7 +121,9 @@ Each rater used their own independent judgement."""
             multiple=self._multiple_prompt,
             example=example,
         )
-        return formatted_prompt
+        return LLMInputPrompt(
+            user_message=formatted_prompt,
+        )
 
     def _process_answer(self, llm_response: LLMResponseType) -> LLMResponseType:
         assert isinstance(llm_response.parsed_answer, dict)

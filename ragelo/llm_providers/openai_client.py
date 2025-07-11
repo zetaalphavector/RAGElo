@@ -7,7 +7,7 @@ from tenacity import retry, stop_after_attempt, wait_random_exponential
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, LLMProviderFactory
 from ragelo.types.configurations import OpenAIConfiguration
-from ragelo.types.formats import LLMResponseType
+from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.types import LLMProviderTypes
 
 
@@ -28,8 +28,7 @@ class OpenAIProvider(BaseLLMProvider):
     @retry(wait=wait_random_exponential(min=1, max=120), stop=stop_after_attempt(5))
     async def call_async(
         self,
-        input: str | list[dict[str, str]],
-        system_prompt: str | None = None,
+        input: LLMInputPrompt,
         response_schema: Type[BaseModel] | dict[str, Any] | None = None,
     ) -> LLMResponseType:
         """Calls the OpenAI API asynchronously.
@@ -45,15 +44,20 @@ class OpenAIProvider(BaseLLMProvider):
             The response from the OpenAI Responses API, formatted according to the answer_format.
         """
         call_kwargs = {
-            "input": input,
             "model": self.config.model,
             "temperature": self.config.temperature,
             "max_completion_tokens": self.config.max_tokens,
             "seed": self.config.seed,
         }
+        if input.messages:
+            call_kwargs["input"] = input.messages
+        elif input.user_message:
+            call_kwargs["input"] = input.user_message
+        else:
+            raise ValueError("No input provided")
 
-        if system_prompt:
-            call_kwargs["instructions"] = system_prompt
+        if input.system_prompt:
+            call_kwargs["instructions"] = input.system_prompt
         if isinstance(response_schema, type(BaseModel)):
             answers = await self.__openai_client.responses.parse(**call_kwargs, text_format=response_schema)
             parsed_answer = answers.output[0].content[0].parsed
@@ -73,7 +77,6 @@ class OpenAIProvider(BaseLLMProvider):
             except json.JSONDecodeError as e:
                 raise ValueError(f"Failed to parse raw JSON answer {raw_answer} as JSON: {e}") from e
         else:
-            # TEXT format
             answers = await self.__openai_client.responses.create(**call_kwargs)
             raw_answer = answers.output_text
             parsed_answer = raw_answer

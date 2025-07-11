@@ -13,6 +13,7 @@ from ragelo.types.configurations import (
 )
 from ragelo.types.evaluables import AgentAnswer, Document, Evaluable, PairwiseGame
 from ragelo.types.experiment import Experiment
+from ragelo.types.formats import LLMInputPrompt
 from ragelo.types.query import Query
 from ragelo.types.results import AnswerEvaluatorResult
 from ragelo.types.types import AnswerEvaluatorTypes
@@ -162,8 +163,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
         exc = None
         try:
             llm_response = await self.llm_provider.call_async(
-                prompt,
-                answer_format=self.config.llm_answer_format,
+                input=prompt,
                 response_schema=self.config.llm_response_schema,
             )
             llm_response = self._process_answer(llm_response)
@@ -229,11 +229,11 @@ class BaseAnswerEvaluator(BaseEvaluator):
 
         return tuples_to_eval
 
-    def _build_message(self, query: Query, answer: AgentAnswer) -> str | list[dict[str, str]]:
+    def _build_message(self, query: Query, answer: AgentAnswer) -> LLMInputPrompt:
         """Builds the message to send to the LLM evaluator"""
         raise NotImplementedError
 
-    def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> str | list[dict[str, str]]:
+    def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> LLMInputPrompt:
         """Builds the message to send to the LLM evaluator"""
         raise NotImplementedError
 

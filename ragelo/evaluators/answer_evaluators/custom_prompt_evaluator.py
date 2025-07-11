@@ -7,6 +7,7 @@ from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.types.configurations import CustomPromptAnswerEvaluatorConfig
 from ragelo.types.evaluables import AgentAnswer
+from ragelo.types.formats import LLMInputPrompt
 from ragelo.types.query import Query
 from ragelo.types.types import AnswerEvaluatorTypes
 
@@ -23,7 +24,7 @@ class CustomPromptEvaluator(BaseAnswerEvaluator):
         super().__init__(config, llm_provider)
         self.prompt = config.prompt
 
-    def _build_message(self, query: Query, answer: AgentAnswer) -> str:
+    def _build_message(self, query: Query, answer: AgentAnswer) -> LLMInputPrompt:
         documents = self._prepare_documents(query)
         query_metadata = self._get_usable_fields_from_metadata(
             self.prompt, query.metadata, skip_fields=[self.config.query_placeholder]
@@ -41,4 +42,6 @@ class CustomPromptEvaluator(BaseAnswerEvaluator):
             **answer_metadata,
         }
 
-        return self.prompt.format(**formatters)
+        return LLMInputPrompt(
+            user_message=self.prompt.format(**formatters),
+        )

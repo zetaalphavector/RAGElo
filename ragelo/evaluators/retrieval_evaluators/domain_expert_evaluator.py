@@ -1,7 +1,5 @@
 """Evaluator with a domain expert persona"""
 
-from __future__ import annotations
-
 from tenacity import RetryError
 
 from ragelo.evaluators.retrieval_evaluators import (
@@ -12,7 +10,7 @@ from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.logger import logger
 from ragelo.types.configurations import DomainExpertEvaluatorConfig
 from ragelo.types.evaluables import Document, Evaluable
-from ragelo.types.formats import AnswerFormat
+from ragelo.types.formats import LLMInputPrompt
 from ragelo.types.query import Query
 from ragelo.types.results import RetrievalEvaluatorResult
 from ragelo.types.types import RetrievalEvaluatorTypes
@@ -93,9 +91,6 @@ document given the particular query. The score meaning is as follows:
         llm_provider: BaseLLMProvider,
     ):
         super().__init__(config, llm_provider)
-        if self.config.llm_answer_format != AnswerFormat.JSON:
-            logger.warning("We are using the Domain Expert Evaluator config. Forcing the LLM answer format to JSON.")
-            self.config.llm_answer_format = AnswerFormat.JSON
         self.expert_in = self.config.expert_in
         self.domain_short = f" {self.config.domain_short}" if self.config.domain_short else ""
         self.system_prompt = self.system_prompt.format(
@@ -135,12 +130,13 @@ document given the particular query. The score meaning is as follows:
                 answer=document.evaluation.answer,
                 exception=document.evaluation.exception,
             )
-        messages = [
-            {"role": "system", "content": self.system_prompt},
-            {"role": "user", "content": reason_message},
-        ]
         try:
-            return_answer = await self.llm_provider.call_async(messages, answer_format=AnswerFormat.TEXT)
+            messages = [
+                {"role": "system", "content": self.system_prompt},
+                {"role": "user", "content": reason_message},
+            ]
+
+            return_answer = await self.llm_provider.call_async(input=LLMInputPrompt(messages=messages))
             reasoning_answer = return_answer.parsed_answer
             assert isinstance(reasoning_answer, str)
         except Exception as e:
@@ -160,10 +156,10 @@ document given the particular query. The score meaning is as follows:
         messages_score = messages.copy()
         messages_score.append({"role": "assistant", "content": reasoning_answer})
         messages_score.append({"role": "user", "content": self.score_prompt})
+
         try:
             score_answer = await self.llm_provider.call_async(
-                messages_score,
-                answer_format=AnswerFormat.JSON,
+                input=LLMInputPrompt(messages=messages_score),
                 response_schema=self.config.llm_response_schema,
             )
         except Exception as e:
