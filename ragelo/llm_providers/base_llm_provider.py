@@ -5,7 +5,7 @@ from typing import Any, Type, get_type_hints
 from pydantic import BaseModel
 
 from ragelo.types.configurations import LLMProviderConfig
-from ragelo.types.formats import AnswerFormat, LLMResponseType
+from ragelo.types.formats import LLMResponseType
 from ragelo.types.types import LLMProviderTypes
 from ragelo.utils import call_async_fn
 
@@ -19,18 +19,18 @@ class BaseLLMProvider(ABC):
 
     def __call__(
         self,
-        prompt: str | list[dict[str, str]],
-        answer_format: AnswerFormat = AnswerFormat.TEXT,
+        input: str | list[dict[str, str]],
+        system_prompt: str | None = None,
         response_schema: Type[BaseModel] | dict[str, Any] | None = None,
     ) -> LLMResponseType:
         """Submits a single query-document pair to the LLM and returns the answer."""
-        return call_async_fn(self.call_async, prompt, answer_format, response_schema)
+        return call_async_fn(self.call_async, input, system_prompt, response_schema)
 
     @abstractmethod
     async def call_async(
         self,
-        prompt: str | list[dict[str, str]],
-        answer_format: AnswerFormat = AnswerFormat.TEXT,
+        input: str | list[dict[str, str]],
+        system_prompt: str | None = None,
         response_schema: Type[BaseModel] | dict[str, Any] | None = None,
     ) -> LLMResponseType:
         """Submits a single query-document pair to the LLM and returns the answer."""

@@ -7,7 +7,7 @@ from tenacity import retry, stop_after_attempt, wait_random_exponential
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, LLMProviderFactory
 from ragelo.types.configurations import OpenAIConfiguration
-from ragelo.types.formats import AnswerFormat, LLMResponseType
+from ragelo.types.formats import LLMResponseType
 from ragelo.types.types import LLMProviderTypes
 
 
@@ -30,7 +30,6 @@ class OpenAIProvider(BaseLLMProvider):
         self,
         input: str | list[dict[str, str]],
         system_prompt: str | None = None,
-        answer_format: AnswerFormat = AnswerFormat.TEXT,
         response_schema: Type[BaseModel] | dict[str, Any] | None = None,
     ) -> LLMResponseType:
         """Calls the OpenAI API asynchronously.
