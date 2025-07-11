@@ -149,7 +149,7 @@ and "C" for a tie.
         """Extracts the relevant part of an answer."""
         if isinstance(llm_response.parsed_answer, dict):
             answer = llm_response.parsed_answer["winner"]
-        elif isinstance(llm_response.parsed_answer, PydanticBaseModel):
+        elif isinstance(llm_response.parsed_answer, PairWiseAnswerAnswerFormat):
             answer = llm_response.parsed_answer.winner  # type: ignore
         else:
             answer = llm_response.parsed_answer
