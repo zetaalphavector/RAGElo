@@ -1,12 +1,11 @@
 import json
-from typing import Any, Callable, Type, cast
+from typing import Any, Type
 
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, wait_random_exponential
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, LLMProviderFactory
-from ragelo.logger import logger
 from ragelo.types.configurations import OpenAIConfiguration
 from ragelo.types.formats import AnswerFormat, LLMResponseType
 from ragelo.types.types import LLMProviderTypes
@@ -29,71 +28,59 @@ class OpenAIProvider(BaseLLMProvider):
     @retry(wait=wait_random_exponential(min=1, max=120), stop=stop_after_attempt(5))
     async def call_async(
         self,
-        prompt: str | list[dict[str, str]],
+        input: str | list[dict[str, str]],
+        system_prompt: str | None = None,
         answer_format: AnswerFormat = AnswerFormat.TEXT,
         response_schema: Type[BaseModel] | dict[str, Any] | None = None,
     ) -> LLMResponseType:
         """Calls the OpenAI API asynchronously.
 
         Args:
-            prompt: The prompt to use. Either a list of messages or a string.
+            input: The user prompt to send as input to the model. Either a single message or a list of messges with roles.
+            system_prompt: The system prompt to send as instructions to the model.
             answer_format: The format of the answer to return. Either TEXT, JSON, or STRUCTURED.
-            response_format: The format of the response to expect. If the answer_format is STRUCTURED,
+            response_schema: The format of the response to expect. If the answer_format is STRUCTURED,
                 this should be a PydanticBaseModel class. If the answer_format is JSON, this should be a dictionary
                 with the desired format the answer should be in
         Returns:
-            The response from the OpenAI API, formatted according to the answer_format. or a string.
+            The response from the OpenAI Responses API, formatted according to the answer_format.
         """
-        if isinstance(prompt, str):
-            prompt = [{"role": "system", "content": prompt}]
         call_kwargs = {
-            "messages": prompt,  # type: ignore
+            "input": input,
             "model": self.config.model,
             "temperature": self.config.temperature,
-            "max_tokens": self.config.max_tokens,
+            "max_completion_tokens": self.config.max_tokens,
             "seed": self.config.seed,
         }
-        call_fn: Callable
-        if answer_format == AnswerFormat.STRUCTURED:
-            if not isinstance(response_schema, type(BaseModel)):
-                raise ValueError("response_schema must be a PydanticBaseModel Class when using structured output.")
-            call_fn = self.__openai_client.beta.chat.completions.parse
-            call_kwargs["response_format"] = response_schema
-        else:
-            call_fn = self.__openai_client.chat.completions.create
-            if answer_format == AnswerFormat.JSON:
-                if isinstance(response_schema, type(BaseModel)):
-                    logger.info(
-                        "You provided a PydanticBaseModel class for the response_schema. "
-                        "Using JSON as the desired answer format. Dumping the schema to JSON."
-                    )
-                    response_schema = response_schema.model_json_schema()  # type: ignore
-                elif isinstance(response_schema, dict):
-                    schema = json.dumps(response_schema, indent=4)
-                    prompt[0]["content"] += (
-                        "\n\nYour output should be a JSON string that STRICTLY "
-                        f"adheres to the following schema:\n{schema}"
-                    )
-                call_kwargs["response_format"] = {"type": "json_object"}
-        answers = await call_fn(**cast(dict[str, Any], call_kwargs))
 
-        if not answers.choices or not answers.choices[0].message or not answers.choices[0].message.content:
-            raise ValueError("OpenAI did not return any completions.")
-        if answer_format == AnswerFormat.STRUCTURED:
-            parsed_answer = answers.choices[0].message.parsed
-            if not isinstance(parsed_answer, BaseModel):
-                raise ValueError(f"OpenAI did not return a valid structured answer: {parsed_answer}")
-        elif answer_format == AnswerFormat.JSON:
+        if system_prompt:
+            call_kwargs["instructions"] = system_prompt
+        if isinstance(response_schema, type(BaseModel)):
+            answers = await self.__openai_client.responses.parse(**call_kwargs, text_format=response_schema)
+            parsed_answer = answers.output[0].content[0].parsed
+            raw_answer = answers.output_text
+        elif isinstance(response_schema, dict):
+            call_kwargs["text"] = {
+                "format": {
+                    "type": "json_schema",
+                    "schema": response_schema,
+                    "strict": True,
+                }
+            }
+            answers = await self.__openai_client.responses.create(**call_kwargs)
+            raw_answer = answers.output_text
             try:
-                parsed_answer = json.loads(answers.choices[0].message.content)
+                parsed_answer = json.loads(raw_answer)
             except json.JSONDecodeError as e:
-                raise ValueError(
-                    f"Failed to parse raw JSON answer {answers.choices[0].message.content} as JSON: {e}"
-                ) from e
+                raise ValueError(f"Failed to parse raw JSON answer {raw_answer} as JSON: {e}") from e
         else:
-            parsed_answer = answers.choices[0].message.content
+            # TEXT format
+            answers = await self.__openai_client.responses.create(**call_kwargs)
+            raw_answer = answers.output_text
+            parsed_answer = raw_answer
+
         return LLMResponseType(
-            raw_answer=answers.choices[0].message.content,
+            raw_answer=raw_answer,
             parsed_answer=parsed_answer,
         )
 
