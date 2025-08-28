@@ -1,21 +1,19 @@
+import re
 from typing import Any, Callable, Type
 
-from pydantic import BaseModel, Field, model_validator
+from jinja2 import Template
+from pydantic import BaseModel, Field, field_validator, model_validator
 
-from ragelo.types.configurations.base_configs import BaseEvaluatorConfig
+from ragelo.types.configurations.base_configs import BaseEvaluatorConfig, make_template_with_source
 from ragelo.types.types import AnswerEvaluatorTypes
 
 
 class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
-    answer_placeholder: str = Field(default="answer", description="The placeholder for the answer in the prompt")
-    documents_placeholder: str = Field(
-        default="documents",
-        description="The placeholder for the documents in the prompt",
-    )
     pairwise: bool = Field(default=False, description="Whether or not to the evaluator is pairwise")
-    document_template: str = Field(
-        default="[{did}] {doc}",
-        description="The template to format each individual document in the prompt",
+    document_template: Template = Field(
+        default_factory=lambda: make_template_with_source("[{{ document.did }}] {{ document.annotation.answer }}"),
+        description="The template to format each individual document in the prompt."
+        "It should contain at least a {{ document.did }} placeholder and some other document field.",
     )
     has_citations: bool = Field(
         default=True,
@@ -47,6 +45,19 @@ class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
         description="Whether or not to use the raw document evaluation when templating documents in the prompt",
     )
 
+    @field_validator("document_template", mode="after")
+    def validate_document_template(cls, template: Template) -> Template:
+        src = getattr(template, "_ragelo_source", None)
+        placeholders = set(m.group(1) for m in re.finditer(r"{{\s*([a-zA-Z_][\w\.]*)\s*}}", src or ""))
+        if "document.did" not in placeholders:
+            raise ValueError("The document_template must contain a {{ document.did }} placeholder")
+        if not any(p.startswith("document.") and p != "document.did" for p in placeholders):
+            raise ValueError(
+                "The document_template must contain at least one document field. "
+                "It should contain at least a {{ document.did }} placeholder and some other document field."
+            )
+        return template
+
 
 class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     """Configuration for the pairwise evaluator."""
@@ -62,15 +73,6 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     include_raw_documents: bool = Field(
         default=False,
         description="Whether or not to include the raw documents in the prompt",
-    )
-
-    document_template: str = Field(
-        default="[{did}] {annotation}",
-        description="The template to format each individual document in the prompt",
-    )
-    prompt: str | None = Field(
-        default=None,
-        description="Prompt to use for the evaluator.",
     )
     factors: str = Field(
         default=(
@@ -103,8 +105,11 @@ class CustomPairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     """Configuration for a custom pairwise evaluator."""
 
     evaluator_name: AnswerEvaluatorTypes = AnswerEvaluatorTypes.CUSTOM_PAIRWISE
-    system_prompt: str = Field(description="System prompt to use for the evaluator")
-    user_prompt: str = Field(description="User prompt to use for the evaluator.")
+    user_prompt: Template = Field(
+        description=(
+            "User prompt to use for the evaluator. Should contain at least a {{ query }}, a {{ answer_a }}, and a {{ answer_b }} placeholder."
+        )
+    )
     bidirectional: bool = Field(default=False, description="Whether or not to run each game in both directions")
     n_games_per_query: int = Field(default=100, description="Maximum number of games to generate for each query")
     pairwise: bool = Field(default=True, description="Whether or not to the evaluator is pairwise")
@@ -121,13 +126,31 @@ class CustomPairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
         description="The response schema for the LLM. If set, should be a json schema or a Pydantic BaseModel (not an instance).",
     )
 
+    @field_validator("user_prompt", mode="after")
+    def validate_user_prompt(cls, prompt: Template) -> Template:
+        src = getattr(prompt, "_ragelo_source", None)
+        placeholders = set(m.group(1) for m in re.finditer(r"{{\s*([a-zA-Z_][\w\.]*)\s*}}", src or ""))
+        required = {"query", "answer_a", "answer_b"}
+        missing = sorted(required - placeholders)
+        if missing:
+            raise ValueError(f"The user prompt is missing placeholders: {', '.join(missing)}")
+        return prompt
+
 
 class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
     evaluator_name: AnswerEvaluatorTypes = AnswerEvaluatorTypes.CUSTOM_PROMPT
-    prompt: str = Field(
-        default="retrieved documents: {documents} query: {query} answer: {answer}",
+    system_prompt: Template | None = Field(
+        default_factory=lambda: make_template_with_source(
+            "You are a helpful assistant tasked with evaluating the correctness of answers."
+        ),
+        description="The system prompt to use for the evaluator.",
+    )
+    user_prompt: Template = Field(
+        default_factory=lambda: make_template_with_source(
+            "retrieved documents: {% for document in documents %}{{document.text}}\n{% endfor %} query: {{query.query}} answer: {{answer}}"
+        ),
         description=(
-            "The prompt to be used to evaluate the documents. It should contain a {query} and a {document} placeholder"
+            "The prompt to be used to evaluate the documents. It should contain a {{query.query}} and a {{document.text}} placeholder"
         ),
     )
     include_annotations: bool = False

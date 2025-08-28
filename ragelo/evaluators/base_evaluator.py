@@ -4,6 +4,8 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 
 import rich
+from jinja2 import Environment, meta
+from jinja2 import Template as JinjaTemplate
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.types.configurations import BaseEvaluatorConfig
@@ -104,16 +106,46 @@ class BaseEvaluator(ABC):
         return llm_response
 
     @staticmethod
-    def _get_fields_from_string(s: str) -> list[str]:
-        """Parse a formatted string and return all the fields in it"""
-        field_names = [v[1] for v in string.Formatter().parse(s) if v[1] is not None]
-        return field_names
+    def _get_fields_from_string(s: str | JinjaTemplate) -> list[str]:
+        """Parse a Jinja2 template or Python format string and return fields in it.
+
+        - If a Jinja2 Template (preferred), use Jinja's meta parser.
+        - Otherwise, try Jinja parsing on the string; if none found, fallback to Python's Formatter.
+        """
+        fields: set[str] = set()
+        template_source: str | None = None
+
+        # Attempt Jinja2 parsing first
+        try:
+            if isinstance(s, JinjaTemplate):
+                template_source = getattr(s, "_ragelo_source", None)
+                if template_source is not None:
+                    env = s.environment or Environment()
+                    ast = env.parse(template_source)
+                    fields.update(meta.find_undeclared_variables(ast))
+            else:
+                template_source = s
+                ast = Environment().parse(template_source)
+                fields.update(meta.find_undeclared_variables(ast))
+        except Exception:
+            # Ignore Jinja parsing errors; we'll fallback below
+            pass
+
+        # Fallback to Python's Formatter if nothing found and we have a string source
+        if not fields:
+            source_for_python = template_source if template_source is not None else (s if isinstance(s, str) else "")
+            fields.update(v[1] for v in string.Formatter().parse(source_for_python) if v[1] is not None)
+
+        return list(fields)
 
     @staticmethod
     def _get_usable_fields_from_metadata(
-        prompt: str, metadata: dict[str, str] | None, skip_fields: list[str] = []
+        prompt: str | JinjaTemplate, metadata: dict[str, str] | None, skip_fields: list[str] = []
     ) -> dict[str, str]:
-        """Get the fields from the prompt that are in the metadata"""
+        """Get the fields from the prompt that are in the metadata.
+
+        Supports both Jinja2 Template and raw strings.
+        """
         expected_fields = BaseEvaluator._get_fields_from_string(prompt)
         valid_fields: dict[str, str] = {}
         if metadata is None:
