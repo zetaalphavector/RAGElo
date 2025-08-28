@@ -22,7 +22,7 @@ class OpenAIProvider(BaseLLMProvider):
         super().__init__(config)
         self.__openai_client = self.__get_openai_client(config)
 
-    @retry(wait=wait_random_exponential(min=1, max=120), stop=stop_after_attempt(1))
+    @retry(wait=wait_random_exponential(min=1, max=120), stop=stop_after_attempt(5))
     async def call_async(
         self,
         input: LLMInputPrompt,
@@ -38,40 +38,57 @@ class OpenAIProvider(BaseLLMProvider):
         Returns:
             The response from the OpenAI Responses API, formatted according to the answer_format. The LLMResponseType.raw_answer  contains the raw LLM response as a string and the LLMResponseType.parsed_answer contains the parsed response. This can be a number or string (if response_schema is None) a dictionary (if response_schema is a dictionary) or a Pydantic BaseModel (if response_schema is a Pydantic BaseModel)).
         """
-        call_kwargs = {
-            "model": self.config.model,
-            "temperature": self.config.temperature,
-            "max_output_tokens": self.config.max_tokens,
-        }
         if input.messages:
-            call_kwargs["input"] = input.messages
+            llm_input = input.messages
         elif input.user_message:
-            call_kwargs["input"] = input.user_message
+            llm_input = input.user_message
         else:
             raise ValueError("No input provided")
-
+        parsed_answer: str | dict[str, Any] | BaseModel | None = None
         if input.system_prompt:
-            call_kwargs["instructions"] = input.system_prompt
+            instructions = input.system_prompt
+        else:
+            instructions = None
         if isinstance(response_schema, type(BaseModel)):
-            answers = await self.__openai_client.responses.parse(**call_kwargs, text_format=response_schema)
-            parsed_answer = answers.output[0].content[0].parsed
+            answers = await self.__openai_client.responses.parse(
+                text_format=response_schema,
+                input=llm_input,  # type: ignore
+                instructions=instructions,
+                model=self.config.model,
+                temperature=self.config.temperature,
+                max_output_tokens=self.config.max_tokens,
+            )
+            parsed_answer = answers.output_parsed
             raw_answer = answers.output_text
         elif isinstance(response_schema, dict):
-            call_kwargs["text"] = {
+            llm_text = {
                 "format": {
                     "type": "json_schema",
                     "schema": response_schema,
                     "strict": True,
                 }
             }
-            answers = await self.__openai_client.responses.create(**call_kwargs)
+            answers = await self.__openai_client.responses.create(
+                input=llm_input,  # type: ignore
+                instructions=instructions,
+                model=self.config.model,
+                temperature=self.config.temperature,
+                max_output_tokens=self.config.max_tokens,
+                text=llm_text,
+            )
             raw_answer = answers.output_text
             try:
                 parsed_answer = json.loads(raw_answer)
             except json.JSONDecodeError as e:
                 raise ValueError(f"Failed to parse raw JSON answer {raw_answer} as JSON: {e}") from e
         else:
-            answers = await self.__openai_client.responses.create(**call_kwargs)
+            answers = await self.__openai_client.responses.create(
+                input=llm_input,  # type: ignore
+                instructions=instructions,
+                model=self.config.model,
+                temperature=self.config.temperature,
+                max_output_tokens=self.config.max_tokens,
+            )
             raw_answer = answers.output_text
             parsed_answer = raw_answer
 

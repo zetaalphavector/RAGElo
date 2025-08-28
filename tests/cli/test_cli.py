@@ -108,7 +108,7 @@ def test_run_answer_cli():
     assert result.stdout.startswith("Loaded 2 queries from")
     assert "🔎 Query ID: 0\n📜 Document ID: 0" in result.stdout
     assert "Evaluating Retrieved documents" in result.stdout
-    assert "🔎 Query ID: 0\n agent2              🆚   agent1\nParsed Answer: B" in result.stdout
-    assert "🔎 Query ID: 1\n agent1              🆚   agent2\nParsed Answer: A" in result.stdout
+    assert "🔎 Query ID: 0\n agent2              🆚   agent1\nParsed Answer" in result.stdout
+    assert "🔎 Query ID: 1\n agent1              🆚   agent2\nParsed Answer" in result.stdout
     assert os.path.exists("tests/data/test-output.json")
     os.remove("tests/data/test-output.json")

@@ -160,11 +160,7 @@ def responses_api_mock(mocker):
     def parse_structured_response():
         resp = mocker.Mock()
         resp.output_text = '{"keyA": "valueA", "keyB": "valueB"}'
-        output_item = mocker.Mock()
-        content_item = mocker.Mock()
-        content_item.parsed = AnswerModel(keyA="valueA", keyB="valueB")
-        output_item.content = [content_item]
-        resp.output = [output_item]
+        resp.output_parsed = AnswerModel(keyA="valueA", keyB="valueB")
         return resp
 
     holder.create_text_response = create_text_response
@@ -183,15 +179,16 @@ def openai_client_mock(mocker, responses_api_mock):
 
     # responses.create returns TEXT by default; if JSON schema is requested, return JSON
     def create_side_effect(*args, **kwargs):
-        text_fmt = kwargs.get("text")
-        if isinstance(text_fmt, dict):
+        text = kwargs.get("text")
+        text_fmt = kwargs.get("text_format")
+        if isinstance(text, dict):
             return responses_api_mock.create_json_response()
+        elif isinstance(text_fmt, type(BaseModel)):
+            return responses_api_mock.parse_structured_response()
         return responses_api_mock.create_text_response()
 
     openai_client.responses.create = mocker.AsyncMock(side_effect=create_side_effect)
-
-    # responses.parse for STRUCTURED
-    openai_client.responses.parse = mocker.AsyncMock(return_value=responses_api_mock.parse_structured_response())
+    openai_client.responses.parse = mocker.AsyncMock(side_effect=create_side_effect)
 
     return openai_client
 
