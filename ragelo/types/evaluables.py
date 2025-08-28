@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from typing import Any
 
 from pydantic import BaseModel, model_validator
@@ -74,10 +72,10 @@ class Document(Evaluable):
     @classmethod
     def assemble_document(
         cls,
-        document: Document | str,
+        document: "Document" | str,
         qid: str | None = None,
         metadata: dict[str, Any] | None = None,
-    ) -> Document:
+    ) -> "Document":
         """Assembles a Document object from a string or a Document object."""
         if isinstance(document, str):
             if qid is None:
@@ -94,12 +92,12 @@ class Document(Evaluable):
 
     @staticmethod
     def assemble_documents(
-        documents: list[Document | str],
+        documents: list["Document" | str],
         qid: str,
         metadata: list[dict[str, Any]] | list[None] | None = None,
-    ) -> dict[str, Document]:
+    ) -> dict[str, "Document"]:
         """Assembles a list of Document objects from a list of strings or Document objects."""
-        assembled_docs: dict[str, Document] = {}
+        assembled_docs: dict[str, "Document"] = {}
         if metadata and len(documents) != len(metadata):
             raise ValueError("The number of documents and document metadata do not match")
         if not metadata:
@@ -140,11 +138,11 @@ class AgentAnswer(Evaluable):
     @classmethod
     def assemble_answer(
         cls,
-        answer: AgentAnswer | str,
+        answer: "AgentAnswer" | str,
         qid: str,
         agent: str | None = None,
         metadata: dict[str, Any] | None = None,
-    ) -> AgentAnswer:
+    ) -> "AgentAnswer":
         """Assembles an AgentAnswer object from a string or an AgentAnswer object."""
         if isinstance(answer, str):
             if agent is None:

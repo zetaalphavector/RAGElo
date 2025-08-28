@@ -2,8 +2,6 @@
 It receives a set of queries used to retrieve a document and their respective retrieved documents,
 and returns a score or a label for each document."""
 
-from __future__ import annotations
-
 from typing import Any, Callable, Type, get_type_hints
 
 from tenacity import RetryError

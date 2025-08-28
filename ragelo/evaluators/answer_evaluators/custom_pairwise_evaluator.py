@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
     AnswerEvaluatorFactory,
     BaseAnswerEvaluator,
