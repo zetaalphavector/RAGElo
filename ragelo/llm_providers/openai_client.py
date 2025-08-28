@@ -16,12 +16,8 @@ class OpenAIProvider(BaseLLMProvider):
     """A Wrapper over the OpenAI client."""
 
     config: OpenAIConfiguration
-    api_key_env_var: str = "OPENAI_API_KEY"
 
-    def __init__(
-        self,
-        config: OpenAIConfiguration,
-    ):
+    def __init__(self, config: OpenAIConfiguration) -> None:
         super().__init__(config)
         self.__openai_client = self.__get_openai_client(config)
 
@@ -34,14 +30,12 @@ class OpenAIProvider(BaseLLMProvider):
         """Calls the OpenAI API asynchronously.
 
         Args:
-            input: The user prompt to send as input to the model. Either a single message or a list of messges with roles.
-            system_prompt: The system prompt to send as instructions to the model.
-            answer_format: The format of the answer to return. Either TEXT, JSON, or STRUCTURED.
-            response_schema: The format of the response to expect. If the answer_format is STRUCTURED,
-                this should be a PydanticBaseModel class. If the answer_format is JSON, this should be a dictionary
-                with the desired format the answer should be in
+            input: A LLMInputPrompt object containing the system prompt, user message, or a list of messages.
+            response_schema: The schema of the response to expect. If the answer_format is STRUCTURED,
+                this should be a Pydantic BaseModel class (not instance). If the answer_format is JSON, this should be
+                a dictionary with the desired format the answer should be in. Otherwise, the response will be returned as a string.
         Returns:
-            The response from the OpenAI Responses API, formatted according to the answer_format.
+            The response from the OpenAI Responses API, formatted according to the answer_format. The LLMResponseType.raw_answer  contains the raw LLM response as a string and the LLMResponseType.parsed_answer contains the parsed response. This can be a number or string (if response_schema is None) a dictionary (if response_schema is a dictionary) or a Pydantic BaseModel (if response_schema is a Pydantic BaseModel)).
         """
         call_kwargs = {
             "model": self.config.model,

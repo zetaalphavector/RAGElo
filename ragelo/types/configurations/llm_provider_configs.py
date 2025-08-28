@@ -15,7 +15,7 @@ class OpenAIConfiguration(LLMProviderConfig):
     api_type: str | None = None
     api_base: str | None = None
     api_version: str | None = None
-    model: str = "gpt-4.1-nano"
+    model: str = "gpt-4.1-mini"
 
 
 class OllamaConfiguration(LLMProviderConfig):

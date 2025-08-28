@@ -12,7 +12,6 @@ from ragelo.utils import call_async_fn
 
 class BaseLLMProvider(ABC):
     config: LLMProviderConfig
-    api_key_env_var: str = "API_KEY"
 
     def __init__(self, config: LLMProviderConfig):
         self.config = config

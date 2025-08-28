@@ -4,15 +4,6 @@ from unittest.mock import AsyncMock
 
 import pytest
 from openai import AsyncOpenAI
-from openai.resources import AsyncChat
-from openai.resources.beta import AsyncBeta
-from openai.types.chat.chat_completion import ChatCompletion, Choice
-from openai.types.chat.chat_completion_message import ChatCompletionMessage
-from openai.types.chat.parsed_chat_completion import (
-    ParsedChatCompletion,
-    ParsedChatCompletionMessage,
-    ParsedChoice,
-)
 from pydantic import BaseModel
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
@@ -33,7 +24,7 @@ from ragelo.types.configurations import (
 from ragelo.types.configurations.retrieval_evaluator_configs import FewShotExample
 from ragelo.types.evaluables import ChatMessage
 from ragelo.types.experiment import Experiment
-from ragelo.types.formats import AnswerFormat, LLMResponseType
+from ragelo.types.formats import AnswerFormat, LLMInputPrompt, LLMResponseType
 from ragelo.types.results import (
     AnswerEvaluatorResult,
     EloTournamentResult,
@@ -85,112 +76,113 @@ class AnswerModel(BaseModel):
     keyB: str
 
 
-def answer_model_factory(prompt, answer_format, response_schema, **kwargs):
-    if answer_format == AnswerFormat.STRUCTURED:
+def answer_model_factory(input: LLMInputPrompt, response_schema, **kwargs):
+    # Mirror OpenAIProvider behavior: response format is inferred from response_schema
+    if isinstance(response_schema, type(BaseModel)):
         return LLMResponseType(
             raw_answer='{"keyA": "valueA", "keyB": "valueB"}',
             parsed_answer=AnswerModel(keyA="valueA", keyB="valueB"),
         )
-    elif answer_format == AnswerFormat.JSON:
+    elif isinstance(response_schema, dict):
         return LLMResponseType(
             raw_answer='{"score": 1.0}',
             parsed_answer={"score": 1.0},
         )
-    elif answer_format == AnswerFormat.TEXT:
+    else:
         return LLMResponseType(
             raw_answer='{"keyA": "valueA", "keyB": "valueB"}',
             parsed_answer='{"keyA": "valueA", "keyB": "valueB"}',
         )
-    else:
-        raise ValueError(f"Unsupported answer format: {answer_format}")
 
 
 class MockLLMProvider(BaseLLMProvider):
     def __init__(self, config):
-        self.config = config
-
-        def side_effect(*args, **kwargs):
-            return answer_model_factory(*args, **kwargs)
-
-        self.async_call_mocker = AsyncMock(side_effect=side_effect)
+        super().__init__(config)
+        self.async_call_mocker = AsyncMock()
 
     @classmethod
-    def from_configuration(cls, config: LLMProviderConfig):
+    def from_config(cls, config: LLMProviderConfig):
         return cls(config)
 
     async def call_async(
         self,
-        prompt: str | list[dict[str, str]],
-        answer_format: AnswerFormat = AnswerFormat.TEXT,
+        input: LLMInputPrompt,
         response_schema: Type[BaseModel] | dict[str, Any] | None = None,
     ) -> LLMResponseType:
-        return await self.async_call_mocker(prompt, answer_format, response_schema)
+        # For compatibility with existing tests, forward primitive args to the mock
+        if input.messages:
+            forwarded_input = input.messages
+        else:
+            forwarded_input = input.user_message
+
+        # Record the call for assertions in tests
+        if self.async_call_mocker.side_effect is not None:
+            # If a custom side effect is set by a test/fixture, use it
+            return await self.async_call_mocker(forwarded_input, input.system_prompt)
+        else:
+            # Still record the call (without relying on its return value)
+            try:
+                await self.async_call_mocker(forwarded_input, input.system_prompt)
+            except Exception:
+                # In case someone set a return_value that isn't awaitable, ignore
+                pass
+            # Default behavior mirrors OpenAIProvider outcome based on response_schema
+            return answer_model_factory(input, response_schema)
 
 
 @pytest.fixture
-def chat_completion_mock(answer_format):
-    _cls: Type[ChatCompletion | ParsedChatCompletion]
-    if answer_format == AnswerFormat.STRUCTURED:
-        _cls = ParsedChatCompletion
-    else:
-        _cls = ChatCompletion
+def chat_completion_mock(answer_format, mocker):
+    """Mock objects for the OpenAI Responses API depending on answer_format.
 
-    async_mock = AsyncMock()
-    fake_response = _cls(
-        id="fake id",
-        choices=[],
-        created=0,
-        model="fake model",
-        object="chat.completion",
-    )
+    Returns an object with attributes:
+      - create_response: used by responses.create
+      - parse_response: used by responses.parse
+    """
+    holder = mocker.Mock()
+
     if answer_format == AnswerFormat.TEXT:
-        fake_response.choices.append(
-            Choice(
-                finish_reason="stop",
-                index=0,
-                logprobs=None,
-                message=ChatCompletionMessage(content="fake response", role="assistant"),
-            )  # type: ignore
-        )
-        async_mock.create.return_value = fake_response
+        resp = mocker.Mock()
+        resp.output_text = "fake response"
+        holder.create_response = resp
+        holder.parse_response = None
     elif answer_format == AnswerFormat.JSON:
-        fake_response.choices.append(
-            Choice(
-                finish_reason="stop",
-                index=0,
-                logprobs=None,
-                message=ChatCompletionMessage(content='{"keyA": "valueA", "keyB": "valueB"}', role="assistant"),
-            )  # type: ignore
-        )
-        async_mock.create.return_value = fake_response
+        resp = mocker.Mock()
+        resp.output_text = '{"keyA": "valueA", "keyB": "valueB"}'
+        holder.create_response = resp
+        holder.parse_response = None
     elif answer_format == AnswerFormat.STRUCTURED:
-        fake_response.choices.append(
-            ParsedChoice(
-                finish_reason="stop",
-                index=0,
-                logprobs=None,
-                message=ParsedChatCompletionMessage(
-                    content='{"keyA": "valueA", "keyB": "valueB"}',
-                    parsed=AnswerModel(keyA="valueA", keyB="valueB"),
-                    role="assistant",
-                ),
-            )  # type: ignore
-        )
-        async_mock.parse.return_value = fake_response
+        resp = mocker.Mock()
+        resp.output_text = '{"keyA": "valueA", "keyB": "valueB"}'
+        output_item = mocker.Mock()
+        content_item = mocker.Mock()
+        content_item.parsed = AnswerModel(keyA="valueA", keyB="valueB")
+        output_item.content = [content_item]
+        resp.output = [output_item]
+        holder.create_response = None
+        holder.parse_response = resp
     else:
         raise ValueError(f"Unsupported answer format: {answer_format}")
 
-    return async_mock
+    return holder
 
 
 @pytest.fixture
 def openai_client_mock(mocker, chat_completion_mock):
     openai_client = mocker.AsyncMock(AsyncOpenAI)
-    type(openai_client).chat = mocker.AsyncMock(AsyncChat)
-    type(openai_client.chat).completions = mocker.PropertyMock(return_value=chat_completion_mock)
-    type(openai_client).beta = mocker.AsyncMock(AsyncBeta)
-    type(openai_client.beta).chat = mocker.AsyncMock(AsyncChat)
-    type(openai_client.beta.chat).completions = mocker.PropertyMock(return_value=chat_completion_mock)
+
+    # Mock the responses API
+    type(openai_client).responses = mocker.AsyncMock()
+
+    # Wire responses.create / responses.parse based on holder
+    if getattr(chat_completion_mock, "create_response", None) is not None:
+        openai_client.responses.create = mocker.AsyncMock(return_value=chat_completion_mock.create_response)
+    else:
+        openai_client.responses.create = mocker.AsyncMock()
+    if getattr(chat_completion_mock, "parse_response", None) is not None:
+        openai_client.responses.parse = mocker.AsyncMock(return_value=chat_completion_mock.parse_response)
+    else:
+        openai_client.responses.parse = mocker.AsyncMock()
+
     return openai_client
 
 

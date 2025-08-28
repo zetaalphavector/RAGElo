@@ -51,7 +51,7 @@ class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     expert_in: str = Field(description="What the LLM should mimic being an expert in.")
     domain_short: str | None = Field(
         default=None,
-        description="A short or alternative name of the domain. " "(e.g., Chemistry, CS, etc.)",
+        description="A short or alternative name of the domain. (e.g., Chemistry, CS, etc.)",
     )
     company: str | None = Field(
         default=None,
@@ -61,7 +61,7 @@ class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     )
     extra_guidelines: list[str] | None = Field(
         default=None,
-        description="A list of extra guidelines to be used when reasoning about the " "relevancy of the document.",
+        description="A list of extra guidelines to be used when reasoning about the relevancy of the document.",
     )
     llm_answer_format: AnswerFormat = Field(
         default=AnswerFormat.JSON,
@@ -83,8 +83,7 @@ class CustomPromptEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     prompt: str = Field(
         default="query: {query} document: {document}",
         description=(
-            "The prompt to be used to evaluate the documents. "
-            "It should contain a {query} and a {document} placeholder"
+            "The prompt to be used to evaluate the documents. It should contain a {query} and a {document} placeholder"
         ),
     )
 
