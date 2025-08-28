@@ -111,7 +111,13 @@ class MockLLMProvider(BaseLLMProvider):
     ) -> LLMResponseType:
         # For compatibility with existing tests, forward primitive args to the mock
         if input.messages:
-            forwarded_input = input.messages
+            # Prefer forwarding the latest user message content
+            user_messages = [m.get("content") for m in input.messages if m.get("role") == "user"]
+            if len(user_messages) > 0:
+                forwarded_input = user_messages[-1]
+            else:
+                # Fallback: stringify the messages
+                forwarded_input = str(input.messages)
         else:
             forwarded_input = input.user_message
 
@@ -332,7 +338,7 @@ def elo_tournament_result():
 
 @pytest.fixture
 def base_eval_config():
-    return BaseEvaluatorConfig(force=True, verbose=True, llm_answer_format=AnswerFormat.JSON)
+    return BaseEvaluatorConfig(force=True, verbose=True)
 
 
 @pytest.fixture
@@ -369,7 +375,7 @@ Agent answer: {answer}
 
 @pytest.fixture
 def expert_retrieval_eval_config(base_eval_config):
-    base_eval_config = base_eval_config.model_dump()
+    base_eval_config = base_eval_config.model_dump(exclude_unset=True)
     base_eval_config["evaluator_name"] = AnswerEvaluatorTypes.DOMAIN_EXPERT
     return DomainExpertEvaluatorConfig(
         expert_in="Computer Science",
@@ -382,7 +388,7 @@ def expert_retrieval_eval_config(base_eval_config):
 
 @pytest.fixture
 def rdnam_config(base_eval_config):
-    base_config = base_eval_config.model_dump()
+    base_config = base_eval_config.model_dump(exclude_unset=True)
     base_config["query_file"] = "tests/data/rdnam_queries.csv"
     base_config["evaluator_name"] = RetrievalEvaluatorTypes.RDNAM
     return RDNAMEvaluatorConfig(
@@ -395,7 +401,7 @@ def rdnam_config(base_eval_config):
 
 @pytest.fixture
 def custom_prompt_retrieval_eval_config(base_eval_config):
-    base_eval_config = base_eval_config.model_dump()
+    base_eval_config = base_eval_config.model_dump(exclude_unset=True)
     base_eval_config["evaluator_name"] = RetrievalEvaluatorTypes.CUSTOM_PROMPT
     config = CustomPromptEvaluatorConfig(
         prompt="query: {query} doc: {document}",
@@ -442,13 +448,13 @@ def llm_provider_reasoner_mock(llm_provider_config):
 
 @pytest.fixture
 def base_answer_eval_config(base_eval_config):
-    base_config = base_eval_config.model_dump()
+    base_config = base_eval_config.model_dump(exclude_unset=True)
     return BaseAnswerEvaluatorConfig(**base_config)
 
 
 @pytest.fixture
 def pairwise_answer_eval_config(base_answer_eval_config):
-    base_config = base_answer_eval_config.model_dump()
+    base_config = base_answer_eval_config.model_dump(exclude_unset=True)
     base_config["pairwise"] = True
     base_config["evaluator_name"] = AnswerEvaluatorTypes.PAIRWISE
     return PairwiseEvaluatorConfig(bidirectional=True, **base_config)
@@ -456,7 +462,7 @@ def pairwise_answer_eval_config(base_answer_eval_config):
 
 @pytest.fixture
 def domain_expert_answer_eval_config(base_answer_eval_config):
-    base_config = base_answer_eval_config.model_dump()
+    base_config = base_answer_eval_config.model_dump(exclude_unset=True)
     base_config["pairwise"] = True
     base_config["expert_in"] = "Computer Science"
     base_config["include_annotations"] = True
@@ -467,7 +473,7 @@ def domain_expert_answer_eval_config(base_answer_eval_config):
 
 @pytest.fixture
 def few_shot_retrieval_eval_config(base_eval_config):
-    base_eval_config = base_eval_config.model_dump()
+    base_eval_config = base_eval_config.model_dump(exclude_unset=True)
     base_eval_config["evaluator_name"] = RetrievalEvaluatorTypes.FEW_SHOT
     few_shot_samples = [
         FewShotExample(

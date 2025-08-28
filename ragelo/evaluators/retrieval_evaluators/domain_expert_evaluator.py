@@ -131,12 +131,10 @@ document given the particular query. The score meaning is as follows:
                 exception=document.evaluation.exception,
             )
         try:
-            messages = [
-                {"role": "system", "content": self.system_prompt},
-                {"role": "user", "content": reason_message},
-            ]
-
-            return_answer = await self.llm_provider.call_async(input=LLMInputPrompt(messages=messages))
+            # Use system_prompt channel instead of embedding system role in messages
+            return_answer = await self.llm_provider.call_async(
+                input=LLMInputPrompt(system_prompt=self.system_prompt, user_message=reason_message)
+            )
             reasoning_answer = return_answer.parsed_answer
             assert isinstance(reasoning_answer, str)
         except Exception as e:
@@ -153,13 +151,15 @@ document given the particular query. The score meaning is as follows:
                 answer=None,
                 exception=exc,
             )
-        messages_score = messages.copy()
-        messages_score.append({"role": "assistant", "content": reasoning_answer})
-        messages_score.append({"role": "user", "content": self.score_prompt})
+        # Build a follow-up turn including the prior assistant message
+        follow_up_messages = [
+            {"role": "assistant", "content": reasoning_answer},
+            {"role": "user", "content": self.score_prompt},
+        ]
 
         try:
             score_answer = await self.llm_provider.call_async(
-                input=LLMInputPrompt(messages=messages_score),
+                input=LLMInputPrompt(system_prompt=self.system_prompt, messages=follow_up_messages),
                 response_schema=self.config.llm_response_schema,
             )
         except Exception as e:
@@ -170,6 +170,7 @@ document given the particular query. The score meaning is as follows:
             logger.warning(f"LLM Failed to match the expected schema for qid: {query.qid}")
             logger.warning(f"document id: {document.did}")
             logger.warning(f"LLM response: {score_answer.parsed_answer}")
+            logger.warning(f"expected schema: {self.config.llm_response_schema}")
             exc = "The LLM did not return a dictionary with a 'score' key"
             answer = None
         else:

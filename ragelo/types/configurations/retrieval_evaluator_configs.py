@@ -1,9 +1,8 @@
 from typing import Any, Type
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
-from ragelo.logger import logger
-from ragelo.types.configurations.base_configs import AnswerFormat, BaseEvaluatorConfig
+from ragelo.types.configurations.base_configs import BaseEvaluatorConfig
 from ragelo.types.types import RetrievalEvaluatorTypes
 
 
@@ -32,18 +31,6 @@ class BaseRetrievalEvaluatorConfig(BaseEvaluatorConfig):
 
 class ReasonerEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.REASONER
-    llm_answer_format: AnswerFormat = Field(
-        default=AnswerFormat.TEXT,
-        description="The format of the answer returned by the LLM",
-    )
-
-    @model_validator(mode="after")
-    @classmethod
-    def check_answer_format(cls, values):
-        if values.llm_answer_format != AnswerFormat.TEXT:
-            logger.warning("We are using the Reasoner Evaluator config. Forcing the LLM answer format to TEXT.")
-            values.llm_answer_format = AnswerFormat.TEXT
-        return values
 
 
 class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
@@ -62,10 +49,6 @@ class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     extra_guidelines: list[str] | None = Field(
         default=None,
         description="A list of extra guidelines to be used when reasoning about the relevancy of the document.",
-    )
-    llm_answer_format: AnswerFormat = Field(
-        default=AnswerFormat.JSON,
-        description="The format of the answer returned by the LLM",
     )
     llm_response_schema: Type[BaseModel] | dict[str, Any] | None = Field(
         default={
@@ -138,15 +121,3 @@ class RDNAMEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default=False,
         description="Should the prompt ask the LLM to mimic multiple annotators?",
     )
-    llm_answer_format: AnswerFormat = Field(
-        default=AnswerFormat.JSON,
-        description="The format of the answer returned by the LLM",
-    )
-
-    @model_validator(mode="after")
-    @classmethod
-    def check_answer_format(cls, values):
-        if values.llm_answer_format != AnswerFormat.JSON:
-            logger.warning("We are using the RDNAM Evaluator config. Forcing the LLM answer format to JSON.")
-            values.llm_answer_format = AnswerFormat.JSON
-        return values

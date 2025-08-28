@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import json
 from unittest.mock import AsyncMock
 
@@ -13,17 +11,18 @@ from ragelo.evaluators.retrieval_evaluators import (
     ReasonerEvaluator,
 )
 from ragelo.types import Document, Query
-from ragelo.types.formats import LLMResponseType
+from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.results import RetrievalEvaluatorResult
 
 
 class RetrievalEvaluator(BaseRetrievalEvaluator):
-    def _build_message(self, query: Query, document: Document) -> str:
-        return f"Query: {query.query}\nDocument: {document.text}"
+    def _build_message(self, query: Query, document: Document) -> LLMInputPrompt:
+        return LLMInputPrompt(user_message=f"Query: {query.query}\nDocument: {document.text}")
 
 
 class TestRetrievalEvaluator:
     def test_evaluate_single_answer(self, llm_provider_mock, experiment, base_retrieval_eval_config):
+        base_retrieval_eval_config.llm_response_schema = {"score": "float"}
         evaluator = RetrievalEvaluator.from_config(config=base_retrieval_eval_config, llm_provider=llm_provider_mock)
         query = experiment["0"]
         doc = query.retrieved_docs["0"]
@@ -41,6 +40,7 @@ class TestRetrievalEvaluator:
         experiment,
         base_retrieval_eval_config,
     ):
+        base_retrieval_eval_config.llm_response_schema = {"score": "float"}
         evaluator = RetrievalEvaluator.from_config(config=base_retrieval_eval_config, llm_provider=llm_provider_mock)
         evaluator.evaluate_experiment(experiment)
         doc_ids = ["0", "1", "2", "3"]
@@ -54,6 +54,7 @@ class TestRetrievalEvaluator:
                 assert doc.qid == qids.pop(0)
 
     def test_evaluate_with_text(self, llm_provider_mock, base_retrieval_eval_config):
+        base_retrieval_eval_config.llm_response_schema = {"score": "float"}
         evaluator = RetrievalEvaluator.from_config(config=base_retrieval_eval_config, llm_provider=llm_provider_mock)
         result = evaluator.evaluate(document="This is a document", query="This is a query")
         call_args = llm_provider_mock.async_call_mocker.call_args_list
@@ -140,6 +141,7 @@ class TestCustomPromptEvaluator:
         custom_prompt_retrieval_eval_config,
         experiment,
     ):
+        custom_prompt_retrieval_eval_config.llm_response_schema = {"score": "float"}
         query = experiment["0"]
         doc = query.retrieved_docs["0"]
 
@@ -156,7 +158,7 @@ class TestCustomPromptEvaluator:
         response = evaluator.evaluate(query, doc)
         call_args = llm_provider_mock.async_call_mocker.call_args_list
 
-        assert response.answer == {"score": 1}
+        assert response.answer == {"score": 1.0}
         assert call_args[0][0][0] == formatted_prompt
 
     def test_process_with_custom_fields(self, llm_provider_mock, custom_prompt_retrieval_eval_config):
@@ -205,18 +207,24 @@ class TestDomainExpertEvaluator:
 
         assert llm_provider_mock.async_call_mocker.call_count == 2
         call_args = llm_provider_mock.async_call_mocker.call_args_list
-        prompts_reasoning = call_args[0][0][0]
-        prompts_score = call_args[1][0][0]
-        assert len(prompts_reasoning) == 2
-        assert len(prompts_score) == 4
-        assert prompts_score[0] == prompts_reasoning[0]
-        assert prompts_score[1] == prompts_reasoning[1]
-        assert prompts_score[0]["role"] == "system"
-        assert prompts_score[2]["role"] == "assistant"
-        assert prompts_score[1]["role"] == prompts_score[3]["role"] == "user"
-        assert prompts_reasoning[0]["content"].startswith("You are a domain expert in")
-        assert prompts_score[1]["content"].endswith(expert_retrieval_eval_config.extra_guidelines[0])
-        assert prompts_score[3]["content"].startswith("Given the previous reasoning")
+
+        # First call - reasoning call
+        first_call_user_prompt = call_args[0][0][0]  # user_prompt
+        first_call_system_prompt = call_args[0][0][1]  # system_prompt
+
+        # Second call - scoring call
+        second_call_user_prompt = call_args[1][0][0]  # user_prompt
+        second_call_system_prompt = call_args[1][0][1]  # system_prompt
+
+        # Check that system prompts are the same for both calls
+        assert first_call_system_prompt == second_call_system_prompt
+        assert first_call_system_prompt.startswith("You are a domain expert in")
+
+        # Check that first call contains the reasoning prompt
+        assert first_call_user_prompt.endswith(expert_retrieval_eval_config.extra_guidelines[0])
+
+        # Check that second call contains the score prompt
+        assert "Given the previous reasoning" in second_call_user_prompt
 
 
 class TestFewShotEvaluator:
@@ -235,11 +243,19 @@ class TestFewShotEvaluator:
 
         _ = evaluator.evaluate(query, doc)
         call_args = llm_provider_mock.async_call_mocker.call_args_list
-        call_messages = call_args[0][0][0]
-        assert len(call_messages) == 6
-        assert call_messages[0]["role"] == "system"
-        assert call_messages[1]["role"] == call_messages[3]["role"] == call_messages[5]["role"] == "user"
-        assert call_messages[2]["role"] == call_messages[4]["role"] == "assistant"
+
+        # Check that the call was made with the expected structure
+        user_prompt = call_args[0][0][0]  # first argument - user_prompt
+        system_prompt = call_args[0][0][1]  # second argument - system_prompt
+
+        # Check system prompt
+        assert system_prompt == "System prompt"
+
+        # Check that user prompt contains few-shot examples and the main query
+        assert "User: query: Few shot query 1 doc: Few shot example 1" in user_prompt
+        assert "User: query: Few shot query 2 doc: Few shot example 2" in user_prompt
+        assert "Assistant:" in user_prompt  # Should contain assistant responses
+        assert "What is the capital of Brazil?" in user_prompt  # Should contain the actual query
 
 
 class TestReadmeExamples:
@@ -293,7 +309,6 @@ WRITE YOUR ANSWER ON A SINGLE LINE AS A JSON OBJECT WITH THE FOLLOWING KEYS:
             "truthfulness": "An integer, either 0 or 1. 0 if the document is false, 1 if it is true.",
             "reasoning": "A short explanation of why you think the document is relevant or irrelevant.",
         }
-        response_format = "json"
 
         evaluator = get_retrieval_evaluator(
             "custom_prompt",  # name of the retrieval evaluator
@@ -301,8 +316,7 @@ WRITE YOUR ANSWER ON A SINGLE LINE AS A JSON OBJECT WITH THE FOLLOWING KEYS:
             prompt=prompt,  # your custom prompt
             query_placeholder="q",  # the placeholder for the query in the prompt
             document_placeholder="d",  # the placeholder for the document in the prompt
-            llm_answer_format=response_format,  # The format of the answer. Can be either TEXT, if you expect plain text to be returned, JSON if the answer should be in JSON format, or STRUCTURED, if you provide a Pydantic BaseModel as the response_schema.
-            llm_response_schema=response_schema,  # The response schema for the LLM. Required if the llm_answer_format is structured and recommended for JSON.
+            llm_response_schema=response_schema,  # The response schema for the LLM.
         )
 
         def side_effect(*args, **kwargs):
