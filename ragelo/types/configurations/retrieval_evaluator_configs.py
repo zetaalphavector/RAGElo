@@ -65,11 +65,12 @@ class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     )
     llm_response_schema: Type[BaseModel] | dict[str, Any] | None = Field(
         default={
+            "reasoning": "A concise explanation of the relevance judgment.",
             "score": (
                 "An integer between 0 and 2 representing the score of the document, "
                 "where 0 means the document is not relevant to the query, 1 means the document is somewhat relevant, "
                 "and 2 means the document is highly relevant."
-            )
+            ),
         },
     )
 

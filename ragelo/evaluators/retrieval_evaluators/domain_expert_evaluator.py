@@ -1,37 +1,44 @@
 """Evaluator with a domain expert persona"""
 
-from tenacity import RetryError
+from textwrap import dedent
+
+from jinja2 import Template
 
 from ragelo.evaluators.retrieval_evaluators import (
     BaseRetrievalEvaluator,
     RetrievalEvaluatorFactory,
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
-from ragelo.logger import logger
 from ragelo.types.configurations import DomainExpertEvaluatorConfig
-from ragelo.types.evaluables import Document, Evaluable
+from ragelo.types.evaluables import Document
 from ragelo.types.formats import LLMInputPrompt
 from ragelo.types.query import Query
-from ragelo.types.results import RetrievalEvaluatorResult
 from ragelo.types.types import RetrievalEvaluatorTypes
 
 
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.DOMAIN_EXPERT)
 class DomainExpertEvaluator(BaseRetrievalEvaluator):
-    system_prompt = """
-You are a domain expert in {expert_in}.{company_prompt_1} You are tasked \
+    # Jinja2 templates with conditional sections
+    system_template = Template(
+        dedent(
+            """
+You are a domain expert in {{ expert_in }}.{% if company %} You work for {{ company }}.{% endif %} You are tasked \
 with evaluating the performance of a retrieval system for question \
 answering in this domain. The question answering system will be used \
-by internal users{company_prompt_2}{domain_short}. They are interested \
+by internal users{% if company %} of {{ company }}{% endif %}{% if domain_short %} but it also serves some of your external users like {{ domain_short }}{% endif %}. They are interested \
 in a retrieval system that provides relevant passages based on their questions.
-""".strip()
+"""
+        )
+    )
 
-    reason_prompt = """
+    user_template = Template(
+        dedent(
+            """
 User query:
-{query}
+{{ query.query }}
 
 Document passage:
-{doc_content}
+{{ document.text }}
 
 Please think in steps about the relevance of the retrieved document given the \
 original query. Consider the query, the document title, and the document \
@@ -69,20 +76,22 @@ or only peripheral topics.
 personal opinions or biases.
     - Uncertainty: If uncertain about a relevance judgement, annotators default to a \
 lower relevance.
-    {extra_guidelines}
-""".strip()
-
-    score_prompt = """
-Given the previous reasoning, please assign a score of 0, 1, or 2 to the retrieved \
-document given the particular query. The score meaning is as follows:
-- 0: indicates that the retrieved document is not relevant to the query
+{% if extra_guidelines and extra_guidelines|length %}
+Additional Guidelines:
+{% for g in extra_guidelines %}- {{ g }}
+{% endfor %}{% endif %}
+Given the analysis above, assign a relevance score of 0, 1, or 2 to the retrieved document for this query, where:
+- 0: the document is not relevant to the query
 - 1: the document is somewhat relevant to the query
 - 2: the document is highly relevant to the query
-""".strip()
 
-    COMPANY_PROMPT_1 = " You work for {company}."
-    COMPANY_PROMPT_2 = " of {company}"
-    DOMAIN_SHORT = " but it also serves some of your external users like {domain_short}"
+Respond STRICTLY as a JSON object with the following keys:
+- "reasoning": a concise explanation of your judgment
+- "score": an integer (0, 1, or 2)
+"""
+        )
+    )
+
     config: DomainExpertEvaluatorConfig
 
     def __init__(
@@ -92,93 +101,20 @@ document given the particular query. The score meaning is as follows:
     ):
         super().__init__(config, llm_provider)
         self.expert_in = self.config.expert_in
-        self.domain_short = f" {self.config.domain_short}" if self.config.domain_short else ""
-        self.system_prompt = self.system_prompt.format(
+        self.company = self.config.company
+        self.domain_short = self.config.domain_short
+        self.extra_guidelines = self.config.extra_guidelines or []
+
+    def _build_message(self, query: Query, document: Document) -> LLMInputPrompt:
+        context = {
+            "query": query,
+            "document": document,
+            "extra_guidelines": self.extra_guidelines,
+        }
+        system_prompt = self.system_template.render(
             expert_in=self.expert_in,
-            company_prompt_1=(
-                self.COMPANY_PROMPT_1.format(company=self.config.company) if self.config.company else ""
-            ),
-            company_prompt_2=(
-                self.COMPANY_PROMPT_2.format(company=self.config.company) if self.config.company else ""
-            ),
-            domain_short=(
-                self.DOMAIN_SHORT.format(domain_short=self.config.domain_short) if self.config.domain_short else ""
-            ),
+            company=self.company,
+            domain_short=self.domain_short,
         )
-        self.extra_guidelines = self.config.extra_guidelines if self.config.extra_guidelines else []
-
-    def __build_reason_message(self, query: Query, document: Document) -> str:
-        guidelines = "\n".join([f"- {guideline}" for guideline in self.extra_guidelines])
-        reason_prompt = self.reason_prompt.format(
-            query=query.query,
-            doc_content=document.text,
-            domain_short=self.domain_short if self.domain_short else "",
-            extra_guidelines=guidelines,
-        )
-        return reason_prompt
-
-    async def evaluate_async(self, eval_sample: tuple[Query, Evaluable]) -> RetrievalEvaluatorResult:
-        query, document = eval_sample
-        assert isinstance(document, Document)
-        reason_message = self.__build_reason_message(query, document)
-        exc = None
-        if document.evaluation is not None and not self.config.force:
-            return RetrievalEvaluatorResult(
-                did=document.did,
-                qid=query.qid,
-                raw_answer=document.evaluation.raw_answer,
-                answer=document.evaluation.answer,
-                exception=document.evaluation.exception,
-            )
-        try:
-            # Use system_prompt channel instead of embedding system role in messages
-            return_answer = await self.llm_provider.call_async(
-                input=LLMInputPrompt(system_prompt=self.system_prompt, user_message=reason_message)
-            )
-            reasoning_answer = return_answer.parsed_answer
-            assert isinstance(reasoning_answer, str)
-        except Exception as e:
-            logger.warning(f"Failed to FETCH reasonings for qid: {query.qid}")
-            logger.warning(f"document id: {document.did}")
-            if isinstance(e, RetryError):
-                exc = str(e.last_attempt.exception())
-            else:
-                exc = str(e)
-            return RetrievalEvaluatorResult(
-                qid=query.qid,
-                did=document.did,
-                raw_answer=None,
-                answer=None,
-                exception=exc,
-            )
-        # Build a follow-up turn including the prior assistant message
-        follow_up_messages = [
-            {"role": "assistant", "content": reasoning_answer},
-            {"role": "user", "content": self.score_prompt},
-        ]
-
-        try:
-            score_answer = await self.llm_provider.call_async(
-                input=LLMInputPrompt(system_prompt=self.system_prompt, messages=follow_up_messages),
-                response_schema=self.config.llm_response_schema,
-            )
-        except Exception as e:
-            logger.warning(f"Failed to FETCH scores for qid: {query.qid}")
-            logger.warning(f"document id: {document.did}")
-            exc = str(e)
-        if not isinstance(score_answer.parsed_answer, dict) or "score" not in score_answer.parsed_answer:
-            logger.warning(f"LLM Failed to match the expected schema for qid: {query.qid}")
-            logger.warning(f"document id: {document.did}")
-            logger.warning(f"LLM response: {score_answer.parsed_answer}")
-            logger.warning(f"expected schema: {self.config.llm_response_schema}")
-            exc = "The LLM did not return a dictionary with a 'score' key"
-            answer = None
-        else:
-            answer = float(score_answer.parsed_answer["score"])
-        return RetrievalEvaluatorResult(
-            qid=query.qid,
-            did=document.did,
-            raw_answer=reasoning_answer,
-            answer=answer,
-            exception=exc,
-        )
+        user_message = self.user_template.render(**context)
+        return LLMInputPrompt(system_prompt=system_prompt, user_message=user_message)
