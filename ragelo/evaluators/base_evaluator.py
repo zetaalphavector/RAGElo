@@ -4,8 +4,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 
 import rich
-from jinja2 import Environment, meta
-from jinja2 import Template as JinjaTemplate
+from jinja2 import Environment, Template, meta
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.types.configurations import BaseEvaluatorConfig
@@ -23,6 +22,8 @@ class BaseEvaluator(ABC):
     """
 
     config: BaseEvaluatorConfig
+    system_prompt: Template | None = None
+    user_prompt: Template
     evaluable_name: str = "Evaluable"
 
     @abstractmethod
@@ -106,7 +107,7 @@ class BaseEvaluator(ABC):
         return llm_response
 
     @staticmethod
-    def _get_fields_from_string(s: str | JinjaTemplate) -> list[str]:
+    def _get_fields_from_string(s: str | Template) -> list[str]:
         """Parse a Jinja2 template or Python format string and return fields in it.
 
         - If a Jinja2 Template (preferred), use Jinja's meta parser.
@@ -117,7 +118,7 @@ class BaseEvaluator(ABC):
 
         # Attempt Jinja2 parsing first
         try:
-            if isinstance(s, JinjaTemplate):
+            if isinstance(s, Template):
                 template_source = getattr(s, "_ragelo_source", None)
                 if template_source is not None:
                     env = s.environment or Environment()
@@ -140,7 +141,7 @@ class BaseEvaluator(ABC):
 
     @staticmethod
     def _get_usable_fields_from_metadata(
-        prompt: str | JinjaTemplate, metadata: dict[str, str] | None, skip_fields: list[str] = []
+        prompt: str | Template, metadata: dict[str, str] | None, skip_fields: list[str] = []
     ) -> dict[str, str]:
         """Get the fields from the prompt that are in the metadata.
 

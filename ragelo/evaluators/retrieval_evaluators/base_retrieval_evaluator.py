@@ -20,6 +20,10 @@ from ragelo.utils import call_async_fn
 
 
 class BaseRetrievalEvaluator(BaseEvaluator):
+    """
+    A base class for retrieval evaluators.
+    """
+
     config: BaseRetrievalEvaluatorConfig
     evaluable_name: str = "Retrieved document"
 
@@ -28,6 +32,11 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         config: BaseRetrievalEvaluatorConfig,
         llm_provider: BaseLLMProvider,
     ):
+        """
+        Args:
+            config (BaseRetrievalEvaluatorConfig): The configuration for the evaluator.
+            llm_provider (BaseLLMProvider): The LLM provider to use for the evaluation.
+        """
         self.config = config
         self.llm_provider = llm_provider
 
@@ -38,7 +47,13 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         query_metadata: dict[str, Any] | None = None,
         doc_metadata: dict[str, Any] | None = None,
     ) -> RetrievalEvaluatorResult:
-        """Evaluates a single query-document pair. Returns the raw answer and the processed answer."""
+        """Evaluates a single query-document pair. Returns the raw answer and the processed answer.
+        Args:
+            query (Query | str): The query to evaluate.
+            document (Document | str): The document to evaluate.
+            query_metadata (dict[str, Any] | None): The metadata for the query.
+            doc_metadata (dict[str, Any] | None): The metadata for the document.
+        """
         query = Query.assemble_query(query, query_metadata)
         document = Document.assemble_document(document, query.qid, doc_metadata)
         result = call_async_fn(self.evaluate_async, (query, document))
@@ -54,6 +69,11 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         self,
         eval_sample: tuple[Query, Evaluable],
     ) -> RetrievalEvaluatorResult:
+        """
+        Evaluates a single query-document pair asynchronously.
+        Args:
+            eval_sample (tuple[Query, Evaluable]): The query and document to evaluate.
+        """
         query, document = eval_sample
         if not isinstance(document, Document):
             type_name = type(document).__name__
@@ -67,23 +87,22 @@ class BaseRetrievalEvaluator(BaseEvaluator):
                 answer=document.evaluation.answer,
                 exception=document.evaluation.exception,
             )
-        prompt = self._build_message(query, document)
+        llm_input = self._build_message(query, document)
         try:
             llm_response = await self.llm_provider.call_async(
-                input=prompt,
+                input=llm_input,
                 response_schema=self.config.llm_response_schema,
             )
             llm_response = self._process_answer(llm_response)
         except ValueError as e:
-            logger.warning(f"Failed to PARSE answer for qid: {query.qid} document id: {document.did}")
+            logger.warning(f"Failed to PARSE answer for qid: {query.qid} did: {document.did}")
             try:
                 llm_response = LLMResponseType(raw_answer=llm_response.raw_answer, parsed_answer=None)
             except Exception:
                 llm_response = LLMResponseType(raw_answer="", parsed_answer=None)
             exc = str(e)
         except Exception as e:
-            logger.warning(f"Failed to FETCH answers for qid: {query.qid}")
-            logger.warning(f"document id: {document.did}")
+            logger.warning(f"Failed to FETCH answers for qid: {query.qid} did: {document.did}")
             if isinstance(e, RetryError):
                 exc = str(e.last_attempt.exception())
             else:
@@ -121,7 +140,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         return tuples_to_eval
 
     def _build_message(self, query: Query, document: Document) -> LLMInputPrompt:
-        """Builds the prompt to send to the LLM."""
+        """Builds the LLMInputPrompt to send to the LLM."""
         raise NotImplementedError
 
     @classmethod

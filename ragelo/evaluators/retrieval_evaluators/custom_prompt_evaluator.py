@@ -20,24 +20,15 @@ class CustomPromptEvaluator(BaseRetrievalEvaluator):
         llm_provider: BaseLLMProvider,
     ):
         super().__init__(config, llm_provider)
-        self.prompt = config.prompt
+        self.system_prompt = config.system_prompt
+        self.user_prompt = config.user_prompt
 
     def _build_message(self, query: Query, document: Document) -> LLMInputPrompt:
-        query_metadata = self._get_usable_fields_from_metadata(
-            self.prompt, query.metadata, skip_fields=[self.config.query_placeholder]
-        )
-        document_metadata = self._get_usable_fields_from_metadata(
-            self.prompt,
-            document.metadata,
-            skip_fields=[self.config.document_placeholder],
-        )
-        formatters = {
-            self.config.query_placeholder: query.query,
-            self.config.document_placeholder: document.text,
-            **query_metadata,
-            **document_metadata,
-        }
+        context = {"query": query, "document": document}
+        user_message = self.user_prompt.render(**context) if self.user_prompt else None
+        system_prompt = self.system_prompt.render(**context) if self.system_prompt else None
 
         return LLMInputPrompt(
-            user_message=self.prompt.format(**formatters),
+            system_prompt=system_prompt,
+            user_message=user_message,
         )
