@@ -27,32 +27,24 @@ class FewShotEvaluator(BaseRetrievalEvaluator):
         self.few_shots = config.few_shots
 
     def _build_message(self, query: Query, document: Document) -> LLMInputPrompt:
-        # Build few-shot transcript as plain text to be passed as user_message
-        few_shots_text = self.__build_few_shot_transcript()
-        formatters = {
-            self.config.query_placeholder: query.query,
-            self.config.document_placeholder: document.text,
-        }
-        user_message = f"{few_shots_text}User: {self.user_prompt.format(**formatters)}"
+        few_shot_messages = self.__build_few_shot_examples()
+        few_shot_messages.append({"role": "user", "content": self.user_prompt.render(query=query, document=document)})
 
         return LLMInputPrompt(
-            user_message=user_message,
             system_prompt=self.system_prompt,
+            messages=few_shot_messages,
         )
 
-    def __build_few_shot_transcript(self) -> str:
-        transcript_parts: list[str] = []
+    def __build_few_shot_examples(self) -> list[dict[str, str]]:
+        few_shot_messages: list[dict[str, str]] = []
         for few_shot in self.few_shots:
-            user_formatters = {
-                self.config.query_placeholder: few_shot.query,
-                self.config.document_placeholder: few_shot.passage,
-            }
-            assistant_formatters = {
-                self.config.reasoning_placeholder: few_shot.reasoning,
-                self.config.relevance_placeholder: str(few_shot.relevance),
-            }
-            transcript_parts.append(f"User: {self.user_prompt.format(**user_formatters)}")
-            transcript_parts.append(f"Assistant: {self.assistant_prompt.format(**assistant_formatters)}")
-        if transcript_parts:
-            return "\n".join(transcript_parts) + "\n"
-        return ""
+            query = Query(query=few_shot.query)
+            document = Document(text=few_shot.passage)
+            few_shot_messages.append(
+                {"role": "user", "content": self.user_prompt.render(query=query, document=document)}
+            )
+            reasoning = few_shot.reasoning
+            relevance = few_shot.relevance
+            assistant_message = self.assistant_prompt.render(reasoning=reasoning, relevance=relevance)
+            few_shot_messages.append({"role": "assistant", "content": assistant_message})
+        return few_shot_messages
