@@ -1,3 +1,7 @@
+from textwrap import dedent
+
+from jinja2 import Template
+
 from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     BaseRetrievalEvaluator,
     RetrievalEvaluatorFactory,
@@ -17,32 +21,35 @@ class ReasonerEvaluator(BaseRetrievalEvaluator):
     """
 
     config: ReasonerEvaluatorConfig
-    prompt = """
+    system_prompt = Template(
+        dedent("""
 You are an expert document annotator, evaluating if a document contains relevant \
 information to answer a question submitted by a user. \
 Please act as an impartial relevance annotator for a search engine. \
 Your goal is to evaluate the relevancy of the documents given a user question.
-
-You should write only one sentence reasoning wether the document is relevant or not for \
+               
+You should write one sentence reasoning wether the document is relevant or not for \
 the user question. A document can be:
     - Not relevant: The document is not on topic.
     - Somewhat relevant: The document is on topic but does not fully answer the \
 user question.
     - Very relevant: The document is on topic and answers the user question.
+""")
+    )
+    user_prompt = Template(
+        dedent("""
     [user question]
-    {query}
+    {{ query.query }}
 
     [document content]
-    {document}
-""".strip()
+    {{ document.text }}
+""")
+    )
 
     def _build_message(self, query: Query, document: Document) -> LLMInputPrompt:
-        formatters = {
-            self.config.query_placeholder: query.query,
-            self.config.document_placeholder: document.text,
-        }
         return LLMInputPrompt(
-            user_message=self.prompt.format(**formatters),
+            system_prompt=self.system_prompt.render(),
+            user_message=self.user_prompt.render(query=query, document=document),
         )
 
     def _process_answer(self, llm_response: LLMResponseType) -> LLMResponseType:
