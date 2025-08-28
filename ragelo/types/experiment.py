@@ -4,8 +4,6 @@ evaluations created by Evaluators.
 For most use cases, this class should be the main entry point to interact with RAGElo.
 """
 
-from __future__ import annotations
-
 import csv
 import json
 import logging
@@ -16,11 +14,10 @@ from pathlib import Path
 from typing import Any, Literal, overload
 
 import rich
-from pydantic import BaseModel as PydanticBaseModel
+from pydantic import BaseModel
 
 from ragelo.logger import CLILogHandler, logger
 from ragelo.types.evaluables import AgentAnswer, Document
-from ragelo.types.pydantic_models import _PYDANTIC_MAJOR_VERSION
 from ragelo.types.query import Query
 from ragelo.types.results import (
     AnswerEvaluatorResult,
@@ -160,9 +157,7 @@ class Experiment:
                 if not os.path.exists("ragelo_cache"):
                     os.makedirs("ragelo_cache", exist_ok=True)
             if not os.path.isfile(self.evaluations_cache_path):
-                logger.info(
-                    "Creating a cache file for the experiment's evaluations at" f"{self.evaluations_cache_path}"
-                )
+                logger.info(f"Creating a cache file for the experiment's evaluations at{self.evaluations_cache_path}")
                 Path(self.evaluations_cache_path).touch()
 
         if self.save_path and os.path.isfile(self.save_path):
@@ -383,11 +378,8 @@ class Experiment:
         if isinstance(response.answer, dict):
             # Print the answer in a more readable format
             answer = json.dumps(response.answer, indent=4, ensure_ascii=False)
-        elif isinstance(response.answer, PydanticBaseModel):
-            if _PYDANTIC_MAJOR_VERSION >= 2:
-                answer = response.answer.model_dump_json(indent=4)  # type: ignore
-            else:
-                answer = response.answer.schema_json(indent=4)  # type: ignore
+        elif isinstance(response.answer, BaseModel):
+            answer = response.answer.model_dump_json(indent=4)
         else:
             answer = str(response.answer)
         response_dict = response.model_dump()
@@ -404,9 +396,7 @@ class Experiment:
             if did:
                 rich.print(f"[bold blue]📜 Document ID[/bold blue]: {did}")
             if agent_a and agent_b:
-                rich.print(
-                    f"[bold bright_cyan] {agent_a:<18} [/bold bright_cyan] 🆚  " f"[bold red] {agent_b}[/bold red]"
-                )
+                rich.print(f"[bold bright_cyan] {agent_a:<18} [/bold bright_cyan] 🆚  [bold red] {agent_b}[/bold red]")
             elif agent:
                 rich.print(f"[bold bright_cyan]🕵️ Agent[/bold bright_cyan]: {agent}")
             rich.print(f"[bold blue]Parsed Answer[/bold blue]: {answer}")
@@ -539,7 +529,7 @@ class Experiment:
                     json.dump(qrels, f)
                 else:
                     raise ValueError(
-                        f"Invalid output format for QRELS: {output_format}" "Valid options are 'trec' and 'json'"
+                        f"Invalid output format for QRELS: {output_format}Valid options are 'trec' and 'json'"
                     )
         return qrels
 
@@ -578,7 +568,7 @@ class Experiment:
                         for qid, docs in run.items():
                             sorted_scores = sorted(docs.items(), key=lambda x: x[1], reverse=True)
                             for idx, (did, score) in enumerate(sorted_scores):
-                                f.write(f"{qid} Q0 {did} {idx+1} {score} {agent}\n")
+                                f.write(f"{qid} Q0 {did} {idx + 1} {score} {agent}\n")
             elif output_format.lower() == "json":
                 with open(output_path, "w") as f:
                     json.dump(runs_by_agent, f)

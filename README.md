@@ -70,8 +70,7 @@ evaluator = get_retrieval_evaluator(
     prompt=prompt, # your custom prompt
     query_placeholder="q", # the placeholder for the query in the prompt
     document_placeholder="d", # the placeholder for the document in the prompt
-    llm_answer_format=response_format, # The format of the answer. Can be either `text`, if you expect plain text to be returned, `JSON` if the answer should be in JSON format, or `structured`, if you provide a Pydantic BaseModel as the response_schema.
-    llm_response_schema=response_schema, # The response schema for the LLM. Required if the llm_answer_format is structured and recommended for JSON.
+    llm_response_schema=response_schema, # The response schema for the LLM. 
     seed=42, # The seed for the LLM. Used to ensure we get the same answer for the same query and document pair.
 )
 

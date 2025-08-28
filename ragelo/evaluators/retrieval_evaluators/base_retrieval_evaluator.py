@@ -14,7 +14,7 @@ from ragelo.logger import logger
 from ragelo.types.configurations import BaseRetrievalEvaluatorConfig
 from ragelo.types.evaluables import Document, Evaluable
 from ragelo.types.experiment import Experiment
-from ragelo.types.formats import LLMResponseType
+from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.query import Query
 from ragelo.types.results import RetrievalEvaluatorResult
 from ragelo.types.types import RetrievalEvaluatorTypes
@@ -72,8 +72,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         prompt = self._build_message(query, document)
         try:
             llm_response = await self.llm_provider.call_async(
-                prompt,
-                answer_format=self.config.llm_answer_format,
+                input=prompt,
                 response_schema=self.config.llm_response_schema,
             )
             llm_response = self._process_answer(llm_response)
@@ -123,11 +122,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             )
         return tuples_to_eval
 
-    def _build_message(
-        self,
-        query: Query,
-        document: Document,
-    ) -> str | list[dict[str, str]]:
+    def _build_message(self, query: Query, document: Document) -> LLMInputPrompt:
         """Builds the prompt to send to the LLM."""
         raise NotImplementedError
 
@@ -165,7 +160,7 @@ class RetrievalEvaluatorFactory:
     ) -> BaseRetrievalEvaluator:
         if evaluator_name not in cls.registry:
             raise ValueError(
-                f"Unknown retrieval evaluator {evaluator_name}\n" f"Valid options are {list(cls.registry.keys())}"
+                f"Unknown retrieval evaluator {evaluator_name}\nValid options are {list(cls.registry.keys())}"
             )
         if isinstance(llm_provider, str):
             llm_provider_instance = get_llm_provider(llm_provider, **kwargs)
@@ -174,9 +169,9 @@ class RetrievalEvaluatorFactory:
         if config is None:
             class_ = cls.registry[evaluator_name]
             type_config = class_.get_config_class()
-            valid_keys = [field for field in type_config.get_model_fields()]
+            valid_keys = [field for field in type_config.model_fields]
             valid_args = {k: v for k, v in kwargs.items() if k in valid_keys}
-            required_fields = [arg for arg, info in type_config.get_model_fields().items() if info.is_required()]
+            required_fields = [arg for arg, info in type_config.model_fields.items() if info.is_required()]
             for field in required_fields:
                 if field not in valid_args:
                     raise ValueError(f"Required argument {field} for evaluator {evaluator_name} not provided")

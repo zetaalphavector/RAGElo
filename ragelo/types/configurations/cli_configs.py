@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from pydantic import Field
 
 from ragelo.types.configurations.answer_evaluator_configs import (
@@ -106,4 +104,4 @@ class CLIConfig(BaseCLIConfig):
     initial_score: int = Field(default=1000, description="The initial Elo score for each agent")
     elo_k: int = Field(default=32, description="The K factor for the Elo ranking algorithm")
     bidirectional: bool = Field(default=False, description="Wether or not to run each game in both directions")
-    model: str = Field(default="gpt-4o-mini", description="The model to use for the LLM")
+    model: str = Field(default="gpt-4.1-mini", description="The model to use for the LLM")

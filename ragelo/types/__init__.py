@@ -12,7 +12,6 @@ from ragelo.types.configurations import (
 from ragelo.types.configurations.cli_configs import CLIConfig
 from ragelo.types.evaluables import AgentAnswer, Document, PairwiseGame
 from ragelo.types.experiment import Experiment
-from ragelo.types.formats import AnswerFormat
 from ragelo.types.query import Query
 from ragelo.types.results import (
     AnswerEvaluatorResult,
@@ -47,7 +46,6 @@ __all__ = [
     "AnswerEvaluatorTypes",
     "EvaluatorResult",
     "Document",
-    "AnswerFormat",
     "LLMProviderTypes",
     "Experiment",
 ]

@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from pydantic import BaseModel, model_validator
+
 from ragelo.logger import logger
-from ragelo.types.pydantic_models import BaseModel, validator
 from ragelo.types.results import EvaluatorResult
 
 
@@ -124,7 +125,7 @@ class AgentAnswer(Evaluable):
     text: str | None = None
     conversation: list[ChatMessage] | None = None
 
-    @validator
+    @model_validator(mode="before")
     @classmethod
     def one_of_text_or_conversation(cls, values):
         text = values.get("text")

@@ -1,13 +1,8 @@
-from __future__ import annotations
-
 from typing import Any, Type
 
-from pydantic import BaseModel as PydanticBaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
-from ragelo.logger import logger
-from ragelo.types.configurations.base_configs import AnswerFormat, BaseEvaluatorConfig
-from ragelo.types.pydantic_models import BaseModel, post_validator
+from ragelo.types.configurations.base_configs import BaseEvaluatorConfig
 from ragelo.types.types import RetrievalEvaluatorTypes
 
 
@@ -36,18 +31,6 @@ class BaseRetrievalEvaluatorConfig(BaseEvaluatorConfig):
 
 class ReasonerEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.REASONER
-    llm_answer_format: AnswerFormat = Field(
-        default=AnswerFormat.TEXT,
-        description="The format of the answer returned by the LLM",
-    )
-
-    @post_validator
-    @classmethod
-    def check_answer_format(cls, values):
-        if values.llm_answer_format != AnswerFormat.TEXT:
-            logger.warning("We are using the Reasoner Evaluator config. Forcing the LLM answer format to TEXT.")
-            values.llm_answer_format = AnswerFormat.TEXT
-        return values
 
 
 class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
@@ -55,7 +38,7 @@ class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     expert_in: str = Field(description="What the LLM should mimic being an expert in.")
     domain_short: str | None = Field(
         default=None,
-        description="A short or alternative name of the domain. " "(e.g., Chemistry, CS, etc.)",
+        description="A short or alternative name of the domain. (e.g., Chemistry, CS, etc.)",
     )
     company: str | None = Field(
         default=None,
@@ -65,13 +48,9 @@ class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     )
     extra_guidelines: list[str] | None = Field(
         default=None,
-        description="A list of extra guidelines to be used when reasoning about the " "relevancy of the document.",
+        description="A list of extra guidelines to be used when reasoning about the relevancy of the document.",
     )
-    llm_answer_format: AnswerFormat = Field(
-        default=AnswerFormat.JSON,
-        description="The format of the answer returned by the LLM",
-    )
-    llm_response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = Field(
+    llm_response_schema: Type[BaseModel] | dict[str, Any] | None = Field(
         default={
             "score": (
                 "An integer between 0 and 2 representing the score of the document, "
@@ -87,8 +66,7 @@ class CustomPromptEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     prompt: str = Field(
         default="query: {query} document: {document}",
         description=(
-            "The prompt to be used to evaluate the documents. "
-            "It should contain a {query} and a {document} placeholder"
+            "The prompt to be used to evaluate the documents. It should contain a {query} and a {document} placeholder"
         ),
     )
 
@@ -143,15 +121,3 @@ class RDNAMEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default=False,
         description="Should the prompt ask the LLM to mimic multiple annotators?",
     )
-    llm_answer_format: AnswerFormat = Field(
-        default=AnswerFormat.JSON,
-        description="The format of the answer returned by the LLM",
-    )
-
-    @post_validator
-    @classmethod
-    def check_answer_format(cls, values):
-        if values.llm_answer_format != AnswerFormat.JSON:
-            logger.warning("We are using the RDNAM Evaluator config. Forcing the LLM answer format to JSON.")
-            values.llm_answer_format = AnswerFormat.JSON
-        return values
