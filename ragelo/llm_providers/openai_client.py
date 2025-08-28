@@ -16,12 +16,13 @@ class OpenAIProvider(BaseLLMProvider):
     """A Wrapper over the OpenAI client."""
 
     config: OpenAIConfiguration
+    api_key_env_var: str = "OPENAI_API_KEY"
 
     def __init__(self, config: OpenAIConfiguration) -> None:
         super().__init__(config)
         self.__openai_client = self.__get_openai_client(config)
 
-    @retry(wait=wait_random_exponential(min=1, max=120), stop=stop_after_attempt(5))
+    @retry(wait=wait_random_exponential(min=1, max=120), stop=stop_after_attempt(1))
     async def call_async(
         self,
         input: LLMInputPrompt,
@@ -40,8 +41,7 @@ class OpenAIProvider(BaseLLMProvider):
         call_kwargs = {
             "model": self.config.model,
             "temperature": self.config.temperature,
-            "max_completion_tokens": self.config.max_tokens,
-            "seed": self.config.seed,
+            "max_output_tokens": self.config.max_tokens,
         }
         if input.messages:
             call_kwargs["input"] = input.messages
