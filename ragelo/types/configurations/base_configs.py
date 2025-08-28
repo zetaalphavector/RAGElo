@@ -2,7 +2,6 @@ from typing import Any, Type
 
 from pydantic import BaseModel, Field
 
-from ragelo.types.formats import AnswerFormat
 from ragelo.types.types import AnswerEvaluatorTypes
 
 
@@ -36,14 +35,7 @@ class BaseEvaluatorConfig(BaseConfig):
         default="query",
         description="The placeholder for the query in the prompt.",
     )
-    llm_answer_format: AnswerFormat = Field(
-        default=AnswerFormat.JSON,
-        description="The format of the answer returned by the LLM.",
-    )
     llm_response_schema: Type[BaseModel] | dict[str, Any] | None = Field(
         default=None,
-        description=(
-            "The response schema for the LLM. "
-            "Required if the llm_answer_format is structured and recommended for JSON."
-        ),
+        description="The response schema for the LLM. If set, should be a json schema or a Pydantic BaseModel (not an instance). Otherwise, the answer will be returned as a string.",
     )

@@ -1,4 +1,3 @@
-from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, model_validator
@@ -23,14 +22,6 @@ class LLMInputPrompt(BaseModel):
             self.user_message = self.system_prompt
             self.system_prompt = None
         return self
-
-
-class AnswerFormat(str, Enum):
-    """Enum that contains the names of the available answer formats"""
-
-    TEXT = "text"
-    STRUCTURED = "structured"
-    JSON = "json"
 
 
 class LLMResponseType(BaseModel):

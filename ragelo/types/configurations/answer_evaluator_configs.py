@@ -3,7 +3,6 @@ from typing import Any, Callable, Type
 from pydantic import BaseModel, Field, model_validator
 
 from ragelo.types.configurations.base_configs import BaseEvaluatorConfig
-from ragelo.types.formats import AnswerFormat
 from ragelo.types.types import AnswerEvaluatorTypes
 
 
@@ -79,10 +78,6 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
         ),
         description=("A string containing the factors to be used when evaluating an answer. "),
     )
-    llm_answer_format: AnswerFormat = Field(
-        default=AnswerFormat.JSON,
-        description="The format of the answer returned by the LLM",
-    )
     llm_response_schema: Type[BaseModel] | dict[str, Any] | None = Field(
         default={
             "answer_a_reasoning": "A string with your analysis of assistant A's answer",
@@ -93,10 +88,7 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
                 "'A' if assistant A is better, 'B' if assistant B is better, and 'C' for a tie"
             ),
         },
-        description=(
-            "The response schema for the LLM. "
-            "Required if the llm_answer_format is structured and recommended for JSON."
-        ),
+        description="The response schema for the LLM.",
     )
 
     @model_validator(mode="before")
@@ -116,10 +108,6 @@ class CustomPairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     bidirectional: bool = Field(default=False, description="Whether or not to run each game in both directions")
     n_games_per_query: int = Field(default=100, description="Maximum number of games to generate for each query")
     pairwise: bool = Field(default=True, description="Whether or not to the evaluator is pairwise")
-    llm_answer_format: AnswerFormat = Field(
-        default=AnswerFormat.JSON,
-        description="The format of the answer returned by the LLM",
-    )
     llm_response_schema: Type[BaseModel] | dict[str, Any] | None = Field(
         default={
             "analysis_assistant_a": "A string with your analysis of assistant A's answer",
@@ -130,10 +118,7 @@ class CustomPairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
                 "'A' if assistant A is better, 'B' if assistant B is better, and 'C' for a tie"
             ),
         },
-        description=(
-            "The response schema for the LLM. "
-            "Required if the llm_answer_format is structured and recommended for JSON."
-        ),
+        description="The response schema for the LLM. If set, should be a json schema or a Pydantic BaseModel (not an instance).",
     )
 
 
@@ -142,13 +127,8 @@ class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
     prompt: str = Field(
         default="retrieved documents: {documents} query: {query} answer: {answer}",
         description=(
-            "The prompt to be used to evaluate the documents. "
-            "It should contain a {query} and a {document} placeholder"
+            "The prompt to be used to evaluate the documents. It should contain a {query} and a {document} placeholder"
         ),
-    )
-    llm_answer_format: AnswerFormat = Field(
-        default=AnswerFormat.JSON,
-        description="The format of the answer returned by the LLM",
     )
     include_annotations: bool = False
     include_raw_documents: bool = True

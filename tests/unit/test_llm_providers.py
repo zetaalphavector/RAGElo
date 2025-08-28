@@ -2,7 +2,7 @@ import pytest
 from pydantic import BaseModel
 
 from ragelo.llm_providers.openai_client import OpenAIProvider
-from ragelo.types.formats import AnswerFormat, LLMInputPrompt, LLMResponseType
+from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 
 
 class AnswerModel(BaseModel):
@@ -12,17 +12,15 @@ class AnswerModel(BaseModel):
 
 class TestOpenAIProvider:
     @pytest.mark.parametrize(
-        "answer_format,response_schema,raw_answer,parsed_answer",
+        "response_schema,raw_answer,parsed_answer",
         [
-            (AnswerFormat.TEXT, None, "fake response", "fake response"),
+            (None, "fake response", "fake response"),
             (
-                AnswerFormat.JSON,
                 {"keyA": "Value of key a", "KeyB": "Value of key b"},
                 '{"keyA": "valueA", "keyB": "valueB"}',
                 {"keyA": "valueA", "keyB": "valueB"},
             ),
             (
-                AnswerFormat.STRUCTURED,
                 AnswerModel,
                 '{"keyA": "valueA", "keyB": "valueB"}',
                 AnswerModel(keyA="valueA", keyB="valueB"),
@@ -31,7 +29,6 @@ class TestOpenAIProvider:
     )
     def test_response(
         self,
-        answer_format,
         response_schema,
         raw_answer,
         parsed_answer,
@@ -50,7 +47,8 @@ class TestOpenAIProvider:
         )
         assert isinstance(result, LLMResponseType)
         assert result.raw_answer == raw_answer
-        if answer_format == AnswerFormat.STRUCTURED:
+        is_structured = isinstance(response_schema, type) and issubclass(response_schema, BaseModel)
+        if is_structured:
             assert isinstance(result.parsed_answer, BaseModel)
             assert AnswerModel(**result.parsed_answer.model_dump()) == parsed_answer
         else:
@@ -65,7 +63,7 @@ class TestOpenAIProvider:
         )
 
         # Verify the correct API methods were called
-        if answer_format == AnswerFormat.STRUCTURED:
+        if is_structured:
             assert openai_client_mock.responses.parse.called
             call_args = openai_client_mock.responses.parse.call_args_list
             assert call_args[0][1]["model"] == "fake model"

@@ -7,10 +7,9 @@ from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
     BaseAnswerEvaluator,
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
-from ragelo.logger import logger
 from ragelo.types.configurations import PairwiseEvaluatorConfig
 from ragelo.types.evaluables import PairwiseGame
-from ragelo.types.formats import AnswerFormat, LLMInputPrompt, LLMResponseType
+from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.query import Query
 from ragelo.types.types import AnswerEvaluatorTypes
 
@@ -92,21 +91,7 @@ and "C" for a tie.
             self.documents_prompt = self.documents_prompt_raw_only
         if config.prompt:
             self.prompt = config.prompt
-        if config.llm_answer_format == AnswerFormat.STRUCTURED:
-            if not config.llm_response_schema:
-                self.config.llm_response_schema = PairWiseAnswerAnswerFormat
-        elif self.config.llm_answer_format != AnswerFormat.JSON:
-            logger.warning("We are using a PairwiseAnswerEvaluator config. Forcing the LLM answer format to JSON.")
-            self.config.llm_answer_format = AnswerFormat.JSON
-            self.config.llm_response_schema = self.config.llm_response_schema or {
-                "analysis_assistant_a": "A string with your analysis of assistant A's answer",
-                "analysis_assistant_b": "A string with your analysis of assistant B's answer",
-                "differences": "A string with your comparison between the two answers and their differences",
-                "winner": (
-                    "The winner of the comparison. "
-                    "'A' if assistant A is better, 'B' if assistant B is better, and 'C' for a tie"
-                ),
-            }
+        self.config.llm_response_schema = PairWiseAnswerAnswerFormat
 
     def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> LLMInputPrompt:
         documents = self._prepare_documents(query)

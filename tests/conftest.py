@@ -24,7 +24,7 @@ from ragelo.types.configurations import (
 from ragelo.types.configurations.retrieval_evaluator_configs import FewShotExample
 from ragelo.types.evaluables import ChatMessage
 from ragelo.types.experiment import Experiment
-from ragelo.types.formats import AnswerFormat, LLMInputPrompt, LLMResponseType
+from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.results import (
     AnswerEvaluatorResult,
     EloTournamentResult,
@@ -137,26 +137,27 @@ class MockLLMProvider(BaseLLMProvider):
 
 
 @pytest.fixture
-def chat_completion_mock(answer_format, mocker):
-    """Mock objects for the OpenAI Responses API depending on answer_format.
+def responses_api_mock(mocker):
+    """Factory helpers to mock the OpenAI Responses API.
 
-    Returns an object with attributes:
-      - create_response: used by responses.create
-      - parse_response: used by responses.parse
+    The OpenAIProvider chooses between responses.create (TEXT/JSON) and
+    responses.parse (STRUCTURED) based on the provided response_schema.
+    This fixture exposes helpers so the client mock can return suitable
+    objects depending on call kwargs.
     """
     holder = mocker.Mock()
 
-    if answer_format == AnswerFormat.TEXT:
+    def create_text_response():
         resp = mocker.Mock()
         resp.output_text = "fake response"
-        holder.create_response = resp
-        holder.parse_response = None
-    elif answer_format == AnswerFormat.JSON:
+        return resp
+
+    def create_json_response():
         resp = mocker.Mock()
         resp.output_text = '{"keyA": "valueA", "keyB": "valueB"}'
-        holder.create_response = resp
-        holder.parse_response = None
-    elif answer_format == AnswerFormat.STRUCTURED:
+        return resp
+
+    def parse_structured_response():
         resp = mocker.Mock()
         resp.output_text = '{"keyA": "valueA", "keyB": "valueB"}'
         output_item = mocker.Mock()
@@ -164,30 +165,33 @@ def chat_completion_mock(answer_format, mocker):
         content_item.parsed = AnswerModel(keyA="valueA", keyB="valueB")
         output_item.content = [content_item]
         resp.output = [output_item]
-        holder.create_response = None
-        holder.parse_response = resp
-    else:
-        raise ValueError(f"Unsupported answer format: {answer_format}")
+        return resp
+
+    holder.create_text_response = create_text_response
+    holder.create_json_response = create_json_response
+    holder.parse_structured_response = parse_structured_response
 
     return holder
 
 
 @pytest.fixture
-def openai_client_mock(mocker, chat_completion_mock):
+def openai_client_mock(mocker, responses_api_mock):
     openai_client = mocker.AsyncMock(AsyncOpenAI)
 
     # Mock the responses API
     type(openai_client).responses = mocker.AsyncMock()
 
-    # Wire responses.create / responses.parse based on holder
-    if getattr(chat_completion_mock, "create_response", None) is not None:
-        openai_client.responses.create = mocker.AsyncMock(return_value=chat_completion_mock.create_response)
-    else:
-        openai_client.responses.create = mocker.AsyncMock()
-    if getattr(chat_completion_mock, "parse_response", None) is not None:
-        openai_client.responses.parse = mocker.AsyncMock(return_value=chat_completion_mock.parse_response)
-    else:
-        openai_client.responses.parse = mocker.AsyncMock()
+    # responses.create returns TEXT by default; if JSON schema is requested, return JSON
+    def create_side_effect(*args, **kwargs):
+        text_fmt = kwargs.get("text")
+        if isinstance(text_fmt, dict):
+            return responses_api_mock.create_json_response()
+        return responses_api_mock.create_text_response()
+
+    openai_client.responses.create = mocker.AsyncMock(side_effect=create_side_effect)
+
+    # responses.parse for STRUCTURED
+    openai_client.responses.parse = mocker.AsyncMock(return_value=responses_api_mock.parse_structured_response())
 
     return openai_client
 
