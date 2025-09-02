@@ -245,10 +245,9 @@ class BaseAnswerEvaluator(BaseEvaluator):
             system_prompt=system_prompt,
             user_message=user_message,
         )
-        raise NotImplementedError
 
     def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> LLMInputPrompt:
-        """Builds the message to send to the LLM evaluator"""
+        """Builds the message to send to the LLM evaluator based on a pairwise game"""
         documents = self._filter_documents(query)
         context = {"query": query, "game": game, "documents": documents}
         user_message = self.user_prompt.render(**context)
@@ -369,6 +368,15 @@ def get_answer_evaluator(
     config: BaseAnswerEvaluatorConfig | None = None,
     **kwargs,
 ) -> BaseAnswerEvaluator:
+    """Gets an answer evaluator
+    Args:
+        evaluator_name (AnswerEvaluatorTypes | str | None): The name of the answer evaluator to get.
+        llm_provider (BaseLLMProvider | str): The LLM provider to use for the evaluation.
+        config (BaseAnswerEvaluatorConfig | None): The configuration for the answer evaluator.
+        **kwargs: Additional arguments to pass to the answer evaluator.
+    Returns:
+        BaseAnswerEvaluator: The answer evaluator.
+    """
     if evaluator_name is None:
         # get the name from the config
         if config is None:
