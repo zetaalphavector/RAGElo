@@ -139,8 +139,14 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         return tuples_to_eval
 
     def _build_message(self, query: Query, document: Document) -> LLMInputPrompt:
-        """Builds the LLMInputPrompt to send to the LLM."""
-        raise NotImplementedError
+        context = {"query": query, "document": document}
+        user_message = self.user_prompt.render(**context) if self.user_prompt else None
+        system_prompt = self.system_prompt.render(**context) if self.system_prompt else None
+
+        return LLMInputPrompt(
+            system_prompt=system_prompt,
+            user_message=user_message,
+        )
 
     @classmethod
     def from_config(cls, config: BaseRetrievalEvaluatorConfig, llm_provider: BaseLLMProvider):
