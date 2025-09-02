@@ -1,13 +1,6 @@
-from __future__ import annotations
-
 from typing import Any
 
-from ragelo.types.pydantic_models import (
-    BaseModel,
-    SerializablePydanticBaseModel,
-    ValidationError,
-    validator,
-)
+from pydantic import BaseModel, SerializeAsAny, ValidationError, model_validator
 
 
 class EvaluatorResult(BaseModel):
@@ -23,10 +16,10 @@ class EvaluatorResult(BaseModel):
     qid: str
     agent: str | None = None
     raw_answer: str | None = None
-    answer: float | str | dict[str, Any] | SerializablePydanticBaseModel | None = None
+    answer: float | str | dict[str, Any] | SerializeAsAny[BaseModel] | None = None
     exception: str | None = None
 
-    @validator
+    @model_validator(mode="before")
     @classmethod
     def check_agents(cls, v):
         exception = v.get("exception")
@@ -53,7 +46,7 @@ class AnswerEvaluatorResult(EvaluatorResult):
     agent_b: str | None = None
     pairwise: bool = False
 
-    @validator
+    @model_validator(mode="before")
     @classmethod
     def check_agents(cls, v):
         agent = v.get("agent")

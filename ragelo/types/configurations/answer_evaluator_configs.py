@@ -1,13 +1,8 @@
-from __future__ import annotations
-
 from typing import Any, Callable, Type
 
-from pydantic import BaseModel as PydanticBaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field, model_validator
 
 from ragelo.types.configurations.base_configs import BaseEvaluatorConfig
-from ragelo.types.formats import AnswerFormat
-from ragelo.types.pydantic_models import ValidationError, validator
 from ragelo.types.types import AnswerEvaluatorTypes
 
 
@@ -47,6 +42,10 @@ class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
             "By default, all documents are included."
         ),
     )
+    use_raw_document_evaluation: bool = Field(
+        default=False,
+        description="Whether or not to use the raw document evaluation when templating documents in the prompt",
+    )
 
 
 class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
@@ -71,22 +70,15 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     )
     prompt: str | None = Field(
         default=None,
-        description="Prompt to use for the evaluator. If not provided, a default prompt will be used",
+        description="Prompt to use for the evaluator.",
     )
     factors: str = Field(
         default=(
-            "the correctness, helpfulness, completeness, accuracy, depth, and " "level of detail of their responses"
+            "the correctness, helpfulness, completeness, accuracy, depth, and level of detail of their responses"
         ),
-        description=(
-            "A string containing the factors to be used when evaluating an answer. "
-            "If not provided, a default string will be used"
-        ),
+        description=("A string containing the factors to be used when evaluating an answer. "),
     )
-    llm_answer_format: AnswerFormat = Field(
-        default=AnswerFormat.JSON,
-        description="The format of the answer returned by the LLM",
-    )
-    llm_response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = Field(
+    llm_response_schema: Type[BaseModel] | dict[str, Any] | None = Field(
         default={
             "answer_a_reasoning": "A string with your analysis of assistant A's answer",
             "answer_b_reasoning": "A string with your analysis of assistant B's answer",
@@ -96,17 +88,14 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
                 "'A' if assistant A is better, 'B' if assistant B is better, and 'C' for a tie"
             ),
         },
-        description=(
-            "The response schema for the LLM. "
-            "Required if the llm_answer_format is structured and recommended for JSON."
-        ),
+        description="The response schema for the LLM.",
     )
 
-    @validator
+    @model_validator(mode="before")
     @classmethod
     def check_annotations_or_raw_documents(cls, v):
         if v is None and cls.include_annotations is False and cls.include_raw_documents is False:
-            raise ValidationError("At least one of include_annotations or include_raw_documents must be True")
+            raise ValueError("At least one of include_annotations or include_raw_documents must be True")
         return v
 
 
@@ -119,11 +108,7 @@ class CustomPairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     bidirectional: bool = Field(default=False, description="Whether or not to run each game in both directions")
     n_games_per_query: int = Field(default=100, description="Maximum number of games to generate for each query")
     pairwise: bool = Field(default=True, description="Whether or not to the evaluator is pairwise")
-    llm_answer_format: AnswerFormat = Field(
-        default=AnswerFormat.JSON,
-        description="The format of the answer returned by the LLM",
-    )
-    llm_response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = Field(
+    llm_response_schema: Type[BaseModel] | dict[str, Any] | None = Field(
         default={
             "analysis_assistant_a": "A string with your analysis of assistant A's answer",
             "analysis_assistant_b": "A string with your analysis of assistant B's answer",
@@ -133,10 +118,7 @@ class CustomPairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
                 "'A' if assistant A is better, 'B' if assistant B is better, and 'C' for a tie"
             ),
         },
-        description=(
-            "The response schema for the LLM. "
-            "Required if the llm_answer_format is structured and recommended for JSON."
-        ),
+        description="The response schema for the LLM. If set, should be a json schema or a Pydantic BaseModel (not an instance).",
     )
 
 
@@ -145,13 +127,8 @@ class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
     prompt: str = Field(
         default="retrieved documents: {documents} query: {query} answer: {answer}",
         description=(
-            "The prompt to be used to evaluate the documents. "
-            "It should contain a {query} and a {document} placeholder"
+            "The prompt to be used to evaluate the documents. It should contain a {query} and a {document} placeholder"
         ),
-    )
-    llm_answer_format: AnswerFormat = Field(
-        default=AnswerFormat.JSON,
-        description="The format of the answer returned by the LLM",
     )
     include_annotations: bool = False
     include_raw_documents: bool = True

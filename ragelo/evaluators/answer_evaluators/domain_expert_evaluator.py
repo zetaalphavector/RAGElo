@@ -11,6 +11,7 @@ from ragelo.evaluators.answer_evaluators.pairwise_evaluator import (
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.types.configurations import PairwiseDomainExpertEvaluatorConfig
 from ragelo.types.evaluables import PairwiseGame
+from ragelo.types.formats import LLMInputPrompt
 from ragelo.types.query import Query
 from ragelo.types.types import AnswerEvaluatorTypes
 
@@ -64,7 +65,7 @@ and 'C' for a tie.
         self.expert_in = self.config.expert_in
         self.company = self.config.company
 
-    def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> str | list[dict[str, str]]:
+    def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> LLMInputPrompt:
         documents = self._prepare_documents(query)
         query_metadata = self._get_usable_fields_from_metadata(
             self.prompt, query.metadata, skip_fields=[self.config.query_placeholder]
@@ -100,4 +101,6 @@ and 'C' for a tie.
             formatters["company_prompt"] = self.COMPANY_PROMPT.format(company=self.company)
         else:
             formatters["company_prompt"] = ""
-        return self.prompt.format(**formatters)
+        return LLMInputPrompt(
+            user_message=self.prompt.format(**formatters),
+        )

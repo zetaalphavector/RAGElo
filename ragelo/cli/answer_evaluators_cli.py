@@ -32,7 +32,6 @@ def pairwise(config: CLIPairwiseEvaluatorConfig = CLIPairwiseEvaluatorConfig(), 
 
     """
     logging.getLogger("ragelo").setLevel(logging.INFO)
-    kwargs.pop("llm_answer_format", None)
     kwargs.pop("llm_response_schema", None)
 
     config = CLIPairwiseEvaluatorConfig(**kwargs)
@@ -85,7 +84,6 @@ def expert_pairwise(
     An evaluator that evaluates RAG-based answers by comparing answers of two agents and impersonating a domain expert.
     """
     logging.getLogger("ragelo").setLevel(logging.INFO)
-    kwargs.pop("llm_answer_format", None)
     kwargs.pop("llm_response_schema", None)
 
     config = CLIPairwiseDomainExpertEvaluatorConfig(**kwargs)

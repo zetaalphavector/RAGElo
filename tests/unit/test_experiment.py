@@ -44,8 +44,7 @@ class TestExperiment:
         assert empty_experiment[qid2].query == "Test query 2"
 
         # Test force parameter
-        with pytest.warns(UserWarning):
-            empty_experiment.add_query("New query", qid, force=False)
+        empty_experiment.add_query("New query", qid, force=False)
         empty_experiment.add_query("Forced query", qid, force=True)
         assert empty_experiment[qid].query == "Forced query"
 

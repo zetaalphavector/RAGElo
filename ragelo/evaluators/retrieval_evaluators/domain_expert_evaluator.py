@@ -1,7 +1,5 @@
 """Evaluator with a domain expert persona"""
 
-from __future__ import annotations
-
 from tenacity import RetryError
 
 from ragelo.evaluators.retrieval_evaluators import (
@@ -12,7 +10,7 @@ from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.logger import logger
 from ragelo.types.configurations import DomainExpertEvaluatorConfig
 from ragelo.types.evaluables import Document, Evaluable
-from ragelo.types.formats import AnswerFormat
+from ragelo.types.formats import LLMInputPrompt
 from ragelo.types.query import Query
 from ragelo.types.results import RetrievalEvaluatorResult
 from ragelo.types.types import RetrievalEvaluatorTypes
@@ -93,9 +91,6 @@ document given the particular query. The score meaning is as follows:
         llm_provider: BaseLLMProvider,
     ):
         super().__init__(config, llm_provider)
-        if self.config.llm_answer_format != AnswerFormat.JSON:
-            logger.warning("We are using the Domain Expert Evaluator config. Forcing the LLM answer format to JSON.")
-            self.config.llm_answer_format = AnswerFormat.JSON
         self.expert_in = self.config.expert_in
         self.domain_short = f" {self.config.domain_short}" if self.config.domain_short else ""
         self.system_prompt = self.system_prompt.format(
@@ -135,12 +130,11 @@ document given the particular query. The score meaning is as follows:
                 answer=document.evaluation.answer,
                 exception=document.evaluation.exception,
             )
-        messages = [
-            {"role": "system", "content": self.system_prompt},
-            {"role": "user", "content": reason_message},
-        ]
         try:
-            return_answer = await self.llm_provider.call_async(messages, answer_format=AnswerFormat.TEXT)
+            # Use system_prompt channel instead of embedding system role in messages
+            return_answer = await self.llm_provider.call_async(
+                input=LLMInputPrompt(system_prompt=self.system_prompt, user_message=reason_message)
+            )
             reasoning_answer = return_answer.parsed_answer
             assert isinstance(reasoning_answer, str)
         except Exception as e:
@@ -157,13 +151,15 @@ document given the particular query. The score meaning is as follows:
                 answer=None,
                 exception=exc,
             )
-        messages_score = messages.copy()
-        messages_score.append({"role": "assistant", "content": reasoning_answer})
-        messages_score.append({"role": "user", "content": self.score_prompt})
+        # Build a follow-up turn including the prior assistant message
+        follow_up_messages = [
+            {"role": "assistant", "content": reasoning_answer},
+            {"role": "user", "content": self.score_prompt},
+        ]
+
         try:
             score_answer = await self.llm_provider.call_async(
-                messages_score,
-                answer_format=AnswerFormat.JSON,
+                input=LLMInputPrompt(system_prompt=self.system_prompt, messages=follow_up_messages),
                 response_schema=self.config.llm_response_schema,
             )
         except Exception as e:
@@ -174,10 +170,11 @@ document given the particular query. The score meaning is as follows:
             logger.warning(f"LLM Failed to match the expected schema for qid: {query.qid}")
             logger.warning(f"document id: {document.did}")
             logger.warning(f"LLM response: {score_answer.parsed_answer}")
+            logger.warning(f"expected schema: {self.config.llm_response_schema}")
             exc = "The LLM did not return a dictionary with a 'score' key"
             answer = None
         else:
-            answer = score_answer.parsed_answer["score"]
+            answer = float(score_answer.parsed_answer["score"])
         return RetrievalEvaluatorResult(
             qid=query.qid,
             did=document.did,

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import logging
 
 import typer
@@ -12,7 +10,6 @@ from ragelo.types.configurations.cli_configs import (
     CLIRDNAMEvaluatorConfig,
     CLIReasonerEvaluatorConfig,
 )
-from ragelo.types.formats import AnswerFormat
 from ragelo.types.types import RetrievalEvaluatorTypes
 
 typer.main.get_params_from_function = get_params_from_function  # type: ignore
@@ -34,7 +31,6 @@ def domain_expert(config: CLIDomainExpertEvaluatorConfig = CLIDomainExpertEvalua
 
     """
     logging.getLogger("ragelo").setLevel(logging.INFO)
-    kwargs.pop("llm_answer_format", None)
     kwargs.pop("llm_response_schema", None)
 
     config = CLIDomainExpertEvaluatorConfig(**kwargs)
@@ -66,7 +62,7 @@ def domain_expert(config: CLIDomainExpertEvaluatorConfig = CLIDomainExpertEvalua
 
 @app.command()
 def reasoner(
-    config: CLIReasonerEvaluatorConfig = CLIReasonerEvaluatorConfig(llm_answer_format=AnswerFormat.TEXT),
+    config: CLIReasonerEvaluatorConfig = CLIReasonerEvaluatorConfig(),
     **kwargs,
 ):
     """
@@ -75,7 +71,6 @@ def reasoner(
     logging.getLogger("ragelo").setLevel(logging.INFO)
 
     kwargs.pop("llm_response_schema", None)
-    kwargs["llm_answer_format"] = AnswerFormat.TEXT
 
     config = CLIReasonerEvaluatorConfig(**kwargs)
 
@@ -111,7 +106,6 @@ def rdnam(config: CLIRDNAMEvaluatorConfig = CLIRDNAMEvaluatorConfig(), **kwargs)
     """
     logging.getLogger("ragelo").setLevel(logging.INFO)
 
-    kwargs.pop("llm_answer_format", None)
     kwargs.pop("llm_response_schema", None)
 
     config = CLIRDNAMEvaluatorConfig(**kwargs)
@@ -131,7 +125,6 @@ def rdnam(config: CLIRDNAMEvaluatorConfig = CLIRDNAMEvaluatorConfig(), **kwargs)
     )
 
     kwargs = config.model_dump()
-    kwargs.pop("llm_answer_format")
     kwargs.pop("llm_response_schema")
 
     llm_provider = get_llm_provider(config.llm_provider_name, **kwargs)

@@ -1,40 +1,35 @@
-from __future__ import annotations
-
 import os
 from abc import ABC, abstractmethod
 from typing import Any, Type, get_type_hints
 
-from pydantic import BaseModel as PydanticBaseModel
+from pydantic import BaseModel
 
 from ragelo.types.configurations import LLMProviderConfig
-from ragelo.types.formats import AnswerFormat, LLMResponseType
-from ragelo.types.pydantic_models import _PYDANTIC_MAJOR_VERSION
+from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.types import LLMProviderTypes
 from ragelo.utils import call_async_fn
 
 
 class BaseLLMProvider(ABC):
     config: LLMProviderConfig
-    api_key_env_var: str = "API_KEY"
+    api_key_env_var: str = "OPENAI_API_KEY"
 
     def __init__(self, config: LLMProviderConfig):
         self.config = config
 
     def __call__(
         self,
-        prompt: str | list[dict[str, str]],
-        answer_format: AnswerFormat = AnswerFormat.TEXT,
-        response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = None,
+        input: LLMInputPrompt,
+        response_schema: Type[BaseModel] | dict[str, Any] | None = None,
     ) -> LLMResponseType:
         """Submits a single query-document pair to the LLM and returns the answer."""
-        return call_async_fn(self.call_async, prompt, answer_format, response_schema)
+        return call_async_fn(self.call_async, input, response_schema)
 
     @abstractmethod
     async def call_async(
         self,
-        prompt: str | list[dict[str, str]],
-        answer_format: AnswerFormat = AnswerFormat.TEXT,
-        response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = None,
+        input: LLMInputPrompt,
+        response_schema: Type[BaseModel] | dict[str, Any] | None = None,
     ) -> LLMResponseType:
         """Submits a single query-document pair to the LLM and returns the answer."""
         raise NotImplementedError
@@ -80,16 +75,13 @@ class LLMProviderFactory:
         if config is None:
             class_ = cls.registry[name]
             type_config = class_.get_config_class()
-            valid_keys = [field for field in type_config.get_model_fields()]
+            valid_keys = [field for field in type_config.model_fields]
             if "api_key" not in kwargs:
                 api_key = os.environ.get(class_.api_key_env_var)
                 if not api_key:
                     # Check if the key is actually required
-                    api_key_field = type_config.get_model_fields()["api_key"]
-                    if _PYDANTIC_MAJOR_VERSION == 2:
-                        is_required = api_key_field.is_required()
-                    else:
-                        is_required = api_key_field.required  # type: ignore
+                    api_key_field = type_config.model_fields["api_key"]
+                    is_required = api_key_field.is_required()
                     if is_required:
                         raise ValueError(f"API key not found in environment variable {class_.api_key_env_var}")
                     else:

@@ -1,21 +1,10 @@
-from __future__ import annotations
-
 import json
 from typing import Any, Type
 from unittest.mock import AsyncMock
 
 import pytest
 from openai import AsyncOpenAI
-from openai.resources.beta import AsyncBeta
-from openai.resources.beta.chat import AsyncChat
-from openai.types.chat.chat_completion import ChatCompletion, Choice
-from openai.types.chat.chat_completion_message import ChatCompletionMessage
-from openai.types.chat.parsed_chat_completion import (
-    ParsedChatCompletion,
-    ParsedChatCompletionMessage,
-    ParsedChoice,
-)
-from pydantic import BaseModel as PydanticBaseModel
+from pydantic import BaseModel
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.llm_providers.openai_client import OpenAIConfiguration
@@ -35,7 +24,7 @@ from ragelo.types.configurations import (
 from ragelo.types.configurations.retrieval_evaluator_configs import FewShotExample
 from ragelo.types.evaluables import ChatMessage
 from ragelo.types.experiment import Experiment
-from ragelo.types.formats import AnswerFormat, LLMResponseType
+from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.results import (
     AnswerEvaluatorResult,
     EloTournamentResult,
@@ -82,117 +71,125 @@ def llm_provider_config():
     )
 
 
-class AnswerModel(PydanticBaseModel):
+class AnswerModel(BaseModel):
     keyA: str
     keyB: str
 
 
-def answer_model_factory(prompt, answer_format, response_schema, **kwargs):
-    if answer_format == AnswerFormat.STRUCTURED:
+def answer_model_factory(input: LLMInputPrompt, response_schema, **kwargs):
+    # Mirror OpenAIProvider behavior: response format is inferred from response_schema
+    if isinstance(response_schema, type(BaseModel)):
         return LLMResponseType(
             raw_answer='{"keyA": "valueA", "keyB": "valueB"}',
             parsed_answer=AnswerModel(keyA="valueA", keyB="valueB"),
         )
-    elif answer_format == AnswerFormat.JSON:
+    elif isinstance(response_schema, dict):
         return LLMResponseType(
             raw_answer='{"score": 1.0}',
             parsed_answer={"score": 1.0},
         )
-    elif answer_format == AnswerFormat.TEXT:
+    else:
         return LLMResponseType(
             raw_answer='{"keyA": "valueA", "keyB": "valueB"}',
             parsed_answer='{"keyA": "valueA", "keyB": "valueB"}',
         )
-    else:
-        raise ValueError(f"Unsupported answer format: {answer_format}")
 
 
 class MockLLMProvider(BaseLLMProvider):
     def __init__(self, config):
-        self.config = config
-
-        def side_effect(*args, **kwargs):
-            return answer_model_factory(*args, **kwargs)
-
-        self.async_call_mocker = AsyncMock(side_effect=side_effect)
+        super().__init__(config)
+        self.async_call_mocker = AsyncMock()
 
     @classmethod
-    def from_configuration(cls, config: LLMProviderConfig):
+    def from_config(cls, config: LLMProviderConfig):
         return cls(config)
 
     async def call_async(
         self,
-        prompt: str | list[dict[str, str]],
-        answer_format: AnswerFormat = AnswerFormat.TEXT,
-        response_schema: Type[PydanticBaseModel] | dict[str, Any] | None = None,
+        input: LLMInputPrompt,
+        response_schema: Type[BaseModel] | dict[str, Any] | None = None,
     ) -> LLMResponseType:
-        return await self.async_call_mocker(prompt, answer_format, response_schema)
+        # For compatibility with existing tests, forward primitive args to the mock
+        if input.messages:
+            # Prefer forwarding the latest user message content
+            user_messages = [m.get("content") for m in input.messages if m.get("role") == "user"]
+            if len(user_messages) > 0:
+                forwarded_input = user_messages[-1]
+            else:
+                # Fallback: stringify the messages
+                forwarded_input = str(input.messages)
+        else:
+            forwarded_input = input.user_message
+
+        # Record the call for assertions in tests
+        if self.async_call_mocker.side_effect is not None:
+            # If a custom side effect is set by a test/fixture, use it
+            return await self.async_call_mocker(forwarded_input, input.system_prompt)
+        else:
+            # Still record the call (without relying on its return value)
+            try:
+                await self.async_call_mocker(forwarded_input, input.system_prompt)
+            except Exception:
+                # In case someone set a return_value that isn't awaitable, ignore
+                pass
+            # Default behavior mirrors OpenAIProvider outcome based on response_schema
+            return answer_model_factory(input, response_schema)
 
 
 @pytest.fixture
-def chat_completion_mock(answer_format):
-    _cls: Type[ChatCompletion | ParsedChatCompletion]
-    if answer_format == AnswerFormat.STRUCTURED:
-        _cls = ParsedChatCompletion
-    else:
-        _cls = ChatCompletion
+def responses_api_mock(mocker):
+    """Factory helpers to mock the OpenAI Responses API.
 
-    async_mock = AsyncMock()
-    fake_response = _cls(
-        id="fake id",
-        choices=[],
-        created=0,
-        model="fake model",
-        object="chat.completion",
-    )
-    if answer_format == AnswerFormat.TEXT:
-        fake_response.choices.append(
-            Choice(
-                finish_reason="stop",
-                index=0,
-                logprobs=None,
-                message=ChatCompletionMessage(content="fake response", role="assistant"),
-            )  # type: ignore
-        )
-        async_mock.create.return_value = fake_response
-    elif answer_format == AnswerFormat.JSON:
-        fake_response.choices.append(
-            Choice(
-                finish_reason="stop",
-                index=0,
-                logprobs=None,
-                message=ChatCompletionMessage(content='{"keyA": "valueA", "keyB": "valueB"}', role="assistant"),
-            )  # type: ignore
-        )
-        async_mock.create.return_value = fake_response
-    elif answer_format == AnswerFormat.STRUCTURED:
-        fake_response.choices.append(
-            ParsedChoice(
-                finish_reason="stop",
-                index=0,
-                logprobs=None,
-                message=ParsedChatCompletionMessage(
-                    content='{"keyA": "valueA", "keyB": "valueB"}',
-                    parsed=AnswerModel(keyA="valueA", keyB="valueB"),
-                    role="assistant",
-                ),
-            )  # type: ignore
-        )
-        async_mock.parse.return_value = fake_response
-    else:
-        raise ValueError(f"Unsupported answer format: {answer_format}")
+    The OpenAIProvider chooses between responses.create (TEXT/JSON) and
+    responses.parse (STRUCTURED) based on the provided response_schema.
+    This fixture exposes helpers so the client mock can return suitable
+    objects depending on call kwargs.
+    """
+    holder = mocker.Mock()
 
-    return async_mock
+    def create_text_response():
+        resp = mocker.Mock()
+        resp.output_text = "fake response"
+        return resp
+
+    def create_json_response():
+        resp = mocker.Mock()
+        resp.output_text = '{"keyA": "valueA", "keyB": "valueB"}'
+        return resp
+
+    def parse_structured_response():
+        resp = mocker.Mock()
+        resp.output_text = '{"keyA": "valueA", "keyB": "valueB"}'
+        resp.output_parsed = AnswerModel(keyA="valueA", keyB="valueB")
+        return resp
+
+    holder.create_text_response = create_text_response
+    holder.create_json_response = create_json_response
+    holder.parse_structured_response = parse_structured_response
+
+    return holder
 
 
 @pytest.fixture
-def openai_client_mock(mocker, chat_completion_mock):
+def openai_client_mock(mocker, responses_api_mock):
     openai_client = mocker.AsyncMock(AsyncOpenAI)
-    type(openai_client).chat = mocker.AsyncMock(AsyncChat)
-    type(openai_client.chat).completions = mocker.PropertyMock(return_value=chat_completion_mock)
-    type(openai_client).beta = mocker.AsyncMock(AsyncBeta)
-    type(openai_client.beta).chat = mocker.AsyncMock(AsyncChat)
-    type(openai_client.beta.chat).completions = mocker.PropertyMock(return_value=chat_completion_mock)
+
+    # Mock the responses API
+    type(openai_client).responses = mocker.AsyncMock()
+
+    # responses.create returns TEXT by default; if JSON schema is requested, return JSON
+    def create_side_effect(*args, **kwargs):
+        text = kwargs.get("text")
+        text_fmt = kwargs.get("text_format")
+        if isinstance(text, dict):
+            return responses_api_mock.create_json_response()
+        elif isinstance(text_fmt, type(BaseModel)):
+            return responses_api_mock.parse_structured_response()
+        return responses_api_mock.create_text_response()
+
+    openai_client.responses.create = mocker.AsyncMock(side_effect=create_side_effect)
+    openai_client.responses.parse = mocker.AsyncMock(side_effect=create_side_effect)
+
     return openai_client
 
 
@@ -342,7 +339,7 @@ def elo_tournament_result():
 
 @pytest.fixture
 def base_eval_config():
-    return BaseEvaluatorConfig(force=True, verbose=True, llm_answer_format=AnswerFormat.JSON)
+    return BaseEvaluatorConfig(force=True, verbose=True)
 
 
 @pytest.fixture
@@ -379,7 +376,7 @@ Agent answer: {answer}
 
 @pytest.fixture
 def expert_retrieval_eval_config(base_eval_config):
-    base_eval_config = base_eval_config.model_dump()
+    base_eval_config = base_eval_config.model_dump(exclude_unset=True)
     base_eval_config["evaluator_name"] = AnswerEvaluatorTypes.DOMAIN_EXPERT
     return DomainExpertEvaluatorConfig(
         expert_in="Computer Science",
@@ -392,7 +389,7 @@ def expert_retrieval_eval_config(base_eval_config):
 
 @pytest.fixture
 def rdnam_config(base_eval_config):
-    base_config = base_eval_config.model_dump()
+    base_config = base_eval_config.model_dump(exclude_unset=True)
     base_config["query_file"] = "tests/data/rdnam_queries.csv"
     base_config["evaluator_name"] = RetrievalEvaluatorTypes.RDNAM
     return RDNAMEvaluatorConfig(
@@ -405,7 +402,7 @@ def rdnam_config(base_eval_config):
 
 @pytest.fixture
 def custom_prompt_retrieval_eval_config(base_eval_config):
-    base_eval_config = base_eval_config.model_dump()
+    base_eval_config = base_eval_config.model_dump(exclude_unset=True)
     base_eval_config["evaluator_name"] = RetrievalEvaluatorTypes.CUSTOM_PROMPT
     config = CustomPromptEvaluatorConfig(
         prompt="query: {query} doc: {document}",
@@ -452,13 +449,13 @@ def llm_provider_reasoner_mock(llm_provider_config):
 
 @pytest.fixture
 def base_answer_eval_config(base_eval_config):
-    base_config = base_eval_config.model_dump()
+    base_config = base_eval_config.model_dump(exclude_unset=True)
     return BaseAnswerEvaluatorConfig(**base_config)
 
 
 @pytest.fixture
 def pairwise_answer_eval_config(base_answer_eval_config):
-    base_config = base_answer_eval_config.model_dump()
+    base_config = base_answer_eval_config.model_dump(exclude_unset=True)
     base_config["pairwise"] = True
     base_config["evaluator_name"] = AnswerEvaluatorTypes.PAIRWISE
     return PairwiseEvaluatorConfig(bidirectional=True, **base_config)
@@ -466,7 +463,7 @@ def pairwise_answer_eval_config(base_answer_eval_config):
 
 @pytest.fixture
 def domain_expert_answer_eval_config(base_answer_eval_config):
-    base_config = base_answer_eval_config.model_dump()
+    base_config = base_answer_eval_config.model_dump(exclude_unset=True)
     base_config["pairwise"] = True
     base_config["expert_in"] = "Computer Science"
     base_config["include_annotations"] = True
@@ -477,7 +474,7 @@ def domain_expert_answer_eval_config(base_answer_eval_config):
 
 @pytest.fixture
 def few_shot_retrieval_eval_config(base_eval_config):
-    base_eval_config = base_eval_config.model_dump()
+    base_eval_config = base_eval_config.model_dump(exclude_unset=True)
     base_eval_config["evaluator_name"] = RetrievalEvaluatorTypes.FEW_SHOT
     few_shot_samples = [
         FewShotExample(

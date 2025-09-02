@@ -11,7 +11,7 @@ from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.types.configurations import BaseEvaluatorConfig
 from ragelo.types.evaluables import Evaluable
 from ragelo.types.experiment import Experiment
-from ragelo.types.formats import AnswerFormat, LLMResponseType
+from ragelo.types.formats import LLMResponseType
 from ragelo.types.query import Query
 from ragelo.types.results import EvaluatorResult
 from ragelo.utils import call_async_fn, get_pbar
@@ -23,7 +23,6 @@ class BaseEvaluator(ABC):
     """
 
     config: BaseEvaluatorConfig
-    answer_format: AnswerFormat
     evaluable_name: str = "Evaluable"
 
     @abstractmethod
@@ -89,7 +88,10 @@ class BaseEvaluator(ABC):
                     failed += 1
                     continue
                 experiment.add_evaluation(
-                    evaluation, exist_ok=True, force=self.config.force, should_print=self.config.verbose
+                    evaluation,
+                    exist_ok=True,
+                    force=self.config.force,
+                    should_print=self.config.verbose,
                 )
         pbar.close()
         if self.config.verbose:

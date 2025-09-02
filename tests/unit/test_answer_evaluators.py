@@ -1,8 +1,5 @@
-from __future__ import annotations
-
 import json
 import warnings
-
 
 from ragelo import get_answer_evaluator
 from ragelo.evaluators.answer_evaluators import (
@@ -14,16 +11,19 @@ from ragelo.evaluators.answer_evaluators import (
     PairwiseDomainExpertEvaluator,
 )
 from ragelo.types.evaluables import AgentAnswer, PairwiseGame
+from ragelo.types.formats import LLMInputPrompt
 from ragelo.types.query import Query
 from ragelo.types.results import AnswerEvaluatorResult
 
 
 class AnswerEvaluator(BaseAnswerEvaluator):
-    def _build_message(self, query: Query, answer: AgentAnswer) -> str:
-        return f"Query: {query.query}\nAnswer: {answer.text}"
+    def _build_message(self, query: Query, answer: AgentAnswer) -> LLMInputPrompt:
+        return LLMInputPrompt(user_message=f"Query: {query.query}\nAnswer: {answer.text}")
 
-    def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> str:
-        return f"Query: {query.query}\nAnswer A: {game.agent_a_answer.text}\nAnswer B: {game.agent_b_answer.text}"
+    def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> LLMInputPrompt:
+        return LLMInputPrompt(
+            user_message=f"Query: {query.query}\nAnswer A: {game.agent_a_answer.text}\nAnswer B: {game.agent_b_answer.text}"
+        )
 
     def test_get_by_name(self, llm_provider_mock):
         pairwise_evaluator = get_answer_evaluator(
