@@ -26,7 +26,7 @@ class BaseEvaluator(ABC):
     evaluable_name: str = "Evaluable"
 
     @abstractmethod
-    def __init__(self, llm_provider: BaseLLMProvider, config: BaseEvaluatorConfig):
+    def __init__(self, config: BaseEvaluatorConfig, llm_provider: BaseLLMProvider):
         self.config = config
         self.llm_provider = llm_provider
         if config.system_prompt:

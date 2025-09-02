@@ -77,15 +77,6 @@ class CustomPromptEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         ),
     )
 
-    @field_validator("user_prompt", mode="after")
-    def validate_user_prompt(cls, prompt: Template) -> Template:
-        valid_placeholders = prompt._get_fields().keys()
-        if "query.query" not in valid_placeholders:
-            raise ValueError("The user prompt must contain a {{query.query}} placeholder")
-        if "document.text" not in valid_placeholders:
-            raise ValueError("The user prompt must contain a {{document.text}} placeholder")
-        return prompt
-
 
 class FewShotEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.FEW_SHOT

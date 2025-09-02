@@ -7,7 +7,7 @@ from textwrap import dedent
 
 import numpy as np
 from jinja2 import Template
-from pydantic import Field, create_model
+from pydantic import BaseModel, Field, create_model
 
 from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     BaseRetrievalEvaluator,
@@ -72,7 +72,7 @@ class RDNAMEvaluator(BaseRetrievalEvaluator):
         """Initializes an evaluator based on RDNAM framework."""
         super().__init__(config, llm_provider)
         self._role = self.config.annotator_role if self.config.annotator_role else ""
-        llm_response_schema_dict: dict[str, Field] = {
+        llm_response_schema_dict = {
             "overall": Field(..., description="An integer between 0 and 2 representing the score of the document.")
         }
 
@@ -116,34 +116,35 @@ class RDNAMEvaluator(BaseRetrievalEvaluator):
             answer["intent_match"] = []
             answer["trustworthiness"] = []
         parsed = llm_response.parsed_answer
+        assert isinstance(self.config.llm_response_schema, type(BaseModel))
         assert isinstance(parsed, self.config.llm_response_schema)
 
         answer["overall"] = np.mean(
             [
-                parsed.annotator_1.overall,
-                parsed.annotator_2.overall,
-                parsed.annotator_3.overall,
-                parsed.annotator_4.overall,
-                parsed.annotator_5.overall,
+                parsed.annotator_1.overall,  # type: ignore
+                parsed.annotator_2.overall,  # type: ignore
+                parsed.annotator_3.overall,  # type: ignore
+                parsed.annotator_4.overall,  # type: ignore
+                parsed.annotator_5.overall,  # type: ignore
             ]
         )
         if self.config.use_aspects:
             answer["intent_match"] = np.mean(
                 [
-                    parsed.annotator_1.intent_match,
-                    parsed.annotator_2.intent_match,
-                    parsed.annotator_3.intent_match,
-                    parsed.annotator_4.intent_match,
-                    parsed.annotator_5.intent_match,
+                    parsed.annotator_1.intent_match,  # type: ignore
+                    parsed.annotator_2.intent_match,  # type: ignore
+                    parsed.annotator_3.intent_match,  # type: ignore
+                    parsed.annotator_4.intent_match,  # type: ignore
+                    parsed.annotator_5.intent_match,  # type: ignore
                 ]
             )
             answer["trustworthiness"] = np.mean(
                 [
-                    parsed.annotator_1.trustworthiness,
-                    parsed.annotator_2.trustworthiness,
-                    parsed.annotator_3.trustworthiness,
-                    parsed.annotator_4.trustworthiness,
-                    parsed.annotator_5.trustworthiness,
+                    parsed.annotator_1.trustworthiness,  # type: ignore
+                    parsed.annotator_2.trustworthiness,  # type: ignore
+                    parsed.annotator_3.trustworthiness,  # type: ignore
+                    parsed.annotator_4.trustworthiness,  # type: ignore
+                    parsed.annotator_5.trustworthiness,  # type: ignore
                 ]
             )
         response = RDNAMAnswerEvaluatorFormat(

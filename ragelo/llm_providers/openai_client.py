@@ -38,6 +38,7 @@ class OpenAIProvider(BaseLLMProvider):
         Returns:
             The response from the OpenAI Responses API, formatted according to the answer_format. The LLMResponseType.raw_answer  contains the raw LLM response as a string and the LLMResponseType.parsed_answer contains the parsed response. This can be a number or string (if response_schema is None) a dictionary (if response_schema is a dictionary) or a Pydantic BaseModel (if response_schema is a Pydantic BaseModel)).
         """
+        llm_input: str | list[dict[str, str]]
         if input.messages:
             llm_input = input.messages
         elif input.user_message:

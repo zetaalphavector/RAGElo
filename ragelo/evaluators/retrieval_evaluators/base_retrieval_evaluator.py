@@ -27,6 +27,9 @@ class BaseRetrievalEvaluator(BaseEvaluator):
     config: BaseRetrievalEvaluatorConfig
     evaluable_name: str = "Retrieved document"
 
+    def __init__(self, config: BaseRetrievalEvaluatorConfig, llm_provider: BaseLLMProvider):
+        super().__init__(config, llm_provider)
+
     def evaluate(
         self,
         query: Query | str,
@@ -200,7 +203,12 @@ def get_retrieval_evaluator(
             raise ValueError("Either the evaluator_name or a config object must be provided")
         evaluator_name = config.evaluator_name
     if isinstance(evaluator_name, str):
-        evaluator_name = RetrievalEvaluatorTypes(evaluator_name)
+        try:
+            evaluator_name = RetrievalEvaluatorTypes(evaluator_name)
+        except ValueError:
+            raise ValueError(f"Unknown retrieval evaluator {evaluator_name}")
+    if evaluator_name is None:
+        raise ValueError("The evaluator_name must be provided")
     return RetrievalEvaluatorFactory.create(
         evaluator_name,
         llm_provider=llm_provider,

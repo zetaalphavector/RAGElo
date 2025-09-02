@@ -17,7 +17,7 @@ class FewShotEvaluator(BaseRetrievalEvaluator):
     def __init__(self, config: FewShotEvaluatorConfig, llm_provider: BaseLLMProvider):
         super().__init__(config, llm_provider)
 
-        self.user_prompt = config.few_shot_user_prompt
+        self.user_prompt = config.user_prompt
         self.system_prompt = config.system_prompt
         self.assistant_prompt = config.few_shot_assistant_answer
         self.few_shots = config.few_shots
@@ -30,9 +30,9 @@ class FewShotEvaluator(BaseRetrievalEvaluator):
 
     def __build_few_shot_examples(self) -> list[dict[str, str]]:
         few_shot_messages: list[dict[str, str]] = []
-        for few_shot in self.few_shots:
-            query = Query(query=few_shot.query)
-            document = Document(text=few_shot.passage)
+        for idx, few_shot in enumerate(self.few_shots):
+            query = Query(query=few_shot.query, qid=f"query_{idx}")
+            document = Document(text=few_shot.passage, did=f"doc_{idx}", qid=f"query_{idx}")
             few_shot_messages.append(
                 {"role": "user", "content": self.user_prompt.render(query=query, document=document)}
             )

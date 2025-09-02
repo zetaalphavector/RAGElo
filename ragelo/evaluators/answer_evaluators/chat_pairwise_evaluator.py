@@ -104,6 +104,6 @@ class ChatPairwiseEvaluator(PairwiseAnswerEvaluator):
             "annotation": self.config.include_annotations,
         }
         return LLMInputPrompt(
-            system_message=self.system_prompt.format(**context),
-            user_message=self.user_prompt.format(**context),
+            system_message=self.system_prompt.render(**context),
+            user_message=self.user_prompt.render(**context),
         )
