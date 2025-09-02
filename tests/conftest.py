@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.llm_providers.openai_client import OpenAIConfiguration
+from ragelo.types.answer_formats import PairWiseAnswerAnswerFormat
 from ragelo.types.configurations import (
     BaseAnswerEvaluatorConfig,
     BaseEvaluatorConfig,
@@ -521,12 +522,13 @@ def llm_provider_answer_mock(llm_provider_config):
 def llm_provider_pairwise_answer_mock(llm_provider_config):
     provider = MockLLMProvider(llm_provider_config)
     answer = {
-        "answer_a_reasoning": "Answer A is good",
-        "answer_b_reasoning": "Answer B is bad",
+        "answer_a_analysis": "Answer A is good",
+        "answer_b_analysis": "Answer B is bad",
         "comparison_reasoning": "Answer A is better than Answer B",
         "winner": "A",
     }
-    LLM_response = LLMResponseType(raw_answer=json.dumps(answer), parsed_answer=answer)
+    parsed_answer = PairWiseAnswerAnswerFormat(**answer)
+    LLM_response = LLMResponseType(raw_answer=json.dumps(answer), parsed_answer=parsed_answer)
 
     def side_effect(*args, **kwargs):
         return LLM_response

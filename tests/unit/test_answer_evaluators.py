@@ -10,6 +10,7 @@ from ragelo.evaluators.answer_evaluators import (
     PairwiseAnswerEvaluator,
     PairwiseDomainExpertEvaluator,
 )
+from ragelo.types.answer_formats import PairWiseAnswerAnswerFormat
 from ragelo.types.evaluables import AgentAnswer, PairwiseGame
 from ragelo.types.formats import LLMInputPrompt
 from ragelo.types.query import Query
@@ -87,10 +88,10 @@ class TestAnswerEvaluator:
 
         assert isinstance(result, AnswerEvaluatorResult)
         assert isinstance(result.raw_answer, str)
-        assert isinstance(result.answer, str)
+        assert isinstance(result.answer, PairWiseAnswerAnswerFormat)
         raw_answer = json.loads(result.raw_answer)
-        assert raw_answer.keys() == {"answer_a_reasoning", "answer_b_reasoning", "comparison_reasoning", "winner"}
-        assert result.answer == "A"
+        assert raw_answer.keys() == {"answer_a_analysis", "answer_b_analysis", "comparison_reasoning", "winner"}
+        assert result.answer.winner == "A"
         assert result.exception is None
         assert result.pairwise is True
         assert result.qid == query.qid
