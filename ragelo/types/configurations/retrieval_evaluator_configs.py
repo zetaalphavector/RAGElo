@@ -4,6 +4,7 @@ from typing import Any, Type
 from jinja2 import Template
 from pydantic import BaseModel, Field, field_validator
 
+from ragelo.types.answer_formats import RetrievalAnswerEvaluatorFormat
 from ragelo.types.configurations.base_configs import BaseEvaluatorConfig
 from ragelo.types.types import RetrievalEvaluatorTypes
 
@@ -63,16 +64,7 @@ class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default=None,
         description="A list of extra guidelines to be used when reasoning about the relevancy of the document.",
     )
-    llm_response_schema: Type[BaseModel] | dict[str, Any] | None = Field(
-        default={
-            "reasoning": "A concise explanation of the relevance judgment.",
-            "score": (
-                "An integer between 0 and 2 representing the score of the document, "
-                "where 0 means the document is not relevant to the query, 1 means the document is somewhat relevant, "
-                "and 2 means the document is highly relevant."
-            ),
-        },
-    )
+    llm_response_schema: Type[BaseModel] | dict[str, Any] | None = Field(default=RetrievalAnswerEvaluatorFormat)
 
 
 class CustomPromptEvaluatorConfig(BaseRetrievalEvaluatorConfig):
@@ -114,12 +106,7 @@ class FewShotEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         description="The expected answer format from the LLM for each evaluated document "
         "It should contain at least a {{relevance}} placeholder, and, optionally, a {{reasoning}} placeholder",
     )
-    llm_response_schema: Type[BaseModel] | dict[str, Any] | None = Field(
-        default={
-            "reasoning": "A string with the reasoning for the relevance score.",
-            "relevance": "An integer between 0 and 2 representing the relevance score.",
-        },
-    )
+    llm_response_schema: Type[BaseModel] | dict[str, Any] | None = Field(default=RetrievalAnswerEvaluatorFormat)
 
     @field_validator("few_shot_assistant_answer", mode="after")
     def validate_few_shot_assistant_answer(cls, prompt: Template) -> Template:
