@@ -99,9 +99,9 @@ class Document(Evaluable):
         documents: list[Self | str],
         qid: str,
         metadata: list[dict[str, Any]] | list[None] | None = None,
-    ) -> dict[str, Self]:
+    ) -> dict[str, "Document"]:
         """Assembles a list of Document objects from a list of strings or Document objects."""
-        assembled_docs: dict[str, Self] = {}
+        assembled_docs: dict[str, Document] = {}
         if metadata and len(documents) != len(metadata):
             raise ValueError("The number of documents and document metadata do not match")
         if not metadata:
@@ -146,7 +146,7 @@ class AgentAnswer(Evaluable):
         qid: str,
         agent: str | None = None,
         metadata: dict[str, Any] | None = None,
-    ) -> Self:
+    ) -> "AgentAnswer":
         """Assembles an AgentAnswer object from a string or an AgentAnswer object."""
         if isinstance(answer, str):
             if agent is None:

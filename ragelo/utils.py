@@ -2,8 +2,10 @@ import asyncio
 import warnings
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from textwrap import dedent
 from typing import Any, Coroutine
 
+from jinja2 import Template
 from tqdm import TqdmExperimentalWarning
 from tqdm.auto import tqdm
 from tqdm.rich import tqdm_rich
@@ -40,3 +42,10 @@ def get_pbar(
         return tqdm_rich(total=total, ncols=ncols, desc=desc, disable=disable)
     else:
         return tqdm(total=total, ncols=ncols, desc=desc, disable=disable)
+
+
+def string_to_template(src: str) -> Template:
+    clean_str = dedent(src).strip()
+    template = Template(clean_str)
+    template._ragelo_source = src
+    return template

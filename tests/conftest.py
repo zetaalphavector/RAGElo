@@ -32,6 +32,7 @@ from ragelo.types.results import (
     RetrievalEvaluatorResult,
 )
 from ragelo.types.types import AnswerEvaluatorTypes, RetrievalEvaluatorTypes
+from ragelo.utils import string_to_template
 
 
 def pytest_addoption(parser):
@@ -78,6 +79,7 @@ class AnswerModel(BaseModel):
 
 
 def answer_model_factory(input: LLMInputPrompt, response_schema, **kwargs):
+    raise NotImplementedError("This function is not implemented")
     # Mirror OpenAIProvider behavior: response format is inferred from response_schema
     if isinstance(response_schema, type(BaseModel)):
         return LLMResponseType(
@@ -110,30 +112,16 @@ class MockLLMProvider(BaseLLMProvider):
         input: LLMInputPrompt,
         response_schema: Type[BaseModel] | dict[str, Any] | None = None,
     ) -> LLMResponseType:
-        # For compatibility with existing tests, forward primitive args to the mock
-        if input.messages:
-            # Prefer forwarding the latest user message content
-            user_messages = [m.get("content") for m in input.messages if m.get("role") == "user"]
-            if len(user_messages) > 0:
-                forwarded_input = user_messages[-1]
-            else:
-                # Fallback: stringify the messages
-                forwarded_input = str(input.messages)
-        else:
-            forwarded_input = input.user_message
-
         # Record the call for assertions in tests
         if self.async_call_mocker.side_effect is not None:
             # If a custom side effect is set by a test/fixture, use it
-            return await self.async_call_mocker(forwarded_input, input.system_prompt)
+            return await self.async_call_mocker(input, input.system_prompt)
         else:
             # Still record the call (without relying on its return value)
             try:
-                await self.async_call_mocker(forwarded_input, input.system_prompt)
+                await self.async_call_mocker(input, input.system_prompt)
             except Exception:
-                # In case someone set a return_value that isn't awaitable, ignore
                 pass
-            # Default behavior mirrors OpenAIProvider outcome based on response_schema
             return answer_model_factory(input, response_schema)
 
 
@@ -345,7 +333,7 @@ def base_eval_config():
 
 @pytest.fixture
 def base_retrieval_eval_config(base_eval_config):
-    base_config = base_eval_config.model_dump()
+    base_config = base_eval_config.model_dump(exclude_unset=True)
     base_config["evaluator_name"] = RetrievalEvaluatorTypes.REASONER
     return BaseRetrievalEvaluatorConfig(
         **base_config,
@@ -353,11 +341,13 @@ def base_retrieval_eval_config(base_eval_config):
 
 
 @pytest.fixture
-def custom_answer_eval_config(base_eval_config):
-    base_config = base_eval_config.model_dump()
+def custom_answer_eval_config(base_eval_config, answer_eval_format):
+    base_config = base_eval_config.model_dump(exclude_unset=True)
     base_config["evaluator_name"] = AnswerEvaluatorTypes.CUSTOM_PROMPT
     config = CustomPromptAnswerEvaluatorConfig(
-        prompt="""
+        llm_response_schema=answer_eval_format,
+        user_prompt=string_to_template(
+            """ 
 You are an useful assistant for evaluating the quality of the answers generated \
 by RAG Agents. Given the following retrieved documents and a user query, evaluate \
 the quality of the answers based on their quality, trustworthiness and originality. \
@@ -365,11 +355,13 @@ The last line of your answer must be a json object with the keys "quality", \
 "trustworthiness" and originality, each of them with a single number between 0 and \
 2, where 2 is the highest score on that aspect.
 DOCUMENTS RETRIEVED:
-{documents}
-User Query: {query}
+{% for document in documents %}
+{{document.text}}
+{% endfor %}
+User Query: {{ query.query }}
 
-Agent answer: {answer}
-""".strip(),
+Agent answer: {{answer.text}}"""
+        ),
         **base_config,
     )
     return config
@@ -449,8 +441,21 @@ def llm_provider_reasoner_mock(llm_provider_config):
 
 
 @pytest.fixture
-def base_answer_eval_config(base_eval_config):
+def answer_eval_format():
+    class AnswerFormat(BaseModel):
+        quality: int
+        trustworthiness: int
+        originality: int
+
+    return AnswerFormat
+
+
+@pytest.fixture
+def base_answer_eval_config(base_eval_config, answer_eval_format):
     base_config = base_eval_config.model_dump(exclude_unset=True)
+    base_config["system_prompt"] = "This is a system prompt"
+    base_config["llm_response_schema"] = answer_eval_format
+    base_config["user_prompt"] = "Query: {{ query.query }}\nAnswer: {{ answer.text }}"
     return BaseAnswerEvaluatorConfig(**base_config)
 
 
@@ -459,12 +464,30 @@ def pairwise_answer_eval_config(base_answer_eval_config):
     base_config = base_answer_eval_config.model_dump(exclude_unset=True)
     base_config["pairwise"] = True
     base_config["evaluator_name"] = AnswerEvaluatorTypes.PAIRWISE
+    base_config["user_prompt"] = """
+    Query: {{ query.query }}
+[The Start of Assistant A's Answer]
+    {{ game.agent_a_answer.text }}
+    [The End of Assistant A's Answer]
+    [The Start of Assistant B's Answer]
+    {{ game.agent_b_answer.text }}
+    [The End of Assistant B's Answer]
+    """
+    return PairwiseEvaluatorConfig(bidirectional=True, **base_config)
+
+
+@pytest.fixture
+def chat_pairwise_answer_eval_config(base_answer_eval_config):
+    base_config = base_answer_eval_config.model_dump(exclude_unset=True, exclude={"user_prompt", "system_prompt"})
+    base_config["pairwise"] = True
+    base_config["evaluator_name"] = AnswerEvaluatorTypes.CHAT_PAIRWISE
+
     return PairwiseEvaluatorConfig(bidirectional=True, **base_config)
 
 
 @pytest.fixture
 def domain_expert_answer_eval_config(base_answer_eval_config):
-    base_config = base_answer_eval_config.model_dump(exclude_unset=True)
+    base_config = base_answer_eval_config.model_dump(exclude_unset=True, exclude={"user_prompt", "system_prompt"})
     base_config["pairwise"] = True
     base_config["expert_in"] = "Computer Science"
     base_config["include_annotations"] = True
@@ -504,11 +527,11 @@ def few_shot_retrieval_eval_config(base_eval_config):
 
 
 @pytest.fixture
-def llm_provider_answer_mock(llm_provider_config):
+def llm_provider_answer_mock(llm_provider_config, answer_eval_format):
     provider = MockLLMProvider(llm_provider_config)
     mocked_answer = LLMResponseType(
         raw_answer='{"quality": 1, "trustworthiness": 0, "originality": 0}',
-        parsed_answer={"quality": 1, "trustworthiness": 0, "originality": 0},
+        parsed_answer=answer_eval_format(quality=1, trustworthiness=0, originality=0),
     )
 
     def side_effect(*args, **kwargs):
@@ -521,14 +544,13 @@ def llm_provider_answer_mock(llm_provider_config):
 @pytest.fixture
 def llm_provider_pairwise_answer_mock(llm_provider_config):
     provider = MockLLMProvider(llm_provider_config)
-    answer = {
-        "answer_a_analysis": "Answer A is good",
-        "answer_b_analysis": "Answer B is bad",
-        "comparison_reasoning": "Answer A is better than Answer B",
-        "winner": "A",
-    }
-    parsed_answer = PairWiseAnswerAnswerFormat(**answer)
-    LLM_response = LLMResponseType(raw_answer=json.dumps(answer), parsed_answer=parsed_answer)
+    answer = PairWiseAnswerAnswerFormat(
+        answer_a_analysis="Answer A is good",
+        answer_b_analysis="Answer B is bad",
+        comparison_reasoning="Answer A is better than Answer B",
+        winner="A",
+    )
+    LLM_response = LLMResponseType(raw_answer=answer.model_dump_json(), parsed_answer=answer)
 
     def side_effect(*args, **kwargs):
         return LLM_response

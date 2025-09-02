@@ -1,9 +1,5 @@
 """Answer Evaluator for conversations between two agents."""
 
-from textwrap import dedent
-
-from jinja2 import Template
-
 from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
     AnswerEvaluatorFactory,
 )
@@ -15,14 +11,13 @@ from ragelo.types.evaluables import PairwiseGame
 from ragelo.types.formats import LLMInputPrompt
 from ragelo.types.query import Query
 from ragelo.types.types import AnswerEvaluatorTypes
+from ragelo.utils import string_to_template
 
 
 @AnswerEvaluatorFactory.register(AnswerEvaluatorTypes.CHAT_PAIRWISE)
 class ChatPairwiseEvaluator(PairwiseAnswerEvaluator):
     config: PairwiseEvaluatorConfig
-    system_prompt = Template(
-        dedent(
-            """
+    system_prompt = string_to_template("""
             Please act as an impartial judge and evaluate the quality of the responses provided by two AI assistants tasked to answer the question of a user, based on a set of documents retrieved by a search engine that may or may not be relevant to the question.
             When available, answers will cite specific documents by placing their IDs into square brackets.
             {%- if doc and annotation %}
@@ -46,12 +41,9 @@ class ChatPairwiseEvaluator(PairwiseAnswerEvaluator):
             - Then, provide a short explanation how the agent performed overall based on the evaluation objectives
             - Finally, compare the conversations of the two agents and provide a short explanation on their differences.
             - After providing your explanation, output your final verdict by strictly following this format: 'A' if assistant A is better, 'B' if assistant B is better, and 'C' for a tie.
-            """
-        )
-    )
-    user_prompt = Template(
-        dedent(
-            """
+            """)
+    user_prompt = string_to_template(
+        """
             [User Intent]
             {{ query.query }}
 
@@ -75,18 +67,17 @@ class ChatPairwiseEvaluator(PairwiseAnswerEvaluator):
             {% endif -%}
 
             [The Start of Conversation with Assistant A]
-            {% for msg in game.agent_a_answer.conversation %}
+            {% for msg in game.agent_a_answer.conversation -%}
             {{ msg }}
             {% endfor %}
             [The End of Conversation with Assistant A]
 
             [The Start of Conversation with Assistant B]
-            {% for msg in game.agent_b_answer.conversation %}
+            {% for msg in game.agent_b_answer.conversation -%}
             {{ msg }}
             {% endfor %}
             [The End of Conversation with Assistant B]
             """
-        )
     )
 
     def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> LLMInputPrompt:

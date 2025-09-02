@@ -1,7 +1,3 @@
-from textwrap import dedent
-
-from jinja2 import Template
-
 from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
     AnswerEvaluatorFactory,
     BaseAnswerEvaluator,
@@ -11,6 +7,7 @@ from ragelo.types.evaluables import PairwiseGame
 from ragelo.types.formats import LLMInputPrompt
 from ragelo.types.query import Query
 from ragelo.types.types import AnswerEvaluatorTypes
+from ragelo.utils import string_to_template
 
 
 @AnswerEvaluatorFactory.register(AnswerEvaluatorTypes.PAIRWISE)
@@ -22,9 +19,8 @@ class PairwiseAnswerEvaluator(BaseAnswerEvaluator):
     user_prompt_annotation = "[{did}] {annotation}"
     user_prompt_document_and_annotation = "[{{ d.did }}] Content: {{ d.text }}\n Evaluation: {{ d.evaluation.answer }}"
 
-    system_prompt = Template(
-        dedent(
-            """
+    system_prompt = string_to_template(
+        """
             Please act as an impartial judge and evaluate the quality of the responses provided by two AI assistants tasked to answer the question of a user, based on a set of documents retrieved by a search engine that may or may not be relevant to the question. 
             When available, answers will cite specific documents by placing their IDs into square brackets.
             {%- if doc and annotation %}
@@ -49,11 +45,10 @@ class PairwiseAnswerEvaluator(BaseAnswerEvaluator):
             Then, you should compare the two responses and provide a short explanation on their differences, explaining in which aspects each answer is better or worst than the other. 
             After providing your explanation, output your final verdict by strictly following his format: "A" if assistant A is better, "B" if assistant B is better, or "C" for a tie.
             """
-        )
     )
-    user_prompt = Template(
-        dedent(
-            """
+
+    user_prompt = string_to_template(
+        """
             [User Question]
             {{ query.query }}
             {%- if documents %}
@@ -80,7 +75,6 @@ class PairwiseAnswerEvaluator(BaseAnswerEvaluator):
                 {{ game.agent_b_answer.text }}
             [The End of Assistant B's Answer]
             """
-        )
     )
 
     def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> LLMInputPrompt:

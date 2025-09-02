@@ -8,18 +8,28 @@ from ragelo.types.evaluables import Document
 from ragelo.types.formats import LLMInputPrompt
 from ragelo.types.query import Query
 from ragelo.types.types import RetrievalEvaluatorTypes
+from ragelo.utils import string_to_template
 
 
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.FEW_SHOT)
 class FewShotEvaluator(BaseRetrievalEvaluator):
     config: FewShotEvaluatorConfig
+    user_prompt = string_to_template("""
+        Query: {{ query.query }}
+        Passage: {{ document.text }}
+    """)
+    few_shot_assistant_answer = string_to_template("""
+        {"reasoning": {{reasoning}}} 
+        {"relevance": {{relevance}}}
+    """)
 
     def __init__(self, config: FewShotEvaluatorConfig, llm_provider: BaseLLMProvider):
         super().__init__(config, llm_provider)
-
-        self.user_prompt = config.user_prompt
+        if config.user_prompt:
+            self.user_prompt = config.user_prompt
+        if config.few_shot_assistant_answer:
+            self.few_shot_assistant_answer = config.few_shot_assistant_answer
         self.system_prompt = config.system_prompt
-        self.assistant_prompt = config.few_shot_assistant_answer
         self.few_shots = config.few_shots
 
     def _build_message(self, query: Query, document: Document) -> LLMInputPrompt:
@@ -38,6 +48,6 @@ class FewShotEvaluator(BaseRetrievalEvaluator):
             )
             reasoning = few_shot.reasoning
             relevance = few_shot.relevance
-            assistant_message = self.assistant_prompt.render(reasoning=reasoning, relevance=relevance)
+            assistant_message = self.few_shot_assistant_answer.render(reasoning=reasoning, relevance=relevance)
             few_shot_messages.append({"role": "assistant", "content": assistant_message})
         return few_shot_messages

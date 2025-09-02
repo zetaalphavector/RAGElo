@@ -54,6 +54,16 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
         description="The response schema for the LLM.",
     )
 
+    @field_validator("user_prompt", mode="after")
+    def validate_user_prompt(cls, prompt: Template) -> Template:
+        src = getattr(prompt, "_ragelo_source", None)
+        placeholders = set(m.group(1) for m in re.finditer(r"{{\s*([a-zA-Z_][\w\.]*)\s*}}", src or ""))
+        required = {"query.query", "game.agent_a_answer.text", "game.agent_b_answer.text"}
+        missing = sorted(required - placeholders)
+        if missing:
+            raise ValueError(f"The user prompt is missing placeholders: {', '.join(missing)}")
+        return prompt
+
 
 class CustomPairwiseEvaluatorConfig(PairwiseEvaluatorConfig):
     """Configuration for a custom pairwise evaluator."""
@@ -61,19 +71,9 @@ class CustomPairwiseEvaluatorConfig(PairwiseEvaluatorConfig):
     evaluator_name: AnswerEvaluatorTypes = AnswerEvaluatorTypes.CUSTOM_PAIRWISE
     user_prompt: Template = Field(
         description=(
-            "User prompt to use for the evaluator. Should contain at least a {{ query }}, a {{ answer_a }}, and a {{ answer_b }} placeholder."
+            "User prompt to use for the evaluator. Should contain at least a {{ query.query }}, a {{ game.agent_a_answer.text }}, and a {{ game.agent_b_answer.text }} placeholder."
         )
     )
-
-    @field_validator("user_prompt", mode="after")
-    def validate_user_prompt(cls, prompt: Template) -> Template:
-        src = getattr(prompt, "_ragelo_source", None)
-        placeholders = set(m.group(1) for m in re.finditer(r"{{\s*([a-zA-Z_][\w\.]*)\s*}}", src or ""))
-        required = {"query", "answer_a", "answer_b"}
-        missing = sorted(required - placeholders)
-        if missing:
-            raise ValueError(f"The user prompt is missing placeholders: {', '.join(missing)}")
-        return prompt
 
 
 class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
@@ -86,12 +86,22 @@ class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
     )
     user_prompt: Template = Field(
         default_factory=lambda: Template(
-            "retrieved documents: {% for document in documents %}{{document.text}}\n{% endfor %} query: {{query.query}} answer: {{answer}}"
+            "retrieved documents: {% for document in documents %}{{document.text}}\n{% endfor %} query: {{query.query}} answer: {{answer.text}}"
         ),
         description=(
-            "The prompt to be used to evaluate the documents. It should contain a {{query.query}} and a {{document.text}} placeholder"
+            "The prompt to be used to evaluate the documents. It should contain a {{query.query}} and a {{document.text}} and a {{answer.text}} placeholder"
         ),
     )
+
+    @field_validator("user_prompt", mode="after")
+    def validate_user_prompt(cls, prompt: Template) -> Template:
+        src = getattr(prompt, "_ragelo_source", None)
+        placeholders = set(m.group(1) for m in re.finditer(r"{{\s*([a-zA-Z_][\w\.]*)\s*}}", src or ""))
+        required = {"query.query", "answer.text"}
+        missing = sorted(required - placeholders)
+        if missing:
+            raise ValueError(f"The user prompt is missing placeholders: {', '.join(missing)}")
+        return prompt
 
 
 class PairwiseDomainExpertEvaluatorConfig(PairwiseEvaluatorConfig):

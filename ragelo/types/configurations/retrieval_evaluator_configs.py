@@ -70,7 +70,6 @@ class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
 class CustomPromptEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.CUSTOM_PROMPT
     user_prompt: Template = Field(
-        default_factory=lambda: Template("Query: {{ query.query }}\n\nPassage: {{ document.text }}"),
         description=(
             "The user prompt to be used to evaluate the documents. "
             "It should contain at least a {{query.query}} and a {{document.text}} placeholder"
@@ -85,15 +84,8 @@ class FewShotEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default_factory=list,
         description="A list of few-shot examples to be used in the prompt",
     )
-    user_prompt: Template = Field(
-        default_factory=lambda: Template("Query: {{ query.query }}\n\nPassage: {{ document.text }}"),
-        description=(
-            "The user prompt to be used to evaluate the documents and for the few-shot examples. "
-            "It should contain a {{query.query}} and a {{document.text}} placeholder"
-        ),
-    )
     few_shot_assistant_answer: Template = Field(
-        default_factory=lambda: Template('{"reasoning": {{ reasoning }}\n\n{"relevance": {{ relevance }}}'),
+        ...,
         description="The expected answer format from the LLM for each evaluated document "
         "It should contain at least a {{relevance}} placeholder, and, optionally, a {{reasoning}} placeholder",
     )
