@@ -1,8 +1,7 @@
-import re
 from typing import Any, Type
 
 from jinja2 import Template
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ragelo.types.types import AnswerEvaluatorTypes
 
@@ -29,6 +28,7 @@ class BaseConfig(BaseModel):
 
 
 class BaseEvaluatorConfig(BaseConfig):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     evaluator_name: str | AnswerEvaluatorTypes | None = Field(
         default=None,
         description="The name of the evaluator to use.",
@@ -37,12 +37,12 @@ class BaseEvaluatorConfig(BaseConfig):
         default=None,
         description="The response schema for the LLM. If set, should be a json schema or a Pydantic BaseModel (not an instance). Otherwise, the answer will be returned as a string.",
     )
-    system_prompt: Template | None = Field(
+    system_prompt: Template | str | None = Field(
         default=None,
         description="The system prompt to use for the evaluator.",
     )
 
-    user_prompt: Template | None = Field(
+    user_prompt: Template | str | None = Field(
         default=None,
         description="The user prompt to use for the evaluator. Should contain at least a {{ query.query }} placeholder for the query's text.",
     )
@@ -52,15 +52,3 @@ class BaseEvaluatorConfig(BaseConfig):
         if isinstance(v, str):
             return Template(v)
         return v
-
-    @field_validator("user_prompt", mode="after")
-    def validate_query_placeholder(self, prompt: Template | None) -> Template | None:
-        if prompt is None:
-            return prompt
-        src = getattr(prompt, "_ragelo_source", None)
-        if not isinstance(src, str):
-            return prompt
-        placeholders = set(m.group(1) for m in re.finditer(r"{{\s*([a-zA-Z_][\w\.]*)\s*}}", src))
-        if "query.query" not in placeholders:
-            raise ValueError("The user prompt must contain a {{ query.query }} placeholder")
-        return prompt

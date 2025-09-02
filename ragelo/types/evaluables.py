@@ -2,6 +2,10 @@ from typing import Any
 
 from pydantic import BaseModel, model_validator
 
+try:
+    from typing import Self
+except ImportError:
+    from typing_extensions import Self
 from ragelo.logger import logger
 from ragelo.types.results import EvaluatorResult
 
@@ -72,10 +76,10 @@ class Document(Evaluable):
     @classmethod
     def assemble_document(
         cls,
-        document: "Document" | str,
+        document: Self | str,
         qid: str | None = None,
         metadata: dict[str, Any] | None = None,
-    ) -> "Document":
+    ) -> Self:
         """Assembles a Document object from a string or a Document object."""
         if isinstance(document, str):
             if qid is None:
@@ -92,12 +96,12 @@ class Document(Evaluable):
 
     @staticmethod
     def assemble_documents(
-        documents: list["Document" | str],
+        documents: list[Self | str],
         qid: str,
         metadata: list[dict[str, Any]] | list[None] | None = None,
-    ) -> dict[str, "Document"]:
+    ) -> dict[str, Self]:
         """Assembles a list of Document objects from a list of strings or Document objects."""
-        assembled_docs: dict[str, "Document"] = {}
+        assembled_docs: dict[str, Self] = {}
         if metadata and len(documents) != len(metadata):
             raise ValueError("The number of documents and document metadata do not match")
         if not metadata:
@@ -138,11 +142,11 @@ class AgentAnswer(Evaluable):
     @classmethod
     def assemble_answer(
         cls,
-        answer: "AgentAnswer" | str,
+        answer: Self | str,
         qid: str,
         agent: str | None = None,
         metadata: dict[str, Any] | None = None,
-    ) -> "AgentAnswer":
+    ) -> Self:
         """Assembles an AgentAnswer object from a string or an AgentAnswer object."""
         if isinstance(answer, str):
             if agent is None:
