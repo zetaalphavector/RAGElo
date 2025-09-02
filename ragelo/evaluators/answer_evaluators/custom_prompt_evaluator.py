@@ -20,26 +20,15 @@ class CustomPromptEvaluator(BaseAnswerEvaluator):
         llm_provider: BaseLLMProvider,
     ):
         super().__init__(config, llm_provider)
-        self.prompt = config.prompt
+        self.system_prompt = config.system_prompt
+        self.user_prompt = config.user_prompt
 
     def _build_message(self, query: Query, answer: AgentAnswer) -> LLMInputPrompt:
-        documents = self._prepare_documents(query)
-        query_metadata = self._get_usable_fields_from_metadata(
-            self.prompt, query.metadata, skip_fields=[self.config.query_placeholder]
-        )
-        answer_metadata = self._get_usable_fields_from_metadata(
-            self.prompt,
-            answer.metadata,
-            skip_fields=[self.config.answer_placeholder],
-        )
-        formatters = {
-            self.config.query_placeholder: query.query,
-            self.config.answer_placeholder: answer.text,
-            self.config.documents_placeholder: documents,
-            **query_metadata,
-            **answer_metadata,
-        }
-
+        documents = self._filter_documents(query)
+        context = {"query": query, "answer": answer, "documents": documents}
+        user_message = self.user_prompt.render(**context)
+        system_prompt = self.system_prompt.render(**context) if self.system_prompt else None
         return LLMInputPrompt(
-            user_message=self.prompt.format(**formatters),
+            system_prompt=system_prompt,
+            user_message=user_message,
         )

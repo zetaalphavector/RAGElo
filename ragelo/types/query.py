@@ -65,6 +65,7 @@ class Query(BaseModel):
                 (either the objects or the texts) to add to the query.
                 Optionally, a score can be provided for each document.
             agent (str): The agent that retrieved the documents.
+            force (bool): Whether to overwrite existing documents.
         """
         # First, transform all of the strings into Document objects.
         # If an agent name was provided, but no score information exists,

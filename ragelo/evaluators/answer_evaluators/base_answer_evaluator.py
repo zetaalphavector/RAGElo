@@ -32,6 +32,10 @@ class BaseAnswerEvaluator(BaseEvaluator):
     ):
         self.config = config
         self.llm_provider = llm_provider
+        if config.system_prompt:
+            self.system_prompt = config.system_prompt
+        if config.user_prompt:
+            self.user_prompt = config.user_prompt
 
     def evaluate(
         self,
@@ -59,11 +63,11 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 Only used if the evaluator is pairwise.
             retrieved_documents(Optional[list[str]|list[Document]]): The documents retrieved by the agent.
             document_metadata(Optional[list[dict[str, Any]]): The metadata of the documents retrieved by the agent.
-            query_metadata(Optional[dict[str, Any]]): The metadata of the query.
-            answer_metadata(Optional[dict[str, Any]]): The metadata of the answer.
-            answer_a_metadata(Optional[dict[str, Any]]): The metadata of the first answer.
+            query_metadata(Optional[dict[str, Any]]): The metadata for the query.
+            answer_metadata(Optional[dict[str, Any]]): The metadata for the answer.
+            answer_a_metadata(Optional[dict[str, Any]]): The metadata for the first answer.
                 Only used if the evaluator is pairwise.
-            answer_b_metadata(Optional[dict[str, Any]]): The metadata of the second answer.
+            answer_b_metadata(Optional[dict[str, Any]]): The metadata for the second answer.
                 Only used if the evaluator is pairwise.
         Returns:
             AnswerEvaluatorResult: The result of the evaluation.
@@ -124,7 +128,9 @@ class BaseAnswerEvaluator(BaseEvaluator):
 
     async def evaluate_async(self, eval_sample: tuple[Query, Evaluable]) -> AnswerEvaluatorResult:
         """
-        Evaluates a single sample asynchronously
+        Evaluates a single sample (either an answer or a pairwise game) asynchronously.
+        Args:
+            eval_sample (tuple[Query, Evaluable]): The query and evaluable to evaluate.
         """
         agent: str | tuple[str, str]
         query, evaluable = eval_sample
@@ -231,11 +237,26 @@ class BaseAnswerEvaluator(BaseEvaluator):
 
     def _build_message(self, query: Query, answer: AgentAnswer) -> LLMInputPrompt:
         """Builds the message to send to the LLM evaluator"""
+        documents = self._filter_documents(query)
+        context = {"query": query, "answer": answer, "documents": documents}
+        user_message = self.user_prompt.render(**context)
+        system_prompt = self.system_prompt.render(**context) if self.system_prompt else None
+        return LLMInputPrompt(
+            system_prompt=system_prompt,
+            user_message=user_message,
+        )
         raise NotImplementedError
 
     def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> LLMInputPrompt:
         """Builds the message to send to the LLM evaluator"""
-        raise NotImplementedError
+        documents = self._filter_documents(query)
+        context = {"query": query, "game": game, "documents": documents}
+        user_message = self.user_prompt.render(**context)
+        system_prompt = self.system_prompt.render(**context) if self.system_prompt else None
+        return LLMInputPrompt(
+            system_prompt=system_prompt,
+            user_message=user_message,
+        )
 
     @classmethod
     def from_config(cls, config: BaseAnswerEvaluatorConfig, llm_provider: BaseLLMProvider):
@@ -272,7 +293,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
                     )
                 )
 
-    def _prepare_documents(self, query: Query) -> str:
+    def _filter_documents(self, query: Query) -> list[Document]:
         documents = []
         for did, d in query.retrieved_docs.items():
             if self.config.document_relevance_threshold is not None:
@@ -287,28 +308,9 @@ class BaseAnswerEvaluator(BaseEvaluator):
                     continue
                 if score < self.config.document_relevance_threshold:
                     continue
-            if self.config.document_filter is not None:
-                if d.evaluation is None:
-                    continue
-                if not self.config.document_filter(str(d.evaluation.answer)):
-                    continue
-            if self.config.include_annotations and d.evaluation is None:
+            if self.config.document_filter is not None and not self.config.document_filter(d):
                 continue
-            if self.config.include_raw_documents and d.text is None:
-                continue
-            if d.evaluation is None:
-                annotation = None
-            elif self.config.use_raw_document_evaluation:
-                annotation = d.evaluation.raw_answer
-            else:
-                annotation = str(d.evaluation.answer)
-
-            formatters = {
-                "did": did,
-                "doc": d.text,
-                "annotation": annotation,
-            }
-            documents.append(self.config.document_template.format(**formatters))
+            documents.append(d)
         if len(documents) == 0:
             if query.qid not in self._warned_queries:
                 logger.warning(
@@ -316,8 +318,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
                     "No documents will be provided to the Answer Evaluator."
                 )
                 self._warned_queries.add(query.qid)
-            return "NO DOCUMENTS WERE RETRIEVED"
-        return "\n".join(documents)
+        return documents
 
 
 class AnswerEvaluatorFactory:

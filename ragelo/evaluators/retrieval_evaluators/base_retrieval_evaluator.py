@@ -50,7 +50,9 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         """Evaluates a single query-document pair. Returns the raw answer and the processed answer.
         Args:
             query (Query | str): The query to evaluate.
+                If a string is provided, a Query object will be created with the provided query_metadata.
             document (Document | str): The document to evaluate.
+                If a string is provided, a Document object will be created with the provided doc_metadata.
             query_metadata (dict[str, Any] | None): The metadata for the query.
             doc_metadata (dict[str, Any] | None): The metadata for the document.
         """
@@ -65,10 +67,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             )
         return result
 
-    async def evaluate_async(
-        self,
-        eval_sample: tuple[Query, Evaluable],
-    ) -> RetrievalEvaluatorResult:
+    async def evaluate_async(self, eval_sample: tuple[Query, Evaluable]) -> RetrievalEvaluatorResult:
         """
         Evaluates a single query-document pair asynchronously.
         Args:
