@@ -54,31 +54,31 @@ class PairwiseAnswerEvaluator(BaseAnswerEvaluator):
     user_prompt = Template(
         dedent(
             """
-                [User Question]
-                {{ query.query }}
-                {%- if documents %}
-                [Reference Documents]
-                {%- for d in documents %}
-                {%- if doc and annotation %}
-                    Document ID: [{{ d.did }}]
-                    Content: {{ d.text }}
-                    Relevance Evaluation: {{ d.evaluation.answer }}
-                ------------------
-                {%- elif doc %}
-                    [{{ d.did }}]: {{ d.text }}
-                {%- elif annotation %}
-                    [{{d.did }}] {{ d.evaluation.answer }}"
-                {% endif -%}
-                {% endfor %}
-                {% endif -%}
+            [User Question]
+            {{ query.query }}
+            {%- if documents %}
+            [Reference Documents]
+            {%- for d in documents %}
+            {%- if doc and annotation %}
+                Document ID: [{{ d.did }}]
+                Content: {{ d.text }}
+                Relevance Evaluation: {{ d.evaluation.answer }}
+            ------------------
+            {%- elif doc %}
+                [{{ d.did }}]: {{ d.text }}
+            {%- elif annotation %}
+                [{{d.did }}] {{ d.evaluation.answer }}"
+            {% endif -%}
+            {% endfor %}
+            {% endif -%}
 
-                [The Start of Assistant A's Answer]
-                    {{ game.agent_a_answer.text }}
-                [The End of Assistant A's Answer]
+            [The Start of Assistant A's Answer]
+                {{ game.agent_a_answer.text }}
+            [The End of Assistant A's Answer]
 
-                [The Start of Assistant B's Answer]
-                    {{ game.agent_b_answer.text }}
-                [The End of Assistant B's Answer]
+            [The Start of Assistant B's Answer]
+                {{ game.agent_b_answer.text }}
+            [The End of Assistant B's Answer]
             """
         )
     )

@@ -139,23 +139,6 @@ class BaseEvaluator(ABC):
 
         return list(fields)
 
-    @staticmethod
-    def _get_usable_fields_from_metadata(
-        prompt: str | Template, metadata: dict[str, str] | None, skip_fields: list[str] = []
-    ) -> dict[str, str]:
-        """Get the fields from the prompt that are in the metadata.
-
-        Supports both Jinja2 Template and raw strings.
-        """
-        expected_fields = BaseEvaluator._get_fields_from_string(prompt)
-        valid_fields: dict[str, str] = {}
-        if metadata is None:
-            return valid_fields
-        for field in expected_fields:
-            if field in metadata and field not in skip_fields:
-                valid_fields[field] = metadata[field]
-        return valid_fields
-
     def _print_failed_evaluations(self, total_evaluations: int, failed_evaluations: int):
         if self.config.rich_print:
             rich.print("✅ Done!")
