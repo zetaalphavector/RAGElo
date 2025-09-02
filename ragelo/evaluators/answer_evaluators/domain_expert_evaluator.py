@@ -44,7 +44,7 @@ class PairwiseDomainExpertEvaluator(PairwiseAnswerEvaluator):
             - Avoid any position biases and ensure that the order in which the responses were presented does not influence your decision.
             - Do not allow the length of the responses to influence your evaluation.
             - Be as objective as possible.
-            - Remember that you are in expert in {{ expert_in }}. Make your judgements accordingly.
+            - Remember that you are in expert in {{ expert_in }}. Make your judgement accordingly.
 
             ## Workflow
             First, you should analyze each of the two answers, explaining whether or not each of them correctly answers the user's question, based on the relevant documents retrieved and your expertise.
