@@ -14,11 +14,7 @@ from ragelo.types.types import RetrievalEvaluatorTypes
 class FewShotEvaluator(BaseRetrievalEvaluator):
     config: FewShotEvaluatorConfig
 
-    def __init__(
-        self,
-        config: FewShotEvaluatorConfig,
-        llm_provider: BaseLLMProvider,
-    ):
+    def __init__(self, config: FewShotEvaluatorConfig, llm_provider: BaseLLMProvider):
         super().__init__(config, llm_provider)
 
         self.user_prompt = config.few_shot_user_prompt
@@ -30,10 +26,7 @@ class FewShotEvaluator(BaseRetrievalEvaluator):
         few_shot_messages = self.__build_few_shot_examples()
         few_shot_messages.append({"role": "user", "content": self.user_prompt.render(query=query, document=document)})
 
-        return LLMInputPrompt(
-            system_prompt=self.system_prompt,
-            messages=few_shot_messages,
-        )
+        return LLMInputPrompt(system_prompt=self.system_prompt, messages=few_shot_messages)
 
     def __build_few_shot_examples(self) -> list[dict[str, str]]:
         few_shot_messages: list[dict[str, str]] = []

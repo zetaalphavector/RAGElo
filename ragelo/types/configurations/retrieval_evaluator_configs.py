@@ -29,6 +29,7 @@ class BaseRetrievalEvaluatorConfig(BaseEvaluatorConfig):
         default=None,
         description="The user prompt to use for the evaluator. Should contain at least a {{ query.query }} and a {{ document.text }} placeholder for the query and the document text.",
     )
+    llm_response_schema: Type[BaseModel] | dict[str, Any] | None = Field(default=RetrievalAnswerEvaluatorFormat)
 
     @field_validator("user_prompt", mode="after")
     def validate_user_prompt(cls, prompt: Template | None) -> Template | None:
@@ -64,7 +65,6 @@ class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default=None,
         description="A list of extra guidelines to be used when reasoning about the relevancy of the document.",
     )
-    llm_response_schema: Type[BaseModel] | dict[str, Any] | None = Field(default=RetrievalAnswerEvaluatorFormat)
 
 
 class CustomPromptEvaluatorConfig(BaseRetrievalEvaluatorConfig):
@@ -106,7 +106,6 @@ class FewShotEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         description="The expected answer format from the LLM for each evaluated document "
         "It should contain at least a {{relevance}} placeholder, and, optionally, a {{reasoning}} placeholder",
     )
-    llm_response_schema: Type[BaseModel] | dict[str, Any] | None = Field(default=RetrievalAnswerEvaluatorFormat)
 
     @field_validator("few_shot_assistant_answer", mode="after")
     def validate_few_shot_assistant_answer(cls, prompt: Template) -> Template:
