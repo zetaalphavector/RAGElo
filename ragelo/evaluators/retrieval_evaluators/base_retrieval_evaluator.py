@@ -27,19 +27,6 @@ class BaseRetrievalEvaluator(BaseEvaluator):
     config: BaseRetrievalEvaluatorConfig
     evaluable_name: str = "Retrieved document"
 
-    def __init__(
-        self,
-        config: BaseRetrievalEvaluatorConfig,
-        llm_provider: BaseLLMProvider,
-    ):
-        """
-        Args:
-            config (BaseRetrievalEvaluatorConfig): The configuration for the evaluator.
-            llm_provider (BaseLLMProvider): The LLM provider to use for the evaluation.
-        """
-        self.config = config
-        self.llm_provider = llm_provider
-
     def evaluate(
         self,
         query: Query | str,

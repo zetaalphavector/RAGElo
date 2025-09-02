@@ -25,18 +25,6 @@ class BaseAnswerEvaluator(BaseEvaluator):
     evaluable_name: str = "Agent Answer"
     _warned_queries: set[str] = set()
 
-    def __init__(
-        self,
-        config: BaseAnswerEvaluatorConfig,
-        llm_provider: BaseLLMProvider,
-    ):
-        self.config = config
-        self.llm_provider = llm_provider
-        if config.system_prompt:
-            self.system_prompt = config.system_prompt
-        if config.user_prompt:
-            self.user_prompt = config.user_prompt
-
     def evaluate(
         self,
         query: Query | str,

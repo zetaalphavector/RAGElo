@@ -5,7 +5,7 @@ from jinja2 import Template
 from pydantic import BaseModel, Field, field_validator
 
 from ragelo.types.answer_formats import PairWiseAnswerAnswerFormat
-from ragelo.types.configurations.base_configs import BaseEvaluatorConfig, make_template_with_source
+from ragelo.types.configurations.base_configs import BaseEvaluatorConfig
 from ragelo.types.evaluables import Document
 from ragelo.types.types import AnswerEvaluatorTypes
 
@@ -79,13 +79,13 @@ class CustomPairwiseEvaluatorConfig(PairwiseEvaluatorConfig):
 class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
     evaluator_name: AnswerEvaluatorTypes = AnswerEvaluatorTypes.CUSTOM_PROMPT
     system_prompt: Template | None = Field(
-        default_factory=lambda: make_template_with_source(
+        default_factory=lambda: Template(
             "You are a helpful assistant tasked with evaluating the correctness of answers."
         ),
         description="The system prompt to use for the evaluator.",
     )
     user_prompt: Template = Field(
-        default_factory=lambda: make_template_with_source(
+        default_factory=lambda: Template(
             "retrieved documents: {% for document in documents %}{{document.text}}\n{% endfor %} query: {{query.query}} answer: {{answer}}"
         ),
         description=(

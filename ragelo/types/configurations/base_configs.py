@@ -7,12 +7,6 @@ from pydantic import BaseModel, Field, field_validator
 from ragelo.types.types import AnswerEvaluatorTypes
 
 
-def make_template_with_source(src: str) -> Template:
-    t = Template(src)
-    t._ragelo_source = src
-    return t
-
-
 class BaseConfig(BaseModel):
     force: bool = Field(
         default=False,
@@ -56,7 +50,7 @@ class BaseEvaluatorConfig(BaseConfig):
     @field_validator("system_prompt", "user_prompt", mode="before")
     def check_system_prompt_and_user_prompt(cls, v: str | Template | None) -> Template | None:
         if isinstance(v, str):
-            return make_template_with_source(v)
+            return Template(v)
         return v
 
     @field_validator("user_prompt", mode="after")
