@@ -25,7 +25,6 @@ class BaseEvaluator(ABC):
     user_prompt: Template
     evaluable_name: str = "Evaluable"
 
-    @abstractmethod
     def __init__(self, config: BaseEvaluatorConfig, llm_provider: BaseLLMProvider):
         self.config = config
         self.llm_provider = llm_provider
