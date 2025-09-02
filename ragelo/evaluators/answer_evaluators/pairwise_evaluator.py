@@ -1,21 +1,16 @@
-from typing import Literal
+from textwrap import dedent
 
-from pydantic import BaseModel, Field
+from jinja2 import Template
 
 from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
     AnswerEvaluatorFactory,
     BaseAnswerEvaluator,
 )
-from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.types.configurations import PairwiseEvaluatorConfig
 from ragelo.types.evaluables import PairwiseGame
-from ragelo.types.formats import LLMInputPrompt, LLMResponseType
+from ragelo.types.formats import LLMInputPrompt
 from ragelo.types.query import Query
 from ragelo.types.types import AnswerEvaluatorTypes
-
-
-class PairWiseAnswerAnswerFormat(BaseModel):
-    winner: Literal["A", "B", "C"] = Field(..., description="The winner of the pairwise comparison.")
 
 
 @AnswerEvaluatorFactory.register(AnswerEvaluatorTypes.PAIRWISE)
@@ -23,121 +18,83 @@ class PairwiseAnswerEvaluator(BaseAnswerEvaluator):
     """An evaluator that evaluates RAG-based answers pairwise, with document reasoning and citations."""
 
     config: PairwiseEvaluatorConfig
-    citations_prompt = " Answers cite documents using square brackets."
-    document_template_raw_only = "[{did}] {doc}"
-    document_template_annotation_only = "[{did}] {annotation}"
-    document_template_raw_and_annotation = "[RETRIEVED DOCUMENT]\n{doc}\n[DOCUMENT RELEVANCE]\n{annotation}\n"
-    documents_prompt_relevance_only = (
-        "For each reference document, you will be provided with a reasoning "
-        "explaining why the document is or is not relevant."
+    user_prompt_document = "[{did}] {doc}"
+    user_prompt_annotation = "[{did}] {annotation}"
+    user_prompt_document_and_annotation = "[{{ d.did }}] Content: {{ d.text }}\n Evaluation: {{ d.evaluation.answer }}"
+
+    system_prompt = Template(
+        dedent(
+            """
+                Please act as an impartial judge and evaluate the quality of the responses provided by two AI assistants tasked to answer the question of a user, based on a set of documents retrieved by a search engine that may or may not be relevant to the question. 
+                When available, answers will cite specific documents by placing their IDs into square brackets.
+                {%- if doc and annotation %}
+                You will be provided with the text of each reference document and its relevance evaluation.
+                {%- elif doc %}
+                You will be provided with the text of each reference document.
+                {%- elif annotation %}
+                For each cited document, you will be provided with its relevance evaluation
+                {%- endif %}
+                You should choose the assistant that best answers the user's question.
+
+                ## Evaluation Guidelines
+                - Your evaluation should consider factors such as {{ factors }}.
+                - Details are only useful if they answer the user question.
+                - If an answer contains non-relevant details, it should not be preferred over one that only use relevant information.
+                - Avoid any position biases and ensure that the order in which the responses were presented does not influence your decision.
+                - Do not allow the length of the responses to influence your evaluation.
+                - Be as objective as possible.
+
+                ## Workflow
+                First, you should analyze each of the two answers, explaining whether or not each of them correctly answers the user's question, based on the relevant documents retrieved. 
+                Then, you should compare the two responses and provide a short explanation on their differences, explaining in which aspects each answer is better or worst than the other. 
+                After providing your explanation, output your final verdict by strictly following his format: "A" if assistant A is better, "B" if assistant B is better, or "C" for a tie.
+            """
+        )
     )
-    documents_prompt_raw_and_relevance = (
-        "For each reference document, you will be provided with the text "
-        "of the document as well as a reasoning  why the document "
-        "is or is not relevant."
+    user_prompt = Template(
+        dedent(
+            """
+                [User Question]
+                {{ query.query }}
+                {%- if documents %}
+                [Reference Documents]
+                {%- for d in documents %}
+                {%- if doc and annotation %}
+                    Document ID: [{{ d.did }}]
+                    Content: {{ d.text }}
+                    Relevance Evaluation: {{ d.evaluation.answer }}
+                ------------------
+                {%- elif doc %}
+                    [{{ d.did }}]: {{ d.text }}
+                {%- elif annotation %}
+                    [{{d.did }}] {{ d.evaluation.answer }}"
+                {% endif -%}
+                {% endfor %}
+                {% endif -%}
+
+                [The Start of Assistant A's Answer]
+                    {{ game.agent_a_answer.text }}
+                [The End of Assistant A's Answer]
+
+                [The Start of Assistant B's Answer]
+                    {{ game.agent_b_answer.text }}
+                [The End of Assistant B's Answer]
+            """
+        )
     )
-    documents_prompt_raw_only = "You will be provided with the text of each reference document."
-
-    prompt = """
-Please act as an impartial judge and evaluate the quality of the responses provided \
-by two AI assistants tasked to answer the question displayed below, based on a set \
-of documents retrieved by a search engine.
-You should choose the assistant that best answers the user question based on a set \
-of reference documents that may or not be relevant.{citations}
-{document_rel}
-Your evaluation should consider factors such as {factors}.
-Details are only useful if they answer the user question. If an answer \
-contains non-relevant details, it should not be preferred over one that only \
-use relevant information.
-Begin your evaluation by explaining whether or nor each answer correctly answers the user \
-question. Then, you should compare the two responses and provide a short explanation \
-on their differences. Avoid any position biases and ensure that the order in which \
-the responses were presented does not influence your decision. Do not allow the \
-length of the responses to influence your evaluation. Be as objective as possible.
-After providing your explanation, output your final verdict by strictly following \
-this format: "A" if assistant A is better, "B" if assistant B is better, \
-and "C" for a tie.
-
-[User Question]
-{query}
-
-[Reference Documents]
-{documents}
-
-[The Start of Assistant A's Answer]
-{answer_a}
-[The End of Assistant A's Answer]
-
-[The Start of Assistant B's Answer]
-{answer_b}
-[The End of Assistant B's Answer]
-""".strip()
-
-    def __init__(
-        self,
-        config: PairwiseEvaluatorConfig,
-        llm_provider: BaseLLMProvider,
-    ):
-        super().__init__(config, llm_provider)
-        self.factors = config.factors
-        if config.include_annotations and config.include_raw_documents:
-            config.document_template = self.document_template_raw_and_annotation
-            self.documents_prompt = self.documents_prompt_raw_and_relevance
-        elif config.include_annotations:
-            config.document_template = self.document_template_annotation_only
-            self.documents_prompt = self.documents_prompt_relevance_only
-        elif config.include_raw_documents:
-            config.document_template = self.document_template_raw_only
-            self.documents_prompt = self.documents_prompt_raw_only
-        if config.prompt:
-            self.prompt = config.prompt
-        self.config.llm_response_schema = PairWiseAnswerAnswerFormat
 
     def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> LLMInputPrompt:
-        documents = self._prepare_documents(query)
-
-        query_metadata = self._get_usable_fields_from_metadata(
-            self.prompt, query.metadata, skip_fields=[self.config.query_placeholder]
-        )
-        answer_a_metadata = self._get_usable_fields_from_metadata(
-            self.prompt,
-            game.agent_a_answer.metadata,
-            skip_fields=[self.config.answer_placeholder],
-        )
-        answer_b_metadata = self._get_usable_fields_from_metadata(
-            self.prompt,
-            game.agent_b_answer.metadata,
-            skip_fields=[self.config.answer_placeholder],
-        )
-        if self.config.has_citations:
-            citations = self.citations_prompt
-        else:
-            citations = ""
-        formatters = {
-            self.config.query_placeholder: query.query,
-            self.config.documents_placeholder: documents,
+        documents = self._filter_documents(query)
+        context = {
+            "factors": self.config.factors,
+            "query": query.query,
+            "documents": documents,
             "answer_a": game.agent_a_answer.text,
             "answer_b": game.agent_b_answer.text,
-            "citations": citations,
-            "factors": self.factors,
-            "document_rel": self.documents_prompt,
-            **query_metadata,
-            **answer_a_metadata,
-            **answer_b_metadata,
+            "doc": self.config.include_raw_documents,
+            "annotation": self.config.include_annotations,
         }
         return LLMInputPrompt(
-            user_message=self.prompt.format(**formatters),
-        )
-
-    def _process_answer(self, llm_response: LLMResponseType) -> LLMResponseType:
-        """Extracts the relevant part of an answer."""
-        if isinstance(llm_response.parsed_answer, dict):
-            answer = llm_response.parsed_answer["winner"]
-        elif isinstance(llm_response.parsed_answer, BaseModel):
-            answer = llm_response.parsed_answer.winner  # type: ignore
-        else:
-            answer = llm_response.parsed_answer
-        return LLMResponseType(
-            raw_answer=llm_response.raw_answer,
-            parsed_answer=answer,
+            system_message=self.system_prompt.format(**context),
+            user_message=self.user_prompt.format(**context),
         )

@@ -27,18 +27,6 @@ with evaluating the performance of a retrieval system for question \
 answering in this domain. The question answering system will be used \
 by internal users{% if company %} of {{ company }}{% endif %}{% if domain_short %} but it also serves some of your external users like {{ domain_short }}{% endif %}. They are interested \
 in a retrieval system that provides relevant passages based on their questions.
-"""
-        )
-    )
-
-    user_template = Template(
-        dedent(
-            """
-User query:
-{{ query.query }}
-
-Document passage:
-{{ document.text }}
 
 Please think in steps about the relevance of the retrieved document given the \
 original query. Consider the query, the document title, and the document \
@@ -88,6 +76,18 @@ Given the analysis above, assign a relevance score of 0, 1, or 2 to the retrieve
 Respond STRICTLY as a JSON object with the following keys:
 - "reasoning": a concise explanation of your judgment
 - "score": an integer (0, 1, or 2)
+"""
+        )
+    )
+
+    user_template = Template(
+        dedent(
+            """
+User query:
+{{ query.query }}
+
+Document passage:
+{{ document.text }}
 """
         )
     )
