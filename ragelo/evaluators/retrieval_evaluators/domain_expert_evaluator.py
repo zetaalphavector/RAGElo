@@ -4,11 +4,7 @@ from textwrap import dedent
 
 from jinja2 import Template
 
-from ragelo.evaluators.retrieval_evaluators import (
-    BaseRetrievalEvaluator,
-    RetrievalEvaluatorFactory,
-)
-from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
+from ragelo.evaluators.retrieval_evaluators import BaseRetrievalEvaluator, RetrievalEvaluatorFactory
 from ragelo.types.configurations import DomainExpertEvaluatorConfig
 from ragelo.types.evaluables import Document
 from ragelo.types.formats import LLMInputPrompt
@@ -18,7 +14,7 @@ from ragelo.types.types import RetrievalEvaluatorTypes
 
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.DOMAIN_EXPERT)
 class DomainExpertEvaluator(BaseRetrievalEvaluator):
-    # Jinja2 templates with conditional sections
+    config: DomainExpertEvaluatorConfig
     system_template = Template(
         dedent(
             """
@@ -59,45 +55,31 @@ class DomainExpertEvaluator(BaseRetrievalEvaluator):
             Respond STRICTLY as a JSON object with the following keys:
             - "reasoning": a concise explanation of your judgment
             - "score": an integer (0, 1, or 2)
-"""
+            """
         )
     )
 
     user_template = Template(
         dedent(
             """
-User query:
-{{ query.query }}
+            User query:
+            {{ query.query }}
 
-Document passage:
-{{ document.text }}
-"""
+            Document passage:
+            {{ document.text }}
+            """
         )
     )
-
-    config: DomainExpertEvaluatorConfig
-
-    def __init__(
-        self,
-        config: DomainExpertEvaluatorConfig,
-        llm_provider: BaseLLMProvider,
-    ):
-        super().__init__(config, llm_provider)
-        self.expert_in = self.config.expert_in
-        self.company = self.config.company
-        self.domain_short = self.config.domain_short
-        self.extra_guidelines = self.config.extra_guidelines or []
 
     def _build_message(self, query: Query, document: Document) -> LLMInputPrompt:
         context = {
             "query": query,
             "document": document,
-            "extra_guidelines": self.extra_guidelines,
+            "extra_guidelines": self.config.extra_guidelines or [],
+            "expert_in": self.config.expert_in,
+            "company": self.config.company,
+            "domain_short": self.config.domain_short,
         }
-        system_prompt = self.system_template.render(
-            expert_in=self.expert_in,
-            company=self.company,
-            domain_short=self.domain_short,
-        )
+        system_prompt = self.system_template.render(**context)
         user_message = self.user_template.render(**context)
         return LLMInputPrompt(system_prompt=system_prompt, user_message=user_message)
