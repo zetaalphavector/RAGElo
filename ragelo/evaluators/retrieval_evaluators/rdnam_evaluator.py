@@ -95,44 +95,53 @@ class RDNAMEvaluator(BaseRetrievalEvaluator):
 
     def _process_answer(self, llm_response: LLMResponseType) -> LLMResponseType:
         parsed = llm_response.parsed_answer
-        assert isinstance(self.config.llm_response_schema, BaseModel)
+        assert isinstance(self.config.llm_response_schema, type(BaseModel))
         assert isinstance(parsed, self.config.llm_response_schema)
 
         if self.config.use_multiple_annotators:
-            overall = np.mean(
-                [
-                    parsed.annotator_1.overall,  # type: ignore
-                    parsed.annotator_2.overall,  # type: ignore
-                    parsed.annotator_3.overall,  # type: ignore
-                    parsed.annotator_4.overall,  # type: ignore
-                    parsed.annotator_5.overall,  # type: ignore
-                ]
-            )
-            if self.config.use_aspects:
-                intent_match = np.mean(
+            assert isinstance(parsed, RDNAMMultipleAnnotatorsAnswer)
+            overall = float(
+                np.mean(
                     [
-                        parsed.annotator_1.intent_match,  # type: ignore
-                        parsed.annotator_2.intent_match,  # type: ignore
-                        parsed.annotator_3.intent_match,  # type: ignore
-                        parsed.annotator_4.intent_match,  # type: ignore
-                        parsed.annotator_5.intent_match,  # type: ignore
+                        parsed.annotator_1.overall,
+                        parsed.annotator_2.overall,
+                        parsed.annotator_3.overall,
+                        parsed.annotator_4.overall,
+                        parsed.annotator_5.overall,
                     ]
                 )
-                trustworthiness = np.mean(
-                    [
-                        parsed.annotator_1.trustworthiness,  # type: ignore
-                        parsed.annotator_2.trustworthiness,  # type: ignore
-                        parsed.annotator_3.trustworthiness,  # type: ignore
-                        parsed.annotator_4.trustworthiness,  # type: ignore
-                        parsed.annotator_5.trustworthiness,  # type: ignore
-                    ]
+            )
+            if self.config.use_aspects:
+                intent_match = float(
+                    np.mean(
+                        [
+                            parsed.annotator_1.intent_match,
+                            parsed.annotator_2.intent_match,
+                            parsed.annotator_3.intent_match,
+                            parsed.annotator_4.intent_match,
+                            parsed.annotator_5.intent_match,
+                        ]
+                    )
+                )
+                trustworthiness = float(
+                    np.mean(
+                        [
+                            parsed.annotator_1.trustworthiness,
+                            parsed.annotator_2.trustworthiness,
+                            parsed.annotator_3.trustworthiness,
+                            parsed.annotator_4.trustworthiness,
+                            parsed.annotator_5.trustworthiness,
+                        ]
+                    )
                 )
             else:
                 intent_match = None
                 trustworthiness = None
         else:
+            assert isinstance(parsed, RDNAMAnswerEvaluatorFormat) or isinstance(parsed, RDNAMAnswerNoAspects)
             overall = parsed.overall
             if self.config.use_aspects:
+                assert isinstance(parsed, RDNAMAnswerEvaluatorFormat)
                 intent_match = parsed.intent_match
                 trustworthiness = parsed.trustworthiness
             else:
