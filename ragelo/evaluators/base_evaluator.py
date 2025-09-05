@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-import string
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
+from typing import Optional
 
 import rich
+from jinja2 import Template
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.types.configurations import BaseEvaluatorConfig
@@ -23,15 +24,17 @@ class BaseEvaluator(ABC):
     """
 
     config: BaseEvaluatorConfig
+    system_prompt: Optional[Template] = None
+    user_prompt: Template
     evaluable_name: str = "Evaluable"
 
-    @abstractmethod
-    def __init__(
-        self,
-        llm_provider: BaseLLMProvider,
-        config: BaseEvaluatorConfig,
-    ):
-        raise NotImplementedError
+    def __init__(self, config: BaseEvaluatorConfig, llm_provider: BaseLLMProvider):
+        self.config = config
+        self.llm_provider = llm_provider
+        if config.system_prompt:
+            self.system_prompt = config.system_prompt
+        if config.user_prompt:
+            self.user_prompt = config.user_prompt
 
     def evaluate_experiment(self, experiment: Experiment, n_threads: int | None = None):
         """
@@ -48,10 +51,7 @@ class BaseEvaluator(ABC):
         call_async_fn(self._evaluate_experiment_async, experiment, n_threads)
 
     @abstractmethod
-    async def evaluate_async(
-        self,
-        eval_sample: tuple[Query, Evaluable],
-    ) -> EvaluatorResult:
+    async def evaluate_async(self, eval_sample: tuple[Query, Evaluable]) -> EvaluatorResult:
         """Evaluate a single query and evaluable asynchronously."""
         raise NotImplementedError
 
@@ -96,6 +96,7 @@ class BaseEvaluator(ABC):
         pbar.close()
         if self.config.verbose:
             self._print_failed_evaluations(evaluations, failed)
+        experiment.save()
 
     @abstractmethod
     def _get_tuples_to_evaluate(self, queries: Experiment) -> Sequence[tuple[Query, Evaluable]]:
@@ -104,26 +105,6 @@ class BaseEvaluator(ABC):
     def _process_answer(self, llm_response: LLMResponseType) -> LLMResponseType:
         """Processes the raw answer returned by the LLM. Should be implemented by the subclass if needed."""
         return llm_response
-
-    @staticmethod
-    def _get_fields_from_string(s: str) -> list[str]:
-        """Parse a formatted string and return all the fields in it"""
-        field_names = [v[1] for v in string.Formatter().parse(s) if v[1] is not None]
-        return field_names
-
-    @staticmethod
-    def _get_usable_fields_from_metadata(
-        prompt: str, metadata: dict[str, str] | None, skip_fields: list[str] = []
-    ) -> dict[str, str]:
-        """Get the fields from the prompt that are in the metadata"""
-        expected_fields = BaseEvaluator._get_fields_from_string(prompt)
-        valid_fields: dict[str, str] = {}
-        if metadata is None:
-            return valid_fields
-        for field in expected_fields:
-            if field in metadata and field not in skip_fields:
-                valid_fields[field] = metadata[field]
-        return valid_fields
 
     def _print_failed_evaluations(self, total_evaluations: int, failed_evaluations: int):
         if self.config.rich_print:

@@ -1,9 +1,11 @@
 """Parse arguments for the cli app"""
 
+from __future__ import annotations
+
 import collections.abc
 import inspect
 import sys
-from typing import Any, Callable, Dict, get_args, get_origin, get_type_hints
+from typing import Any, Callable, get_args, get_origin, get_type_hints
 
 from typer.models import ArgumentInfo, OptionInfo, ParameterInfo, ParamMeta
 
@@ -16,10 +18,10 @@ arguments = {
     "domain_long",
 }
 
-ignore_args = {"llm_response_schema"}
+ignore_args = {"llm_response_schema", "system_prompt", "user_prompt"}
 
 
-def get_params_from_function(func: Callable[..., Any]) -> Dict[str, ParamMeta]:
+def get_params_from_function(func: Callable[..., Any]) -> dict[str, ParamMeta]:
     if sys.version_info >= (3, 10):
         signature = inspect.signature(func, eval_str=True)
     else:

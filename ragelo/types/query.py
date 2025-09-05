@@ -1,19 +1,14 @@
+from __future__ import annotations
+
 from collections.abc import Iterator
 from typing import Any, overload
 
-try:
-    from typing import Self
-except ImportError:
-    from typing_extensions import Self
-
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
+from typing_extensions import Self
 
 from ragelo.logger import logger
 from ragelo.types.evaluables import AgentAnswer, Document, PairwiseGame
-from ragelo.types.results import (
-    AnswerEvaluatorResult,
-    RetrievalEvaluatorResult,
-)
+from ragelo.types.results import AnswerEvaluatorResult, RetrievalEvaluatorResult
 
 
 class Query(BaseModel):
@@ -34,6 +29,15 @@ class Query(BaseModel):
     retrieved_docs: dict[str, Document] = {}
     answers: dict[str, AgentAnswer] = {}
     pairwise_games: list[PairwiseGame] = []
+
+    @field_validator("qid", mode="before")
+    def qid_into_string(cls, v):
+        if not isinstance(v, str):
+            try:
+                v = str(v)
+            except ValueError:
+                raise ValueError("qid must be a string or convertible to a string")
+        return v
 
     def add_metadata(self, metadata: dict[str, Any] | None):
         """Adds metadata to the query that may be templated in the prompt.
@@ -59,12 +63,14 @@ class Query(BaseModel):
         agent: str | None = None,
         force: bool = False,
     ):
-        """Add a list of retrieved documents to the query.
+        """
+        Add a list of retrieved documents to the query.
         Args:
             docs (list[Document | str] | list[Tuple[Document | str], float]): The list of documents
                 (either the objects or the texts) to add to the query.
                 Optionally, a score can be provided for each document.
             agent (str): The agent that retrieved the documents.
+            force (bool): Whether to overwrite existing documents.
         """
         # First, transform all of the strings into Document objects.
         # If an agent name was provided, but no score information exists,
@@ -117,7 +123,7 @@ class Query(BaseModel):
         answer = self.answers.get(agent, answer)
         if answer.agent in self.answers and not force:
             if not exist_ok:
-                logger.warning(f"Answer from agent {answer.agent} already exists in query {self.qid}")
+                logger.info(f"Answer from agent {answer.agent} already exists in query {self.qid}")
             return
         self.answers[agent] = answer
 

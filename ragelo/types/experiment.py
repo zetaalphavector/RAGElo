@@ -4,6 +4,8 @@ evaluations created by Evaluators.
 For most use cases, this class should be the main entry point to interact with RAGElo.
 """
 
+from __future__ import annotations
+
 import csv
 import json
 import logging
@@ -19,12 +21,7 @@ from pydantic import BaseModel
 from ragelo.logger import CLILogHandler, logger
 from ragelo.types.evaluables import AgentAnswer, Document
 from ragelo.types.query import Query
-from ragelo.types.results import (
-    AnswerEvaluatorResult,
-    EloTournamentResult,
-    EvaluatorResult,
-    RetrievalEvaluatorResult,
-)
+from ragelo.types.results import AnswerEvaluatorResult, EloTournamentResult, EvaluatorResult, RetrievalEvaluatorResult
 
 
 class Experiment:
@@ -128,7 +125,6 @@ class Experiment:
         self.experiment_name = experiment_name
         self.queries: dict[str, Query] = {}
         self.elo_tournaments: list[EloTournamentResult] = []
-        self.verbose = verbose
         self.rich_print = rich_print
         self.save_on_disk = save_on_disk
         self.save_path = save_path
@@ -214,8 +210,9 @@ class Experiment:
             query_obj = Query(qid=query_id, query=query, metadata=metadata)
         else:
             query_obj = Query(qid=query_id, query=query, metadata=metadata)
+            query_id = query_obj.qid
         if query_id in self.queries and not force:
-            logger.warning(f'Query with ID "{query_id}" already exists. Use force=True to overwrite')
+            logger.info(f'Query with ID "{query_id}" already exists. Use force=True to overwrite')
             return query_id
         if query_id in self.queries and force:
             logger.info(f'Query with ID "{query_id}" already exists, but force was set to True. Overwriting.')
@@ -258,6 +255,7 @@ class Experiment:
             raise ValueError(f"ID of the query to which document {doc_id} was retrieved was not provided.")
         if isinstance(doc, str):
             doc = Document(qid=query_id, did=doc_id, text=doc)
+            query_id = doc.qid
         if query_id not in self.queries:
             raise ValueError(f"Query {query_id} not found in queries")
         self.queries[query_id].add_retrieved_doc(doc, score, agent, force, exist_ok)
@@ -285,6 +283,7 @@ class Experiment:
             if query_id is None:
                 raise ValueError("Query ID not provided")
             answer = AgentAnswer(qid=query_id, agent=agent, text=answer)
+        query_id = answer.qid
         if query_id not in self.queries:
             raise ValueError(f"Query {query_id} not found in queries")
         self.queries[query_id].add_agent_answer(answer, force=force, exist_ok=exist_ok)
@@ -349,8 +348,6 @@ class Experiment:
         if should_save:
             self.save_results(evaluation)
         if not should_print:
-            return
-        if not self.verbose:
             return
         if isinstance(evaluation, EloTournamentResult):
             self._print_elo_tournament_result(evaluation)

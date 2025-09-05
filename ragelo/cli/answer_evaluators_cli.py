@@ -1,22 +1,12 @@
-from __future__ import annotations
-
 import logging
 
 import typer
 
-from ragelo import (
-    Experiment,
-    get_answer_evaluator,
-    get_llm_provider,
-    get_retrieval_evaluator,
-)
+from ragelo import Experiment, get_answer_evaluator, get_llm_provider, get_retrieval_evaluator
 from ragelo.cli.args import get_params_from_function
 from ragelo.cli.utils import get_path
 from ragelo.types import AnswerEvaluatorTypes
-from ragelo.types.configurations.cli_configs import (
-    CLIPairwiseDomainExpertEvaluatorConfig,
-    CLIPairwiseEvaluatorConfig,
-)
+from ragelo.types.configurations.cli_configs import CLIPairwiseDomainExpertEvaluatorConfig, CLIPairwiseEvaluatorConfig
 from ragelo.types.types import RetrievalEvaluatorTypes
 
 typer.main.get_params_from_function = get_params_from_function  # type: ignore
@@ -64,10 +54,10 @@ def pairwise(config: CLIPairwiseEvaluatorConfig = CLIPairwiseEvaluatorConfig(), 
             verbose=config.verbose,
         )
         reasoner_evaluator.evaluate_experiment(experiment)
-        config.include_annotations = True
+        config.include_relevance_score = True
         config.include_raw_documents = False
     else:
-        config.include_annotations = False
+        config.include_relevance_score = False
         config.include_raw_documents = True
 
     evaluator = get_answer_evaluator(AnswerEvaluatorTypes.PAIRWISE, config=config, llm_provider=llm_provider)
@@ -110,7 +100,7 @@ def expert_pairwise(
     if config.add_reasoning:
         reasoner_evaluator = get_retrieval_evaluator(RetrievalEvaluatorTypes.REASONER, llm_provider=llm_provider)
         reasoner_evaluator.evaluate_experiment(experiment)
-        config.include_annotations = True
+        config.include_relevance_score = True
 
     evaluator = get_answer_evaluator(AnswerEvaluatorTypes.PAIRWISE, config=config, llm_provider=llm_provider)
     evaluator.evaluate_experiment(experiment)

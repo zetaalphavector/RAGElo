@@ -1,9 +1,15 @@
-from typing import Any, Type
+from __future__ import annotations
 
-from pydantic import BaseModel, Field
+import re
+from typing import Any, Optional, Type
 
+from jinja2 import Template
+from pydantic import BaseModel, Field, field_validator
+
+from ragelo.types.answer_formats import RetrievalAnswerEvaluatorFormat
 from ragelo.types.configurations.base_configs import BaseEvaluatorConfig
 from ragelo.types.types import RetrievalEvaluatorTypes
+from ragelo.utils import string_to_template
 
 
 class FewShotExample(BaseModel):
@@ -22,11 +28,23 @@ class FewShotExample(BaseModel):
 
 
 class BaseRetrievalEvaluatorConfig(BaseEvaluatorConfig):
-    evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.CUSTOM_PROMPT
-    document_placeholder: str = Field(
-        default="document",
-        description="The placeholder for the document in the prompt",
+    user_prompt: Optional[Template] = Field(
+        default=None,
+        description="The user prompt to use for the evaluator. Should contain at least a {{ query.query }} and a {{ document.text }} placeholder for the query and the document text.",
     )
+    llm_response_schema: Optional[Type[BaseModel] | dict[str, Any]] = Field(default=RetrievalAnswerEvaluatorFormat)
+
+    @field_validator("user_prompt", mode="after")
+    def validate_user_prompt(cls, prompt: Optional[Template]) -> Optional[Template]:
+        if prompt is None:
+            return prompt
+        src = getattr(prompt, "_ragelo_source", None)
+        placeholders = set(m.group(1) for m in re.finditer(r"{{\s*([a-zA-Z_][\w\.]*)\s*}}", src or ""))
+        if "query.query" not in placeholders:
+            raise ValueError("The user prompt must contain a {{ query.query }} placeholder")
+        if "document.text" not in placeholders:
+            raise ValueError("The user prompt must contain a {{ document.text }} placeholder")
+        return prompt
 
 
 class ReasonerEvaluatorConfig(BaseRetrievalEvaluatorConfig):
@@ -50,57 +68,46 @@ class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default=None,
         description="A list of extra guidelines to be used when reasoning about the relevancy of the document.",
     )
-    llm_response_schema: Type[BaseModel] | dict[str, Any] | None = Field(
-        default={
-            "score": (
-                "An integer between 0 and 2 representing the score of the document, "
-                "where 0 means the document is not relevant to the query, 1 means the document is somewhat relevant, "
-                "and 2 means the document is highly relevant."
-            )
-        },
-    )
 
 
 class CustomPromptEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.CUSTOM_PROMPT
-    prompt: str = Field(
-        default="query: {query} document: {document}",
+    user_prompt: Template = Field(
         description=(
-            "The prompt to be used to evaluate the documents. It should contain a {query} and a {document} placeholder"
+            "The user prompt to be used to evaluate the documents. "
+            "It should contain at least a {{query.query}} and a {{document.text}} placeholder"
         ),
     )
 
 
 class FewShotEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.FEW_SHOT
-    system_prompt: str = Field(
-        default="You are a helpful assistant.",
-        description="The system prompt to be used to evaluate the documents.",
-    )
+
     few_shots: list[FewShotExample] = Field(
         default_factory=list,
         description="A list of few-shot examples to be used in the prompt",
     )
-    few_shot_user_prompt: str = Field(
-        default="Query: {query}\n\nPassage:{passage}",
-        description=(
-            "The individual prompt to be used to evaluate the documents. "
-            "It should contain a {query} and a {passage} placeholder"
-        ),
-    )
-    few_shot_assistant_answer: str = Field(
-        default='{reasoning}\n\n{{"relevance": {relevance}}}',
+    few_shot_assistant_answer: Template | None = Field(
+        default=None,
         description="The expected answer format from the LLM for each evaluated document "
-        "It should contain a {reasoning} and a {relevance} placeholder",
+        "It should contain at least a {{relevance}} placeholder, and, optionally, a {{reasoning}} placeholder",
     )
-    reasoning_placeholder: str = Field(
-        default="reasoning",
-        description="The placeholder for the reasoning in the prompt",
-    )
-    relevance_placeholder: str = Field(
-        default="relevance",
-        description="The placeholder for the relevance in the prompt",
-    )
+
+    @field_validator("few_shot_assistant_answer", mode="before")
+    def string_to_template_few_shot_assistant_answer(cls, prompt: str | None) -> Template | None:
+        if prompt is None:
+            return prompt
+        return string_to_template(prompt)
+
+    @field_validator("few_shot_assistant_answer", mode="after")
+    def validate_few_shot_assistant_answer(cls, prompt: Template | None) -> Template | None:
+        if prompt is None:
+            return prompt
+        src = getattr(prompt, "_ragelo_source", None)
+        placeholders = set(m.group(1) for m in re.finditer(r"{{\s*([a-zA-Z_][\w\.]*)\s*}}", src or ""))
+        if "relevance" not in placeholders:
+            raise ValueError("The few_shot_assistant_answer must contain a {{ relevance }} placeholder")
+        return prompt
 
 
 class RDNAMEvaluatorConfig(BaseRetrievalEvaluatorConfig):

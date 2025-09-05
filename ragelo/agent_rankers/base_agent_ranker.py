@@ -17,7 +17,6 @@ class AgentRanker:
     ):
         self.config = config
         self.name = self.config.ranker_name
-        self.agents_evaluations_file = self.config.agents_evaluations_file
 
     def run(self, experiment: Experiment) -> Any:
         """Computes a score for each agent in the experiment"""
@@ -43,7 +42,7 @@ class AgentRanker:
                     if isinstance(game.evaluation.answer, dict):
                         winner = game.evaluation.answer["winner"]
                     else:
-                        winner = game.evaluation.answer
+                        winner = game.evaluation.answer.winner
                     evaluations.append(
                         (
                             game.agent_a_answer.agent,

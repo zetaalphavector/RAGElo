@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, field_validator, model_validator
+from typing_extensions import Self
 
 from ragelo.logger import logger
 from ragelo.types.results import EvaluatorResult
@@ -26,6 +27,15 @@ class Evaluable(BaseModel):
     qid: str
     evaluation: EvaluatorResult | None = None
     metadata: dict[str, Any] | None = None
+
+    @field_validator("qid", mode="before")
+    def qid_into_string(cls, v):
+        if not isinstance(v, str):
+            try:
+                v = str(v)
+            except ValueError:
+                raise ValueError("qid must be a string or convertible to a string")
+        return v
 
     def add_metadata(self, metadata: dict[str, Any] | None):
         if not metadata:
@@ -56,6 +66,15 @@ class Document(Evaluable):
     text: str
     retrieved_by: dict[str, float] = {}
 
+    @field_validator("did", mode="before")
+    def did_into_string(cls, v):
+        if not isinstance(v, str):
+            try:
+                v = str(v)
+            except ValueError:
+                raise ValueError("did must be a string or convertible to a string")
+        return v
+
     def add_retrieved_by(self, agent: str, score: float | None = None, force: bool = False, exist_ok: bool = False):
         """Adds the score of an agent that retrieved the document."""
         if agent in self.retrieved_by and not force:
@@ -74,10 +93,10 @@ class Document(Evaluable):
     @classmethod
     def assemble_document(
         cls,
-        document: Document | str,
+        document: Self | str,
         qid: str | None = None,
         metadata: dict[str, Any] | None = None,
-    ) -> Document:
+    ) -> Self:
         """Assembles a Document object from a string or a Document object."""
         if isinstance(document, str):
             if qid is None:
@@ -94,10 +113,10 @@ class Document(Evaluable):
 
     @staticmethod
     def assemble_documents(
-        documents: list[Document | str],
+        documents: list,
         qid: str,
         metadata: list[dict[str, Any]] | list[None] | None = None,
-    ) -> dict[str, Document]:
+    ) -> dict[str, "Document"]:
         """Assembles a list of Document objects from a list of strings or Document objects."""
         assembled_docs: dict[str, Document] = {}
         if metadata and len(documents) != len(metadata):
@@ -140,11 +159,11 @@ class AgentAnswer(Evaluable):
     @classmethod
     def assemble_answer(
         cls,
-        answer: AgentAnswer | str,
+        answer: Self | str,
         qid: str,
         agent: str | None = None,
         metadata: dict[str, Any] | None = None,
-    ) -> AgentAnswer:
+    ) -> "AgentAnswer":
         """Assembles an AgentAnswer object from a string or an AgentAnswer object."""
         if isinstance(answer, str):
             if agent is None:
