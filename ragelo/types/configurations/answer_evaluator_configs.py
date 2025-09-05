@@ -119,3 +119,6 @@ class PairwiseDomainExpertEvaluatorConfig(PairwiseEvaluatorConfig):
         "submitted the query works for. that the domain belongs to. "
         "(e.g.: ChemCorp, CS Inc.)",
     )
+
+
+RubricPairwiseEvaluatorConfig = PairwiseEvaluatorConfig

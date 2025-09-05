@@ -5,8 +5,8 @@ from pydantic import BaseModel
 
 class LLMProviderConfig(BaseModel):
     api_key: str | None
-    temperature: float | None = 0.1
-    max_tokens: int = 2048
+    temperature: float = 0.1
+    max_tokens: int = 4096
     seed: int | None = 42
 
 

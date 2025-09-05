@@ -153,7 +153,7 @@ class Experiment:
                 if not os.path.exists("ragelo_cache"):
                     os.makedirs("ragelo_cache", exist_ok=True)
             if not os.path.isfile(self.evaluations_cache_path):
-                logger.info(f"Creating a cache file for the experiment's evaluations at{self.evaluations_cache_path}")
+                logger.info(f"Creating a cache file for the experiment's evaluations at {self.evaluations_cache_path}")
                 Path(self.evaluations_cache_path).touch()
 
         if self.save_path and os.path.isfile(self.save_path):

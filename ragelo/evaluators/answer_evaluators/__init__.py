@@ -8,6 +8,7 @@ from ragelo.evaluators.answer_evaluators.custom_pairwise_evaluator import Custom
 from ragelo.evaluators.answer_evaluators.custom_prompt_evaluator import CustomPromptEvaluator
 from ragelo.evaluators.answer_evaluators.domain_expert_evaluator import PairwiseDomainExpertEvaluator
 from ragelo.evaluators.answer_evaluators.pairwise_evaluator import PairwiseAnswerEvaluator
+from ragelo.evaluators.answer_evaluators.rubric_pairwise_evaluator import RubricPairwiseEvaluator
 
 __all__ = [
     "AnswerEvaluatorFactory",
@@ -18,4 +19,5 @@ __all__ = [
     "PairwiseAnswerEvaluator",
     "get_answer_evaluator",
     "ChatPairwiseEvaluator",
+    "RubricPairwiseEvaluator",
 ]
