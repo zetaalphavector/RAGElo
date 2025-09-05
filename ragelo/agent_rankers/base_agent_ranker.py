@@ -15,7 +15,6 @@ class AgentRanker:
     ):
         self.config = config
         self.name = self.config.ranker_name
-        self.agents_evaluations_file = self.config.agents_evaluations_file
 
     def run(self, experiment: Experiment) -> Any:
         """Computes a score for each agent in the experiment"""
