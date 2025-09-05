@@ -15,11 +15,8 @@ class FewShotEvaluator(BaseRetrievalEvaluator):
     config: FewShotEvaluatorConfig
     user_prompt = string_to_template("""
         Query: {{ query.query }}
-        Passage: {{ document.text }}
-    """)
-    few_shot_assistant_answer = string_to_template("""
-        {"reasoning": "{{reasoning}}", "relevance": {{relevance}}}
-    """)
+        Passage: {{ document.text }}""")
+    few_shot_assistant_answer = string_to_template("""{"reasoning": "{{reasoning}}", "relevance": {{relevance}}}""")
 
     def __init__(self, config: FewShotEvaluatorConfig, llm_provider: BaseLLMProvider):
         super().__init__(config, llm_provider)

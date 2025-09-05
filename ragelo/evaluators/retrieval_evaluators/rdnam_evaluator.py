@@ -28,44 +28,39 @@ from ragelo.utils import string_to_template
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.RDNAM)
 class RDNAMEvaluator(BaseRetrievalEvaluator):
     config: RDNAMEvaluatorConfig
-    system_prompt = string_to_template(
-        """
-            {% if annotator_role %}{{ annotator_role }} {% endif %} Given a query and a document, you must provide a score on an integer scale of 0 to 2 with the following meanings:
-            2 = highly relevant, very helpful for this query
-            1 = relevant, may be partly helpful but might contain other irrelevant content
-            0 = not relevant, should never be shown for this query
-            Assume that you are writing a report on the subject of the topic. If you would use any of the information contained in the document in such a report, mark it 1. If the document is primarily about the topic, or contains vital information about the topic, mark it 2. Otherwise, mark it 0.
-            """
-    )
-    user_prompt = string_to_template(
-        """
-            # Query
-            A person has typed {{ query.query }} into a search engine.
-            {% if query.metadata and (query.metadata.description or query.metadata.narrative) %}
-            They were looking for: {{ query.metadata.description }}
-            {{ query.metadata.narrative }}
-            {% endif %}
+    system_prompt = string_to_template("""
+        {% if annotator_role %}{{ annotator_role }} {% endif %} Given a query and a document, you must provide a score on an integer scale of 0 to 2 with the following meanings:
+        2 = highly relevant, very helpful for this query
+        1 = relevant, may be partly helpful but might contain other irrelevant content
+        0 = not relevant, should never be shown for this query
+        Assume that you are writing a report on the subject of the topic. If you would use any of the information contained in the document in such a report, mark it 1. If the document is primarily about the topic, or contains vital information about the topic, mark it 2. Otherwise, mark it 0.
+        """)
+    user_prompt = string_to_template("""
+        # Query
+        A person has typed {{ query.query }} into a search engine.
+        {% if query.metadata and (query.metadata.description or query.metadata.narrative) %}
+        They were looking for: {{ query.metadata.description }}
+        {{ query.metadata.narrative }}
+        {% endif %}
 
-            # Result
-            Consider the following document.
-            ---BEGIN DOCUMENT CONTENT---
-            {{ document.text }}
-            ---END DOCUMENT CONTENT---
+        # Result
+        Consider the following document.
+        ---BEGIN DOCUMENT CONTENT---
+        {{ document.text }}
+        ---END DOCUMENT CONTENT---
 
-            # Instructions
-            Split this problem into steps:
-            Consider the underlying intent of the search.
-            {%- if use_aspects %}
-            Measure how well the content matches a likely intent of the query.
-            Measure how trustworthy the web page is.
-            {%- endif %}
-            Consider the aspects above and relative importance of each, and decide on a final overall score.
-            {%- if multiple %}
-            We asked five search engine raters to evaluate the relevance of the web page for the query.
-            Each rater used their own independent judgement.
-            {%- endif %}
-        """
-    )
+        # Instructions
+        Split this problem into steps:
+        Consider the underlying intent of the search.
+        {%- if use_aspects %}
+        Measure how well the content matches a likely intent of the query.
+        Measure how trustworthy the web page is.
+        {%- endif %}
+        Consider the aspects above and relative importance of each, and decide on a final overall score.
+        {%- if multiple %}
+        We asked five search engine raters to evaluate the relevance of the web page for the query.
+        Each rater used their own independent judgement.
+        {%- endif %}""")
 
     def __init__(self, config: RDNAMEvaluatorConfig, llm_provider: BaseLLMProvider):
         """Initializes an evaluator based on RDNAM framework."""
