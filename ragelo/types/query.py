@@ -1,12 +1,8 @@
 from collections.abc import Iterator
 from typing import Any, overload
+from typing_extensions import Self
 
-try:
-    from typing import Self
-except ImportError:
-    from typing_extensions import Self
-
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from ragelo.logger import logger
 from ragelo.types.evaluables import AgentAnswer, Document, PairwiseGame
@@ -35,6 +31,15 @@ class Query(BaseModel):
     answers: dict[str, AgentAnswer] = {}
     pairwise_games: list[PairwiseGame] = []
 
+    @field_validator("qid", mode="before")
+    def qid_into_string(cls, v):
+        if not isinstance(v, str):
+            try:
+                v = str(v)
+            except ValueError:
+                raise ValueError("qid must be a string or convertible to a string")
+        return v
+
     def add_metadata(self, metadata: dict[str, Any] | None):
         """Adds metadata to the query that may be templated in the prompt.
         Args:
@@ -59,7 +64,8 @@ class Query(BaseModel):
         agent: str | None = None,
         force: bool = False,
     ):
-        """Add a list of retrieved documents to the query.
+        """
+        Add a list of retrieved documents to the query.
         Args:
             docs (list[Document | str] | list[Tuple[Document | str], float]): The list of documents
                 (either the objects or the texts) to add to the query.

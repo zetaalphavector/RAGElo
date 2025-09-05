@@ -1,11 +1,9 @@
 from typing import Any
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, model_validator, field_validator
 
-try:
-    from typing import Self
-except ImportError:
-    from typing_extensions import Self
+
+from typing_extensions import Self
 from ragelo.logger import logger
 from ragelo.types.results import EvaluatorResult
 
@@ -28,6 +26,15 @@ class Evaluable(BaseModel):
     qid: str
     evaluation: EvaluatorResult | None = None
     metadata: dict[str, Any] | None = None
+
+    @field_validator("qid", mode="before")
+    def qid_into_string(cls, v):
+        if not isinstance(v, str):
+            try:
+                v = str(v)
+            except ValueError:
+                raise ValueError("qid must be a string or convertible to a string")
+        return v
 
     def add_metadata(self, metadata: dict[str, Any] | None):
         if not metadata:
@@ -57,6 +64,15 @@ class Document(Evaluable):
     did: str
     text: str
     retrieved_by: dict[str, float] = {}
+
+    @field_validator("did", mode="before")
+    def did_into_string(cls, v):
+        if not isinstance(v, str):
+            try:
+                v = str(v)
+            except ValueError:
+                raise ValueError("did must be a string or convertible to a string")
+        return v
 
     def add_retrieved_by(self, agent: str, score: float | None = None, force: bool = False, exist_ok: bool = False):
         """Adds the score of an agent that retrieved the document."""
