@@ -93,6 +93,7 @@ class BaseEvaluator(ABC):
         pbar.close()
         if self.config.verbose:
             self._print_failed_evaluations(evaluations, failed)
+        experiment.save()
 
     @abstractmethod
     def _get_tuples_to_evaluate(self, queries: Experiment) -> Sequence[tuple[Query, Evaluable]]:
