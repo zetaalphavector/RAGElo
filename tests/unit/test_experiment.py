@@ -317,7 +317,7 @@ class TestExperiment:
         assert len(empty_experiment["0"].answers) == 2
         assert len(empty_experiment["1"].answers) == 2
 
-    @pytest.mark.requires_openai
+    # @pytest.mark.requires_openai
     def test_readme_example(self, capsys):
         """Test the README example"""
         if os.path.exists("ragelo_cache/A_really_cool_RAGElo_experiment.json"):
