@@ -86,7 +86,7 @@ elo_ranker.run(experiment)
     agent2         : 961.3(±2.9)
 ```
 
-The experiment is save as a JSON in `experiment_name.json`. 
+The experiment is save as a JSON in `ragelo_cache/experiment_name.json`. 
 
 ### 🛠️ Using a custom prompt and injecting metadata
 For a more complete example, we can evaluate with a custom prompt, and inject metadata into our evaluation prompt:
@@ -257,8 +257,8 @@ python -m build
 ```
 
 ### ✅ TODO
-- [ ] Add CI/CD for publishing
 - [ ] Add full documentation of all implemented Evaluators
+- [X] Add CI/CD for publishing
 - [x] Add option to few-shot examples (Undocumented, yet)
 - [x] Testing!
 - [x] Publish on PyPi

@@ -16,7 +16,7 @@ arguments = {
     "domain_long",
 }
 
-ignore_args = {"llm_response_schema"}
+ignore_args = {"llm_response_schema", "system_prompt", "user_prompt"}
 
 
 def get_params_from_function(func: Callable[..., Any]) -> dict[str, ParamMeta]:

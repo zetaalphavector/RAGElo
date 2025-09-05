@@ -40,7 +40,7 @@ class AgentRanker:
                     if isinstance(game.evaluation.answer, dict):
                         winner = game.evaluation.answer["winner"]
                     else:
-                        winner = game.evaluation.answer
+                        winner = game.evaluation.answer.winner
                     evaluations.append(
                         (
                             game.agent_a_answer.agent,

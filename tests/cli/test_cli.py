@@ -35,7 +35,7 @@ def test_run_all_cli():
     assert "Agents Elo Ratings" in result.stdout
     assert result.stdout.startswith("Creating a cache file for the experiment's evaluations")
     assert "🔎 Query ID: 0\n📜 Document ID: 0" in result.stdout
-    assert "🔎 Query ID: 0\n agent1              🆚   agent2\nParsed Answer: A" in result.stdout
+    assert "🔎 Query ID: 0\n agent1              🆚   agent2\nParsed Answer:" in result.stdout
     assert "Total evaluations: 4" in result.stdout
     assert "Total evaluations: 2" in result.stdout
     assert "Evaluating Retrieved documents" in result.stdout

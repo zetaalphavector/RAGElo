@@ -318,13 +318,13 @@ class TestExperiment:
         assert len(empty_experiment["0"].answers) == 2
         assert len(empty_experiment["1"].answers) == 2
 
-    @pytest.mark.requires_openai
+    # @pytest.mark.requires_openai
     def test_readme_example(self, capsys):
         """Test the README example"""
-        if os.path.exists("A_really_cool_RAGElo_experiment.json"):
-            os.remove("A_really_cool_RAGElo_experiment.json")
-        if os.path.exists("A_really_cool_RAGElo_experiment_results.jsonl"):
-            os.remove("A_really_cool_RAGElo_experiment_results.jsonl")
+        if os.path.exists("ragelo_cache/A_really_cool_RAGElo_experiment.json"):
+            os.remove("ragelo_cache/A_really_cool_RAGElo_experiment.json")
+        if os.path.exists("ragelo_cache/A_really_cool_RAGElo_experiment_results.jsonl"):
+            os.remove("ragelo_cache/A_really_cool_RAGElo_experiment_results.jsonl")
 
         experiment = Experiment(experiment_name="A_really_cool_RAGElo_experiment")
         # Add two user queries. Alternatively, we can load them from a csv file with .add_queries_from_csv()
@@ -368,7 +368,7 @@ class TestExperiment:
         assert "Agents Elo Ratings" in captured.out
         assert "agent1" in captured.out
         assert "agent2" in captured.out
-        assert os.path.exists("A_really_cool_RAGElo_experiment.json")
-        assert os.path.exists("A_really_cool_RAGElo_experiment_results.jsonl")
-        os.remove("A_really_cool_RAGElo_experiment.json")
-        os.remove("A_really_cool_RAGElo_experiment_results.jsonl")
+        assert os.path.exists("ragelo_cache/A_really_cool_RAGElo_experiment.json")
+        assert os.path.exists("ragelo_cache/A_really_cool_RAGElo_experiment_results.jsonl")
+        os.remove("ragelo_cache/A_really_cool_RAGElo_experiment.json")
+        os.remove("ragelo_cache/A_really_cool_RAGElo_experiment_results.jsonl")
