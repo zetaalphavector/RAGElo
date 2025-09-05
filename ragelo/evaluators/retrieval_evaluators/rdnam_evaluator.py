@@ -4,6 +4,7 @@ https://arxiv.org/abs/2309.10621
 """
 
 import numpy as np
+from pydantic import BaseModel
 
 from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     BaseRetrievalEvaluator,
@@ -94,6 +95,7 @@ class RDNAMEvaluator(BaseRetrievalEvaluator):
 
     def _process_answer(self, llm_response: LLMResponseType) -> LLMResponseType:
         parsed = llm_response.parsed_answer
+        assert isinstance(self.config.llm_response_schema, BaseModel)
         assert isinstance(parsed, self.config.llm_response_schema)
 
         if self.config.use_multiple_annotators:

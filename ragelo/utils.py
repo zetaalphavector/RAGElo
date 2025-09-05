@@ -47,5 +47,5 @@ def get_pbar(
 def string_to_template(src: str) -> Template:
     clean_str = dedent(src).strip()
     template = Template(clean_str)
-    template._ragelo_source = src
+    template._ragelo_source = src  # type: ignore
     return template

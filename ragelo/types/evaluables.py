@@ -112,7 +112,7 @@ class Document(Evaluable):
 
     @staticmethod
     def assemble_documents(
-        documents: list[Self | str],
+        documents: list["Document" | str],
         qid: str,
         metadata: list[dict[str, Any]] | list[None] | None = None,
     ) -> dict[str, "Document"]:
