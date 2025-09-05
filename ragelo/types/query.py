@@ -124,7 +124,7 @@ class Query(BaseModel):
         answer = self.answers.get(agent, answer)
         if answer.agent in self.answers and not force:
             if not exist_ok:
-                logger.warning(f"Answer from agent {answer.agent} already exists in query {self.qid}")
+                logger.info(f"Answer from agent {answer.agent} already exists in query {self.qid}")
             return
         self.answers[agent] = answer
 

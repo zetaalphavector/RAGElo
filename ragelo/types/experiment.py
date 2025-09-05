@@ -128,7 +128,6 @@ class Experiment:
         self.experiment_name = experiment_name
         self.queries: dict[str, Query] = {}
         self.elo_tournaments: list[EloTournamentResult] = []
-        self.verbose = verbose
         self.rich_print = rich_print
         self.save_on_disk = save_on_disk
         self.save_path = save_path
@@ -216,7 +215,7 @@ class Experiment:
             query_obj = Query(qid=query_id, query=query, metadata=metadata)
             query_id = query_obj.qid
         if query_id in self.queries and not force:
-            logger.warning(f'Query with ID "{query_id}" already exists. Use force=True to overwrite')
+            logger.info(f'Query with ID "{query_id}" already exists. Use force=True to overwrite')
             return query_id
         if query_id in self.queries and force:
             logger.info(f'Query with ID "{query_id}" already exists, but force was set to True. Overwriting.')
@@ -352,8 +351,6 @@ class Experiment:
         if should_save:
             self.save_results(evaluation)
         if not should_print:
-            return
-        if not self.verbose:
             return
         if isinstance(evaluation, EloTournamentResult):
             self._print_elo_tournament_result(evaluation)
