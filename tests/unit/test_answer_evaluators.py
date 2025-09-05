@@ -1,7 +1,6 @@
 import json
 import warnings
 
-
 from ragelo import get_answer_evaluator
 from ragelo.evaluators.answer_evaluators import (
     BaseAnswerEvaluator,
@@ -50,12 +49,10 @@ def test_get_by_name(llm_provider_mock):
 
 
 class TestAnswerEvaluator:
-    def test_evaluate_single_answer(
-        self, llm_provider_answer_mock, experiment, base_answer_eval_config, answer_eval_format
-    ):
+    def test_evaluate_single_answer(self, llm_provider_mock, experiment, base_answer_eval_config, answer_eval_format):
         pointwise_evaluator = BaseAnswerEvaluator.from_config(
             config=base_answer_eval_config,
-            llm_provider=llm_provider_answer_mock,
+            llm_provider=llm_provider_mock,
         )
         query = experiment["0"]
         answer = query.answers["agent1"]
@@ -67,15 +64,15 @@ class TestAnswerEvaluator:
         assert result.pairwise is False
         assert result.qid == query.qid
         assert result.agent == answer.agent
-        call_args = llm_provider_answer_mock.async_call_mocker.call_args_list
+        call_args = llm_provider_mock.async_call_mocker.call_args_list
         assert len(call_args) == 1
         expected_user_prompt = f"Query: {query.query}\nAnswer: {answer.text}"
         assert call_args[0][0][0].user_message == expected_user_prompt
         assert call_args[0][0][0].system_prompt == base_answer_eval_config.system_prompt.render()
 
-    def test_evaluate_single_game(self, llm_provider_pairwise_answer_mock, experiment, pairwise_answer_eval_config):
+    def test_evaluate_single_game(self, llm_provider_mock, experiment, pairwise_answer_eval_config):
         evaluator = PairwiseAnswerEvaluator.from_config(
-            config=pairwise_answer_eval_config, llm_provider=llm_provider_pairwise_answer_mock
+            config=pairwise_answer_eval_config, llm_provider=llm_provider_mock
         )
         query = experiment["0"]
         result = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
@@ -109,11 +106,9 @@ class TestAnswerEvaluator:
                 assert answer.evaluation.qid == query.qid
                 assert answer.evaluation.agent == answer.agent
 
-    def test_evaluate_pairwise_experiment(
-        self, llm_provider_pairwise_answer_mock, experiment, pairwise_answer_eval_config
-    ):
+    def test_evaluate_pairwise_experiment(self, llm_provider_mock, experiment, pairwise_answer_eval_config):
         evaluator = PairwiseAnswerEvaluator.from_config(
-            config=pairwise_answer_eval_config, llm_provider=llm_provider_pairwise_answer_mock
+            config=pairwise_answer_eval_config, llm_provider=llm_provider_mock
         )
         evaluator.evaluate_experiment(experiment)
         for query in experiment:
@@ -132,13 +127,13 @@ class TestAnswerEvaluator:
 class TestPairwiseAnswerEvaluator:
     def test_evaluate_single_game(
         self,
-        llm_provider_pairwise_answer_mock,
+        llm_provider_mock,
         experiment_with_conversations_and_reasonings,
         pairwise_answer_eval_config,
     ):
         evaluator = PairwiseAnswerEvaluator.from_config(
             config=pairwise_answer_eval_config,
-            llm_provider=llm_provider_pairwise_answer_mock,
+            llm_provider=llm_provider_mock,
         )
         query = experiment_with_conversations_and_reasonings["0"]
         result = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
@@ -147,7 +142,7 @@ class TestPairwiseAnswerEvaluator:
         assert isinstance(result.raw_answer, str)
         assert result.answer.winner == "A"
 
-        llm_call_args = llm_provider_pairwise_answer_mock.async_call_mocker.call_args_list
+        llm_call_args = llm_provider_mock.async_call_mocker.call_args_list
         assert len(llm_call_args) == 1
         assert isinstance(llm_call_args[0][0][0], LLMInputPrompt)
         # Make sure that no games with the same agent were called
@@ -166,11 +161,9 @@ class TestPairwiseAnswerEvaluator:
         assert agent_a_answer == query.answers["agent1"].text
         assert agent_b_answer == query.answers["agent2"].text
 
-    def test_evaluation_no_documents(
-        self, llm_provider_pairwise_answer_mock, empty_experiment, pairwise_answer_eval_config
-    ):
+    def test_evaluation_no_documents(self, llm_provider_mock, empty_experiment, pairwise_answer_eval_config):
         evaluator = PairwiseAnswerEvaluator.from_config(
-            config=pairwise_answer_eval_config, llm_provider=llm_provider_pairwise_answer_mock
+            config=pairwise_answer_eval_config, llm_provider=llm_provider_mock
         )
         empty_experiment.add_query("empty_query", "0")
         empty_experiment.add_agent_answer("answer_a", "agent1", "0")
@@ -209,13 +202,13 @@ class TestCustomPromptEvaluator:
 class TestChatPairwiseEvaluator:
     def test_evaluate_single_game(
         self,
-        llm_provider_pairwise_answer_mock,
+        llm_provider_mock,
         experiment_with_conversations_and_reasonings,
         chat_pairwise_answer_eval_config,
     ):
         evaluator = ChatPairwiseEvaluator.from_config(
             config=chat_pairwise_answer_eval_config,
-            llm_provider=llm_provider_pairwise_answer_mock,
+            llm_provider=llm_provider_mock,
         )
         query = experiment_with_conversations_and_reasonings["0"]
 
@@ -224,7 +217,7 @@ class TestChatPairwiseEvaluator:
         assert isinstance(result.answer, PairWiseAnswerAnswerFormat)
         assert isinstance(result.raw_answer, str)
         assert result.answer.winner == "A"
-        llm_call_args = llm_provider_pairwise_answer_mock.async_call_mocker.call_args_list
+        llm_call_args = llm_provider_mock.async_call_mocker.call_args_list
         assert len(llm_call_args) == 1
         prompt = llm_call_args[0][0][0]
         agent_a_answer = (
@@ -244,51 +237,51 @@ class TestChatPairwiseEvaluator:
 class TestDomainExpertEvaluator:
     def test_evaluate_single_answer(
         self,
-        llm_provider_pairwise_answer_mock,
+        llm_provider_mock,
         experiment_with_conversations_and_reasonings,
         domain_expert_answer_eval_config,
     ):
         evaluator = PairwiseDomainExpertEvaluator.from_config(
-            config=domain_expert_answer_eval_config, llm_provider=llm_provider_pairwise_answer_mock
+            config=domain_expert_answer_eval_config, llm_provider=llm_provider_mock
         )
         query = experiment_with_conversations_and_reasonings["0"]
         with warnings.catch_warnings():
             warnings.simplefilter("error")
             result = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
         assert isinstance(result, AnswerEvaluatorResult)
-        prompt = llm_provider_pairwise_answer_mock.async_call_mocker.call_args_list[0][0][0]
+        prompt = llm_provider_mock.async_call_mocker.call_args_list[0][0][0]
         assert isinstance(prompt, LLMInputPrompt)
         assert "You work for" not in prompt.system_prompt
 
     def test_evaluate_single_answer_with_company(
         self,
-        llm_provider_pairwise_answer_mock,
+        llm_provider_mock,
         experiment_with_conversations_and_reasonings,
         domain_expert_answer_eval_config,
     ):
         domain_expert_answer_eval_config.company = "Zeta Alpha"
         evaluator = PairwiseDomainExpertEvaluator.from_config(
-            config=domain_expert_answer_eval_config, llm_provider=llm_provider_pairwise_answer_mock
+            config=domain_expert_answer_eval_config, llm_provider=llm_provider_mock
         )
         query = experiment_with_conversations_and_reasonings["0"]
         with warnings.catch_warnings():
             warnings.simplefilter("error")
             result = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
         assert isinstance(result, AnswerEvaluatorResult)
-        prompt = llm_provider_pairwise_answer_mock.async_call_mocker.call_args_list[0][0][0]
+        prompt = llm_provider_mock.async_call_mocker.call_args_list[0][0][0]
         assert "You work for" in prompt.system_prompt
 
     def test_evaluate_single_answer_no_documents(
         self,
-        llm_provider_pairwise_answer_mock,
+        llm_provider_mock,
         experiment,
         domain_expert_answer_eval_config,
     ):
         evaluator = PairwiseDomainExpertEvaluator.from_config(
-            config=domain_expert_answer_eval_config, llm_provider=llm_provider_pairwise_answer_mock
+            config=domain_expert_answer_eval_config, llm_provider=llm_provider_mock
         )
         query = experiment["0"]
         result = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
         assert isinstance(result, AnswerEvaluatorResult)
-        prompt = llm_provider_pairwise_answer_mock.async_call_mocker.call_args_list[0][0][0]
+        prompt = llm_provider_mock.async_call_mocker.call_args_list[0][0][0]
         assert "You work for" not in prompt.system_prompt

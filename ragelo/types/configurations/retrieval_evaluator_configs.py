@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, field_validator
 from ragelo.types.answer_formats import RetrievalAnswerEvaluatorFormat
 from ragelo.types.configurations.base_configs import BaseEvaluatorConfig
 from ragelo.types.types import RetrievalEvaluatorTypes
+from ragelo.utils import string_to_template
 
 
 class FewShotExample(BaseModel):
@@ -84,14 +85,22 @@ class FewShotEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default_factory=list,
         description="A list of few-shot examples to be used in the prompt",
     )
-    few_shot_assistant_answer: Template = Field(
-        ...,
+    few_shot_assistant_answer: Template | None = Field(
+        default=None,
         description="The expected answer format from the LLM for each evaluated document "
         "It should contain at least a {{relevance}} placeholder, and, optionally, a {{reasoning}} placeholder",
     )
 
+    @field_validator("few_shot_assistant_answer", mode="before")
+    def string_to_template_few_shot_assistant_answer(cls, prompt: str | None) -> Template | None:
+        if prompt is None:
+            return prompt
+        return string_to_template(prompt)
+
     @field_validator("few_shot_assistant_answer", mode="after")
-    def validate_few_shot_assistant_answer(cls, prompt: Template) -> Template:
+    def validate_few_shot_assistant_answer(cls, prompt: Template | None) -> Template | None:
+        if prompt is None:
+            return prompt
         src = getattr(prompt, "_ragelo_source", None)
         placeholders = set(m.group(1) for m in re.finditer(r"{{\s*([a-zA-Z_][\w\.]*)\s*}}", src or ""))
         if "relevance" not in placeholders:

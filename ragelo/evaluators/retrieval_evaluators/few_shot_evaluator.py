@@ -19,8 +19,7 @@ class FewShotEvaluator(BaseRetrievalEvaluator):
         Passage: {{ document.text }}
     """)
     few_shot_assistant_answer = string_to_template("""
-        {"reasoning": {{reasoning}}} 
-        {"relevance": {{relevance}}}
+        {"reasoning": "{{reasoning}}", "relevance": {{relevance}}}
     """)
 
     def __init__(self, config: FewShotEvaluatorConfig, llm_provider: BaseLLMProvider):
@@ -29,14 +28,19 @@ class FewShotEvaluator(BaseRetrievalEvaluator):
             self.user_prompt = config.user_prompt
         if config.few_shot_assistant_answer:
             self.few_shot_assistant_answer = config.few_shot_assistant_answer
-        self.system_prompt = config.system_prompt
+        if config.system_prompt:
+            self.system_prompt = config.system_prompt
         self.few_shots = config.few_shots
 
     def _build_message(self, query: Query, document: Document) -> LLMInputPrompt:
         few_shot_messages = self.__build_few_shot_examples()
         few_shot_messages.append({"role": "user", "content": self.user_prompt.render(query=query, document=document)})
+        if self.system_prompt:
+            return LLMInputPrompt(
+                system_prompt=self.system_prompt.render(query=query, document=document), messages=few_shot_messages
+            )
 
-        return LLMInputPrompt(system_prompt=self.system_prompt, messages=few_shot_messages)
+        return LLMInputPrompt(messages=few_shot_messages)
 
     def __build_few_shot_examples(self) -> list[dict[str, str]]:
         few_shot_messages: list[dict[str, str]] = []

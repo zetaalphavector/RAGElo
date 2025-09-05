@@ -32,46 +32,47 @@ from ragelo import get_retrieval_evaluator
 evaluator = get_retrieval_evaluator("RDNAM", llm_provider="openai")
 result = evaluator.evaluate(query="What is the capital of France?", document='Lyon is the second largest city in France.')
 print(result.answer)
-# Output: {'overall': 1}
-print(result.answer["overall"])
-# Output: 1
+# Output: RDNAMAnswerEvaluatorFormat(overall=1.0, intent_match=None, trustworthiness=None)
+print(result.answer.overall)
+# Output: 1.0
 print(result.raw_answer)
-# Output: '{"overall": 1"}'
+# Output: '{"overall": 1.0"}'
 ```
 
 For a more complete example, we can evaluate with a custom prompt, and inject metadata into our evaluation prompt:
 
 ```python
+from pydantic import BaseModel, Field
 from ragelo import get_retrieval_evaluator
 
-prompt = """You are a helpful assistant for evaluating the relevance of a retrieved document to a user query.
+system_prompt = """You are a helpful assistant for evaluating the relevance of a retrieved document to a user query.
 You should pay extra attention to how **recent** a document is. A document older than 5 years is considered outdated.
 
 The answer should be evaluated according to its recency, truthfulness, and relevance to the user query.
-
-User query: {q}
-
-Retrieved document: {d}
-
-The document has a date of {document_date}.
-Today is {today_date}.
 """
-response_schema = {
-    "relevance": "An integer, either 0 or 1. 0 if the document is irrelevant, 1 if it is relevant.",
-    "recency": "An integer, either 0 or 1. 0 if the document is outdated, 1 if it is recent.",
-    "truthfulness": "An integer, either 0 or 1. 0 if the document is false, 1 if it is true.",
-    "reasoning": "A short explanation of why you think the document is relevant or irrelevant.",
-}
-response_format = "json"
+
+user_prompt = """
+User query: {{ query.query }}
+
+Retrieved document: {{ document.text }}
+
+The document has a date of {{ document.metadata.date }}.
+Today is {{ query.metadata.today_date }}.
+"""
+class ResponseSchema(BaseModel):
+    relevance: int = Field(description="An integer, either 0 or 1. 0 if the document is irrelevant, 1 if it is relevant.")
+    recency: int = Field(description="An integer, either 0 or 1. 0 if the document is outdated, 1 if it is recent.")
+    truthfulness: int = Field(description="An integer, either 0 or 1. 0 if the document is false, 1 if it is true.")
+    reasoning: str = Field(description="A short explanation of why you think the document is relevant or irrelevant.")
+
+
 
 evaluator = get_retrieval_evaluator(
     "custom_prompt", # name of the retrieval evaluator
     llm_provider="openai", # Which LLM provider to use
-    prompt=prompt, # your custom prompt
-    query_placeholder="q", # the placeholder for the query in the prompt
-    document_placeholder="d", # the placeholder for the document in the prompt
-    llm_response_schema=response_schema, # The response schema for the LLM. 
-    seed=42, # The seed for the LLM. Used to ensure we get the same answer for the same query and document pair.
+    system_prompt=system_prompt, # your custom prompt
+    user_prompt=user_prompt, # your custom prompt
+    llm_response_schema=ResponseSchema, # The response schema for the LLM. 
 )
 
 result = evaluator.evaluate(
@@ -81,11 +82,14 @@ result = evaluator.evaluate(
     doc_metadata={"document_date": "04-03-1950"}, # Some metadata for the document
 )
 
-answer
-{'relevance': 0,
- 'recency': 0,
- 'truthfulness': 0,
- 'reasoning': 'The document is outdated and incorrect. Rio de Janeiro was the capital of Brazil until 1960 when it was changed to Brasília.'}
+result.answer.model_dump_json(indent=2)
+# Output: 
+    '{
+        "relevance": 0,
+        "recency": 0,
+        "truthfulness": 0,
+        "reasoning": "The document is outdated and incorrect. Rio de Janeiro was the capital of Brazil until 1960 when it was changed to Brasília."
+    }'
 ```
 Note that, in this example, we passed to the `evaluate` method two dictionaries with metadata for the query and the document. This metadata is injected into the prompt by matching their keys into the placeholders in the prompt.
 

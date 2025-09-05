@@ -25,10 +25,33 @@ class RDNAMAnswerEvaluatorFormat(BaseModel):
         ...,
         description="An number between 0 and 2 representing the score of the document.",
     )
-    intent_match: float = Field(
+    intent_match: float | None = Field(
         ...,
         description="An number between 0 and 2 representing the match of the document to the query intent.",
     )
-    trustworthiness: float = Field(
+    trustworthiness: float | None = Field(
         ..., description="An number between 0 and 2 representing the trustworthiness of the document."
     )
+
+
+class RDNAMAnswerNoAspects(BaseModel):
+    overall: float = Field(
+        ...,
+        description="An number between 0 and 2 representing the score of the document.",
+    )
+
+
+class RDNAMMultipleAnnotatorsAnswer(BaseModel):
+    annotator_1: RDNAMAnswerEvaluatorFormat
+    annotator_2: RDNAMAnswerEvaluatorFormat
+    annotator_3: RDNAMAnswerEvaluatorFormat
+    annotator_4: RDNAMAnswerEvaluatorFormat
+    annotator_5: RDNAMAnswerEvaluatorFormat
+
+
+class RDNAMMultipleAnnotatorsAnswerNoAspects(BaseModel):
+    annotator_1: RDNAMAnswerNoAspects
+    annotator_2: RDNAMAnswerNoAspects
+    annotator_3: RDNAMAnswerNoAspects
+    annotator_4: RDNAMAnswerNoAspects
+    annotator_5: RDNAMAnswerNoAspects

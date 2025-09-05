@@ -1,10 +1,7 @@
-from textwrap import dedent
-
-from jinja2 import Template
-
 from ragelo.evaluators.retrieval_evaluators import BaseRetrievalEvaluator, RetrievalEvaluatorFactory
 from ragelo.types.configurations import ReasonerEvaluatorConfig
 from ragelo.types.types import RetrievalEvaluatorTypes
+from ragelo.utils import string_to_template
 
 
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.REASONER)
@@ -14,9 +11,8 @@ class ReasonerEvaluator(BaseRetrievalEvaluator):
     """
 
     config: ReasonerEvaluatorConfig
-    system_prompt = Template(
-        dedent(
-            """
+    system_prompt = string_to_template(
+        """
             You are an impartial expert document annotator, tasked with evaluating if a document contains relevant information to answer a question submitted by a user. 
             Your goal is to evaluate the relevancy of the documents given a user question, and write a concise reasoning for your decision.
                
@@ -25,16 +21,14 @@ class ReasonerEvaluator(BaseRetrievalEvaluator):
                 - Somewhat relevant: The document is on topic but does not fully answer the user question.
                 - Very relevant: The document is on topic and answers the user question.
             """
-        )
     )
-    user_prompt = Template(
-        dedent(
-            """
+
+    user_prompt = string_to_template(
+        """
             [user question]
             {{ query.query }}
 
             [document content]
             {{ document.text }}
             """
-        )
     )

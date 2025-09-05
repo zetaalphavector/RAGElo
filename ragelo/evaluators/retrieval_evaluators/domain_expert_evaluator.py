@@ -1,23 +1,19 @@
 """Evaluator with a domain expert persona"""
 
-from textwrap import dedent
-
-from jinja2 import Template
-
 from ragelo.evaluators.retrieval_evaluators import BaseRetrievalEvaluator, RetrievalEvaluatorFactory
 from ragelo.types.configurations import DomainExpertEvaluatorConfig
 from ragelo.types.evaluables import Document
 from ragelo.types.formats import LLMInputPrompt
 from ragelo.types.query import Query
 from ragelo.types.types import RetrievalEvaluatorTypes
+from ragelo.utils import string_to_template
 
 
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.DOMAIN_EXPERT)
 class DomainExpertEvaluator(BaseRetrievalEvaluator):
     config: DomainExpertEvaluatorConfig
-    system_template = Template(
-        dedent(
-            """
+    system_template = string_to_template(
+        """
             You are a domain expert in {{ expert_in }}.{% if company %} You work for {{ company }}.{% endif %} You are tasked with evaluating the performance of a retrieval system for question answering in this domain. The question answering system will be used by internal users{% if company %} of {{ company }}{% endif %}{% if domain_short %} but it also serves some of your external users like {{ domain_short }}{% endif %}. 
             These users are interested in a retrieval system that provides relevant passages based on their questions.
 
@@ -56,19 +52,16 @@ class DomainExpertEvaluator(BaseRetrievalEvaluator):
             - "reasoning": a concise explanation of your judgment
             - "score": an integer (0, 1, or 2)
             """
-        )
     )
 
-    user_template = Template(
-        dedent(
-            """
+    user_template = string_to_template(
+        """
             User query:
             {{ query.query }}
 
             Document passage:
             {{ document.text }}
             """
-        )
     )
 
     def _build_message(self, query: Query, document: Document) -> LLMInputPrompt:
