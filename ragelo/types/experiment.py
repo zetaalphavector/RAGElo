@@ -628,6 +628,7 @@ class Experiment:
             else:
                 raise ValueError(f"Cannot save evaluation of type {type(result)} to cache")
             f.write(json.dumps({result_type: result.model_dump()}, ensure_ascii=False) + "\n")
+        self.save()
 
     def add_queries_from_csv(
         self,
