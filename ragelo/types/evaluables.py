@@ -1,9 +1,8 @@
 from typing import Any
 
-from pydantic import BaseModel, model_validator, field_validator
-
-
+from pydantic import BaseModel, field_validator, model_validator
 from typing_extensions import Self
+
 from ragelo.logger import logger
 from ragelo.types.results import EvaluatorResult
 

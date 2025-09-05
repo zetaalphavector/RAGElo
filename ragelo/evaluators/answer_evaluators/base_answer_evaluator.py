@@ -7,10 +7,7 @@ from tenacity import RetryError
 from ragelo.evaluators.base_evaluator import BaseEvaluator
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
 from ragelo.logger import logger
-from ragelo.types.configurations import (
-    BaseAnswerEvaluatorConfig,
-    PairwiseEvaluatorConfig,
-)
+from ragelo.types.configurations import BaseAnswerEvaluatorConfig, PairwiseEvaluatorConfig
 from ragelo.types.evaluables import AgentAnswer, Document, Evaluable, PairwiseGame
 from ragelo.types.experiment import Experiment
 from ragelo.types.formats import LLMInputPrompt

@@ -1,7 +1,4 @@
-from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
-    AnswerEvaluatorFactory,
-    BaseAnswerEvaluator,
-)
+from ragelo.evaluators.answer_evaluators.base_answer_evaluator import AnswerEvaluatorFactory, BaseAnswerEvaluator
 from ragelo.types.configurations import PairwiseEvaluatorConfig
 from ragelo.types.evaluables import PairwiseGame
 from ragelo.types.formats import LLMInputPrompt

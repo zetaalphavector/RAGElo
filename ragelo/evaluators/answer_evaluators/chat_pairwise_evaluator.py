@@ -1,11 +1,7 @@
 """Answer Evaluator for conversations between two agents."""
 
-from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
-    AnswerEvaluatorFactory,
-)
-from ragelo.evaluators.answer_evaluators.pairwise_evaluator import (
-    PairwiseAnswerEvaluator,
-)
+from ragelo.evaluators.answer_evaluators.base_answer_evaluator import AnswerEvaluatorFactory
+from ragelo.evaluators.answer_evaluators.pairwise_evaluator import PairwiseAnswerEvaluator
 from ragelo.types.configurations import PairwiseEvaluatorConfig
 from ragelo.types.evaluables import PairwiseGame
 from ragelo.types.formats import LLMInputPrompt

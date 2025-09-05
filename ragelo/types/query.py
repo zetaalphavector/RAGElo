@@ -1,15 +1,12 @@
 from collections.abc import Iterator
 from typing import Any, overload
-from typing_extensions import Self
 
 from pydantic import BaseModel, field_validator
+from typing_extensions import Self
 
 from ragelo.logger import logger
 from ragelo.types.evaluables import AgentAnswer, Document, PairwiseGame
-from ragelo.types.results import (
-    AnswerEvaluatorResult,
-    RetrievalEvaluatorResult,
-)
+from ragelo.types.results import AnswerEvaluatorResult, RetrievalEvaluatorResult
 
 
 class Query(BaseModel):

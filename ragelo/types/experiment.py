@@ -19,12 +19,7 @@ from pydantic import BaseModel
 from ragelo.logger import CLILogHandler, logger
 from ragelo.types.evaluables import AgentAnswer, Document
 from ragelo.types.query import Query
-from ragelo.types.results import (
-    AnswerEvaluatorResult,
-    EloTournamentResult,
-    EvaluatorResult,
-    RetrievalEvaluatorResult,
-)
+from ragelo.types.results import AnswerEvaluatorResult, EloTournamentResult, EvaluatorResult, RetrievalEvaluatorResult
 
 
 class Experiment:

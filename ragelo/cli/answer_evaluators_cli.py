@@ -2,19 +2,11 @@ import logging
 
 import typer
 
-from ragelo import (
-    Experiment,
-    get_answer_evaluator,
-    get_llm_provider,
-    get_retrieval_evaluator,
-)
+from ragelo import Experiment, get_answer_evaluator, get_llm_provider, get_retrieval_evaluator
 from ragelo.cli.args import get_params_from_function
 from ragelo.cli.utils import get_path
 from ragelo.types import AnswerEvaluatorTypes
-from ragelo.types.configurations.cli_configs import (
-    CLIPairwiseDomainExpertEvaluatorConfig,
-    CLIPairwiseEvaluatorConfig,
-)
+from ragelo.types.configurations.cli_configs import CLIPairwiseDomainExpertEvaluatorConfig, CLIPairwiseEvaluatorConfig
 from ragelo.types.types import RetrievalEvaluatorTypes
 
 typer.main.get_params_from_function = get_params_from_function  # type: ignore

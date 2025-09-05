@@ -1,7 +1,4 @@
-from ragelo.types.configurations.agent_ranker_configs import (
-    AgentRankerConfig,
-    EloAgentRankerConfig,
-)
+from ragelo.types.configurations.agent_ranker_configs import AgentRankerConfig, EloAgentRankerConfig
 from ragelo.types.configurations.answer_evaluator_configs import (
     BaseAnswerEvaluatorConfig,
     CustomPairwiseEvaluatorConfig,

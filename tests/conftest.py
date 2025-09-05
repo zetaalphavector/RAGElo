@@ -30,11 +30,7 @@ from ragelo.types.configurations.retrieval_evaluator_configs import FewShotExamp
 from ragelo.types.evaluables import ChatMessage
 from ragelo.types.experiment import Experiment
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
-from ragelo.types.results import (
-    AnswerEvaluatorResult,
-    EloTournamentResult,
-    RetrievalEvaluatorResult,
-)
+from ragelo.types.results import AnswerEvaluatorResult, EloTournamentResult, RetrievalEvaluatorResult
 from ragelo.types.types import AnswerEvaluatorTypes, RetrievalEvaluatorTypes
 from ragelo.utils import string_to_template
 

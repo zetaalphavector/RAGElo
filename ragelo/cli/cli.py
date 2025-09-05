@@ -2,13 +2,7 @@ import logging
 
 import typer
 
-from ragelo import (
-    Experiment,
-    get_agent_ranker,
-    get_answer_evaluator,
-    get_llm_provider,
-    get_retrieval_evaluator,
-)
+from ragelo import Experiment, get_agent_ranker, get_answer_evaluator, get_llm_provider, get_retrieval_evaluator
 from ragelo.cli.answer_evaluators_cli import app as answer_evaluator_app
 from ragelo.cli.args import get_params_from_function
 from ragelo.cli.retrieval_evaluator_cli import app as retrieval_evaluator_app

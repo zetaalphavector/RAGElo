@@ -3,11 +3,10 @@ import os
 
 import pytest
 
+from ragelo import Experiment, get_agent_ranker, get_answer_evaluator, get_llm_provider, get_retrieval_evaluator
 from ragelo.types.evaluables import AgentAnswer, Document
 from ragelo.types.query import Query
 from ragelo.types.results import AnswerEvaluatorResult, RetrievalEvaluatorResult
-
-from ragelo import Experiment, get_retrieval_evaluator, get_answer_evaluator, get_agent_ranker, get_llm_provider
 
 
 class TestExperiment:
