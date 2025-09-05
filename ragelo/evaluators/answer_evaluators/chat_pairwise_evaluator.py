@@ -27,6 +27,12 @@ class ChatPairwiseEvaluator(PairwiseAnswerEvaluator):
             {%- elif annotation %}
             For each cited document, you will be provided with its relevance evaluation
             {%- endif %}
+            {%- if not reasoning %}
+            Each document is scored in a scale of 0 to 2, where:
+                - 0: the document is not relevant to the query
+                - 1: the document is somewhat relevant to the query
+                - 2: the document is highly relevant to the query
+            {%- endif %}
             You should choose the assistant that best answers the user's question.
 
             ## Evaluation Guidelines
@@ -53,15 +59,15 @@ class ChatPairwiseEvaluator(PairwiseAnswerEvaluator):
             {%- if documents %}
             [Reference Documents]
             {%- for d in documents %}
-            {%- if doc and annotation %}
+            {%- if doc and (annotation or reasoning) %}
                 Document ID: [{{ d.did }}]
                 Content: {{ d.text }}
-                Relevance Evaluation: {{ d.evaluation.answer }}
+                Relevance: {% if reasoning %} {{ d.evaluation.answer.reasoning }} {% else %} {{ d.evaluation.answer.score }} {% endif %}
             ------------------
             {%- elif doc %}
                 [{{ d.did }}]: {{ d.text }}
             {%- elif annotation %}
-                [{{d.did }}] {{ d.evaluation.answer }}"
+                [{{d.did }}] {% if reasoning %} {{ d.evaluation.answer.reasoning }} {% else %} {{ d.evaluation.answer.score }} {% endif %}"
             {% endif -%}
             {% endfor %}
             {% endif -%}
@@ -88,11 +94,12 @@ class ChatPairwiseEvaluator(PairwiseAnswerEvaluator):
 
         context = {
             "factors": self.config.factors,
-            "query": query.query,
+            "query": query,
             "documents": documents,
             "game": game,
             "doc": self.config.include_raw_documents,
-            "annotation": self.config.include_annotations,
+            "annotation": self.config.include_relevance_score,
+            "reasoning": self.config.include_relevance_reasoning,
         }
         return LLMInputPrompt(
             system_message=self.system_prompt.render(**context),

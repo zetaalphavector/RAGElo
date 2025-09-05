@@ -21,13 +21,20 @@ class PairwiseDomainExpertEvaluator(PairwiseAnswerEvaluator):
         """
             You are a domain expert in {{ expert_in }}.{% if company %} You work for {{ company }}.{% endif %} You are tasked with evaluating the quality of the responses provided by two AI assistants that were tasked with answering a user's question based on a set of documents retrieved by a search engine.
             When available, answers will cite specific documents by placing their IDs into square brackets.
-            {%- if doc and annotation %}
+            {%- if doc and (annotation or reasoning) %}
             You will be provided with the text of each reference document and its relevance evaluation.
             {%- elif doc %}
             You will be provided with the text of each reference document.
-            {%- elif annotation %}
-            For each cited document, you will be provided with its relevance evaluation
+            {%- elif annotation or reasoning %}
+            For each cited document, you will be provided with its relevance evaluation.
             {%- endif %}
+            {%- if not reasoning %}
+            Each document is scored in a scale of 0 to 2, where:
+                - 0: the document is not relevant to the query
+                - 1: the document is somewhat relevant to the query
+                - 2: the document is highly relevant to the query
+            {%- endif %}
+
             You should choose the assistant that best answers the user's question.
 
             ## Evaluation Guidelines
@@ -47,36 +54,6 @@ class PairwiseDomainExpertEvaluator(PairwiseAnswerEvaluator):
             """
     )
 
-    user_prompt = string_to_template(
-        """
-            [User Question]
-            {{ query.query }}
-            {%- if documents %}
-            [Reference Documents]
-            {%- for d in documents %}
-            {%- if doc and annotation %}
-                Document ID: [{{ d.did }}]
-                Content: {{ d.text }}
-                Relevance Evaluation: {{ d.evaluation.answer }}
-            ------------------
-            {%- elif doc %}
-                [{{ d.did }}]: {{ d.text }}
-            {%- elif annotation %}
-                [{{d.did }}] {{ d.evaluation.answer }}"
-            {% endif -%}
-            {% endfor %}
-            {% endif -%}
-
-            [The Start of Assistant A's Answer]
-                {{ game.agent_a_answer.text }}
-            [The End of Assistant A's Answer]
-
-            [The Start of Assistant B's Answer]
-                {{ game.agent_b_answer.text }}
-            [The End of Assistant B's Answer]
-            """
-    )
-
     def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> LLMInputPrompt:
         documents = self._filter_documents(query)
         context = {
@@ -85,9 +62,10 @@ class PairwiseDomainExpertEvaluator(PairwiseAnswerEvaluator):
             "documents": documents,
             "game": game,
             "doc": self.config.include_raw_documents,
-            "annotation": self.config.include_annotations,
+            "annotation": self.config.include_relevance_score,
             "expert_in": self.config.expert_in,
             "company": self.config.company,
+            "reasoning": self.config.include_relevance_reasoning,
         }
 
         return LLMInputPrompt(
