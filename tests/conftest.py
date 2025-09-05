@@ -551,8 +551,10 @@ def domain_expert_answer_eval_config(base_answer_eval_config):
     base_config["pairwise"] = True
     base_config["expert_in"] = "Computer Science"
     base_config["include_annotations"] = True
-    base_config["include_raw_documents"] = False
+    base_config["include_raw_documents"] = True
     base_config["evaluator_name"] = AnswerEvaluatorTypes.DOMAIN_EXPERT
+    base_config["include_relevance_reasoning"] = False
+    base_config["include_relevance_score"] = False
     return PairwiseDomainExpertEvaluatorConfig(**base_config)
 
 
