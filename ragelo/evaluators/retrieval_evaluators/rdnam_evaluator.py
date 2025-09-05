@@ -28,7 +28,7 @@ from ragelo.utils import string_to_template
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.RDNAM)
 class RDNAMEvaluator(BaseRetrievalEvaluator):
     config: RDNAMEvaluatorConfig
-    system_template = string_to_template(
+    system_prompt = string_to_template(
         """
             {% if annotator_role %}{{ annotator_role }} {% endif %} Given a query and a document, you must provide a score on an integer scale of 0 to 2 with the following meanings:
             2 = highly relevant, very helpful for this query
@@ -89,7 +89,7 @@ class RDNAMEvaluator(BaseRetrievalEvaluator):
             "multiple": self.config.use_multiple_annotators,
         }
         return LLMInputPrompt(
-            system_prompt=self.system_template.render(**context),
+            system_prompt=self.system_prompt.render(**context),
             user_message=self.user_prompt.render(**context),
         )
 
