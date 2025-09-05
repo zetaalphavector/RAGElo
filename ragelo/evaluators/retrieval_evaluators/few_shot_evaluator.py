@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from ragelo.evaluators.retrieval_evaluators import BaseRetrievalEvaluator, RetrievalEvaluatorFactory
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.types.configurations import FewShotEvaluatorConfig

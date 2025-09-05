@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Any, Type, get_type_hints
 
 from ragelo.logger import logger

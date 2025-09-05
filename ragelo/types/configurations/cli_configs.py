@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from pydantic import Field
 
 from ragelo.types.configurations.answer_evaluator_configs import (

@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
+from typing import Optional
 
 import rich
 from jinja2 import Template
@@ -21,7 +24,7 @@ class BaseEvaluator(ABC):
     """
 
     config: BaseEvaluatorConfig
-    system_prompt: Template | None = None
+    system_prompt: Optional[Template] = None
     user_prompt: Template
     evaluable_name: str = "Evaluable"
 

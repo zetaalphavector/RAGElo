@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 import re
-from typing import Any, Type
+from typing import Any, Optional, Type
 
 from jinja2 import Template
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -31,26 +33,26 @@ class BaseConfig(BaseModel):
 
 class BaseEvaluatorConfig(BaseConfig):
     model_config = ConfigDict(arbitrary_types_allowed=True)
-    evaluator_name: str | AnswerEvaluatorTypes | None = Field(
+    evaluator_name: Optional[str | AnswerEvaluatorTypes] = Field(
         default=None,
         description="The name of the evaluator to use.",
     )
-    llm_response_schema: Type[BaseModel] | dict[str, Any] | None = Field(
+    llm_response_schema: Optional[Type[BaseModel] | dict[str, Any]] = Field(
         default=None,
         description="The response schema for the LLM. If set, should be a json schema or a Pydantic BaseModel (not an instance). Otherwise, the answer will be returned as a string.",
     )
-    system_prompt: Template | None = Field(
+    system_prompt: Optional[Template] = Field(
         default=None,
         description="The system prompt to use for the evaluator.",
     )
 
-    user_prompt: Template | None = Field(
+    user_prompt: Optional[Template] = Field(
         default=None,
         description="The user prompt to use for the evaluator. Should contain at least a {{ query.query }} placeholder for the query's text.",
     )
 
     @field_validator("system_prompt", "user_prompt", mode="before")
-    def check_system_prompt_and_user_prompt(cls, v: str | Template | None) -> Template | None:
+    def check_system_prompt_and_user_prompt(cls, v: Optional[str | Template]) -> Optional[Template]:
         if isinstance(v, str):
             return string_to_template(v)
         return v

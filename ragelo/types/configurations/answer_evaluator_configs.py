@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 import re
-from typing import Any, Callable, Type
+from typing import Any, Callable, Optional, Type
 
 from jinja2 import Template
 from pydantic import BaseModel, Field, field_validator
@@ -24,20 +26,20 @@ class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
         default=False,
         description="Whether or not to include the raw documents in the prompt",
     )
-    factors: str | None = Field(
+    factors: Optional[str] = Field(
         default=(
             "the correctness, helpfulness, completeness, accuracy, depth, and level of detail of their responses"
         ),
         description=("A string containing the factors to be used when evaluating an answer. "),
     )
-    document_filter: Callable[[Document], bool] | None = Field(
+    document_filter: Optional[Callable[[Document], bool]] = Field(
         default=None,
         description=(
             "A function to filter the documents. "
             "It should take a Document object and return a boolean indicating whether the document should be included in the prompt."
         ),
     )
-    document_relevance_threshold: int | None = Field(
+    document_relevance_threshold: Optional[int] = Field(
         default=None,
         description=(
             "The minimum relevance score for a document to be included in the prompt. "
@@ -53,7 +55,7 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     bidirectional: bool = Field(default=True, description="Whether or not to run each game in both directions")
     n_games_per_query: int = Field(default=100, description="Maximum number of games to generate for each query")
     pairwise: bool = Field(default=True, description="Whether or not to the evaluator is pairwise")
-    llm_response_schema: Type[BaseModel] | dict[str, Any] | None = Field(
+    llm_response_schema: Optional[Type[BaseModel] | dict[str, Any]] = Field(
         default=PairWiseAnswerAnswerFormat,
         description="The response schema for the LLM.",
     )
@@ -82,7 +84,7 @@ class CustomPairwiseEvaluatorConfig(PairwiseEvaluatorConfig):
 
 class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
     evaluator_name: AnswerEvaluatorTypes = AnswerEvaluatorTypes.CUSTOM_PROMPT
-    system_prompt: Template | None = Field(
+    system_prompt: Optional[Template] = Field(
         default_factory=lambda: Template(
             "You are a helpful assistant tasked with evaluating the correctness of answers."
         ),
@@ -111,7 +113,7 @@ class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
 class PairwiseDomainExpertEvaluatorConfig(PairwiseEvaluatorConfig):
     evaluator_name: AnswerEvaluatorTypes = AnswerEvaluatorTypes.DOMAIN_EXPERT
     expert_in: str = Field(description="What the LLM should mimic being an expert in.")
-    company: str | None = Field(
+    company: Optional[str] = Field(
         default=None,
         description="Name of the company or organization that the user that "
         "submitted the query works for. that the domain belongs to. "

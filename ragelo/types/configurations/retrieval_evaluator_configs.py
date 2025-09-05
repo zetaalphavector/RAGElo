@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 import re
-from typing import Any, Type
+from typing import Any, Optional, Type
 
 from jinja2 import Template
 from pydantic import BaseModel, Field, field_validator
@@ -26,14 +28,14 @@ class FewShotExample(BaseModel):
 
 
 class BaseRetrievalEvaluatorConfig(BaseEvaluatorConfig):
-    user_prompt: Template | None = Field(
+    user_prompt: Optional[Template] = Field(
         default=None,
         description="The user prompt to use for the evaluator. Should contain at least a {{ query.query }} and a {{ document.text }} placeholder for the query and the document text.",
     )
-    llm_response_schema: Type[BaseModel] | dict[str, Any] | None = Field(default=RetrievalAnswerEvaluatorFormat)
+    llm_response_schema: Optional[Type[BaseModel] | dict[str, Any]] = Field(default=RetrievalAnswerEvaluatorFormat)
 
     @field_validator("user_prompt", mode="after")
-    def validate_user_prompt(cls, prompt: Template | None) -> Template | None:
+    def validate_user_prompt(cls, prompt: Optional[Template]) -> Optional[Template]:
         if prompt is None:
             return prompt
         src = getattr(prompt, "_ragelo_source", None)

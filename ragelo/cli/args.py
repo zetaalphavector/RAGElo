@@ -1,5 +1,7 @@
 """Parse arguments for the cli app"""
 
+from __future__ import annotations
+
 import collections.abc
 import inspect
 import sys

@@ -4,6 +4,8 @@ evaluations created by Evaluators.
 For most use cases, this class should be the main entry point to interact with RAGElo.
 """
 
+from __future__ import annotations
+
 import csv
 import json
 import logging

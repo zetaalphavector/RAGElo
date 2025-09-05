@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 import itertools
 import random
-from typing import Any, Callable, Type, get_type_hints
+from typing import Any, Callable, Set, Type, get_type_hints
 
 from tenacity import RetryError
 
@@ -20,7 +22,7 @@ from ragelo.utils import call_async_fn
 class BaseAnswerEvaluator(BaseEvaluator):
     config: BaseAnswerEvaluatorConfig
     evaluable_name: str = "Agent Answer"
-    _warned_queries: set[str] = set()
+    _warned_queries: Set[str] = set()
 
     def evaluate(
         self,
