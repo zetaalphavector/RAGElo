@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field, create_model
 
 from ragelo.evaluators.answer_evaluators.base_answer_evaluator import AnswerEvaluatorFactory
 from ragelo.evaluators.answer_evaluators.pairwise_evaluator import PairwiseAnswerEvaluator
-from ragelo.types.answer_formats import Criterion, CriterionEvaluation, RubricPairwiseAnswerAnswerFormat
+from ragelo.types.answer_formats import Criterion, CriterionEvaluation, RubricAnswerFormat
 from ragelo.types.configurations import RubricPairwiseEvaluatorConfig
 from ragelo.types.evaluables import Document, PairwiseGame
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
@@ -148,7 +148,7 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
             else:
                 equally_bad += 1
 
-        parsed_answer = RubricPairwiseAnswerAnswerFormat(
+        parsed_answer = RubricAnswerFormat(
             criteria=criteria,
             agent_a_wins=agent_a_wins,
             agent_b_wins=agent_b_wins,

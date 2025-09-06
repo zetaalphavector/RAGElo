@@ -57,3 +57,30 @@ class RDNAMMultipleAnnotatorsAnswerNoAspects(BaseModel):
     annotator_3: RDNAMAnswerNoAspects
     annotator_4: RDNAMAnswerNoAspects
     annotator_5: RDNAMAnswerNoAspects
+
+
+class Criterion(BaseModel):
+    criterion_name: str = Field(
+        description="The name of the criterion to be used to evaluate the quality of the responses."
+    )
+    supporting_documents: list[str] = Field(
+        description="The list of documents IDs that support the criterion. If no documents support the criterion, leave this list empty."
+    )
+    short_question: str = Field(
+        description="A short, yes/no question that can be used to evaluate the quality of the responses."
+    )
+
+
+class CriterionEvaluation(BaseModel):
+    criterion: Criterion = Field(..., description="The criterion used for evaluating the answer quality")
+    reasoning: str = Field(..., description="The LLM reasoning for the winner of the criteria")
+    winner: Literal["A", "B", "C"] = Field(..., description="The winner of the criteria")
+
+
+class RubricAnswerFormat(BaseModel):
+    criteria: list[CriterionEvaluation] = Field(..., description="The criteria used for evaluating the answer quality")
+    agent_a_wins: int = Field(..., description="The number of criteria that agent A wins")
+    agent_b_wins: int = Field(..., description="The number of criteria that agent B wins")
+    equally_good: int = Field(..., description="The number of criteria that agent A and agent B are equally good")
+    equally_bad: int = Field(..., description="The number of criteria that agent A and agent B are equally bad")
+    winner: Literal["A", "B", "C"] = Field(..., description="The winner of the pairwise comparison")
