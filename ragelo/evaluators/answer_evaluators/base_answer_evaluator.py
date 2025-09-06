@@ -4,6 +4,7 @@ import itertools
 import random
 from typing import Any, Callable, Set, Type, get_type_hints
 
+from pydantic import BaseModel
 from tenacity import RetryError
 
 from ragelo.evaluators.base_evaluator import BaseEvaluator
@@ -288,6 +289,13 @@ class BaseAnswerEvaluator(BaseEvaluator):
                     continue
                 # check if evaluation.answer is an integer or a string that can be converted to an integer
                 score = d.evaluation.answer
+                if isinstance(d.evaluation.answer, dict):
+                    score = d.evaluation.answer["score"]
+                elif isinstance(d.evaluation.answer, BaseModel):
+                    score = d.evaluation.answer.score  # type: ignore
+                else:
+                    score = d.evaluation.answer
+
                 if isinstance(score, str) and score.isdigit():
                     score = int(score)
                 if not isinstance(score, (int, float)):

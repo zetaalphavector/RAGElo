@@ -61,7 +61,7 @@ class OllamaProvider(BaseLLMProvider):
         if not messages:
             raise ValueError("No input provided")
 
-        call_kwargs["messages"] = messages
+        call_kwargs["messages"] = messages  # type: ignore
         if isinstance(response_schema, type(BaseModel)):
             raise NotImplementedError("Structured answer format is not supported on Ollama.")
         if isinstance(response_schema, dict):
@@ -69,7 +69,7 @@ class OllamaProvider(BaseLLMProvider):
             messages[-1]["content"] += (
                 f"\n\nYour output should be a JSON string that STRICTLY adheres to the following schema:\n{schema}"
             )
-            call_kwargs["response_format"] = {"type": "json_object"}
+            call_kwargs["response_format"] = {"type": "json_object"}  # type: ignore
         answers = await self.__ollama_client.chat.completions.create(**call_kwargs)  # type: ignore
 
         if not answers.choices or not answers.choices[0].message or not answers.choices[0].message.content:

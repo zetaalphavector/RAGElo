@@ -107,28 +107,22 @@ class RDNAMEvaluator(BaseRetrievalEvaluator):
                 )
             )
             if self.config.use_aspects:
-                intent_match = float(
-                    np.mean(
-                        [
-                            parsed.annotator_1.intent_match,
-                            parsed.annotator_2.intent_match,
-                            parsed.annotator_3.intent_match,
-                            parsed.annotator_4.intent_match,
-                            parsed.annotator_5.intent_match,
-                        ]
-                    )
-                )
-                trustworthiness = float(
-                    np.mean(
-                        [
-                            parsed.annotator_1.trustworthiness,
-                            parsed.annotator_2.trustworthiness,
-                            parsed.annotator_3.trustworthiness,
-                            parsed.annotator_4.trustworthiness,
-                            parsed.annotator_5.trustworthiness,
-                        ]
-                    )
-                )
+                trustworthiness = [
+                    parsed.annotator_1.trustworthiness,
+                    parsed.annotator_2.trustworthiness,
+                    parsed.annotator_3.trustworthiness,
+                    parsed.annotator_4.trustworthiness,
+                    parsed.annotator_5.trustworthiness,
+                ]
+                intent_match = [
+                    parsed.annotator_1.intent_match,
+                    parsed.annotator_2.intent_match,
+                    parsed.annotator_3.intent_match,
+                    parsed.annotator_4.intent_match,
+                    parsed.annotator_5.intent_match,
+                ]
+                intent_match = float(np.mean(intent_match))  # type: ignore
+                trustworthiness = float(np.mean(trustworthiness))  # type: ignore
             else:
                 intent_match = None
                 trustworthiness = None
@@ -137,8 +131,8 @@ class RDNAMEvaluator(BaseRetrievalEvaluator):
             overall = parsed.overall
             if self.config.use_aspects:
                 assert isinstance(parsed, RDNAMAnswerEvaluatorFormat)
-                intent_match = parsed.intent_match
-                trustworthiness = parsed.trustworthiness
+                intent_match = parsed.intent_match  # type: ignore
+                trustworthiness = parsed.trustworthiness  # type: ignore
             else:
                 intent_match = None
                 trustworthiness = None
