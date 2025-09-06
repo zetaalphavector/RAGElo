@@ -160,7 +160,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 input=prompt,
                 response_schema=self.config.llm_response_schema,
             )
-            llm_response = self._process_answer(llm_response)
+            llm_response = self._process_answer(llm_response, query)
         except ValueError as e:
             logger.warning(
                 f"Failed to PARSE answer for qid: {query.qid} agent(s): {agent}\nRaw answer: {llm_response.raw_answer}"
