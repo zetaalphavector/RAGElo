@@ -4,6 +4,8 @@ import json
 from typing import Any, Type
 
 from openai import AsyncAzureOpenAI, AsyncOpenAI
+from openai.types.responses import ResponseTextConfigParam
+from openai.types.shared_params import ResponseFormatJSONObject
 from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, wait_random_exponential
 
@@ -23,8 +25,10 @@ class OpenAIProvider(BaseLLMProvider):
     def __init__(self, config: OpenAIConfiguration) -> None:
         super().__init__(config)
         self.__openai_client = self.__get_openai_client(config)
+        if self.config.model.startswith("gpt-5") or self.config.model.startswith("o"):
+            self.config.temperature = None
 
-    @retry(wait=wait_random_exponential(min=1, max=120), stop=stop_after_attempt(5))
+    @retry(wait=wait_random_exponential(min=1, max=120), stop=stop_after_attempt(1))
     async def call_async(
         self,
         input: LLMInputPrompt,
@@ -77,7 +81,7 @@ class OpenAIProvider(BaseLLMProvider):
                 model=self.config.model,
                 temperature=self.config.temperature,
                 max_output_tokens=self.config.max_tokens,
-                text=llm_text,
+                text=ResponseTextConfigParam(format=ResponseFormatJSONObject(type="json_object")),
             )
             raw_answer = answers.output_text
             try:

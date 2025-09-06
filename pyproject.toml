@@ -26,7 +26,7 @@ classifiers = [
 ]
 dependencies = [
     "openai>=1.78.0",
-    "tenacity==9.0.0",
+    "tenacity<9.0.0",
     "typer>=0.16.0",
     "numpy>=1.24",
     "pydantic>=2.0",
@@ -62,7 +62,7 @@ exclude = ["data*"]
 
 [tool.mypy]
 plugins = ["pydantic.mypy"]
-python_version = "3.12"
+python_version = "3.13"
 show_column_numbers = true
 namespace_packages = true
 follow_imports = "silent"
