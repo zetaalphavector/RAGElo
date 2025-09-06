@@ -126,7 +126,7 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
         )
         return LLMInputPrompt(system_prompt=system_prompt, user_message=user_prompt)
 
-    def _process_answer(self, llm_response: LLMResponseType, query: Query | None = None) -> LLMResponseType:
+    def _process_answer(self, llm_response: LLMResponseType, query: Query) -> LLMResponseType:
         response_dict = llm_response.parsed_answer.model_dump()
         agent_a_wins = 0
         agent_b_wins = 0

@@ -102,7 +102,7 @@ class BaseEvaluator(ABC):
     def _get_tuples_to_evaluate(self, queries: Experiment) -> Sequence[tuple[Query, Evaluable]]:
         raise NotImplementedError
 
-    def _process_answer(self, llm_response: LLMResponseType, query: Query | None = None) -> LLMResponseType:
+    def _process_answer(self, llm_response: LLMResponseType, query: Query) -> LLMResponseType:
         """Processes the raw answer returned by the LLM. Should be implemented by the subclass if needed."""
         return llm_response
 

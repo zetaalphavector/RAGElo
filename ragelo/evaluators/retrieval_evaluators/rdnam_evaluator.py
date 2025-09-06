@@ -88,7 +88,7 @@ class RDNAMEvaluator(BaseRetrievalEvaluator):
             user_message=self.user_prompt.render(**context),
         )
 
-    def _process_answer(self, llm_response: LLMResponseType, query: Query | None = None) -> LLMResponseType:
+    def _process_answer(self, llm_response: LLMResponseType, query: Query) -> LLMResponseType:
         parsed = llm_response.parsed_answer
         assert isinstance(self.config.llm_response_schema, type(BaseModel))
         assert isinstance(parsed, self.config.llm_response_schema)
