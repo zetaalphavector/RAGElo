@@ -24,7 +24,7 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
         You are a domain expert in {{ expert_in }}.{% if company %} You work for {{ company }}.{% endif %}
         Your task is to, given a user question and a set of relevant retrieved documents, create a rubric for evaluating the quality of reports generated written by other agents.
         You should think deeply and carefully about what questions should a complete and high-quality report that answer the question should answer. 
-        Each criterion should be a short yes/no question that can be used to evaluate the quality of the responses. You should write 5 criteria.
+        Each criterion should be a short yes/no question that can be used to evaluate the quality of the responses. You should write {{ n_criteria }} criteria.
         If a criterion is supported by a document, you should include the document ID in the supporting_documents list.
         """)
 
@@ -85,6 +85,7 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
             "company": self.config.company,
             "documents": documents,
             "query": query,
+            "n_criteria": self.config.n_criteria,
         }
         criteria_prompt = self.criteria_prompt.render(context)
         user_prompt = self.criteria_user_prompt.render(context)
@@ -147,14 +148,14 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
                 equally_good += 1
             else:
                 equally_bad += 1
-
+        winner = "A" if agent_a_wins > agent_b_wins else "B" if agent_a_wins < agent_b_wins else "C"
         parsed_answer = RubricAnswerFormat(
             criteria=criteria,
             agent_a_wins=agent_a_wins,
             agent_b_wins=agent_b_wins,
             equally_good=equally_good,
             equally_bad=equally_bad,
-            winner="A" if agent_a_wins > agent_b_wins else "B" if agent_a_wins < agent_b_wins else "C",
+            winner=winner,
         )
 
         return LLMResponseType(
