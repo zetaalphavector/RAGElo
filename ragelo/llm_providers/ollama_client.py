@@ -63,26 +63,32 @@ class OllamaProvider(BaseLLMProvider):
 
         call_kwargs["messages"] = messages  # type: ignore
         if isinstance(response_schema, type(BaseModel)):
-            raise NotImplementedError("Structured answer format is not supported on Ollama.")
-        if isinstance(response_schema, dict):
+            call_kwargs["response_format"] = response_schema
+            answers = await self.__ollama_client.chat.completions.parse(**call_kwargs)
+            if not answers.choices or not answers.choices[0].message or not answers.choices[0].message.content:
+                raise ValueError("Ollama did not return any completions.")
+            parsed_answer = answers.choices[0].message.parsed
+            raw_answer = answers.choices[0].message.content
+        elif isinstance(response_schema, dict):
             schema = json.dumps(response_schema, indent=4)
             messages[-1]["content"] += (
                 f"\n\nYour output should be a JSON string that STRICTLY adheres to the following schema:\n{schema}"
             )
             call_kwargs["response_format"] = {"type": "json_object"}  # type: ignore
-        answers = await self.__ollama_client.chat.completions.create(**call_kwargs)  # type: ignore
-
-        if not answers.choices or not answers.choices[0].message or not answers.choices[0].message.content:
-            raise ValueError("Ollama did not return any completions.")
-
-        if isinstance(response_schema, dict):
-            return LLMResponseType(
-                raw_answer=answers.choices[0].message.content,
-                parsed_answer=json.loads(answers.choices[0].message.content),
-            )
+            answers = await self.__ollama_client.chat.completions.create(**call_kwargs)  # type: ignore
+            if not answers.choices or not answers.choices[0].message or not answers.choices[0].message.content:
+                raise ValueError("Ollama did not return any completions.")
+            parsed_answer = json.loads(answers.choices[0].message.content)
+            raw_answer = answers.choices[0].message.content
+        else:
+            answers = await self.__ollama_client.chat.completions.create(**call_kwargs)  # type: ignore
+            parsed_answer = answers.choices[0].message.content
+            raw_answer = answers.choices[0].message.content
+            if not answers.choices or not answers.choices[0].message or not answers.choices[0].message.content:
+                raise ValueError("Ollama did not return any completions.")
         return LLMResponseType(
-            raw_answer=answers.choices[0].message.content,
-            parsed_answer=answers.choices[0].message.content,
+            raw_answer=raw_answer,
+            parsed_answer=parsed_answer,
         )
 
     @staticmethod
