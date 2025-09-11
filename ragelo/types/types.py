@@ -35,6 +35,7 @@ class AnswerEvaluatorTypes(StrEnum):
     DOMAIN_EXPERT = "domain_expert"
     CHAT_PAIRWISE = "chat_pairwise"
     RUBRIC_PAIRWISE = "rubric_pairwise"
+    RUBRIC_POINTWISE = "rubric_pointwise"
 
 
 class AgentRankerTypes(StrEnum):

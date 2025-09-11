@@ -84,3 +84,16 @@ class RubricAnswerFormat(BaseModel):
     equally_good: int = Field(..., description="The number of criteria that agent A and agent B are equally good")
     equally_bad: int = Field(..., description="The number of criteria that agent A and agent B are equally bad")
     winner: Literal["A", "B", "C"] = Field(..., description="The winner of the pairwise comparison")
+
+
+class CriterionEvaluationPointwise(BaseModel):
+    criterion: Criterion = Field(..., description="The criterion used for evaluating the answer quality")
+    reasoning: str = Field(..., description="The LLM reasoning for the score of the criterion")
+    fulfillment: bool = Field(..., description="Whether the criterion is fully fulfilled by the answer")
+
+
+class RubricPointwiseAnswerFormat(BaseModel):
+    criteria: list[CriterionEvaluationPointwise] = Field(
+        ..., description="The criteria used for evaluating the answer quality"
+    )
+    average_score: float = Field(..., description="The average score of the criteria")

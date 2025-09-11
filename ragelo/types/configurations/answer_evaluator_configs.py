@@ -6,7 +6,7 @@ from typing import Any, Callable, Optional, Type
 from jinja2 import Template
 from pydantic import BaseModel, Field, field_validator
 
-from ragelo.types.answer_formats import PairWiseAnswerAnswerFormat, RubricAnswerFormat
+from ragelo.types.answer_formats import PairWiseAnswerAnswerFormat, RubricAnswerFormat, RubricPointwiseAnswerFormat
 from ragelo.types.configurations.base_configs import BaseEvaluatorConfig
 from ragelo.types.evaluables import Document
 from ragelo.types.types import AnswerEvaluatorTypes
@@ -127,4 +127,14 @@ class RubricPairwiseEvaluatorConfig(PairwiseDomainExpertEvaluatorConfig):
         default=RubricAnswerFormat,
         description="The response schema for the LLM.",
     )
+    n_criteria: int = Field(default=5, description="The number of criteria to use for the evaluator.")
+
+
+class RubricPointwiseEvaluatorConfig(PairwiseDomainExpertEvaluatorConfig):
+    evaluator_name: AnswerEvaluatorTypes = AnswerEvaluatorTypes.RUBRIC_POINTWISE
+    llm_response_schema: Optional[Type[BaseModel] | dict[str, Any]] = Field(
+        default=RubricPointwiseAnswerFormat,
+        description="The response schema for the LLM.",
+    )
+    pairwise: bool = False
     n_criteria: int = Field(default=5, description="The number of criteria to use for the evaluator.")
