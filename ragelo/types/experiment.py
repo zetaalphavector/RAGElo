@@ -238,7 +238,7 @@ class Experiment:
                 Defaults to False.
         """
         for doc in docs:
-            self.add_retrieved_doc(doc, force, exist_ok)
+            self.add_retrieved_doc(doc, force=force, exist_ok=exist_ok)
 
     def add_retrieved_doc(
         self,
