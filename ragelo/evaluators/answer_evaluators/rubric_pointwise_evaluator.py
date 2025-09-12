@@ -108,7 +108,6 @@ class RubricPointwiseEvaluator(BaseAnswerEvaluator):
         return llm_response.parsed_answer
 
     def _build_message(self, query: Query, answer: AgentAnswer) -> LLMInputPrompt:
-        documents = self._filter_documents(query)
         if query.qid not in self.criteria_cache:
             self.criteria_cache[query.qid] = call_async_fn(
                 self._build_criteria, query, list(query.retrieved_docs.values())

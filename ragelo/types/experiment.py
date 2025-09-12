@@ -192,6 +192,7 @@ class Experiment:
         query_id: str | None = None,
         metadata: dict | None = None,
         force: bool = False,
+        exist_ok: bool = False,
     ) -> str:
         """
         Adds a query to the collection of queries.
@@ -201,6 +202,7 @@ class Experiment:
                 If not provided, a default ID will be generated.
             metadata (dict | None, optional): Additional metadata for the query. Defaults to None.
             force (bool, optional): Whether to overwrite the query if it already exists. Defaults to False.
+            exist_ok (bool, optional): Whether to raise an error if the query already exists. Defaults to False.
         """
 
         if isinstance(query, Query):
@@ -216,10 +218,15 @@ class Experiment:
             query_obj = Query(qid=query_id, query=query, metadata=metadata)
             query_id = query_obj.qid
         if query_id in self.queries and not force:
-            logger.info(f'Query with ID "{query_id}" already exists. Use force=True to overwrite')
+            if not exist_ok:
+                logger.info(f'Query with ID "{query_id}" already exists. Use force=True to overwrite')
+            else:
+                return query_id
             return query_id
         if query_id in self.queries and force:
             logger.info(f'Query with ID "{query_id}" already exists, but force was set to True. Overwriting.')
+        if query_id in self.queries and exist_ok:
+            return query_id
         self.queries[query_id] = query_obj
         return query_id
 

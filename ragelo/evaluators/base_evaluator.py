@@ -50,6 +50,51 @@ class BaseEvaluator(ABC):
         n_threads = n_threads or self.config.n_processes
         call_async_fn(self._evaluate_experiment_async, experiment, n_threads)
 
+    def evaluate_all_evaluables(self, query: Query, n_threads: int | None = None):
+        """Evaluate all evaluables for a given query"""
+        n_threads = n_threads or self.config.n_processes
+        call_async_fn(self._evaluate_all_evaluables_async, query, n_threads)
+
+    async def _evaluate_all_evaluables_async(self, query: Query, n_threads: int):
+        tuples_to_eval = [(query, e) for e in self._get_all_evaluables(query)]
+        pbar = get_pbar(
+            len(tuples_to_eval),
+            self.config.rich_print,
+            desc=f"Evaluating {self.evaluable_name}s for query {query.qid}",
+        )
+        awaitables_ended = False
+        pending: set[asyncio.Future] = set()
+        aws = map(self.evaluate_async, tuples_to_eval)
+        failed = 0
+        evaluations = 0
+        aws = iter(aws)
+        while pending or not awaitables_ended:
+            while len(pending) < n_threads and not awaitables_ended:
+                try:
+                    aw = next(aws)
+                except StopIteration:
+                    awaitables_ended = True
+                else:
+                    pending.add(asyncio.ensure_future(aw))
+            if not pending:
+                break
+            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+            while done:
+                evaluation = await done.pop()
+                evaluations += 1
+                pbar.update()
+                if evaluation.exception:
+                    failed += 1
+                    continue
+                query.add_evaluation(evaluation)
+        if self.config.verbose:
+            self._print_failed_evaluations(evaluations, failed)
+
+    @abstractmethod
+    def _get_all_evaluables(self, query: Query) -> list[Evaluable]:
+        """Returns all evaluables for a given query"""
+        raise NotImplementedError
+
     @abstractmethod
     async def evaluate_async(self, eval_sample: tuple[Query, Evaluable]) -> EvaluatorResult:
         """Evaluate a single query and evaluable asynchronously."""

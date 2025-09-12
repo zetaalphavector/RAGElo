@@ -102,7 +102,10 @@ class Query(BaseModel):
             score float: The score of the document when retrieved.
             agent str: The agent that retrieved the document.
         """
+
+        retrieved_by = doc.retrieved_by
         doc = self.retrieved_docs.get(doc.did, doc.model_copy(deep=True))
+        doc.retrieved_by.update(retrieved_by)
         if agent is not None:
             doc.add_retrieved_by(agent, score, force, exist_ok)
         if doc.did in self.retrieved_docs and not force:

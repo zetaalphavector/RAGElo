@@ -5,7 +5,7 @@ from typing import Any, Type
 
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 from openai.types.responses import ResponseTextConfigParam
-from openai.types.shared_params import ResponseFormatJSONObject
+from openai.types.shared_params import ResponseFormatJSONSchema
 from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, wait_random_exponential
 
@@ -68,20 +68,15 @@ class OpenAIProvider(BaseLLMProvider):
             parsed_answer = answers.output_parsed
             raw_answer = answers.output_text
         elif isinstance(response_schema, dict):
-            llm_text = {
-                "format": {
-                    "type": "json_schema",
-                    "schema": response_schema,
-                    "strict": True,
-                }
-            }
             answers = await self.__openai_client.responses.create(
                 input=llm_input,  # type: ignore
                 instructions=instructions,
                 model=self.config.model,
                 temperature=self.config.temperature,
                 max_output_tokens=self.config.max_tokens,
-                text=ResponseTextConfigParam(format=ResponseFormatJSONObject(type="json_object")),
+                text=ResponseTextConfigParam(
+                    format=ResponseFormatJSONSchema(json_schema=response_schema, type="json_schema")
+                ),
             )
             raw_answer = answers.output_text
             try:
