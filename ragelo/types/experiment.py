@@ -223,6 +223,23 @@ class Experiment:
         self.queries[query_id] = query_obj
         return query_id
 
+    def add_retrieved_docs(
+        self,
+        docs: list[Document | str],
+        force: bool = False,
+        exist_ok: bool = False,
+    ):
+        """
+        Adds a list of retrieved documents to a query.
+        Args:
+            docs (list[Document | str]): The documents to be added.
+            force (bool): Whether to overwrite the documents if they already exist.
+            exist_ok (bool): If True, will not raise an error if the documents already exist.
+                Defaults to False.
+        """
+        for doc in docs:
+            self.add_retrieved_doc(doc, force, exist_ok)
+
     def add_retrieved_doc(
         self,
         doc: Document | str,

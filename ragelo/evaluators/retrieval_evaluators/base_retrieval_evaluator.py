@@ -4,6 +4,7 @@ and returns a score or a label for each document."""
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Callable, Type, get_type_hints
 
 from tenacity import RetryError
@@ -18,7 +19,7 @@ from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.query import Query
 from ragelo.types.results import RetrievalEvaluatorResult
 from ragelo.types.types import RetrievalEvaluatorTypes
-from ragelo.utils import call_async_fn
+from ragelo.utils import call_async_fn, get_pbar
 
 
 class BaseRetrievalEvaluator(BaseEvaluator):
@@ -31,6 +32,40 @@ class BaseRetrievalEvaluator(BaseEvaluator):
 
     def __init__(self, config: BaseRetrievalEvaluatorConfig, llm_provider: BaseLLMProvider):
         super().__init__(config, llm_provider)
+
+    def evaluate_all_documents(self, query: Query, n_threads: int | None = None):
+        """Evaluates all documents for a given query"""
+        n_threads = n_threads or self.config.n_processes
+        call_async_fn(self._evaluate_all_documents_async, query, n_threads)
+
+    async def _evaluate_all_documents_async(self, query: Query, n_threads: int):
+        tuples_to_eval = ((query, d) for d in query.retrieved_docs.values())
+        pbar = get_pbar(
+            len(tuples_to_eval),
+            self.config.rich_print,
+            desc=f"Evaluating {self.evaluable_name}s for query {query.qid}",
+        )
+        awaitables_ended = False
+        pending: set[asyncio.Future] = set()
+        aws = map(self.evaluate_async, tuples_to_eval)
+        aws = iter(aws)
+        while pending or not awaitables_ended:
+            while len(pending) < n_threads and not awaitables_ended:
+                try:
+                    aw = next(aws)
+                except StopIteration:
+                    awaitables_ended = True
+                else:
+                    pending.add(asyncio.ensure_future(aw))
+            if not pending:
+                break
+            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+            while done:
+                evaluation = await done.pop()
+                pbar.update()
+                if evaluation.exception:
+                    continue
+                query.add_evaluation(evaluation)
 
     def evaluate(
         self,
