@@ -123,9 +123,10 @@ class RubricPointwiseEvaluator(BaseAnswerEvaluator):
     def _process_answer(self, llm_response: LLMResponseType, query: Query) -> LLMResponseType:
         response_dict = llm_response.parsed_answer.model_dump()
         criteria: list[CriterionEvaluationPointwise] = []
-        for response in response_dict.values():
+        for crit, response in response_dict.items():
+            crit_obj = [x for x in self.criteria_cache[query.qid].criteria if x.criterion_name == crit][0]
             criterion = CriterionEvaluationPointwise(
-                criterion=self.criteria_cache[query.qid],
+                criterion=crit_obj,
                 reasoning=response["reasoning"],
                 fulfillment=response["fulfillment"],
             )

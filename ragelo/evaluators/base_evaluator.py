@@ -86,7 +86,7 @@ class BaseEvaluator(ABC):
                 if evaluation.exception:
                     failed += 1
                     continue
-                query.add_evaluation(evaluation)
+                query.add_evaluation(evaluation, exist_ok=True)
         if self.config.verbose:
             self._print_failed_evaluations(evaluations, failed)
 
