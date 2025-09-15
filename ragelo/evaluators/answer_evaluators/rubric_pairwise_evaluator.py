@@ -137,9 +137,12 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
         equally_bad = 0
         criteria: list[CriterionEvaluation] = []
 
-        for response in response_dict.values():
+        for crit, response in response_dict.items():
+            crit_obj = [x for x in self.criteria_cache[query.qid].criteria if x.criterion_name == crit][0]
+            if response["winner"] == "D":
+                response["winner"] = "C"
             criterion = CriterionEvaluation(
-                criterion=self.criteria_cache[query.qid],
+                criterion=crit_obj,
                 reasoning=response["reasoning"],
                 winner=response["winner"],
             )
