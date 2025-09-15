@@ -1,4 +1,4 @@
-from typing import Type
+from typing import Literal, Type
 
 from pydantic import BaseModel, Field, create_model
 
@@ -102,7 +102,7 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
                     Field(description="A brief explanation about your judgement, and why you chose the winner"),
                 ),
                 winner=(
-                    str,
+                    Literal["A", "B", "C", "D"],
                     Field(description="The winner of the criterion"),
                 ),
             )
@@ -139,6 +139,8 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
 
         for crit, response in response_dict.items():
             crit_obj = [x for x in self.criteria_cache[query.qid].criteria if x.criterion_name == crit][0]
+            if len(response["winner"]) > 1:
+                response["winner"] = response["winner"][-1]
             if response["winner"] == "D":
                 response["winner"] = "C"
             criterion = CriterionEvaluation(
