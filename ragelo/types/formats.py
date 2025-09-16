@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Type
 
 from pydantic import BaseModel, model_validator
 
@@ -11,6 +11,7 @@ class LLMInputPrompt(BaseModel):
     system_prompt: str | None = None
     user_message: str | None = None
     messages: list[dict[str, str]] | None = None
+    llm_response_schema: Type[BaseModel] | dict[str, Any] | None = None
 
     @model_validator(mode="after")
     def check_at_least_one_is_set(self) -> "LLMInputPrompt":

@@ -5,13 +5,14 @@ import random
 from typing import Any, Awaitable, Callable, Optional
 
 import numpy as np
+from tqdm.auto import tqdm
 
 from ragelo.agent_rankers.base_agent_ranker import AgentRanker, AgentRankerFactory
 from ragelo.evaluators.answer_evaluators import BaseAnswerEvaluator
 from ragelo.evaluators.retrieval_evaluators import BaseRetrievalEvaluator
 from ragelo.logger import logger
 from ragelo.types.configurations import EloAgentRankerConfig
-from ragelo.types.evaluables import AgentAnswer, Document
+from ragelo.types.evaluables import AgentAnswer, Document, PairwiseGame
 from ragelo.types.experiment import Experiment
 from ragelo.types.query import Query
 from ragelo.types.results import AnswerEvaluatorResult, EloTournamentResult
@@ -136,17 +137,17 @@ class EloRanker(AgentRanker):
             retrieval_evaluator.evaluate_all_evaluables(query, n_threads=10)
             if experiment:
                 experiment.save()
-        evaluation_a_b = answer_evaluator.evaluate(query, answer_a=answer_a, answer_b=answer_b)
-        evaluation_b_a = answer_evaluator.evaluate(query, answer_a=answer_b, answer_b=answer_a)
-
-        winner_a_b = evaluation_a_b.answer.winner
-        winner_b_a = evaluation_b_a.answer.winner
-        if winner_a_b == "A" and winner_b_a == "B":
-            winner = "A"
-        elif winner_a_b == "B" and winner_b_a == "A":
-            winner = "B"
-        else:
-            winner = "C"
+        evaluation = await answer_evaluator.evaluate_async(
+            (
+                query,
+                PairwiseGame(
+                    qid=query.qid,
+                    agent_a_answer=answer_a,
+                    agent_b_answer=answer_b,
+                ),
+            )
+        )
+        winner = evaluation.answer.winner
         score_val = self.score_map[winner]
         # update dictionaries and rankings
         if winner == "A":
@@ -160,7 +161,7 @@ class EloRanker(AgentRanker):
             self.ties[agent_b] = self.ties.get(agent_b, 0) + 1
         self.games.append((query.qid, agent_a, agent_b, winner))
         self.update_rankings(agent_a, agent_b, score_val)
-        return evaluation_a_b, evaluation_b_a
+        return evaluation
 
     def update_rankings(self, agent_a: str, agent_b: str, score_val: float) -> tuple[int, int]:
         agent_a_rating = self.agents_scores.get(agent_a, self.initial_score)
@@ -226,7 +227,7 @@ class EloRanker(AgentRanker):
         answer_evaluator: BaseAnswerEvaluator,
         retrieval_evaluator: Optional[object] = None,
         agent_callable: Optional[Callable[[str, str], Awaitable[tuple[str, list[Any]]]]] = None,
-    ) -> float:
+    ) -> EloTournamentResult:
         """Estimate Elo for a brand-new agent with minimal games.
 
         Strategy:
@@ -237,10 +238,11 @@ class EloRanker(AgentRanker):
           the new agent's observed score is sufficiently tight or when max game budget is reached.
         """
         assert answer_evaluator.config.pairwise, "Answer evaluator must be pairwise"
-        if agent_callable is None:
-            raise ValueError("agent_callable must be provided to generate answers and documents for the new agent")
+        # if agent_callable is None:
+        # raise ValueError("agent_callable must be provided to generate answers and documents for the new agent")
 
         # Ensure internal state for the new agent exists
+        logger.info(f"Adding new agent: {new_agent}")
         if new_agent not in self.agents_scores:
             self.add_new_agent(new_agent)
 
@@ -255,7 +257,13 @@ class EloRanker(AgentRanker):
         if len(existing_agents) == 0:
             if self.config.verbose:
                 logger.info("No existing agents found. Returning initial score for the new agent.")
-            return float(self.agents_scores.get(new_agent, self.initial_score))
+            return EloTournamentResult(
+                agents=[new_agent],
+                scores={new_agent: float(self.agents_scores.get(new_agent, self.initial_score))},
+                games_played={new_agent: 0},
+                wins={new_agent: 0},
+                loses={new_agent: 0},
+            )
 
         # Prepare evaluations summary to score questions by entropy (if any exist)
         self.evaluations = self._flatten_evaluations(experiment)
@@ -314,6 +322,7 @@ class EloRanker(AgentRanker):
         played_pairs: set[tuple[str, str]] = set()
 
         # Main loop: pick next opponent and next informative query
+        pbar = tqdm(total=max_games_budget, desc=f"Playing games for {new_agent}", leave=False, ncols=120)
         while observed_games < max_games_budget and len(selected_opponents) > 0:
             progressed = False
             for opp in list(selected_opponents):
@@ -360,7 +369,7 @@ class EloRanker(AgentRanker):
                     wins_before = self.wins.get(new_agent, 0)
                     ties_before = self.ties.get(new_agent, 0)
                     try:
-                        eval_ab, _ = await self.run_single_game(
+                        evaluation = await self.run_single_game(
                             query=query,
                             agent_a=new_agent,
                             agent_b=opp,
@@ -370,13 +379,14 @@ class EloRanker(AgentRanker):
                         )
                         # Persist at least one orientation for caching
                         try:
-                            experiment.add_evaluation(eval_ab, should_save=True, should_print=False, exist_ok=True)
+                            experiment.add_evaluation(evaluation, should_save=True, should_print=False, exist_ok=True)
                         except Exception:
                             pass
                     except Exception as e:
                         logger.warning(f"Failed to run game on qid={query.qid} between {new_agent} and {opp}: {e}")
+                        pbar.update(1)
                         continue
-
+                    pbar.update(1)
                     # Update success tracking for CI
                     wins_after = self.wins.get(new_agent, 0)
                     ties_after = self.ties.get(new_agent, 0)
@@ -387,10 +397,18 @@ class EloRanker(AgentRanker):
                     played_pairs.add((qid, opp))
                     progressed = True
 
-                    if should_stop():
-                        return float(self.agents_scores.get(new_agent, self.initial_score))
-                    if observed_games >= max_games_budget:
-                        return float(self.agents_scores.get(new_agent, self.initial_score))
+                    if should_stop() or observed_games >= max_games_budget:
+                        return EloTournamentResult(
+                            agents=list(self.agents_scores.keys()),
+                            scores=self.agents_scores,
+                            games_played=self.games_played,
+                            wins=self.wins,
+                            loses=self.losses,
+                            ties=self.ties,
+                            std_dev=self.std_dev,
+                            total_games=self.total_games,
+                            total_tournaments=self.config.tournaments,
+                        )
 
                 # If no more queries left for this opponent, drop it
                 if per_opp_indices[opp] >= len(qids):
@@ -400,5 +418,16 @@ class EloRanker(AgentRanker):
                 # No progress possible (e.g., no queries with opponent answers). Stop.
                 break
 
+        pbar.close()
         # Return the current rating estimate for the new agent
-        return float(self.agents_scores.get(new_agent, self.initial_score))
+        return EloTournamentResult(
+            agents=list(self.agents_scores.keys()),
+            scores=self.agents_scores,
+            games_played=self.games_played,
+            wins=self.wins,
+            loses=self.losses,
+            ties=self.ties,
+            std_dev=self.std_dev,
+            total_games=self.total_games,
+            total_tournaments=self.config.tournaments,
+        )

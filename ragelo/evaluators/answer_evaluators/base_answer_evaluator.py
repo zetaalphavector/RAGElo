@@ -4,7 +4,7 @@ import itertools
 import random
 from typing import Any, Callable, Set, Type, get_type_hints
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from tenacity import RetryError
 
 from ragelo.evaluators.base_evaluator import BaseEvaluator
@@ -114,84 +114,220 @@ class BaseAnswerEvaluator(BaseEvaluator):
             self.__add_pairwise_games(experiment)
         super().evaluate_experiment(experiment, n_threads)
 
+    async def __evaluate_game(self, query: Query, game: PairwiseGame) -> AnswerEvaluatorResult:
+        for g in query.pairwise_games:
+            if (
+                g.agent_a_answer.agent == game.agent_a_answer.agent
+                and g.agent_b_answer.agent == game.agent_b_answer.agent
+                or g.agent_a_answer.agent == game.agent_b_answer.agent
+                and g.agent_b_answer.agent == game.agent_a_answer.agent
+            ):
+                if g.evaluation is not None:
+                    expected_type = self.config.llm_response_schema
+                    if g.evaluation.a_vs_b_result is not None:
+                        a_vs_b_result = AnswerEvaluatorResult.model_validate(g.evaluation.a_vs_b_result)
+                    else:
+                        a_vs_b_result = None
+                    if g.evaluation.b_vs_a_result is not None:
+                        b_vs_a_result = AnswerEvaluatorResult.model_validate(g.evaluation.b_vs_a_result)
+                    else:
+                        b_vs_a_result = None
+                    if isinstance(expected_type, type(BaseModel)):
+                        try:
+                            parsed_answer = expected_type.model_validate(g.evaluation.answer)
+                        except ValidationError as e:
+                            logger.warning(f"Failed to validate answer. Raw answer: {g.evaluation.answer}")
+                            logger.warning(f"Exception: {e}")
+                            parsed_answer = g.evaluation.answer
+                    else:
+                        parsed_answer = g.evaluation.answer
+                    return AnswerEvaluatorResult(
+                        qid=query.qid,
+                        agent_a=g.agent_a_answer.agent,
+                        agent_b=g.agent_b_answer.agent,
+                        raw_answer=g.evaluation.raw_answer,
+                        answer=parsed_answer,
+                        pairwise=True,
+                        a_vs_b_result=a_vs_b_result,
+                        b_vs_a_result=b_vs_a_result,
+                    )
+        sub_game_1 = PairwiseGame(
+            qid=query.qid,
+            agent_a_answer=game.agent_a_answer,
+            agent_b_answer=game.agent_b_answer,
+        )
+        sub_game_2 = PairwiseGame(
+            qid=query.qid,
+            agent_a_answer=game.agent_b_answer,
+            agent_b_answer=game.agent_a_answer,
+        )
+        evaluation_a_b = await self.__evaluate_single_game(query, sub_game_1)
+        evaluation_b_a = await self.__evaluate_single_game(query, sub_game_2)
+        if evaluation_a_b.exception or evaluation_b_a.exception:
+            return evaluation_a_b
+        winner_a_b = evaluation_a_b.answer.winner
+        winner_b_a = evaluation_b_a.answer.winner
+        if winner_a_b == "A" and winner_b_a == "B":
+            winner = "A"
+        elif winner_a_b == "B" and winner_b_a == "A":
+            winner = "B"
+        else:
+            winner = "C"
+        return AnswerEvaluatorResult(
+            qid=query.qid,
+            agent_a=game.agent_a_answer.agent,
+            agent_b=game.agent_b_answer.agent,
+            raw_answer=evaluation_a_b.raw_answer,
+            answer=evaluation_a_b.answer.model_copy(update={"winner": winner}),
+            pairwise=True,
+            exception=evaluation_a_b.exception or evaluation_b_a.exception,
+            a_vs_b_result=evaluation_a_b,
+            b_vs_a_result=evaluation_b_a,
+        )
+
+    async def __evaluate_single_game(self, query: Query, game: PairwiseGame) -> AnswerEvaluatorResult:
+        """
+        Evaluates a pairwise game asynchronously.
+        """
+        if game.evaluation is not None and not self.config.force:
+            expected_type = self.config.llm_response_schema
+            if isinstance(expected_type, type(BaseModel)):
+                try:
+                    parsed_answer = expected_type.model_validate(game.evaluation.answer)
+                except ValidationError as e:
+                    logger.warning(f"Failed to validate answer. Raw answer: {game.evaluation.answer}")
+                    logger.warning(f"Exception: {e}")
+                    parsed_answer = game.evaluation.answer
+            else:
+                parsed_answer = game.evaluation.answer
+            return AnswerEvaluatorResult(
+                qid=query.qid,
+                agent_a=game.agent_a_answer.agent,
+                agent_b=game.agent_b_answer.agent,
+                raw_answer=game.evaluation.raw_answer,
+                answer=parsed_answer,
+                pairwise=True,
+            )
+        prompt = self._build_message_pairwise(query, game)
+        exc = None
+        try:
+            llm_response = await self.llm_provider.call_async(
+                input=prompt,
+                response_schema=prompt.llm_response_schema or self.config.llm_response_schema,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to FETCH answers for qid: {query.qid}")
+            logger.warning(f"agents: {game.agent_a_answer.agent} and {game.agent_b_answer.agent}")
+            if isinstance(e, RetryError):
+                exc = str(e.last_attempt.exception())
+                logger.warning(f"Exception: {repr(exc)}")
+            else:
+                exc = repr(e)
+                logger.warning(f"Exception: {repr(e)}")
+            return AnswerEvaluatorResult(
+                qid=query.qid,
+                agent_a=game.agent_a_answer.agent,
+                agent_b=game.agent_b_answer.agent,
+                raw_answer="",
+                answer=None,
+                pairwise=True,
+                exception=exc,
+            )
+        try:
+            llm_response = self._process_answer(llm_response, query)
+        except Exception as e:
+            logger.warning(f"Failed to PROCESS answer for qid: {query.qid}")
+            logger.warning(f"agents: {game.agent_a_answer.agent} and {game.agent_b_answer.agent}")
+            if isinstance(e, RetryError):
+                exc = str(e.last_attempt.exception())
+            else:
+                exc = repr(e)
+        return AnswerEvaluatorResult(
+            qid=query.qid,
+            agent_a=game.agent_a_answer.agent,
+            agent_b=game.agent_b_answer.agent,
+            raw_answer=llm_response.raw_answer,
+            answer=llm_response.parsed_answer,
+            pairwise=True,
+            exception=exc,
+        )
+
+    async def __evaluate_answer(self, query: Query, answer: AgentAnswer) -> AnswerEvaluatorResult:
+        """
+        Evaluates an answer asynchronously.
+        """
+        if answer.evaluation is not None and not self.config.force:
+            expected_type = self.config.llm_response_schema
+            if isinstance(expected_type, type(BaseModel)):
+                try:
+                    parsed_answer = expected_type.model_validate(answer.evaluation.answer)
+                except ValidationError as e:
+                    logger.warning(f"Failed to validate answer. Raw answer: {answer.evaluation.answer}")
+                    logger.warning(f"Exception: {e}")
+                    parsed_answer = answer.evaluation.answer
+            else:
+                parsed_answer = answer.evaluation.answer
+            return AnswerEvaluatorResult(
+                qid=query.qid,
+                agent=answer.agent,
+                raw_answer=answer.evaluation.raw_answer,
+                answer=parsed_answer,
+                pairwise=False,
+            )
+        prompt = self._build_message(query, answer)
+        exc = None
+        try:
+            llm_response = await self.llm_provider.call_async(
+                input=prompt,
+                response_schema=prompt.llm_response_schema or self.config.llm_response_schema,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to FETCH answers for qid: {query.qid}")
+            logger.warning(f"agent: {answer.agent}")
+            if isinstance(e, RetryError):
+                exc = str(e.last_attempt.exception())
+            else:
+                exc = repr(e)
+            return AnswerEvaluatorResult(
+                qid=query.qid,
+                agent=answer.agent,
+                raw_answer="",
+                answer=None,
+                pairwise=False,
+                exception=exc,
+            )
+        try:
+            llm_response = self._process_answer(llm_response, query)
+        except Exception as e:
+            logger.warning(f"Failed to PROCESS answer for qid: {query.qid}")
+            logger.warning(f"agent: {answer.agent}")
+            if isinstance(e, RetryError):
+                exc = str(e.last_attempt.exception())
+            else:
+                exc = repr(e)
+        return AnswerEvaluatorResult(
+            qid=query.qid,
+            agent=answer.agent,
+            raw_answer=llm_response.raw_answer,
+            answer=llm_response.parsed_answer,
+            pairwise=False,
+            exception=exc,
+        )
+
     async def evaluate_async(self, eval_sample: tuple[Query, Evaluable]) -> AnswerEvaluatorResult:
         """
         Evaluates a single sample (either an answer or a pairwise game) asynchronously.
         Args:
             eval_sample (tuple[Query, Evaluable]): The query and evaluable to evaluate.
         """
-        agent: str | tuple[str, str]
         query, evaluable = eval_sample
 
         if not isinstance(evaluable, AgentAnswer) and not isinstance(evaluable, PairwiseGame):
-            type_name = type(evaluable).__name__
-            raise ValueError(f"can't evaluate a {type_name} in an Answer Evaluator")
+            raise ValueError(f"can't evaluate a {type(evaluable).__name__} in an Answer Evaluator")
 
-        if evaluable.evaluation is not None and not self.config.force:
-            if isinstance(evaluable, AgentAnswer):
-                return AnswerEvaluatorResult(
-                    qid=query.qid,
-                    agent=evaluable.agent,
-                    raw_answer=evaluable.evaluation.raw_answer,
-                    answer=evaluable.evaluation.answer,
-                    pairwise=False,
-                )
-            return AnswerEvaluatorResult(
-                qid=query.qid,
-                agent_a=evaluable.agent_a_answer.agent,
-                agent_b=evaluable.agent_b_answer.agent,
-                raw_answer=evaluable.evaluation.raw_answer,
-                answer=evaluable.evaluation.answer,
-                pairwise=True,
-            )
-
-        if isinstance(evaluable, AgentAnswer):
-            agent = evaluable.agent
-            prompt = self._build_message(query, evaluable)
-        elif isinstance(evaluable, PairwiseGame):
-            agent = (evaluable.agent_a_answer.agent, evaluable.agent_b_answer.agent)
-            prompt = self._build_message_pairwise(query, evaluable)
-        else:
-            raise ValueError(f"Unknown evaluable type {type(evaluable)}")
-
-        exc = None
-        try:
-            llm_response = await self.llm_provider.call_async(
-                input=prompt,
-                response_schema=self.config.llm_response_schema,
-            )
-            llm_response = self._process_answer(llm_response, query)
-        except ValueError as e:
-            logger.warning(
-                f"Failed to PARSE answer for qid: {query.qid} agent(s): {agent}\nRaw answer: {llm_response.raw_answer}"
-            )
-            exc = str(e)
-        except Exception as e:
-            logger.warning(f"Failed to FETCH answers for qid: {query.qid}")
-            logger.warning(f"agent(s): {agent}")
-            if isinstance(e, RetryError):
-                exc = str(e.last_attempt.exception())
-            else:
-                exc = str(e)
-        if isinstance(evaluable, AgentAnswer):
-            return AnswerEvaluatorResult(
-                qid=query.qid,
-                agent=evaluable.agent,
-                raw_answer=llm_response.raw_answer,
-                answer=llm_response.parsed_answer,
-                pairwise=False,
-                exception=exc,
-            )
-        assert isinstance(evaluable, PairwiseGame)
-        return AnswerEvaluatorResult(
-            qid=query.qid,
-            agent_a=evaluable.agent_a_answer.agent,
-            agent_b=evaluable.agent_b_answer.agent,
-            raw_answer=llm_response.raw_answer,
-            answer=llm_response.parsed_answer,
-            pairwise=True,
-            exception=exc,
-        )
+        if isinstance(evaluable, PairwiseGame):
+            return await self.__evaluate_game(query, evaluable)
+        return await self.__evaluate_answer(query, evaluable)
 
     def _get_all_evaluables(self, query: Query) -> list[Evaluable]:
         """Returns all evaluables for a given query"""
@@ -226,7 +362,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 f"All {all_tuples} answers are already evaluated.\n"
                 "If you want to re-evaluate them, use the --force flag"
             )
-
+        print(f"Evaluating {missing_evaluations} answers out of {len(tuples_to_eval)}")
         return tuples_to_eval
 
     def _build_message(self, query: Query, answer: AgentAnswer) -> LLMInputPrompt:
@@ -267,8 +403,8 @@ class BaseAnswerEvaluator(BaseEvaluator):
         for query in experiment:
             query_agents = list(query.answers.keys())
             pairs = list(itertools.combinations(query_agents, 2))
-            if self.config.bidirectional:
-                pairs += [(b, a) for a, b in pairs]
+            # if self.config.bidirectional:
+            # pairs += [(b, a) for a, b in pairs]
             random.shuffle(pairs)
 
             # Filter out games that already exist

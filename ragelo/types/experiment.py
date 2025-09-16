@@ -617,7 +617,22 @@ class Experiment:
             output_path = self.save_path
         output_dict: dict[str, Any] = {}
 
-        output_dict["queries"] = {qid: query.model_dump() for qid, query in self.queries.items()}
+        output_dict["queries"] = {}
+        for qid, query in self.queries.items():
+            pairwise_games = []
+            output_dict["queries"][qid] = query.model_dump()
+            for game, game_dict in zip(query.pairwise_games, output_dict["queries"][qid].get("pairwise_games", [])):
+                if game.evaluation is not None:
+                    evaluation = game.evaluation.model_dump()
+                    if game.evaluation.a_vs_b_result is not None:
+                        evaluation["a_vs_b_result"] = game.evaluation.a_vs_b_result.model_dump()
+                    if game.evaluation.b_vs_a_result is not None:
+                        evaluation["b_vs_a_result"] = game.evaluation.b_vs_a_result.model_dump()
+                    game_dict["evaluation"] = evaluation
+                pairwise_games.append(game_dict)
+            output_dict["queries"][qid]["pairwise_games"] = pairwise_games
+
+        # output_dict["queries"] = {qid: query.model_dump() for qid, query in self.queries.items()}
         output_dict["experiment_name"] = self.experiment_name
         output_dict["elo_tournaments"] = [tournament.model_dump() for tournament in self.elo_tournaments]
 
@@ -928,6 +943,10 @@ class Experiment:
                 if answer.evaluation is not None and not isinstance(answer.evaluation, AnswerEvaluatorResult):
                     answer_eval_dict = answer.evaluation.model_dump()
                     answer.evaluation = AnswerEvaluatorResult(**answer_eval_dict)
+            for game in q.pairwise_games:
+                if game.evaluation is not None and not isinstance(game.evaluation, AnswerEvaluatorResult):
+                    game_eval_dict = game.evaluation.model_dump()
+                    game.evaluation = AnswerEvaluatorResult(**game_eval_dict)
         if "elo_tournaments" in data:
             self.elo_tournaments = [EloTournamentResult(**t) for t in data["elo_tournaments"]]
         return queries

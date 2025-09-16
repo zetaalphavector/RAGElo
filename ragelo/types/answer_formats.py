@@ -63,8 +63,8 @@ class Criterion(BaseModel):
     criterion_name: str = Field(
         description="The name of the criterion to be used to evaluate the quality of the responses."
     )
-    supporting_documents: list[str] = Field(
-        description="The list of documents IDs that support the criterion. If no documents support the criterion, leave this list empty."
+    evidence: list[str] = Field(
+        description="The list of documents IDs or snippets that support the criterion. If no documents support the criterion, leave this list empty."
     )
     short_question: str = Field(
         description="A short, yes/no question that can be used to evaluate the quality of the responses."
@@ -97,3 +97,7 @@ class RubricPointwiseAnswerFormat(BaseModel):
         ..., description="The criteria used for evaluating the answer quality"
     )
     average_score: float = Field(..., description="The average score of the criteria")
+
+
+class RubricSchema(BaseModel):
+    criteria: list[Criterion] = Field(description="The criteria to be used to evaluate the quality of the responses.")

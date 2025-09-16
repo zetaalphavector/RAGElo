@@ -6,7 +6,12 @@ from typing import Any, Callable, Optional, Type
 from jinja2 import Template
 from pydantic import BaseModel, Field, field_validator
 
-from ragelo.types.answer_formats import PairWiseAnswerAnswerFormat, RubricAnswerFormat, RubricPointwiseAnswerFormat
+from ragelo.types.answer_formats import (
+    Criterion,
+    PairWiseAnswerAnswerFormat,
+    RubricAnswerFormat,
+    RubricPointwiseAnswerFormat,
+)
 from ragelo.types.configurations.base_configs import BaseEvaluatorConfig
 from ragelo.types.evaluables import Document
 from ragelo.types.types import AnswerEvaluatorTypes
@@ -128,6 +133,14 @@ class RubricPairwiseEvaluatorConfig(PairwiseDomainExpertEvaluatorConfig):
         description="The response schema for the LLM.",
     )
     n_criteria: int = Field(default=5, description="The number of criteria to use for the evaluator.")
+    rubrics: Optional[dict[str, list[Criterion]]] = Field(
+        default=None,
+        description=(
+            "The cache of criteria for the evaluator. Maps a query_id to a list of Criterion objects. "
+            "If provided, the evaluator will skip creating the rubric based on the retrieved documents "
+            "and use this instead."
+        ),
+    )
 
 
 class RubricPointwiseEvaluatorConfig(PairwiseDomainExpertEvaluatorConfig):

@@ -202,11 +202,11 @@ class Query(BaseModel):
                             )
                     game.evaluation = evaluation
                     return True
-
-            logger.info(
-                f"Trying to add a pairwise evaluation for a comparison between agents {agent_a} and {agent_b},"
-                f" but no game was found for query {self.qid}. Creating a new game."
-            )
+            if not exist_ok:
+                logger.info(
+                    f"Trying to add a pairwise evaluation for a comparison between agents {agent_a} and {agent_b},"
+                    f" but no game was found for query {self.qid}. Creating a new game."
+                )
             agent_a = evaluation.agent_a
             agent_b = evaluation.agent_b
             if agent_a not in self.answers:

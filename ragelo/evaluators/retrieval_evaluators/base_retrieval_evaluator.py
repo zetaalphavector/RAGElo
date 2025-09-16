@@ -82,7 +82,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         try:
             llm_response = await self.llm_provider.call_async(
                 input=llm_input,
-                response_schema=self.config.llm_response_schema,
+                response_schema=llm_input.llm_response_schema or self.config.llm_response_schema,
             )
             llm_response = self._process_answer(llm_response, query)
         except ValueError as e:

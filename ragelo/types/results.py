@@ -47,6 +47,8 @@ class AnswerEvaluatorResult(EvaluatorResult):
     agent_a: str | None = None
     agent_b: str | None = None
     pairwise: bool = False
+    a_vs_b_result: AnswerEvaluatorResult | None = None
+    b_vs_a_result: AnswerEvaluatorResult | None = None
 
     @model_validator(mode="before")
     @classmethod

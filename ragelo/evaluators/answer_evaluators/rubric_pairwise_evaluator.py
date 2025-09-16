@@ -4,17 +4,13 @@ from pydantic import BaseModel, Field, create_model
 
 from ragelo.evaluators.answer_evaluators.base_answer_evaluator import AnswerEvaluatorFactory
 from ragelo.evaluators.answer_evaluators.pairwise_evaluator import PairwiseAnswerEvaluator
-from ragelo.types.answer_formats import Criterion, CriterionEvaluation, RubricAnswerFormat
+from ragelo.types.answer_formats import CriterionEvaluation, RubricAnswerFormat, RubricSchema
 from ragelo.types.configurations import RubricPairwiseEvaluatorConfig
 from ragelo.types.evaluables import Document, PairwiseGame
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.query import Query
 from ragelo.types.types import AnswerEvaluatorTypes
 from ragelo.utils import call_async_fn, string_to_template
-
-
-class RubricSchema(BaseModel):
-    criteria: list[Criterion] = Field(description="The criteria to be used to evaluate the quality of the responses.")
 
 
 @AnswerEvaluatorFactory.register(AnswerEvaluatorTypes.RUBRIC_PAIRWISE)
@@ -77,49 +73,55 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
             {{ game.agent_b_answer.text }}
         [The End of Agent B's Answer]""")
 
-    criteria_cache: dict[str, Criterion] = {}
+    criteria_cache: dict[str, RubricSchema] = {}
+
     answer_schema_cache: dict[str, Type[BaseModel]] = {}
 
-    async def _build_criteria(self, query: Query, documents: list[Document]) -> RubricSchema:
-        documents = self._filter_documents(query)
-        context = {
-            "expert_in": self.config.expert_in,
-            "company": self.config.company,
-            "documents": documents,
-            "query": query,
-            "n_criteria": self.config.n_criteria,
-        }
-        criteria_prompt = self.criteria_prompt.render(context)
-        user_prompt = self.criteria_user_prompt.render(context)
-        llm_input = LLMInputPrompt(system_prompt=criteria_prompt, user_message=user_prompt)
-        llm_response = await self.llm_provider.call_async(llm_input, response_schema=RubricSchema)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.config.rubrics:
+            self.criteria_cache = {qid: RubricSchema(criteria=rubrics) for qid, rubrics in self.config.rubrics.items()}
+        else:
+            self.criteria_cache = {}
+
+    def _build_evaluation_schema(self, criteria: RubricSchema) -> Type[BaseModel]:
         criteria_models = {}
-        for criteria in llm_response.parsed_answer.criteria:
+        for criteria in criteria.criteria:
             criteria_models[criteria.criterion_name] = create_model(
                 criteria.criterion_name,
                 reasoning=(
                     str,
                     Field(description="A brief explanation about your judgement, and why you chose the winner"),
                 ),
-                winner=(
-                    Literal["A", "B", "C", "D"],
-                    Field(description="The winner of the criterion"),
-                ),
+                winner=(Literal["A", "B", "C", "D"], Field(description="The winner of the criterion")),
             )
+        return create_model("EvaluationSchema", **criteria_models)
 
-        evaluation_schema = create_model("EvaluationSchema", **criteria_models)
-        self.answer_schema_cache[query.qid] = evaluation_schema
-        return llm_response.parsed_answer
+    async def _build_criteria(self, query: Query, documents: list[Document]) -> Type[BaseModel]:
+        if query.qid in self.criteria_cache:
+            criteria = self.criteria_cache[query.qid]
+        else:
+            documents = self._filter_documents(query)
+            context = {
+                "expert_in": self.config.expert_in,
+                "company": self.config.company,
+                "documents": documents,
+                "query": query,
+                "n_criteria": self.config.n_criteria,
+            }
+            criteria_prompt = self.criteria_prompt.render(context)
+            user_prompt = self.criteria_user_prompt.render(context)
+            llm_input = LLMInputPrompt(system_prompt=criteria_prompt, user_message=user_prompt)
+            llm_response = await self.llm_provider.call_async(llm_input, response_schema=RubricSchema)
+            criteria = llm_response.parsed_answer
+            self.criteria_cache[query.qid] = criteria
+        evaluation_schema = self._build_evaluation_schema(criteria)
+        return evaluation_schema
 
     def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> LLMInputPrompt:
         # Check if this query already have a criteria set. Otherwise, get it first.
-        if query.qid not in self.criteria_cache:
-            self.criteria_cache[query.qid] = call_async_fn(
-                self._build_criteria, query, list(query.retrieved_docs.values())
-            )
-
+        llm_response_schema = call_async_fn(self._build_criteria, query, list(query.retrieved_docs.values()))
         criteria = self.criteria_cache[query.qid]
-        self.config.llm_response_schema = self.answer_schema_cache[query.qid]
         system_prompt = self.system_prompt.render(
             expert_in=self.config.expert_in, criteria=criteria, company=self.config.company
         )
@@ -127,7 +129,9 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
             query=query,
             game=game,
         )
-        return LLMInputPrompt(system_prompt=system_prompt, user_message=user_prompt)
+        return LLMInputPrompt(
+            system_prompt=system_prompt, user_message=user_prompt, llm_response_schema=llm_response_schema
+        )
 
     def _process_answer(self, llm_response: LLMResponseType, query: Query) -> LLMResponseType:
         response_dict = llm_response.parsed_answer.model_dump()
