@@ -6,7 +6,7 @@ from pydantic import BaseModel, field_validator, model_validator
 from typing_extensions import Self
 
 from ragelo.logger import logger
-from ragelo.types.results import EvaluatorResult
+from ragelo.types.results import AnswerEvaluatorResult, EvaluatorResult, RetrievalEvaluatorResult
 
 
 class ChatMessage(BaseModel):
@@ -25,8 +25,8 @@ class Evaluable(BaseModel):
     """
 
     qid: str
-    evaluation: EvaluatorResult | None = None
     metadata: dict[str, Any] | None = None
+    evaluation: EvaluatorResult | None = None
 
     @field_validator("qid", mode="before")
     def qid_into_string(cls, v):
@@ -65,6 +65,7 @@ class Document(Evaluable):
     did: str
     text: str
     retrieved_by: dict[str, float] = {}
+    evaluation: RetrievalEvaluatorResult | None = None
 
     @field_validator("did", mode="before")
     def did_into_string(cls, v):
@@ -143,6 +144,7 @@ class AgentAnswer(Evaluable):
     agent: str
     text: str | None = None
     conversation: list[ChatMessage] | None = None
+    evaluation: AnswerEvaluatorResult | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -182,3 +184,4 @@ class PairwiseGame(Evaluable):
 
     agent_a_answer: AgentAnswer
     agent_b_answer: AgentAnswer
+    evaluation: AnswerEvaluatorResult | None = None
