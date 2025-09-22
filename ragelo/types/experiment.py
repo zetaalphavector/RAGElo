@@ -19,7 +19,7 @@ import rich
 from pydantic import BaseModel
 
 from ragelo.logger import CLILogHandler, logger
-from ragelo.types.evaluables import AgentAnswer, Document
+from ragelo.types.evaluables import AgentAnswer, ChatMessage, Document, PairwiseGame
 from ragelo.types.query import Query
 from ragelo.types.results import AnswerEvaluatorResult, EloTournamentResult, EvaluatorResult, RetrievalEvaluatorResult
 
@@ -66,7 +66,6 @@ class Experiment:
         experiment_name: str,
         save_path: str | None = None,
         evaluations_cache_path: str | None = None,
-        cache_evaluations: bool = True,
         save_on_disk: bool = True,
         verbose: bool = False,
         rich_print: bool = True,
@@ -91,7 +90,6 @@ class Experiment:
                 we will try to load the state from that file.
             evaluations_cache_path (Optional[str]): A JSON Lines file path to persist the evaluators result on disk,
                 to avoid re-computing evaluations. If not set, will create one based on experiment_name.
-            cache_evaluations (bool, defaults to True): Whether or not to cache the evaluations on evaluations_cache_path,
             save_on_disk (bool, defaults to True): Whether to save the experiment to disk using the experiment_name.
             verbose (bool, defaults to False): Whether to print information about the experiment.
             rich_print (bool, defaults to True): Whether to print information about the experiment using the rich library.
@@ -120,14 +118,15 @@ class Experiment:
         The method prioritizes loading queries from the CSV file over the cache file. If neither source is available,
             it relies on the `queries` attribute if it has been set.
         """
-        self.cache_evaluations = cache_evaluations
-        self.evaluations_cache_path = evaluations_cache_path
+
         self.experiment_name = experiment_name
         self.queries: dict[str, Query] = {}
         self.elo_tournaments: list[EloTournamentResult] = []
         self.rich_print = rich_print
         self.save_on_disk = save_on_disk
-        self.save_path = save_path
+        self.save_path = Path(save_path) if save_path else None
+        self.evaluations_cache_path = Path(evaluations_cache_path) if evaluations_cache_path else None
+
         if verbose:
             logger.setLevel(logging.INFO)
             if len(logger.handlers) == 0:
@@ -137,28 +136,18 @@ class Experiment:
             logger.handlers = []
             logger.addHandler(CLILogHandler(use_rich=rich_print))
 
-        if self.save_on_disk and not self.save_path:
-            self.save_path = f"ragelo_cache/{self.experiment_name}.json"
-            if not os.path.exists("ragelo_cache"):
-                logger.info(f"Creating a cache file for the experiment at ragelo_cache/{self.experiment_name}.json")
-                Path("ragelo_cache").mkdir(parents=True, exist_ok=True)
-
-        elif self.save_path is None and not self.save_on_disk:
+        if self.save_on_disk:
+            if not self.save_path:
+                self.save_path = Path("ragelo_cache") / f"{self.experiment_name}.json"
+            if not self.evaluations_cache_path:
+                self.evaluations_cache_path = self.save_path.with_name(f"{self.experiment_name}_results.jsonl")
+        else:
             logger.info("No save path provided. Will not save the experiment to disk.")
+        self.save_path.parent.mkdir(exist_ok=True)
+        self.evaluations_cache_path.parent.mkdir(exist_ok=True)
 
-        if self.cache_evaluations and not self.evaluations_cache_path:
-            if self.save_path:
-                self.evaluations_cache_path = self.save_path.replace(".json", "_results.jsonl")
-            else:
-                self.evaluations_cache_path = f"ragelo_cache/{self.experiment_name}_results.jsonl"
-                if not os.path.exists("ragelo_cache"):
-                    os.makedirs("ragelo_cache", exist_ok=True)
-            if not os.path.isfile(self.evaluations_cache_path):
-                logger.info(f"Creating a cache file for the experiment's evaluations at {self.evaluations_cache_path}")
-                Path(self.evaluations_cache_path).touch()
-
-        if self.save_path and os.path.isfile(self.save_path) and os.stat(self.save_path).st_size > 0:
-            self.queries = self._load_from_cache(self.save_path)
+        if self.save_path and self.save_path.is_file() and self.save_path.stat().st_size > 0:
+            self._load_from_cache(self.save_path)
         else:
             self.queries = {}
         if queries_csv_path:
@@ -347,7 +336,6 @@ class Experiment:
         self,
         evaluation: RetrievalEvaluatorResult | AnswerEvaluatorResult | EloTournamentResult,
         should_save: bool = True,
-        should_print: bool = False,
         force: bool = False,
         exist_ok: bool = False,
     ):
@@ -356,7 +344,6 @@ class Experiment:
         Args:
             evaluation (RetrievalEvaluatorResult | AnswerEvaluatorResult | EloTournamentResult): The evaluation result to be added.
             should_save (bool): Whether to save the result to disk. Defaults to True.
-            should_print (bool): Whether to print the result. Defaults to True.
             force (bool): Whether to overwrite an existing evaluation. Defaults to False.
             exist_ok (bool): Whether to warn if an evaluation already exists. Defaults to False.
         """
@@ -372,68 +359,6 @@ class Experiment:
             return
         if should_save:
             self.save_results(evaluation)
-        if not should_print:
-            return
-        if isinstance(evaluation, EloTournamentResult):
-            self._print_elo_tournament_result(evaluation)
-        else:
-            self._print_response(evaluation)
-
-    def _print_elo_tournament_result(self, result: EloTournamentResult):
-        scores = sorted(result.scores.items(), key=lambda x: x[1], reverse=True)
-        if self.rich_print:
-            rich.print("-------[bold white] Agents Elo Ratings [/bold white]-------")
-        else:
-            print("------- Agents Elo Ratings -------")
-        for agent, rating in scores:
-            std_dev = result.std_dev.get(agent, 0)
-            if self.rich_print:
-                rich.print(f"[bold white]{agent:<15}[/bold white]: {rating:.1f}(±{std_dev:.1f})")
-            else:
-                print(f"{agent:<15}: {rating:.1f} (±{std_dev:.1f})")
-
-    def _print_response(
-        self,
-        response: EvaluatorResult,
-    ):
-        answer: float | str | dict | int
-        if isinstance(response.answer, dict):
-            # Print the answer in a more readable format
-            answer = json.dumps(response.answer, indent=4, ensure_ascii=False)
-        elif isinstance(response.answer, BaseModel):
-            answer = response.answer.model_dump_json(indent=4)
-        else:
-            answer = str(response.answer)
-        response_dict = response.model_dump()
-        agent_a = response_dict.get("agent_a")
-        agent_b = response_dict.get("agent_b")
-        agent = response_dict.get("agent")
-        qid = response_dict.get("qid")
-        did = response_dict.get("did")
-        raw_answer = response_dict.get("raw_answer")
-
-        if self.rich_print:
-            rich.print(f"[bold blue]🔎 Query ID[/bold blue]: {qid}")
-            did = response_dict.get("did")
-            if did:
-                rich.print(f"[bold blue]📜 Document ID[/bold blue]: {did}")
-            if agent_a and agent_b:
-                rich.print(f"[bold bright_cyan] {agent_a:<18} [/bold bright_cyan] 🆚  [bold red] {agent_b}[/bold red]")
-            elif agent:
-                rich.print(f"[bold bright_cyan]🕵️ Agent[/bold bright_cyan]: {agent}")
-            rich.print(f"[bold blue]Parsed Answer[/bold blue]: {answer}")
-            rich.print("")
-            return
-        print(f"Query ID: {qid}")
-        if did:
-            print(f"Document ID: {did}")
-        if agent_a and agent_b:
-            print(f"{agent_a} vs {agent_b}")
-        elif agent:
-            print(f"Agent: {agent}")
-        print(f"Raw Answer: {raw_answer}")
-        print(f"Parsed Answer: {answer}")
-        print("")
 
     def evaluate_retrieval(
         self,
@@ -616,22 +541,25 @@ class Experiment:
             output_path = self.save_path
         output_dict: dict[str, Any] = {}
 
-        output_dict["queries"] = {qid: query.model_dump() for qid, query in self.queries.items()}
+        # Do not save evaluations. They will be saved on _results.jsonl and loaded from there.
+        exclude_fields = {
+            "retrieved_docs": {"__all__": "evaluation"},
+            "answers": {"__all__": "evaluation"},
+            "pairwise_games": {"__all__": "evaluation"},
+        }
+        output_dict["queries"] = {qid: query.model_dump(exclude=exclude_fields) for qid, query in self.queries.items()}
         output_dict["experiment_name"] = self.experiment_name
         output_dict["elo_tournaments"] = [tournament.model_dump() for tournament in self.elo_tournaments]
 
         with open(output_path, "w") as f:
             json.dump(output_dict, f, indent=4, ensure_ascii=False)
 
-    def save_results(
-        self,
-        result: EvaluatorResult | EloTournamentResult,
-    ):
+    def save_results(self, result: EvaluatorResult | EloTournamentResult):
         """
-        Persist the evaluation result to a cache file.
+        Persist a single evaluation result to the cache file.
         This method writes the given evaluation result to a cache file specified by
         `self.evaluations_cache_path`. The result is serialized to JSON format and appended
-        to the file. The type of the result (either "answer" or "retrieval") is included
+        to the file. The type of the result (either "answer", "retrieval", or "pairwise_answer") is included
         in the serialized data.
         Args:
             result (EvaluatorResult | EloTournamentResult): The evaluation result
@@ -646,7 +574,9 @@ class Experiment:
         if self.evaluations_cache_path is None:
             raise ValueError("Results cache path not set. Cannot dump result")
         with open(self.evaluations_cache_path, "a+") as f:
-            if isinstance(result, AnswerEvaluatorResult):
+            if isinstance(result, AnswerEvaluatorResult) and result.pairwise:
+                result_type = "pairwise_answer"
+            elif isinstance(result, AnswerEvaluatorResult):
                 result_type = "answer"
             elif isinstance(result, RetrievalEvaluatorResult):
                 result_type = "retrieval"
@@ -904,11 +834,11 @@ class Experiment:
 
             self.save()
 
-    def _load_from_cache(self, cache_path: str) -> dict[str, Query]:
-        if not os.path.isfile(cache_path):
+    def _load_from_cache(self, cache_path: Path):
+        if not cache_path.is_file():
             raise FileNotFoundError(f"Cache file {cache_path} not found")
         logger.info(f"Loading existing experiment from {cache_path}")
-        with open(cache_path) as f:
+        with cache_path.open() as f:
             try:
                 data = json.load(f)
             except json.JSONDecodeError:
@@ -916,41 +846,75 @@ class Experiment:
         read_experiment_name = data.get("experiment_name")
         if read_experiment_name and read_experiment_name != self.experiment_name:
             logger.warning(f"Experiment name mismatch. Expected {self.experiment_name}. Found {read_experiment_name}")
-        queries = {k: Query(**v) for k, v in data.get("queries").items()}
-        for q in queries.values():
-            for doc in q.retrieved_docs.values():
-                if doc.evaluation is not None and not isinstance(doc.evaluation, RetrievalEvaluatorResult):
-                    doc_eval_dict = doc.evaluation.model_dump()
-                    doc_eval_dict["did"] = doc.did
-                    doc.evaluation = RetrievalEvaluatorResult(**doc_eval_dict)
-            for answer in q.answers.values():
-                if answer.evaluation is not None and not isinstance(answer.evaluation, AnswerEvaluatorResult):
-                    answer_eval_dict = answer.evaluation.model_dump()
-                    answer.evaluation = AnswerEvaluatorResult(**answer_eval_dict)
-            for game in q.pairwise_games:
-                if game.evaluation is not None and not isinstance(game.evaluation, AnswerEvaluatorResult):
-                    game_eval_dict = game.evaluation.model_dump()
-                    game.evaluation = AnswerEvaluatorResult(**game_eval_dict)
-        if "elo_tournaments" in data:
-            self.elo_tournaments = [EloTournamentResult(**t) for t in data["elo_tournaments"]]
-        return queries
 
-    def _load_results_from_cache(self, cache_path: str):
-        assert os.path.isfile(cache_path)
-        for line in open(cache_path):
+        queries_data = data.get("queries", {})
+        for qid, q_data in queries_data.items():
+            q_object = Query(qid=qid, query=q_data["query"], metadata=q_data.get("metadata"))
+            for did, doc_data in q_data.get("retrieved_docs", {}).items():
+                doc_object = Document(did=did, text=doc_data["text"], metadata=doc_data.get("metadata"))
+                q_object.add_retrieved_doc(doc_object)
+            for agent, answer_data in q_data.get("answers", {}).items():
+                answer_object = AgentAnswer(
+                    agent=agent,
+                    text=answer_data["text"],
+                    metadata=answer_data.get("metadata"),
+                    conversation=[
+                        ChatMessage(sender=sender, content=content)
+                        for sender, content in answer_data.get("conversation", {}).items()
+                    ],
+                )
+                q_object.add_agent_answer(answer_object)
+            for game_data in q_data.get("pairwise_games", []):
+                game_object = PairwiseGame(
+                    agent_a_answer=AgentAnswer(
+                        agent=game_data["agent_a"],
+                        text=game_data["text"],
+                        metadata=game_data.get("metadata"),
+                        conversation=[
+                            ChatMessage(sender=sender, content=content)
+                            for sender, content in game_data.get("conversation", {}).items()
+                        ],
+                    ),
+                    agent_b_answer=AgentAnswer(
+                        agent=game_data["agent_b"],
+                        text=game_data["text"],
+                        metadata=game_data.get("metadata"),
+                        conversation=[
+                            ChatMessage(sender=sender, content=content)
+                            for sender, content in game_data.get("conversation", {}).items()
+                        ],
+                    ),
+                )
+                q_object.pairwise_games.append(game_object)
+            self.queries[qid] = q_object
+
+        self._load_results_from_cache(self.evaluations_cache_path)
+
+    def _load_results_from_cache(self, cache_path: Path | None):
+        missing_queries = set()
+        if cache_path is None:
+            return
+        assert cache_path.is_file()
+        for line in cache_path.open():
             result = json.loads(line)
             result_type = list(result.keys())[0]
             if result_type == "answer":
                 result = AnswerEvaluatorResult(**result["answer"])
-                if result.qid not in self.queries:
-                    continue
+            elif result_type == "pairwise_answer":
+                result = AnswerEvaluatorResult(**result["pairwise_answer"])
             elif result_type == "retrieval":
                 result = RetrievalEvaluatorResult(**result["retrieval"])
-                if result.qid not in self.queries:
-                    continue
             elif result_type == "elo_tournament":
                 result = EloTournamentResult(**result["elo_tournament"])
-            self.add_evaluation(result, should_save=False, should_print=False, exist_ok=True)
+            if not isinstance(result, EloTournamentResult) and result.qid not in self.queries:
+                if result.qid not in missing_queries:
+                    logger.warning(f"Query {result.qid} found in results cache but not found in queries. Skipping")
+                missing_queries.add(result.qid)
+                continue
+            self.add_evaluation(result, should_save=False, exist_ok=True)
+
+        if len(missing_queries) > 0:
+            logger.warning(f"Loaded {len(self.queries)} results from cache. {len(missing_queries)} queries missing")
 
     def __len__(self):
         return len(self.queries)
