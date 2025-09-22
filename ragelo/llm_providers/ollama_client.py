@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Type
+from typing import Type
 
 from openai import AsyncOpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from tenacity import retry, stop_after_attempt, wait_random_exponential
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, LLMProviderFactory
@@ -27,11 +27,7 @@ class OllamaProvider(BaseLLMProvider):
         self.__ollama_client = self.__get_ollama_client(config)
 
     @retry(wait=wait_random_exponential(min=1, max=120), stop=stop_after_attempt(1))
-    async def call_async(
-        self,
-        input: LLMInputPrompt,
-        response_schema: Type[BaseModel] | dict[str, Any] | None = None,
-    ) -> LLMResponseType:
+    async def call_async(self, input: LLMInputPrompt, response_schema: Type[BaseModel]) -> LLMResponseType:
         """Calls the Ollama Local API asynchronously.
 
         Args:
@@ -61,31 +57,33 @@ class OllamaProvider(BaseLLMProvider):
         if not messages:
             raise ValueError("No input provided")
 
-        call_kwargs["messages"] = messages  # type: ignore
-        if isinstance(response_schema, type(BaseModel)):
+        call_kwargs["messages"] = messages
+        if self.config.json_mode:
+            schema = json.dumps(response_schema, indent=4)
+            messages[-1]["content"] += (
+                f"\n\nYour output should be a JSON string that STRICTLY adheres to the following schema:\n{schema}"
+            )
+            call_kwargs["response_format"] = {"type": "json_object"}
+            answers = await self.__ollama_client.chat.completions.create(**call_kwargs)
+            if not answers.choices or not answers.choices[0].message or not answers.choices[0].message.content:
+                raise ValueError("Ollama did not return any completions.")
+            parsed_answer = json.loads(answers.choices[0].message.content)
+            raw_answer = answers.choices[0].message.content
+            try:
+                parsed_answer = response_schema.model_validate_json(parsed_answer)
+            except ValidationError as e:
+                raise ValueError(
+                    f"Failed to parse raw JSON answer {raw_answer} into the response schema {response_schema}: {e}"
+                ) from e
+
+        else:
             call_kwargs["response_format"] = response_schema
             answers = await self.__ollama_client.chat.completions.parse(**call_kwargs)
             if not answers.choices or not answers.choices[0].message or not answers.choices[0].message.content:
                 raise ValueError("Ollama did not return any completions.")
             parsed_answer = answers.choices[0].message.parsed
             raw_answer = answers.choices[0].message.content
-        elif isinstance(response_schema, dict):
-            schema = json.dumps(response_schema, indent=4)
-            messages[-1]["content"] += (
-                f"\n\nYour output should be a JSON string that STRICTLY adheres to the following schema:\n{schema}"
-            )
-            call_kwargs["response_format"] = {"type": "json_object"}  # type: ignore
-            answers = await self.__ollama_client.chat.completions.create(**call_kwargs)  # type: ignore
-            if not answers.choices or not answers.choices[0].message or not answers.choices[0].message.content:
-                raise ValueError("Ollama did not return any completions.")
-            parsed_answer = json.loads(answers.choices[0].message.content)
-            raw_answer = answers.choices[0].message.content
-        else:
-            answers = await self.__ollama_client.chat.completions.create(**call_kwargs)  # type: ignore
-            parsed_answer = answers.choices[0].message.content
-            raw_answer = answers.choices[0].message.content
-            if not answers.choices or not answers.choices[0].message or not answers.choices[0].message.content:
-                raise ValueError("Ollama did not return any completions.")
+
         return LLMResponseType(
             raw_answer=raw_answer,
             parsed_answer=parsed_answer,

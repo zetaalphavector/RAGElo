@@ -6,7 +6,7 @@ from typing import Any, Type
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 from openai.types.responses import ResponseTextConfigParam
 from openai.types.shared_params import ResponseFormatJSONObject
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from tenacity import retry, stop_after_attempt, wait_random_exponential
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, LLMProviderFactory
@@ -28,19 +28,13 @@ class OpenAIProvider(BaseLLMProvider):
         if self.config.model.startswith("gpt-5") or self.config.model.startswith("o"):
             self.config.temperature = None
 
-    @retry(wait=wait_random_exponential(min=1, max=120), stop=stop_after_attempt(1))
-    async def call_async(
-        self,
-        input: LLMInputPrompt,
-        response_schema: Type[BaseModel] | dict[str, Any] | None = None,
-    ) -> LLMResponseType:
+    @retry(wait=wait_random_exponential(min=1, max=120), stop=stop_after_attempt(3))
+    async def call_async(self, input: LLMInputPrompt, response_schema: Type[BaseModel]) -> LLMResponseType:
         """Calls the OpenAI API asynchronously.
 
         Args:
             input: A LLMInputPrompt object containing the system prompt, user message, or a list of messages.
-            response_schema: The schema of the response to expect. If the answer_format is STRUCTURED,
-                this should be a Pydantic BaseModel class (not instance). If the answer_format is JSON, this should be
-                a dictionary with the desired format the answer should be in. Otherwise, the response will be returned as a string.
+            response_schema: The schema of the response to expect. If config.json_mode is True, we will dump the response_schema to a JSON string and add it to the instructions.
         Returns:
             The response from the OpenAI Responses API, formatted according to the answer_format. The LLMResponseType.raw_answer  contains the raw LLM response as a string and the LLMResponseType.parsed_answer contains the parsed response. This can be a number or string (if response_schema is None) a dictionary (if response_schema is a dictionary) or a Pydantic BaseModel (if response_schema is a Pydantic BaseModel)).
         """
@@ -56,7 +50,35 @@ class OpenAIProvider(BaseLLMProvider):
             instructions = input.system_prompt
         else:
             instructions = None
-        if isinstance(response_schema, type(BaseModel)):
+
+        if self.config.json_mode:
+            schema = json.dumps(response_schema, indent=4)
+            if isinstance(llm_input, str):
+                llm_input += (
+                    f"\n\nYour output should be a JSON string that STRICTLY adheres to the following schema:\n{schema}"
+                )
+            else:
+                llm_input[-1]["content"] += (
+                    f"\n\nYour output should be a JSON string that STRICTLY adheres to the following schema:\n{schema}"
+                )
+            answers = await self.__openai_client.responses.create(
+                input=llm_input,  # type: ignore
+                instructions=instructions,
+                model=self.config.model,
+                temperature=self.config.temperature,
+                max_output_tokens=self.config.max_tokens,
+                text=ResponseTextConfigParam(format=ResponseFormatJSONObject(type="json_object")),
+            )
+            raw_answer = answers.output_text
+            parsed_answer = json.loads(raw_answer)
+            try:
+                parsed_answer = response_schema.model_validate_json(parsed_answer)
+            except ValidationError as e:
+                raise ValueError(
+                    f"Failed to parse raw JSON answer {raw_answer} into the response schema {response_schema}: {e}"
+                ) from e
+
+        else:
             answers = await self.__openai_client.responses.parse(
                 text_format=response_schema,
                 input=llm_input,  # type: ignore
@@ -67,37 +89,6 @@ class OpenAIProvider(BaseLLMProvider):
             )
             parsed_answer = answers.output_parsed
             raw_answer = answers.output_text
-        elif isinstance(response_schema, dict):
-            llm_text = {
-                "format": {
-                    "type": "json_schema",
-                    "schema": response_schema,
-                    "strict": True,
-                }
-            }
-            answers = await self.__openai_client.responses.create(
-                input=llm_input,  # type: ignore
-                instructions=instructions,
-                model=self.config.model,
-                temperature=self.config.temperature,
-                max_output_tokens=self.config.max_tokens,
-                text=ResponseTextConfigParam(format=ResponseFormatJSONObject(type="json_object")),
-            )
-            raw_answer = answers.output_text
-            try:
-                parsed_answer = json.loads(raw_answer)
-            except json.JSONDecodeError as e:
-                raise ValueError(f"Failed to parse raw JSON answer {raw_answer} as JSON: {e}") from e
-        else:
-            answers = await self.__openai_client.responses.create(
-                input=llm_input,  # type: ignore
-                instructions=instructions,
-                model=self.config.model,
-                temperature=self.config.temperature,
-                max_output_tokens=self.config.max_tokens,
-            )
-            raw_answer = answers.output_text
-            parsed_answer = raw_answer
 
         return LLMResponseType(
             raw_answer=raw_answer,

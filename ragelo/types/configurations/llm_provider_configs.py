@@ -8,6 +8,7 @@ class LLMProviderConfig(BaseModel):
     temperature: float | None = 0.1
     max_tokens: int = 2048
     seed: int | None = 42
+    json_mode: bool = False
 
 
 class OpenAIConfiguration(LLMProviderConfig):

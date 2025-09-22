@@ -28,4 +28,4 @@ class LLMInputPrompt(BaseModel):
 
 class LLMResponseType(BaseModel):
     raw_answer: str
-    parsed_answer: float | str | dict[str, Any] | BaseModel | None
+    parsed_answer: BaseModel | None
