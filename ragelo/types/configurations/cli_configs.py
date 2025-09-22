@@ -36,10 +36,6 @@ class BaseCLIConfig(BaseConfig):
         default=None,
         description="The path to the output file where the results will be saved.",
     )
-    save_results: bool = Field(
-        default=True,
-        description="Whether or not to save the results to disk.",
-    )
     rich_print: bool = Field(
         default=True,
         description="Use rich to print colorful outputs.",

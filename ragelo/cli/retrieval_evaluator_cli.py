@@ -48,7 +48,6 @@ def domain_expert(config: CLIDomainExpertEvaluatorConfig = CLIDomainExpertEvalua
         verbose=config.verbose,
         clear_evaluations=config.force,
         rich_print=config.rich_print,
-        cache_evaluations=config.save_results,
     )
 
     kwargs = config.model_dump()
@@ -86,7 +85,6 @@ def reasoner(
         verbose=config.verbose,
         clear_evaluations=config.force,
         rich_print=config.rich_print,
-        cache_evaluations=config.save_results,
     )
 
     kwargs = config.model_dump()
@@ -121,7 +119,6 @@ def rdnam(config: CLIRDNAMEvaluatorConfig = CLIRDNAMEvaluatorConfig(), **kwargs)
         verbose=config.verbose,
         clear_evaluations=config.force,
         rich_print=config.rich_print,
-        cache_evaluations=config.save_results,
     )
 
     kwargs = config.model_dump()

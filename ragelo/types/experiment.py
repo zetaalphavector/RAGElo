@@ -568,7 +568,7 @@ class Experiment:
                 is not recognized.
         """
 
-        if not self.cache_evaluations:
+        if not self.save_on_disk:
             return
         if self.evaluations_cache_path is None:
             raise ValueError("Results cache path not set. Cannot dump result")

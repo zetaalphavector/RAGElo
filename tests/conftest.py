@@ -206,7 +206,6 @@ def base_experiment_config():
     config = {
         "experiment_name": "test_experiment",
         "save_on_disk": False,
-        "cache_evaluations": False,
         "queries_csv_path": "tests/data/queries.csv",
         "documents_csv_path": "tests/data/documents.csv",
         "answers_csv_path": "tests/data/answers.csv",

@@ -41,7 +41,6 @@ def pairwise(config: CLIPairwiseEvaluatorConfig = CLIPairwiseEvaluatorConfig(), 
         verbose=config.verbose,
         clear_evaluations=config.force,
         rich_print=config.rich_print,
-        cache_evaluations=config.save_results,
     )
 
     kwargs = config.model_dump()
@@ -94,7 +93,6 @@ def expert_pairwise(
         verbose=config.verbose,
         clear_evaluations=config.force,
         rich_print=config.rich_print,
-        cache_evaluations=config.save_results,
     )
 
     if config.add_reasoning:

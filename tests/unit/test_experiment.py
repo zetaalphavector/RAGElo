@@ -95,7 +95,6 @@ class TestExperiment:
         loaded_experiment = Experiment(
             experiment_name="test_experiment",
             save_path=str(save_path),
-            cache_evaluations=False,
             save_on_disk=True,
         )
 
@@ -225,7 +224,6 @@ class TestExperiment:
         # Set up save paths
         results_path = tmp_path / "test_results.jsonl"
         base_experiment_config["evaluations_cache_path"] = str(results_path)
-        base_experiment_config["cache_evaluations"] = True
         experiment = Experiment(**base_experiment_config)
 
         # Add and save evaluations
