@@ -30,7 +30,7 @@ class EvaluatorResult(BaseModel):
         if (raw_answer is None or answer is None) and exception is None:
             raise ValidationError(
                 "Either answer or raw_answer must be provided. Otherwise, an exception must be provided."
-            )  # type: ignore
+            )
         return v
 
 
@@ -55,7 +55,7 @@ class AnswerEvaluatorResult(EvaluatorResult):
         agent_a = v.get("agent_a")
         agent_b = v.get("agent_b")
         if agent is None and agent_a is None and agent_b is None:
-            raise ValidationError("Either agent or agent_a and agent_b must be provided")  # type: ignore
+            raise ValidationError("Either agent or agent_a and agent_b must be provided")
         if agent_a is not None and agent_b is not None:
             v["pairwise"] = True
         return v

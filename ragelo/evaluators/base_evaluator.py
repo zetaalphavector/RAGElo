@@ -91,12 +91,17 @@ class BaseEvaluator(ABC):
                     evaluation,
                     exist_ok=True,
                     force=self.config.force,
-                    should_print=self.config.verbose,
                 )
+                if self.config.verbose:
+                    self._print_response(evaluation, experiment.rich_print)
         pbar.close()
         if self.config.verbose:
             self._print_failed_evaluations(evaluations, failed)
         experiment.save()
+
+    @abstractmethod
+    def _print_response(self, evaluation: EvaluatorResult, rich_print: bool = True):
+        raise NotImplementedError
 
     @abstractmethod
     def _get_tuples_to_evaluate(self, queries: Experiment) -> Sequence[tuple[Query, Evaluable]]:
