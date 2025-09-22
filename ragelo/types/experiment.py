@@ -16,7 +16,6 @@ from pathlib import Path
 from typing import Any, Literal, overload
 
 import rich
-from pydantic import BaseModel
 
 from ragelo.logger import CLILogHandler, logger
 from ragelo.types.evaluables import AgentAnswer, ChatMessage, Document, PairwiseGame
