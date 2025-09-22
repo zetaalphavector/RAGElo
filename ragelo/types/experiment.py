@@ -136,6 +136,7 @@ class Experiment:
             logger.setLevel(logging.WARNING)
             logger.handlers = []
             logger.addHandler(CLILogHandler(use_rich=rich_print))
+
         if self.save_on_disk and not self.save_path:
             self.save_path = f"ragelo_cache/{self.experiment_name}.json"
             if not os.path.exists("ragelo_cache"):
@@ -153,10 +154,10 @@ class Experiment:
                 if not os.path.exists("ragelo_cache"):
                     os.makedirs("ragelo_cache", exist_ok=True)
             if not os.path.isfile(self.evaluations_cache_path):
-                logger.info(f"Creating a cache file for the experiment's evaluations at{self.evaluations_cache_path}")
+                logger.info(f"Creating a cache file for the experiment's evaluations at {self.evaluations_cache_path}")
                 Path(self.evaluations_cache_path).touch()
 
-        if self.save_path and os.path.isfile(self.save_path):
+        if self.save_path and os.path.isfile(self.save_path) and os.stat(self.save_path).st_size > 0:
             self.queries = self._load_from_cache(self.save_path)
         else:
             self.queries = {}
@@ -188,6 +189,7 @@ class Experiment:
         query_id: str | None = None,
         metadata: dict | None = None,
         force: bool = False,
+        exist_ok: bool = False,
     ) -> str:
         """
         Adds a query to the collection of queries.
@@ -197,6 +199,7 @@ class Experiment:
                 If not provided, a default ID will be generated.
             metadata (dict | None, optional): Additional metadata for the query. Defaults to None.
             force (bool, optional): Whether to overwrite the query if it already exists. Defaults to False.
+            exist_ok (bool, optional): Whether to raise an error if the query already exists. Defaults to False.
         """
 
         if isinstance(query, Query):
@@ -212,12 +215,34 @@ class Experiment:
             query_obj = Query(qid=query_id, query=query, metadata=metadata)
             query_id = query_obj.qid
         if query_id in self.queries and not force:
-            logger.info(f'Query with ID "{query_id}" already exists. Use force=True to overwrite')
+            if not exist_ok:
+                logger.info(f'Query with ID "{query_id}" already exists. Use force=True to overwrite')
+            else:
+                return query_id
             return query_id
         if query_id in self.queries and force:
             logger.info(f'Query with ID "{query_id}" already exists, but force was set to True. Overwriting.')
+        if query_id in self.queries and exist_ok:
+            return query_id
         self.queries[query_id] = query_obj
         return query_id
+
+    def add_retrieved_docs(
+        self,
+        docs: list[Document | str],
+        force: bool = False,
+        exist_ok: bool = False,
+    ):
+        """
+        Adds a list of retrieved documents to a query.
+        Args:
+            docs (list[Document | str]): The documents to be added.
+            force (bool): Whether to overwrite the documents if they already exist.
+            exist_ok (bool): If True, will not raise an error if the documents already exist.
+                Defaults to False.
+        """
+        for doc in docs:
+            self.add_retrieved_doc(doc, force=force, exist_ok=exist_ok)
 
     def add_retrieved_doc(
         self,
@@ -578,6 +603,8 @@ class Experiment:
         This method checks if caching is enabled by evaluating the `save_cache` attribute.
         If caching is enabled, it attempts to write the model's current state to the file
         specified by `cache_path`. If `cache_path` is not set, a ValueError is raised.
+        Args:
+            output_path (str | None): The path to save the experiment to disk. If None, the experiment will be saved to the path specified by `self.save_path`.
         Raises:
             ValueError: If `cache_path` is None and caching is enabled.
         """
@@ -900,6 +927,10 @@ class Experiment:
                 if answer.evaluation is not None and not isinstance(answer.evaluation, AnswerEvaluatorResult):
                     answer_eval_dict = answer.evaluation.model_dump()
                     answer.evaluation = AnswerEvaluatorResult(**answer_eval_dict)
+            for game in q.pairwise_games:
+                if game.evaluation is not None and not isinstance(game.evaluation, AnswerEvaluatorResult):
+                    game_eval_dict = game.evaluation.model_dump()
+                    game.evaluation = AnswerEvaluatorResult(**game_eval_dict)
         if "elo_tournaments" in data:
             self.elo_tournaments = [EloTournamentResult(**t) for t in data["elo_tournaments"]]
         return queries
