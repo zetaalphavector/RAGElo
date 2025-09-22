@@ -1,4 +1,7 @@
-from ragelo.types.configurations.agent_ranker_configs import AgentRankerConfig, EloAgentRankerConfig
+from ragelo.types.configurations.agent_ranker_configs import (
+    AgentRankerConfig,
+    EloAgentRankerConfig,
+)
 from ragelo.types.configurations.answer_evaluator_configs import (
     BaseAnswerEvaluatorConfig,
     CustomPairwiseEvaluatorConfig,
@@ -8,6 +11,9 @@ from ragelo.types.configurations.answer_evaluator_configs import (
 )
 from ragelo.types.configurations.base_configs import BaseConfig, BaseEvaluatorConfig
 from ragelo.types.configurations.cli_configs import CLIConfig
+from ragelo.types.configurations.groundedness_evaluator_configs import (
+    BaseGroundednessEvaluatorConfig,
+)
 from ragelo.types.configurations.llm_provider_configs import (
     LLMProviderConfig,
     OllamaConfiguration,
@@ -42,4 +48,5 @@ __all__ = [
     "ReasonerEvaluatorConfig",
     "CustomPromptEvaluatorConfig",
     "DomainExpertEvaluatorConfig",
+    "BaseGroundednessEvaluatorConfig",
 ]

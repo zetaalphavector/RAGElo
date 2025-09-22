@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, SerializeAsAny, ValidationError, model_validator
 
@@ -82,3 +82,13 @@ class EloTournamentResult(BaseModel):
     std_dev: dict[str, float]
     total_games: int
     total_tournaments: int
+
+
+class GroundednessEvaluatorResult(EvaluatorResult):
+    """The results of a retrieval evaluator.
+    Args:
+        agents list[str]: The list of agents whose answers were evaluated.
+        groundedness_scores dict[str, int]: A dictionary mapping each agent to their groundedness score.
+    """
+
+    pass
