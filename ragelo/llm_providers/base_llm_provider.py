@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Type, get_type_hints
 
 from pydantic import BaseModel
+
 from ragelo.types.configurations import LLMProviderConfig
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.types import LLMProviderTypes
@@ -84,9 +85,7 @@ class LLMProviderFactory:
                     api_key_field = type_config.model_fields["api_key"]
                     is_required = api_key_field.is_required()
                     if is_required:
-                        raise ValueError(
-                            f"API key not found in environment variable {class_.api_key_env_var}"
-                        )
+                        raise ValueError(f"API key not found in environment variable {class_.api_key_env_var}")
                     else:
                         api_key = api_key_field.default
                 kwargs["api_key"] = api_key

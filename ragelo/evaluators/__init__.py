@@ -1,4 +1,4 @@
-from ragelo.evaluators.answer_evaluators import PairwiseAnswerEvaluator, BaseGroundednessEvaluator
+from ragelo.evaluators.answer_evaluators import BaseGroundednessEvaluator, PairwiseAnswerEvaluator
 from ragelo.evaluators.retrieval_evaluators import (
     DomainExpertEvaluator,
     RDNAMEvaluator,

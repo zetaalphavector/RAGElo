@@ -17,6 +17,7 @@ from typing import Any, Literal, overload
 
 import rich
 from pydantic import BaseModel
+
 from ragelo.logger import CLILogHandler, logger
 from ragelo.types.evaluables import AgentAnswer, Document
 from ragelo.types.query import Query
@@ -144,9 +145,7 @@ class Experiment:
         if self.save_on_disk and not self.save_path:
             self.save_path = f"ragelo_cache/{self.experiment_name}.json"
             if not os.path.exists("ragelo_cache"):
-                logger.info(
-                    f"Creating a cache file for the experiment at ragelo_cache/{self.experiment_name}.json"
-                )
+                logger.info(f"Creating a cache file for the experiment at ragelo_cache/{self.experiment_name}.json")
                 Path("ragelo_cache").mkdir(parents=True, exist_ok=True)
 
         elif self.save_path is None and not self.save_on_disk:
@@ -154,19 +153,13 @@ class Experiment:
 
         if self.cache_evaluations and not self.evaluations_cache_path:
             if self.save_path:
-                self.evaluations_cache_path = self.save_path.replace(
-                    ".json", "_results.jsonl"
-                )
+                self.evaluations_cache_path = self.save_path.replace(".json", "_results.jsonl")
             else:
-                self.evaluations_cache_path = (
-                    f"ragelo_cache/{self.experiment_name}_results.jsonl"
-                )
+                self.evaluations_cache_path = f"ragelo_cache/{self.experiment_name}_results.jsonl"
                 if not os.path.exists("ragelo_cache"):
                     os.makedirs("ragelo_cache", exist_ok=True)
             if not os.path.isfile(self.evaluations_cache_path):
-                logger.info(
-                    f"Creating a cache file for the experiment's evaluations at{self.evaluations_cache_path}"
-                )
+                logger.info(f"Creating a cache file for the experiment's evaluations at{self.evaluations_cache_path}")
                 Path(self.evaluations_cache_path).touch()
 
         if self.save_path and os.path.isfile(self.save_path):
@@ -174,9 +167,7 @@ class Experiment:
         else:
             self.queries = {}
         if queries_csv_path:
-            self.add_queries_from_csv(
-                queries_csv_path, csv_query_id_col, csv_query_text_col, exist_ok=True
-            )
+            self.add_queries_from_csv(queries_csv_path, csv_query_id_col, csv_query_text_col, exist_ok=True)
         if documents_csv_path:
             self.add_documents_from_csv(
                 documents_csv_path,
@@ -220,9 +211,7 @@ class Experiment:
 
         if isinstance(query, Query):
             if query_id is not None and query.qid != query_id:
-                warnings.warn(
-                    f"Query ID mismatch. Using ID from query object: {query.qid}"
-                )
+                warnings.warn(f"Query ID mismatch. Using ID from query object: {query.qid}")
             query_id = query.qid
             query_obj = query
         elif query_id is None:
@@ -233,14 +222,10 @@ class Experiment:
             query_obj = Query(qid=query_id, query=query, metadata=metadata)
             query_id = query_obj.qid
         if query_id in self.queries and not force:
-            logger.info(
-                f'Query with ID "{query_id}" already exists. Use force=True to overwrite'
-            )
+            logger.info(f'Query with ID "{query_id}" already exists. Use force=True to overwrite')
             return query_id
         if query_id in self.queries and force:
-            logger.info(
-                f'Query with ID "{query_id}" already exists, but force was set to True. Overwriting.'
-            )
+            logger.info(f'Query with ID "{query_id}" already exists, but force was set to True. Overwriting.')
         self.queries[query_id] = query_obj
         return query_id
 
@@ -268,24 +253,16 @@ class Experiment:
         """
         if isinstance(doc, Document):
             if doc.qid != query_id and query_id is not None:
-                logger.warning(
-                    f"Query ID mismatch. Using ID from document object: {doc.qid}"
-                )
+                logger.warning(f"Query ID mismatch. Using ID from document object: {doc.qid}")
                 query_id = doc.qid
             if doc.did != doc_id and doc_id is not None:
-                logger.warning(
-                    f"Document ID mismatch. Using ID from document object: {doc.did}"
-                )
+                logger.warning(f"Document ID mismatch. Using ID from document object: {doc.did}")
             doc_id = doc.did
             query_id = doc.qid
         elif doc_id is None:
-            raise ValueError(
-                "Document was provided as string, but Document ID was not provided"
-            )
+            raise ValueError("Document was provided as string, but Document ID was not provided")
         if query_id is None:
-            raise ValueError(
-                f"ID of the query to which document {doc_id} was retrieved was not provided."
-            )
+            raise ValueError(f"ID of the query to which document {doc_id} was retrieved was not provided.")
         if isinstance(doc, str):
             doc = Document(qid=query_id, did=doc_id, text=doc)
             query_id = doc.qid
@@ -303,22 +280,16 @@ class Experiment:
     ):
         if isinstance(answer, AgentAnswer):
             if answer.qid != query_id and query_id is not None:
-                logger.warning(
-                    f"Query ID mismatch. Using ID from answer object: {answer.qid}"
-                )
+                logger.warning(f"Query ID mismatch. Using ID from answer object: {answer.qid}")
             query_id = answer.qid
             if answer.agent != agent and agent is not None:
-                logger.warning(
-                    f"Agent mismatch. Using agent from answer object: {answer.agent}"
-                )
+                logger.warning(f"Agent mismatch. Using agent from answer object: {answer.agent}")
         elif query_id is None:
             raise ValueError("Query ID not provided")
         else:
             if agent is None:
                 agent = f"agent_{len(self.queries[query_id].answers) + 1}"
-                logger.warning(
-                    f"Agent not provided. Using default agent name: {agent}."
-                )
+                logger.warning(f"Agent not provided. Using default agent name: {agent}.")
             if query_id is None:
                 raise ValueError("Query ID not provided")
             answer = AgentAnswer(qid=query_id, agent=agent, text=answer)
@@ -370,10 +341,7 @@ class Experiment:
     def add_evaluation(
         self,
         evaluation: (
-            RetrievalEvaluatorResult
-            | AnswerEvaluatorResult
-            | EloTournamentResult
-            | GroundednessEvaluatorResult
+            RetrievalEvaluatorResult | AnswerEvaluatorResult | EloTournamentResult | GroundednessEvaluatorResult
         ),
         should_save: bool = True,
         should_print: bool = False,
@@ -396,9 +364,7 @@ class Experiment:
             qid = evaluation.qid
             if qid not in self.queries:
                 raise ValueError(f"Query {qid} not found in queries")
-            added = self.queries[qid].add_evaluation(
-                evaluation, force=force, exist_ok=exist_ok
-            )
+            added = self.queries[qid].add_evaluation(evaluation, force=force, exist_ok=exist_ok)
         if not added:
             return
         if should_save:
@@ -419,9 +385,7 @@ class Experiment:
         for agent, rating in scores:
             std_dev = result.std_dev.get(agent, 0)
             if self.rich_print:
-                rich.print(
-                    f"[bold white]{agent:<15}[/bold white]: {rating:.1f}(±{std_dev:.1f})"
-                )
+                rich.print(f"[bold white]{agent:<15}[/bold white]: {rating:.1f}(±{std_dev:.1f})")
             else:
                 print(f"{agent:<15}: {rating:.1f} (±{std_dev:.1f})")
 
@@ -451,9 +415,7 @@ class Experiment:
             if did:
                 rich.print(f"[bold blue]📜 Document ID[/bold blue]: {did}")
             if agent_a and agent_b:
-                rich.print(
-                    f"[bold bright_cyan] {agent_a:<18} [/bold bright_cyan] 🆚  [bold red] {agent_b}[/bold red]"
-                )
+                rich.print(f"[bold bright_cyan] {agent_a:<18} [/bold bright_cyan] 🆚  [bold red] {agent_b}[/bold red]")
             elif agent:
                 rich.print(f"[bold bright_cyan]🕵️ Agent[/bold bright_cyan]: {agent}")
             rich.print(f"[bold blue]Parsed Answer[/bold blue]: {answer}")
@@ -512,9 +474,7 @@ class Experiment:
             import ir_measures
             from ir_measures import parse_measure
         except ImportError:
-            raise ImportError(
-                "ir_measures is not installed. Please install it with `pip install ir-measures`"
-            )
+            raise ImportError("ir_measures is not installed. Please install it with `pip install ir-measures`")
         qrels = self.get_qrels(
             relevance_key=relevance_key,
             relevance_threshold=relevance_threshold,
@@ -526,9 +486,7 @@ class Experiment:
                 measure = parse_measure(metric)
             except NameError:
                 valid_metrics = list(ir_measures.measures.registry.keys())
-                raise ValueError(
-                    f"Metric {metric} not found. Valid metrics are: {valid_metrics}"
-                )
+                raise ValueError(f"Metric {metric} not found. Valid metrics are: {valid_metrics}")
             measures.append(measure)
         metrics = [str(m) for m in measures]
         results = {}
@@ -542,24 +500,18 @@ class Experiment:
         key_metric = metrics[0]
         max_agent_len = max([len(agent) for agent in results.keys()]) + 3
         max_metric_len = max([len(metric) for metric in metrics])
-        sorted_agents = sorted(
-            results.items(), key=lambda x: x[1][key_metric], reverse=True
-        )
+        sorted_agents = sorted(results.items(), key=lambda x: x[1][key_metric], reverse=True)
         if self.rich_print:
             rich.print("---[bold cyan] Retrieval Scores [/bold cyan] ---")
             if relevance_threshold > 0:
-                rich.print(
-                    f"[bold yellow]Relevance threshold: {relevance_threshold}[/bold yellow]"
-                )
+                rich.print(f"[bold yellow]Relevance threshold: {relevance_threshold}[/bold yellow]")
             header = f"[bold magenta]{'Agent Name':<{max_agent_len}}"
             header += "\t".join([f"{m:<{max_metric_len}}" for m in metrics])
             header += "[/bold magenta]"
             rich.print(f"[bold cyan]{header}[/bold cyan]")
             for agent, scores in sorted_agents:
                 row = f"[bold white]{agent:<{max_agent_len}}[/bold white]"
-                row += "\t".join(
-                    [f"{scores[metric]:<{max_metric_len},.4f}" for metric in metrics]
-                )
+                row += "\t".join([f"{scores[metric]:<{max_metric_len},.4f}" for metric in metrics])
                 rich.print(row)
 
         else:
@@ -633,9 +585,7 @@ class Experiment:
                 for agent, run in runs_by_agent.items():
                     with open(f"{output_path}/{agent}.run", "w") as f:
                         for qid, docs in run.items():
-                            sorted_scores = sorted(
-                                docs.items(), key=lambda x: x[1], reverse=True
-                            )
+                            sorted_scores = sorted(docs.items(), key=lambda x: x[1], reverse=True)
                             for idx, (did, score) in enumerate(sorted_scores):
                                 f.write(f"{qid} Q0 {did} {idx + 1} {score} {agent}\n")
             elif output_format.lower() == "json":
@@ -661,13 +611,9 @@ class Experiment:
             output_path = self.save_path
         output_dict: dict[str, Any] = {}
 
-        output_dict["queries"] = {
-            qid: query.model_dump() for qid, query in self.queries.items()
-        }
+        output_dict["queries"] = {qid: query.model_dump() for qid, query in self.queries.items()}
         output_dict["experiment_name"] = self.experiment_name
-        output_dict["elo_tournaments"] = [
-            tournament.model_dump() for tournament in self.elo_tournaments
-        ]
+        output_dict["elo_tournaments"] = [tournament.model_dump() for tournament in self.elo_tournaments]
 
         with open(output_path, "w") as f:
             json.dump(output_dict, f, indent=4, ensure_ascii=False)
@@ -704,13 +650,8 @@ class Experiment:
             elif isinstance(result, GroundednessEvaluatorResult):
                 result_type = "groundedness"
             else:
-                raise ValueError(
-                    f"Cannot save evaluation of type {type(result)} to cache"
-                )
-            f.write(
-                json.dumps({result_type: result.model_dump()}, ensure_ascii=False)
-                + "\n"
-            )
+                raise ValueError(f"Cannot save evaluation of type {type(result)} to cache")
+            f.write(json.dumps({result_type: result.model_dump()}, ensure_ascii=False) + "\n")
 
     def add_queries_from_csv(
         self,
@@ -737,11 +678,7 @@ class Experiment:
                     logger.warning(f"Query with ID {qid} already read. Skipping")
                 continue
             query_text = row[query_text_column].strip()
-            metadata = {
-                k: v
-                for k, v in row.items()
-                if k not in [query_id_column, query_text_column]
-            }
+            metadata = {k: v for k, v in row.items() if k not in [query_id_column, query_text_column]}
             self.queries[qid] = Query(qid=qid, query=query_text, metadata=metadata)
             read_queries.add(qid)
         if len(read_queries) > 0:
@@ -784,17 +721,12 @@ class Experiment:
             agent = line.get(agent_col)
             score = float(line.get("score", 0.0))
             metadata = {
-                k: v
-                for k, v in line.items()
-                if k
-                not in [query_id_col, document_id_col, document_text_col, agent_col]
+                k: v for k, v in line.items() if k not in [query_id_col, document_id_col, document_text_col, agent_col]
             }
             if qid not in self.queries:
                 if qid not in warned_queries:
                     warned_queries.add(qid)
-                    logger.warning(
-                        f"Query {qid} found in {file_path} but not found in queries. Skipping"
-                    )
+                    logger.warning(f"Query {qid} found in {file_path} but not found in queries. Skipping")
                 continue
             if (doc_obj := self.queries[qid].retrieved_docs.get(did)) is None:
                 doc_obj = Document(qid=qid, did=did, text=text)
@@ -858,9 +790,7 @@ class Experiment:
                 docs_per_query[qid] += 1
                 documents_read.add(did)
         if len(missing_docs) > 0:
-            logger.warning(
-                f"Loaded {len(documents_read)} documents. {len(missing_docs)} missing docs"
-            )
+            logger.warning(f"Loaded {len(documents_read)} documents. {len(missing_docs)} missing docs")
 
     def add_agent_answers_from_csv(
         self,
@@ -892,17 +822,11 @@ class Experiment:
             qid = line[query_id_col].strip()
             agent = line[agent_col].strip()
             answer = line[answer_col].strip()
-            metadata = {
-                k: v
-                for k, v in line.items()
-                if k not in [query_id_col, agent_col, answer_col]
-            }
+            metadata = {k: v for k, v in line.items() if k not in [query_id_col, agent_col, answer_col]}
             if qid not in self.queries:
                 if qid not in warned_queries:
                     warned_queries.add(qid)
-                    logger.warning(
-                        f"Query {qid} found in {file_path} but not found in queries. Skipping"
-                    )
+                    logger.warning(f"Query {qid} found in {file_path} but not found in queries. Skipping")
                 continue
             if agent not in self.queries[qid].answers:
                 answer_obj = AgentAnswer(qid=qid, agent=agent, text=answer)
@@ -910,9 +834,7 @@ class Experiment:
                 self.add_agent_answer(answer_obj, exist_ok=exist_ok)
                 answers_read += 1
             elif not exist_ok:
-                logger.info(
-                    f"Answer from agent {agent} already exists in query {qid}. Skipping"
-                )
+                logger.info(f"Answer from agent {agent} already exists in query {qid}. Skipping")
         if answers_read > 0:
             logger.info(f"Loaded {answers_read} answers from {file_path}")
 
@@ -974,9 +896,7 @@ class Experiment:
             )
 
         if should_save:
-            if self.evaluations_cache_path and os.path.isfile(
-                self.evaluations_cache_path
-            ):
+            if self.evaluations_cache_path and os.path.isfile(self.evaluations_cache_path):
                 with open(self.evaluations_cache_path, "w"):
                     pass
 
@@ -993,28 +913,20 @@ class Experiment:
                 raise ValueError(f"Cache file {cache_path} is not a valid JSON file")
         read_experiment_name = data.get("experiment_name")
         if read_experiment_name and read_experiment_name != self.experiment_name:
-            logger.warning(
-                f"Experiment name mismatch. Expected {self.experiment_name}. Found {read_experiment_name}"
-            )
+            logger.warning(f"Experiment name mismatch. Expected {self.experiment_name}. Found {read_experiment_name}")
         queries = {k: Query(**v) for k, v in data.get("queries").items()}
         for q in queries.values():
             for doc in q.retrieved_docs.values():
-                if doc.evaluation is not None and not isinstance(
-                    doc.evaluation, RetrievalEvaluatorResult
-                ):
+                if doc.evaluation is not None and not isinstance(doc.evaluation, RetrievalEvaluatorResult):
                     doc_eval_dict = doc.evaluation.model_dump()
                     doc_eval_dict["did"] = doc.did
                     doc.evaluation = RetrievalEvaluatorResult(**doc_eval_dict)
             for answer in q.answers.values():
-                if answer.evaluation is not None and not isinstance(
-                    answer.evaluation, AnswerEvaluatorResult
-                ):
+                if answer.evaluation is not None and not isinstance(answer.evaluation, AnswerEvaluatorResult):
                     answer_eval_dict = answer.evaluation.model_dump()
                     answer.evaluation = AnswerEvaluatorResult(**answer_eval_dict)
         if "elo_tournaments" in data:
-            self.elo_tournaments = [
-                EloTournamentResult(**t) for t in data["elo_tournaments"]
-            ]
+            self.elo_tournaments = [EloTournamentResult(**t) for t in data["elo_tournaments"]]
         return queries
 
     def _load_results_from_cache(self, cache_path: str):
@@ -1034,9 +946,7 @@ class Experiment:
                 result = EloTournamentResult(**result["elo_tournament"])
             elif result_type == "groundedness":
                 result = GroundednessEvaluatorResult(**result["groundedness"])
-            self.add_evaluation(
-                result, should_save=False, should_print=False, exist_ok=True
-            )
+            self.add_evaluation(result, should_save=False, should_print=False, exist_ok=True)
 
     def __len__(self):
         return len(self.queries)
@@ -1073,9 +983,7 @@ class Experiment:
         raise ValueError(f"Could not identify Query ID column for CSV file {file_path}")
 
     @staticmethod
-    def __infer_document_id_column(
-        file_path: str, doc_id_col: str | None = None
-    ) -> str:
+    def __infer_document_id_column(file_path: str, doc_id_col: str | None = None) -> str:
         """Infer the column name with the doc id from a CSV file."""
         if doc_id_col is not None:
             return doc_id_col
@@ -1096,9 +1004,7 @@ class Experiment:
                 for col in possible_did_columns:
                     if col in columns:
                         return col
-        raise ValueError(
-            f"Could not identify Document ID column for CSV file {file_path}"
-        )
+        raise ValueError(f"Could not identify Document ID column for CSV file {file_path}")
 
     @classmethod
     def load(cls, experiment_name: str, path: str):

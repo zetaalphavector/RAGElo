@@ -17,9 +17,7 @@ from ragelo.types.types import AnswerEvaluatorTypes
 
 
 class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
-    pairwise: bool = Field(
-        default=False, description="Whether or not to the evaluator is pairwise"
-    )
+    pairwise: bool = Field(default=False, description="Whether or not to the evaluator is pairwise")
     include_relevance_score: bool = Field(
         default=False,
         description="Whether or not to include the document relevance annotations in the prompt",
@@ -36,9 +34,7 @@ class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
         default=(
             "the correctness, helpfulness, completeness, accuracy, depth, and level of detail of their responses"
         ),
-        description=(
-            "A string containing the factors to be used when evaluating an answer. "
-        ),
+        description=("A string containing the factors to be used when evaluating an answer. "),
     )
     document_filter: Optional[Callable[[Document], bool]] = Field(
         default=None,
@@ -60,15 +56,9 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     """Configuration for the pairwise evaluator."""
 
     evaluator_name: AnswerEvaluatorTypes = AnswerEvaluatorTypes.PAIRWISE
-    bidirectional: bool = Field(
-        default=True, description="Whether or not to run each game in both directions"
-    )
-    n_games_per_query: int = Field(
-        default=100, description="Maximum number of games to generate for each query"
-    )
-    pairwise: bool = Field(
-        default=True, description="Whether or not to the evaluator is pairwise"
-    )
+    bidirectional: bool = Field(default=True, description="Whether or not to run each game in both directions")
+    n_games_per_query: int = Field(default=100, description="Maximum number of games to generate for each query")
+    pairwise: bool = Field(default=True, description="Whether or not to the evaluator is pairwise")
     llm_response_schema: Optional[Type[BaseModel] | dict[str, Any]] = Field(
         default=PairWiseAnswerAnswerFormat,
         description="The response schema for the LLM.",
@@ -77,9 +67,7 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     @field_validator("user_prompt", mode="after")
     def validate_user_prompt(cls, prompt: Template) -> Template:
         src = getattr(prompt, "_ragelo_source", None)
-        placeholders = set(
-            m.group(1) for m in re.finditer(r"{{\s*([a-zA-Z_][\w\.]*)\s*}}", src or "")
-        )
+        placeholders = set(m.group(1) for m in re.finditer(r"{{\s*([a-zA-Z_][\w\.]*)\s*}}", src or ""))
         required = {
             "query.query",
             "game.agent_a_answer.text",
@@ -87,9 +75,7 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
         }
         missing = sorted(required - placeholders)
         if missing:
-            raise ValueError(
-                f"The user prompt is missing placeholders: {', '.join(missing)}"
-            )
+            raise ValueError(f"The user prompt is missing placeholders: {', '.join(missing)}")
         return prompt
 
 
@@ -124,15 +110,11 @@ class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
     @field_validator("user_prompt", mode="after")
     def validate_user_prompt(cls, prompt: Template) -> Template:
         src = getattr(prompt, "_ragelo_source", None)
-        placeholders = set(
-            m.group(1) for m in re.finditer(r"{{\s*([a-zA-Z_][\w\.]*)\s*}}", src or "")
-        )
+        placeholders = set(m.group(1) for m in re.finditer(r"{{\s*([a-zA-Z_][\w\.]*)\s*}}", src or ""))
         required = {"query.query", "answer.text"}
         missing = sorted(required - placeholders)
         if missing:
-            raise ValueError(
-                f"The user prompt is missing placeholders: {', '.join(missing)}"
-            )
+            raise ValueError(f"The user prompt is missing placeholders: {', '.join(missing)}")
         return prompt
 
 
@@ -148,9 +130,7 @@ class PairwiseDomainExpertEvaluatorConfig(PairwiseEvaluatorConfig):
 
 
 class PointwiseDomainExpertEvaluatorConfig(BaseAnswerEvaluatorConfig):
-    pairwise: bool = Field(
-        default=False, description="Whether or not to the evaluator is pairwise"
-    )
+    pairwise: bool = Field(default=False, description="Whether or not to the evaluator is pairwise")
     evaluator_name: AnswerEvaluatorTypes = AnswerEvaluatorTypes.DOMAIN_EXPERT
     expert_in: str = Field(description="What the LLM should mimic being an expert in.")
     company: Optional[str] = Field(

@@ -3,9 +3,10 @@ from __future__ import annotations
 from typing import Any
 
 from pydantic import BaseModel, field_validator, model_validator
+from typing_extensions import Self
+
 from ragelo.logger import logger
 from ragelo.types.results import EvaluatorResult, GroundednessEvaluatorResult
-from typing_extensions import Self
 
 
 class ChatMessage(BaseModel):
@@ -84,9 +85,7 @@ class Document(Evaluable):
         """Adds the score of an agent that retrieved the document."""
         if agent in self.retrieved_by and not force:
             if not exist_ok:
-                logger.info(
-                    f"Document with did {self.did} already retrieved by agent {agent}"
-                )
+                logger.info(f"Document with did {self.did} already retrieved by agent {agent}")
             return
         if score is None:
             score = 1.0
@@ -127,9 +126,7 @@ class Document(Evaluable):
         """Assembles a list of Document objects from a list of strings or Document objects."""
         assembled_docs: dict[str, Document] = {}
         if metadata and len(documents) != len(metadata):
-            raise ValueError(
-                "The number of documents and document metadata do not match"
-            )
+            raise ValueError("The number of documents and document metadata do not match")
         if not metadata:
             metadata = [None] * len(documents)
 

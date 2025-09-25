@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from tenacity import RetryError
+
 from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
     AnswerEvaluatorFactory,
     AnswerEvaluatorTypes,
@@ -16,7 +18,6 @@ from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.query import AgentAnswer, Query
 from ragelo.types.results import EvaluatorResult, GroundednessEvaluatorResult
 from ragelo.utils import call_async_fn, string_to_template
-from tenacity import RetryError
 
 
 @AnswerEvaluatorFactory.register(AnswerEvaluatorTypes.GROUNDEDNESS)
@@ -56,9 +57,7 @@ class BaseGroundednessEvaluator(BaseAnswerEvaluator):
         {%- endif %}"""
     )
 
-    def __init__(
-        self, config: BaseGroundednessEvaluatorConfig, llm_provider: BaseLLMProvider
-    ):
+    def __init__(self, config: BaseGroundednessEvaluatorConfig, llm_provider: BaseLLMProvider):
         super().__init__(config, llm_provider)
 
     def evaluate(
@@ -81,9 +80,7 @@ class BaseGroundednessEvaluator(BaseAnswerEvaluator):
         """
         query = Query.assemble_query(query, query_metadata)
         docs = Document.assemble_documents(retrieved_docs, query.qid, document_metadata)
-        answer = AgentAnswer.assemble_answer(
-            answer, query.qid, metadata=answer_metadata
-        )
+        answer = AgentAnswer.assemble_answer(answer, query.qid, metadata=answer_metadata)
 
         result = call_async_fn(self.evaluate_async, (query, docs, answer))
 
@@ -94,17 +91,13 @@ class BaseGroundednessEvaluator(BaseAnswerEvaluator):
             )
         return result
 
-    def _build_message(
-        self, query: Query, answer: AgentAnswerWithDocuments
-    ) -> LLMInputPrompt:
+    def _build_message(self, query: Query, answer: AgentAnswerWithDocuments) -> LLMInputPrompt:
         """Builds the message to send to the LLM evaluator"""
 
         context = {
             "query": query.query,
             "answer": answer.agent_answer.text,
-            "retrieved_docs": "\n".join(
-                [f"[{doc.did}]: {doc.text}" for doc in answer.documents.values()]
-            ),
+            "retrieved_docs": "\n".join([f"[{doc.did}]: {doc.text}" for doc in answer.documents.values()]),
         }
         user_message = self.user_prompt.render(**context)
         system_message = self.system_prompt.render() if self.system_prompt else None
@@ -113,9 +106,7 @@ class BaseGroundednessEvaluator(BaseAnswerEvaluator):
             user_message=user_message,
         )
 
-    async def evaluate_async(
-        self, eval_sample: tuple[Query, AgentAnswerWithDocuments]
-    ) -> GroundednessEvaluatorResult:
+    async def evaluate_async(self, eval_sample: tuple[Query, AgentAnswerWithDocuments]) -> GroundednessEvaluatorResult:
         """
         Evaluates a single sample (either an answer or a pairwise game) asynchronously.
         Args:
@@ -124,10 +115,7 @@ class BaseGroundednessEvaluator(BaseAnswerEvaluator):
 
         (query, answer_with_docs) = eval_sample
 
-        if (
-            answer_with_docs.agent_answer.groundedness_evaluation is not None
-            and not self.config.force
-        ):
+        if answer_with_docs.agent_answer.groundedness_evaluation is not None and not self.config.force:
             return GroundednessEvaluatorResult(
                 qid=query.qid,
                 agent=answer_with_docs.agent_answer.agent,
@@ -145,9 +133,7 @@ class BaseGroundednessEvaluator(BaseAnswerEvaluator):
             )
             llm_response = self._process_answer(llm_response)
         except ValueError as e:
-            logger.warning(
-                f"Failed to PARSE answer for qid: {query.qid}\nRaw answer: {llm_response.raw_answer}"
-            )
+            logger.warning(f"Failed to PARSE answer for qid: {query.qid}\nRaw answer: {llm_response.raw_answer}")
             exc = str(e)
         except Exception as e:
             logger.warning(f"Failed to FETCH answers for qid: {query.qid}")
@@ -164,9 +150,7 @@ class BaseGroundednessEvaluator(BaseAnswerEvaluator):
             exception=exc,
         )
 
-    def _get_tuples_to_evaluate(
-        self, experiment: Experiment
-    ) -> list[tuple[Query, AgentAnswerWithDocuments]]:
+    def _get_tuples_to_evaluate(self, experiment: Experiment) -> list[tuple[Query, AgentAnswerWithDocuments]]:
         """
         Creates the list of pairs (query, evaluable) to evaluate
         """
@@ -181,9 +165,7 @@ class BaseGroundednessEvaluator(BaseAnswerEvaluator):
                 tuples_to_eval.append(
                     (
                         q,
-                        AgentAnswerWithDocuments(
-                            qid=q.qid, agent_answer=a, documents=retrieved_docs
-                        ),
+                        AgentAnswerWithDocuments(qid=q.qid, agent_answer=a, documents=retrieved_docs),
                     )
                 )
                 if a.groundedness_evaluation is None:

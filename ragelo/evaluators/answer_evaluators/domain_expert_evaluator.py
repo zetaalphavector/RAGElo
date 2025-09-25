@@ -1,16 +1,8 @@
 """Answer Evaluator with a domain expert persona"""
 
-from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
-    AnswerEvaluatorFactory,
-    BaseAnswerEvaluator,
-)
-from ragelo.evaluators.answer_evaluators.pairwise_evaluator import (
-    PairwiseAnswerEvaluator,
-)
-from ragelo.types.configurations import (
-    PairwiseDomainExpertEvaluatorConfig,
-    PointwiseDomainExpertEvaluatorConfig,
-)
+from ragelo.evaluators.answer_evaluators.base_answer_evaluator import AnswerEvaluatorFactory, BaseAnswerEvaluator
+from ragelo.evaluators.answer_evaluators.pairwise_evaluator import PairwiseAnswerEvaluator
+from ragelo.types.configurations import PairwiseDomainExpertEvaluatorConfig, PointwiseDomainExpertEvaluatorConfig
 from ragelo.types.evaluables import PairwiseGame
 from ragelo.types.formats import LLMInputPrompt
 from ragelo.types.query import AgentAnswer, Query
@@ -57,9 +49,7 @@ class PairwiseDomainExpertEvaluator(PairwiseAnswerEvaluator):
         After providing your explanation, output your final verdict by strictly following his format: "A" if assistant A is better, "B" if assistant B is better, or "C" for a tie."""
     )
 
-    def _build_message_pairwise(
-        self, query: Query, game: PairwiseGame
-    ) -> LLMInputPrompt:
+    def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> LLMInputPrompt:
         documents = self._filter_documents(query)
         context = {
             "factors": self.config.factors,

@@ -3,9 +3,7 @@ from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
     BaseAnswerEvaluator,
     get_answer_evaluator,
 )
-from ragelo.evaluators.answer_evaluators.base_groundedness_evaluator import (
-    BaseGroundednessEvaluator,
-)
+from ragelo.evaluators.answer_evaluators.base_groundedness_evaluator import BaseGroundednessEvaluator
 from ragelo.evaluators.answer_evaluators.chat_pairwise_evaluator import ChatPairwiseEvaluator
 from ragelo.evaluators.answer_evaluators.custom_pairwise_evaluator import CustomPairwiseEvaluator
 from ragelo.evaluators.answer_evaluators.custom_prompt_evaluator import CustomPromptEvaluator
