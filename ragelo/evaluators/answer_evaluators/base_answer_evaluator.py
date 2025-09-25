@@ -2,15 +2,21 @@ from __future__ import annotations
 
 import itertools
 import random
-from typing import Any, Callable, Set, Type, get_type_hints
+from typing import Any, Callable, Set, Tuple, Type, get_type_hints
 
+import rich
 from pydantic import BaseModel
-from tenacity import RetryError
-
 from ragelo.evaluators.base_evaluator import BaseEvaluator
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
 from ragelo.logger import logger
-from ragelo.types.configurations import BaseAnswerEvaluatorConfig, PairwiseEvaluatorConfig
+from ragelo.types.answer_formats import (
+    GroundednessEvaluatorFormat,
+    PointWiseAnswerAnswerFormat,
+)
+from ragelo.types.configurations import (
+    BaseAnswerEvaluatorConfig,
+    PairwiseEvaluatorConfig,
+)
 from ragelo.types.evaluables import AgentAnswer, Document, Evaluable, PairwiseGame
 from ragelo.types.experiment import Experiment
 from ragelo.types.formats import LLMInputPrompt
@@ -18,6 +24,7 @@ from ragelo.types.query import Query
 from ragelo.types.results import AnswerEvaluatorResult
 from ragelo.types.types import AnswerEvaluatorTypes
 from ragelo.utils import call_async_fn
+from tenacity import RetryError
 
 
 class BaseAnswerEvaluator(BaseEvaluator):
@@ -77,8 +84,12 @@ class BaseAnswerEvaluator(BaseEvaluator):
         if self.config.pairwise:
             if not answer_a or not answer_b:
                 raise ValueError("Pairwise evaluations require two answers")
-            answer_a = AgentAnswer.assemble_answer(answer_a, query.qid, metadata=answer_a_metadata)
-            answer_b = AgentAnswer.assemble_answer(answer_b, query.qid, metadata=answer_b_metadata)
+            answer_a = AgentAnswer.assemble_answer(
+                answer_a, query.qid, metadata=answer_a_metadata
+            )
+            answer_b = AgentAnswer.assemble_answer(
+                answer_b, query.qid, metadata=answer_b_metadata
+            )
             agent = (answer_a.agent, answer_b.agent)
             evaluable = PairwiseGame(
                 qid=query.qid,
@@ -88,7 +99,9 @@ class BaseAnswerEvaluator(BaseEvaluator):
         else:
             if not answer:
                 raise ValueError("Pointwise evaluations require an answer")
-            evaluable = AgentAnswer.assemble_answer(answer, query.qid, metadata=answer_metadata)
+            evaluable = AgentAnswer.assemble_answer(
+                answer, query.qid, metadata=answer_metadata
+            )
             agent = evaluable.agent
         result = call_async_fn(self.evaluate_async, (query, evaluable))
 
@@ -99,9 +112,14 @@ class BaseAnswerEvaluator(BaseEvaluator):
             )
         return result
 
-    def evaluate_experiment(self, experiment: Experiment, n_threads: int | None = None):
+    def evaluate_experiment(
+        self,
+        experiment: Experiment,
+        n_threads: int | None = None,
+        evaluator_type: str | None = None,
+    ) -> None:
         """
-        Trigger the evaluation of all the queries in the experiment.
+        Trigger the evaluator for all the supported evaluables in the experiment.
         The evaluation is done in asynchronously with the number of threads defined in config.n_processes parameter.
         This can be overwritten by the n_threads parameter.
 
@@ -110,11 +128,31 @@ class BaseAnswerEvaluator(BaseEvaluator):
             n_threads(int): The number of threads to use for the evaluation.
                 If None, the number of threads defined in the config will be used.
         """
-        if self.config.pairwise:
+        n_threads = n_threads or self.config.n_processes
+        if getattr(self.config, "pairwise", False):
             self.__add_pairwise_games(experiment)
-        super().evaluate_experiment(experiment, n_threads)
+        call_async_fn(self._evaluate_experiment_async, experiment, n_threads)
 
-    async def evaluate_async(self, eval_sample: tuple[Query, Evaluable]) -> AnswerEvaluatorResult:
+        if evaluator_type and not getattr(self.config, "pairwise", False):
+            aggregate_groundedness_scores = self._aggregate_scores(
+                experiment, evaluator_type
+            )
+
+            if experiment.rich_print:
+                rich.print(
+                    f"\n-------[bold white] {evaluator_type} scores [0-1] [/bold white]-------"
+                )
+            else:
+                print(f"\n------- {evaluator_type} scores [0-1] -------")
+            for agent, score in aggregate_groundedness_scores:
+                if experiment.rich_print:
+                    rich.print(f"[bold white]{agent:<18}[/bold white]: {score:.2f}")
+                else:
+                    print(f"{agent:<18}: {score:.1f}")
+
+    async def evaluate_async(
+        self, eval_sample: tuple[Query, Evaluable]
+    ) -> AnswerEvaluatorResult:
         """
         Evaluates a single sample (either an answer or a pairwise game) asynchronously.
         Args:
@@ -123,7 +161,9 @@ class BaseAnswerEvaluator(BaseEvaluator):
         agent: str | tuple[str, str]
         query, evaluable = eval_sample
 
-        if not isinstance(evaluable, AgentAnswer) and not isinstance(evaluable, PairwiseGame):
+        if not isinstance(evaluable, AgentAnswer) and not isinstance(
+            evaluable, PairwiseGame
+        ):
             type_name = type(evaluable).__name__
             raise ValueError(f"can't evaluate a {type_name} in an Answer Evaluator")
 
@@ -193,7 +233,9 @@ class BaseAnswerEvaluator(BaseEvaluator):
             exception=exc,
         )
 
-    def _get_tuples_to_evaluate(self, experiment: Experiment) -> list[tuple[Query, Evaluable]]:
+    def _get_tuples_to_evaluate(
+        self, experiment: Experiment
+    ) -> list[tuple[Query, Evaluable]]:
         """
         Creates the list of pairs (query, evaluable) to evaluate
         """
@@ -228,25 +270,33 @@ class BaseAnswerEvaluator(BaseEvaluator):
         documents = self._filter_documents(query)
         context = {"query": query, "answer": answer, "documents": documents}
         user_message = self.user_prompt.render(**context)
-        system_prompt = self.system_prompt.render(**context) if self.system_prompt else None
+        system_prompt = (
+            self.system_prompt.render(**context) if self.system_prompt else None
+        )
         return LLMInputPrompt(
             system_prompt=system_prompt,
             user_message=user_message,
         )
 
-    def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> LLMInputPrompt:
+    def _build_message_pairwise(
+        self, query: Query, game: PairwiseGame
+    ) -> LLMInputPrompt:
         """Builds the message to send to the LLM evaluator based on a pairwise game"""
         documents = self._filter_documents(query)
         context = {"query": query, "game": game, "documents": documents}
         user_message = self.user_prompt.render(**context)
-        system_prompt = self.system_prompt.render(**context) if self.system_prompt else None
+        system_prompt = (
+            self.system_prompt.render(**context) if self.system_prompt else None
+        )
         return LLMInputPrompt(
             system_prompt=system_prompt,
             user_message=user_message,
         )
 
     @classmethod
-    def from_config(cls, config: BaseAnswerEvaluatorConfig, llm_provider: BaseLLMProvider):
+    def from_config(
+        cls, config: BaseAnswerEvaluatorConfig, llm_provider: BaseLLMProvider
+    ):
         return cls(config, llm_provider)
 
     @classmethod
@@ -266,10 +316,15 @@ class BaseAnswerEvaluator(BaseEvaluator):
             random.shuffle(pairs)
 
             # Filter out games that already exist
-            existing_games = {(a.agent_a_answer.agent, a.agent_b_answer.agent) for a in query.pairwise_games}
+            existing_games = {
+                (a.agent_a_answer.agent, a.agent_b_answer.agent)
+                for a in query.pairwise_games
+            }
             games = [g for g in pairs if g not in existing_games]
 
-            games_to_add = min(self.config.n_games_per_query - len(existing_games), len(games))
+            games_to_add = min(
+                self.config.n_games_per_query - len(existing_games), len(games)
+            )
             games = games[:games_to_add]
             for agent_a, agent_b in games:
                 query.pairwise_games.append(
@@ -302,7 +357,10 @@ class BaseAnswerEvaluator(BaseEvaluator):
                     continue
                 if score < self.config.document_relevance_threshold:
                     continue
-            if self.config.document_filter is not None and not self.config.document_filter(d):
+            if (
+                self.config.document_filter is not None
+                and not self.config.document_filter(d)
+            ):
                 continue
             documents.append(d)
         if len(documents) == 0:
@@ -313,6 +371,68 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 )
                 self._warned_queries.add(query.qid)
         return documents
+
+    def _aggregate_scores(
+        self,
+        experiment: Experiment,
+        evaluator_type: str = AnswerEvaluatorTypes.DOMAIN_EXPERT_POINTWISE,
+    ) -> list[Tuple[str, float]]:
+        """
+        Aggregates the groundedness scores for each query in the experiment.
+        Args:
+            experiment (Experiment): The experiment to aggregate the scores for.
+        Returns:
+            dict[str, float]: A dictionary mapping each query ID to its average groundedness score.
+        """
+        groundedness_scores = {}
+        total_scores_per_agent = {}
+        counts_per_agent = {}
+        for query in experiment:
+
+            for answer in query.answers.values():
+                if evaluator_type == AnswerEvaluatorTypes.GROUNDEDNESS:
+                    score_field = "groundedness_score"
+                    max_score = 2
+                    if answer.groundedness_evaluation is not None:
+                        eval_answer = answer.groundedness_evaluation.answer
+                        if isinstance(
+                            answer.groundedness_evaluation.answer,
+                            GroundednessEvaluatorFormat,
+                        ):
+                            eval_answer = vars(answer.groundedness_evaluation.answer)
+
+                if evaluator_type == AnswerEvaluatorTypes.DOMAIN_EXPERT_POINTWISE:
+                    score_field = "score"
+                    max_score = 5
+                    if answer.evaluation is not None:
+                        eval_answer = answer.evaluation.answer
+                        if isinstance(
+                            answer.evaluation.answer,
+                            PointWiseAnswerAnswerFormat,
+                        ):
+                            eval_answer = vars(answer.evaluation.answer)
+
+                if isinstance(eval_answer, dict):
+                    total_scores_per_agent[answer.agent] = total_scores_per_agent.get(
+                        answer.agent, 0
+                    ) + (float(eval_answer[score_field]) / max_score)
+                    counts_per_agent[answer.agent] = (
+                        counts_per_agent.get(answer.agent, 0) + 1
+                    )
+
+        for agent in total_scores_per_agent:
+            groundedness_scores[agent] = (
+                total_scores_per_agent[agent] / counts_per_agent[agent]
+                if counts_per_agent[agent] > 0
+                else 0.0
+            )
+
+        sorted_groundedness_scores = sorted(
+            groundedness_scores.items(),
+            key=lambda x: x[1],
+            reverse=True,
+        )
+        return sorted_groundedness_scores
 
 
 class AnswerEvaluatorFactory:
@@ -349,10 +469,16 @@ class AnswerEvaluatorFactory:
             type_config = class_.get_config_class()
             valid_keys = [field for field in type_config.model_fields]
             valid_args = {k: v for k, v in kwargs.items() if k in valid_keys}
-            required_fields = [arg for arg, info in type_config.model_fields.items() if info.is_required()]
+            required_fields = [
+                arg
+                for arg, info in type_config.model_fields.items()
+                if info.is_required()
+            ]
             for field in required_fields:
                 if field not in valid_args:
-                    raise ValueError(f"Required argument {field} for evaluator {evaluator_name} not provided")
+                    raise ValueError(
+                        f"Required argument {field} for evaluator {evaluator_name} not provided"
+                    )
             config = type_config(**valid_args)
         return cls.registry[evaluator_name].from_config(config, llm_provider_instance)
 
@@ -375,7 +501,9 @@ def get_answer_evaluator(
     if evaluator_name is None:
         # get the name from the config
         if config is None:
-            raise ValueError("Either the evaluator_name or a config object must be provided")
+            raise ValueError(
+                "Either the evaluator_name or a config object must be provided"
+            )
         evaluator_name = config.evaluator_name
     if isinstance(evaluator_name, str):
         try:

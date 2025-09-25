@@ -21,6 +21,17 @@ class PairWiseAnswerAnswerFormat(BaseModel):
     )
 
 
+class PointWiseAnswerAnswerFormat(BaseModel):
+    reasoning: str = Field(
+        ...,
+        description="A concise explanation and reasoning of the relevance of the answer.",
+    )
+    score: int = Field(
+        ...,
+        description="Your relevance score for the answer.",
+    )
+
+
 class RetrievalAnswerEvaluatorFormat(BaseModel):
     reasoning: str = Field(
         ...,

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Sequence, Tuple, Type, get_type_hints
+from typing import Any
 
-import rich
-from ragelo.evaluators.base_evaluator import BaseEvaluator
+from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
+    AnswerEvaluatorFactory,
+    AnswerEvaluatorTypes,
+    BaseAnswerEvaluator,
+)
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
 from ragelo.logger import logger
-from ragelo.types.answer_formats import GroundednessEvaluatorFormat
 from ragelo.types.configurations import BaseGroundednessEvaluatorConfig
 from ragelo.types.evaluables import AgentAnswerWithDocuments, Document, Evaluable
 from ragelo.types.experiment import Experiment
@@ -17,7 +19,8 @@ from ragelo.utils import call_async_fn, string_to_template
 from tenacity import RetryError
 
 
-class BaseGroundednessEvaluator(BaseEvaluator):
+@AnswerEvaluatorFactory.register(AnswerEvaluatorTypes.GROUNDEDNESS)
+class BaseGroundednessEvaluator(BaseAnswerEvaluator):
     """
     A base class for groundedness evaluators.
     """
@@ -193,77 +196,3 @@ class BaseGroundednessEvaluator(BaseEvaluator):
             )
 
         return tuples_to_eval
-
-    def _aggregate_groundedness_scores(
-        self, experiment: Experiment
-    ) -> list[Tuple[str, float]]:
-        """
-        Aggregates the groundedness scores for each query in the experiment.
-        Args:
-            experiment (Experiment): The experiment to aggregate the scores for.
-        Returns:
-            dict[str, float]: A dictionary mapping each query ID to its average groundedness score.
-        """
-        groundedness_scores = {}
-        total_scores_per_agent = {}
-        counts_per_agent = {}
-        for query in experiment:
-
-            for answer in query.answers.values():
-                if answer.groundedness_evaluation is not None:
-                    eval_answer = answer.groundedness_evaluation.answer
-                    if isinstance(
-                        answer.groundedness_evaluation.answer,
-                        GroundednessEvaluatorFormat,
-                    ):
-                        eval_answer = vars(answer.groundedness_evaluation.answer)
-                    if isinstance(eval_answer, dict):
-                        total_scores_per_agent[answer.agent] = (
-                            total_scores_per_agent.get(answer.agent, 0)
-                            + (float(eval_answer["groundedness_score"]) / 2)
-                        )
-                        counts_per_agent[answer.agent] = (
-                            counts_per_agent.get(answer.agent, 0) + 1
-                        )
-
-        for agent in total_scores_per_agent:
-            groundedness_scores[agent] = (
-                total_scores_per_agent[agent] / counts_per_agent[agent]
-                if counts_per_agent[agent] > 0
-                else 0.0
-            )
-
-        sorted_groundedness_scores = sorted(
-            groundedness_scores.items(),
-            key=lambda x: x[1],
-            reverse=True,
-        )
-        return sorted_groundedness_scores
-
-    def evaluate_experiment(self, experiment: Experiment, n_threads: int | None = None):
-        """
-        Trigger the evaluator for all the supported evaluables in the experiment.
-        The evaluation is done in asynchronously with the number of threads defined in config.n_processes parameter.
-        This can be overwritten by the n_threads parameter.
-
-        Args:
-            experiment(Experiment): The experiment to evaluate.
-            n_threads(int): The number of threads to use for the evaluation.
-                If None, the number of threads defined in the config will be used.
-        """
-        n_threads = n_threads or self.config.n_processes
-        call_async_fn(self._evaluate_experiment_async, experiment, n_threads)
-
-        aggregate_groundedness_scores = self._aggregate_groundedness_scores(experiment)
-
-        if experiment.rich_print:
-            rich.print(
-                "-------[bold white] Groundedness scores [0-1] [/bold white]-------"
-            )
-        else:
-            print("\n------- Groundedness scores [0-1] -------")
-        for agent, score in aggregate_groundedness_scores:
-            if experiment.rich_print:
-                rich.print(f"[bold white]{agent:<18}[/bold white]: {score:.2f}")
-            else:
-                print(f"{agent:<18}: {score:.1f}")

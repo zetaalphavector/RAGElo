@@ -7,6 +7,7 @@ from ragelo.types.configurations.answer_evaluator_configs import (
     CustomPairwiseEvaluatorConfig,
     CustomPromptAnswerEvaluatorConfig,
     PairwiseDomainExpertEvaluatorConfig,
+    PointwiseDomainExpertEvaluatorConfig,
     PairwiseEvaluatorConfig,
 )
 from ragelo.types.configurations.base_configs import BaseConfig, BaseEvaluatorConfig
@@ -42,6 +43,7 @@ __all__ = [
     "CustomPromptAnswerEvaluatorConfig",
     "PairwiseEvaluatorConfig",
     "PairwiseDomainExpertEvaluatorConfig",
+    "PointwiseDomainExpertEvaluatorConfig",
     "BaseRetrievalEvaluatorConfig",
     "FewShotEvaluatorConfig",
     "RDNAMEvaluatorConfig",

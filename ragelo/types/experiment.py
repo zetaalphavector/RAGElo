@@ -782,6 +782,7 @@ class Experiment:
             did = line[document_id_col].strip()
             text = line[document_text_col].strip()
             agent = line.get(agent_col)
+            score = float(line.get("score", 0.0))
             metadata = {
                 k: v
                 for k, v in line.items()
@@ -800,8 +801,8 @@ class Experiment:
                 doc_obj.add_metadata(metadata)
                 documents_read += 1
             if agent is not None:
-                doc_obj.add_retrieved_by(agent, exist_ok=exist_ok)
-            self.add_retrieved_doc(doc_obj, exist_ok=exist_ok)
+                doc_obj.add_retrieved_by(agent, exist_ok=exist_ok, score=score)
+            self.add_retrieved_doc(doc_obj, exist_ok=exist_ok, score=score)
         if documents_read > 0:
             logger.info(f"Loaded {documents_read} new documents from {file_path}")
 

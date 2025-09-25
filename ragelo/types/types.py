@@ -33,7 +33,9 @@ class AnswerEvaluatorTypes(StrEnum):
     CUSTOM_PAIRWISE = "custom_pairwise"
     CUSTOM_PROMPT = "custom_prompt"
     DOMAIN_EXPERT = "domain_expert"
+    DOMAIN_EXPERT_POINTWISE = "domain_expert_pointwise"
     CHAT_PAIRWISE = "chat_pairwise"
+    GROUNDEDNESS = "groundedness"
 
 
 class AgentRankerTypes(StrEnum):
