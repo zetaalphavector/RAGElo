@@ -6,6 +6,8 @@ from typing import Any, Callable, Set, Tuple, Type, get_type_hints
 
 import rich
 from pydantic import BaseModel
+from tenacity import RetryError
+
 from ragelo.evaluators.base_evaluator import BaseEvaluator
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
 from ragelo.logger import logger
@@ -24,7 +26,6 @@ from ragelo.types.query import Query
 from ragelo.types.results import AnswerEvaluatorResult
 from ragelo.types.types import AnswerEvaluatorTypes
 from ragelo.utils import call_async_fn
-from tenacity import RetryError
 
 
 class BaseAnswerEvaluator(BaseEvaluator):

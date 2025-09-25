@@ -5,7 +5,9 @@ from typing import Any, Callable, Optional, Type
 
 from jinja2 import Template
 from pydantic import BaseModel, Field, field_validator
+
 from ragelo.types.answer_formats import (
+    GroundednessEvaluatorFormat,
     PairWiseAnswerAnswerFormat,
     PointWiseAnswerAnswerFormat,
 )
@@ -159,5 +161,16 @@ class PointwiseDomainExpertEvaluatorConfig(BaseAnswerEvaluatorConfig):
     )
     llm_response_schema: Optional[Type[BaseModel] | dict[str, Any]] = Field(
         default=PointWiseAnswerAnswerFormat,
+        description="The response schema for the LLM.",
+    )
+
+
+class BaseGroundednessEvaluatorConfig(BaseEvaluatorConfig):
+    """
+    A base configuration class for groundedness evaluators.
+    """
+
+    llm_response_schema: Optional[Type[BaseModel] | dict[str, Any]] = Field(
+        default=GroundednessEvaluatorFormat,
         description="The response schema for the LLM.",
     )
