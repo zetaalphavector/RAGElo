@@ -139,9 +139,15 @@ class PointwiseDomainExpertEvaluatorConfig(BaseAnswerEvaluatorConfig):
         "submitted the query works for. that the domain belongs to. "
         "(e.g.: ChemCorp, CS Inc.)",
     )
-    llm_response_schema: Optional[Type[BaseModel] | dict[str, Any]] = Field(
-        default=PointWiseAnswerAnswerFormat,
-        description="The response schema for the LLM.",
+    llm_response_schema: Optional[Type[BaseModel] | dict[str, Any]] = (
+        Field(
+            default=PointWiseAnswerAnswerFormat,
+            description="The response schema for the LLM.",
+        ),
+    )
+    print_results: bool = Field(
+        default=True,
+        description="Whether or not to print the results after evaluation.",
     )
 
 
@@ -153,4 +159,8 @@ class BaseGroundednessEvaluatorConfig(BaseEvaluatorConfig):
     llm_response_schema: Optional[Type[BaseModel] | dict[str, Any]] = Field(
         default=GroundednessEvaluatorFormat,
         description="The response schema for the LLM.",
+    )
+    print_results: bool = Field(
+        default=True,
+        description="Whether or not to print the results after evaluation.",
     )

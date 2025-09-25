@@ -101,6 +101,19 @@ class BaseAnswerEvaluator(BaseEvaluator):
             )
         return result
 
+    def _print_pointwise_results(self, experiment: Experiment, evaluator_type: str) -> None:
+        aggregate_groundedness_scores = self._aggregate_scores(experiment, evaluator_type)
+
+        if experiment.rich_print:
+            rich.print(f"\n-------[bold white] {evaluator_type} scores [0-1] [/bold white]-------")
+        else:
+            print(f"\n------- {evaluator_type} scores [0-1] -------")
+        for agent, score in aggregate_groundedness_scores:
+            if experiment.rich_print:
+                rich.print(f"[bold white]{agent:<18}[/bold white]: {score:.2f}")
+            else:
+                print(f"{agent:<18}: {score:.1f}")
+
     def evaluate_experiment(
         self,
         experiment: Experiment,
@@ -122,18 +135,12 @@ class BaseAnswerEvaluator(BaseEvaluator):
             self.__add_pairwise_games(experiment)
         call_async_fn(self._evaluate_experiment_async, experiment, n_threads)
 
-        if evaluator_type and not getattr(self.config, "pairwise", False):
-            aggregate_groundedness_scores = self._aggregate_scores(experiment, evaluator_type)
-
-            if experiment.rich_print:
-                rich.print(f"\n-------[bold white] {evaluator_type} scores [0-1] [/bold white]-------")
-            else:
-                print(f"\n------- {evaluator_type} scores [0-1] -------")
-            for agent, score in aggregate_groundedness_scores:
-                if experiment.rich_print:
-                    rich.print(f"[bold white]{agent:<18}[/bold white]: {score:.2f}")
-                else:
-                    print(f"{agent:<18}: {score:.1f}")
+        if (
+            getattr(self.config, "print_results", False)
+            and evaluator_type
+            and not getattr(self.config, "pairwise", False)
+        ):
+            self._print_pointwise_results(experiment, evaluator_type)
 
     async def evaluate_async(self, eval_sample: tuple[Query, Evaluable]) -> AnswerEvaluatorResult:
         """
