@@ -151,7 +151,7 @@ class PointwiseDomainExpertEvaluatorConfig(BaseAnswerEvaluatorConfig):
     )
 
 
-class BaseGroundednessEvaluatorConfig(BaseEvaluatorConfig):
+class GroundednessEvaluatorConfig(BaseAnswerEvaluatorConfig):
     """
     A base configuration class for groundedness evaluators.
     """

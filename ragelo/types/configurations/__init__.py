@@ -1,9 +1,9 @@
 from ragelo.types.configurations.agent_ranker_configs import AgentRankerConfig, EloAgentRankerConfig
 from ragelo.types.configurations.answer_evaluator_configs import (
     BaseAnswerEvaluatorConfig,
-    BaseGroundednessEvaluatorConfig,
     CustomPairwiseEvaluatorConfig,
     CustomPromptAnswerEvaluatorConfig,
+    GroundednessEvaluatorConfig,
     PairwiseDomainExpertEvaluatorConfig,
     PairwiseEvaluatorConfig,
     PointwiseDomainExpertEvaluatorConfig,
@@ -45,5 +45,5 @@ __all__ = [
     "ReasonerEvaluatorConfig",
     "CustomPromptEvaluatorConfig",
     "DomainExpertEvaluatorConfig",
-    "BaseGroundednessEvaluatorConfig",
+    "GroundednessEvaluatorConfig",
 ]

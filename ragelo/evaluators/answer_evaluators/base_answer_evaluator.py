@@ -131,7 +131,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 If None, the number of threads defined in the config will be used.
         """
         n_threads = n_threads or self.config.n_processes
-        if getattr(self.config, "pairwise", False):
+        if self.config.pairwise:
             self.__add_pairwise_games(experiment)
         call_async_fn(self._evaluate_experiment_async, experiment, n_threads)
 

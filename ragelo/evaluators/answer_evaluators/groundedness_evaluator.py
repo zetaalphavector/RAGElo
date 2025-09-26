@@ -9,25 +9,24 @@ from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
     AnswerEvaluatorTypes,
     BaseAnswerEvaluator,
 )
-from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
+from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.logger import logger
-from ragelo.types.configurations import BaseGroundednessEvaluatorConfig
-from ragelo.types.evaluables import AgentAnswerWithDocuments, Document, Evaluable
+from ragelo.types.configurations import GroundednessEvaluatorConfig
 from ragelo.types.experiment import Experiment
-from ragelo.types.formats import LLMInputPrompt, LLMResponseType
+from ragelo.types.formats import LLMInputPrompt
 from ragelo.types.query import AgentAnswer, Query
-from ragelo.types.results import EvaluatorResult, GroundednessEvaluatorResult
-from ragelo.utils import call_async_fn, string_to_template
+from ragelo.types.results import GroundednessEvaluatorResult
+from ragelo.utils import string_to_template
 
 
 @AnswerEvaluatorFactory.register(AnswerEvaluatorTypes.GROUNDEDNESS)
-class BaseGroundednessEvaluator(BaseAnswerEvaluator):
+class GroundednessEvaluator(BaseAnswerEvaluator):
     """
     A base class for groundedness evaluators.
     """
 
     evaluable_name: str = "Groundedness"
-    config: BaseGroundednessEvaluatorConfig
+    config: GroundednessEvaluatorConfig
     system_prompt = string_to_template(
         """
         You are an expert evaluator tasked with determining whether an AI assistant's response is grounded in the provided documents.
@@ -57,47 +56,16 @@ class BaseGroundednessEvaluator(BaseAnswerEvaluator):
         {%- endif %}"""
     )
 
-    def __init__(self, config: BaseGroundednessEvaluatorConfig, llm_provider: BaseLLMProvider):
+    def __init__(self, config: GroundednessEvaluatorConfig, llm_provider: BaseLLMProvider):
         super().__init__(config, llm_provider)
 
-    def evaluate(
-        self,
-        query: Query | str,
-        retrieved_docs: list[Document | str],
-        answer: AgentAnswer | str,
-        document_metadata: list[dict[str, Any]] | None = None,
-        query_metadata: dict[str, Any] | None = None,
-        answer_metadata: dict[str, Any] | None = None,
-    ) -> GroundednessEvaluatorResult:
-        """Evaluates a single query-document pair. Returns the raw answer and the processed answer.
-        Args:
-            query (Query | str): The query to evaluate.
-                If a string is provided, a Query object will be created with the provided query_metadata.
-            document (Document | str): The document to evaluate.
-                If a string is provided, a Document object will be created with the provided doc_metadata.
-            query_metadata (dict[str, Any] | None): The metadata for the query.
-            doc_metadata (dict[str, Any] | None): The metadata for the document.
-        """
-        query = Query.assemble_query(query, query_metadata)
-        docs = Document.assemble_documents(retrieved_docs, query.qid, document_metadata)
-        answer = AgentAnswer.assemble_answer(answer, query.qid, metadata=answer_metadata)
-
-        result = call_async_fn(self.evaluate_async, (query, docs, answer))
-
-        if result.exception or result.raw_answer is None or result.answer is None:
-            raise ValueError(
-                f"Failed to evaluate groundedness for qid: {query.qid}",
-                f"Exception: {result.exception}",
-            )
-        return result
-
-    def _build_message(self, query: Query, answer: AgentAnswerWithDocuments) -> LLMInputPrompt:
+    def _build_message(self, query: Query, answer: AgentAnswer) -> LLMInputPrompt:
         """Builds the message to send to the LLM evaluator"""
 
         context = {
             "query": query.query,
-            "answer": answer.agent_answer.text,
-            "retrieved_docs": "\n".join([f"[{doc.did}]: {doc.text}" for doc in answer.documents.values()]),
+            "answer": answer.text,
+            "retrieved_docs": "\n".join([f"[{doc.did}]: {doc.text}" for doc in query.retrieved_docs.values()]),
         }
         user_message = self.user_prompt.render(**context)
         system_message = self.system_prompt.render() if self.system_prompt else None
@@ -106,24 +74,24 @@ class BaseGroundednessEvaluator(BaseAnswerEvaluator):
             user_message=user_message,
         )
 
-    async def evaluate_async(self, eval_sample: tuple[Query, AgentAnswerWithDocuments]) -> GroundednessEvaluatorResult:
+    async def evaluate_async(self, eval_sample: tuple[Query, AgentAnswer]) -> GroundednessEvaluatorResult:
         """
         Evaluates a single sample (either an answer or a pairwise game) asynchronously.
         Args:
             eval_sample (tuple[Query, Evaluable]): The query and evaluable to evaluate.
         """
 
-        (query, answer_with_docs) = eval_sample
+        (query, agent_answer) = eval_sample
 
-        if answer_with_docs.agent_answer.groundedness_evaluation is not None and not self.config.force:
+        if agent_answer.groundedness_evaluation is not None and not self.config.force:
             return GroundednessEvaluatorResult(
                 qid=query.qid,
-                agent=answer_with_docs.agent_answer.agent,
-                raw_answer=answer_with_docs.agent_answer.groundedness_evaluation.raw_answer,
-                answer=answer_with_docs.agent_answer.groundedness_evaluation.answer,
+                agent=agent_answer.agent,
+                raw_answer=agent_answer.groundedness_evaluation.raw_answer,
+                answer=agent_answer.groundedness_evaluation.answer,
             )
 
-        input_prompt = self._build_message(query, answer_with_docs)
+        input_prompt = self._build_message(query, agent_answer)
 
         exc = None
         try:
@@ -144,30 +112,24 @@ class BaseGroundednessEvaluator(BaseAnswerEvaluator):
 
         return GroundednessEvaluatorResult(
             qid=query.qid,
-            agent=answer_with_docs.agent_answer.agent,
+            agent=agent_answer.agent,
             raw_answer=llm_response.raw_answer,
             answer=llm_response.parsed_answer,
             exception=exc,
         )
 
-    def _get_tuples_to_evaluate(self, experiment: Experiment) -> list[tuple[Query, AgentAnswerWithDocuments]]:
+    def _get_tuples_to_evaluate(self, experiment: Experiment) -> list[tuple[Query, AgentAnswer]]:
         """
         Creates the list of pairs (query, evaluable) to evaluate
         """
-        tuples_to_eval: list[tuple[Query, AgentAnswerWithDocuments]] = []
+        tuples_to_eval: list[tuple[Query, AgentAnswer]] = []
         all_tuples = 0
         missing_evaluations = 0
         for q in experiment:
-            retrieved_docs = q.retrieved_docs
             for a in q.answers.values():
                 all_tuples += 1
 
-                tuples_to_eval.append(
-                    (
-                        q,
-                        AgentAnswerWithDocuments(qid=q.qid, agent_answer=a, documents=retrieved_docs),
-                    )
-                )
+                tuples_to_eval.append((q, a))
                 if a.groundedness_evaluation is None:
                     missing_evaluations += 1
 
