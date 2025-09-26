@@ -2,14 +2,16 @@ from __future__ import annotations
 
 import itertools
 import random
-from typing import Any, Callable, Set, Type, get_type_hints
+from typing import Any, Callable, Set, Tuple, Type, get_type_hints
 
+import rich
 from pydantic import BaseModel
 from tenacity import RetryError
 
 from ragelo.evaluators.base_evaluator import BaseEvaluator
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
 from ragelo.logger import logger
+from ragelo.types.answer_formats import GroundednessEvaluatorFormat, PointWiseAnswerAnswerFormat
 from ragelo.types.configurations import BaseAnswerEvaluatorConfig, PairwiseEvaluatorConfig
 from ragelo.types.evaluables import AgentAnswer, Document, Evaluable, PairwiseGame
 from ragelo.types.experiment import Experiment
@@ -99,9 +101,27 @@ class BaseAnswerEvaluator(BaseEvaluator):
             )
         return result
 
-    def evaluate_experiment(self, experiment: Experiment, n_threads: int | None = None):
+    def _print_pointwise_results(self, experiment: Experiment, evaluator_type: str) -> None:
+        aggregate_groundedness_scores = self._aggregate_scores(experiment, evaluator_type)
+
+        if experiment.rich_print:
+            rich.print(f"\n-------[bold white] {evaluator_type} scores [0-1] [/bold white]-------")
+        else:
+            print(f"\n------- {evaluator_type} scores [0-1] -------")
+        for agent, score in aggregate_groundedness_scores:
+            if experiment.rich_print:
+                rich.print(f"[bold white]{agent:<18}[/bold white]: {score:.2f}")
+            else:
+                print(f"{agent:<18}: {score:.1f}")
+
+    def evaluate_experiment(
+        self,
+        experiment: Experiment,
+        n_threads: int | None = None,
+        evaluator_type: str | None = None,
+    ) -> None:
         """
-        Trigger the evaluation of all the queries in the experiment.
+        Trigger the evaluator for all the supported evaluables in the experiment.
         The evaluation is done in asynchronously with the number of threads defined in config.n_processes parameter.
         This can be overwritten by the n_threads parameter.
 
@@ -110,9 +130,17 @@ class BaseAnswerEvaluator(BaseEvaluator):
             n_threads(int): The number of threads to use for the evaluation.
                 If None, the number of threads defined in the config will be used.
         """
+        n_threads = n_threads or self.config.n_processes
         if self.config.pairwise:
             self.__add_pairwise_games(experiment)
-        super().evaluate_experiment(experiment, n_threads)
+        call_async_fn(self._evaluate_experiment_async, experiment, n_threads)
+
+        if (
+            getattr(self.config, "print_results", False)
+            and evaluator_type
+            and not getattr(self.config, "pairwise", False)
+        ):
+            self._print_pointwise_results(experiment, evaluator_type)
 
     async def evaluate_async(self, eval_sample: tuple[Query, Evaluable]) -> AnswerEvaluatorResult:
         """
@@ -313,6 +341,63 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 )
                 self._warned_queries.add(query.qid)
         return documents
+
+    def _aggregate_scores(
+        self,
+        experiment: Experiment,
+        evaluator_type: str = AnswerEvaluatorTypes.DOMAIN_EXPERT_POINTWISE,
+    ) -> list[Tuple[str, float]]:
+        """
+        Aggregates the groundedness scores for each query in the experiment.
+        Args:
+            experiment (Experiment): The experiment to aggregate the scores for.
+        Returns:
+            dict[str, float]: A dictionary mapping each query ID to its average groundedness score.
+        """
+        groundedness_scores = {}
+        total_scores_per_agent = {}
+        counts_per_agent = {}
+        for query in experiment:
+            for answer in query.answers.values():
+                if evaluator_type == AnswerEvaluatorTypes.GROUNDEDNESS:
+                    score_field = "groundedness_score"
+                    max_score = 2
+                    if answer.groundedness_evaluation is not None:
+                        eval_answer = answer.groundedness_evaluation.answer
+                        if isinstance(
+                            answer.groundedness_evaluation.answer,
+                            GroundednessEvaluatorFormat,
+                        ):
+                            eval_answer = vars(answer.groundedness_evaluation.answer)
+
+                if evaluator_type == AnswerEvaluatorTypes.DOMAIN_EXPERT_POINTWISE:
+                    score_field = "score"
+                    max_score = 5
+                    if answer.evaluation is not None:
+                        eval_answer = answer.evaluation.answer
+                        if isinstance(
+                            answer.evaluation.answer,
+                            PointWiseAnswerAnswerFormat,
+                        ):
+                            eval_answer = vars(answer.evaluation.answer)
+
+                if isinstance(eval_answer, dict):
+                    total_scores_per_agent[answer.agent] = total_scores_per_agent.get(answer.agent, 0) + (
+                        float(eval_answer[score_field]) / max_score
+                    )
+                    counts_per_agent[answer.agent] = counts_per_agent.get(answer.agent, 0) + 1
+
+        for agent in total_scores_per_agent:
+            groundedness_scores[agent] = (
+                total_scores_per_agent[agent] / counts_per_agent[agent] if counts_per_agent[agent] > 0 else 0.0
+            )
+
+        sorted_groundedness_scores = sorted(
+            groundedness_scores.items(),
+            key=lambda x: x[1],
+            reverse=True,
+        )
+        return sorted_groundedness_scores
 
 
 class AnswerEvaluatorFactory:

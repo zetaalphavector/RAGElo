@@ -6,7 +6,11 @@ from typing import Any, Callable, Optional, Type
 from jinja2 import Template
 from pydantic import BaseModel, Field, field_validator
 
-from ragelo.types.answer_formats import PairWiseAnswerAnswerFormat
+from ragelo.types.answer_formats import (
+    GroundednessEvaluatorFormat,
+    PairWiseAnswerAnswerFormat,
+    PointWiseAnswerAnswerFormat,
+)
 from ragelo.types.configurations.base_configs import BaseEvaluatorConfig
 from ragelo.types.evaluables import Document
 from ragelo.types.types import AnswerEvaluatorTypes
@@ -64,7 +68,11 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     def validate_user_prompt(cls, prompt: Template) -> Template:
         src = getattr(prompt, "_ragelo_source", None)
         placeholders = set(m.group(1) for m in re.finditer(r"{{\s*([a-zA-Z_][\w\.]*)\s*}}", src or ""))
-        required = {"query.query", "game.agent_a_answer.text", "game.agent_b_answer.text"}
+        required = {
+            "query.query",
+            "game.agent_a_answer.text",
+            "game.agent_b_answer.text",
+        }
         missing = sorted(required - placeholders)
         if missing:
             raise ValueError(f"The user prompt is missing placeholders: {', '.join(missing)}")
@@ -118,4 +126,41 @@ class PairwiseDomainExpertEvaluatorConfig(PairwiseEvaluatorConfig):
         description="Name of the company or organization that the user that "
         "submitted the query works for. that the domain belongs to. "
         "(e.g.: ChemCorp, CS Inc.)",
+    )
+
+
+class PointwiseDomainExpertEvaluatorConfig(BaseAnswerEvaluatorConfig):
+    pairwise: bool = Field(default=False, description="Whether or not to the evaluator is pairwise")
+    evaluator_name: AnswerEvaluatorTypes = AnswerEvaluatorTypes.DOMAIN_EXPERT
+    expert_in: str = Field(description="What the LLM should mimic being an expert in.")
+    company: Optional[str] = Field(
+        default=None,
+        description="Name of the company or organization that the user that "
+        "submitted the query works for. that the domain belongs to. "
+        "(e.g.: ChemCorp, CS Inc.)",
+    )
+    llm_response_schema: Optional[Type[BaseModel] | dict[str, Any]] = (
+        Field(
+            default=PointWiseAnswerAnswerFormat,
+            description="The response schema for the LLM.",
+        ),
+    )
+    print_results: bool = Field(
+        default=True,
+        description="Whether or not to print the results after evaluation.",
+    )
+
+
+class GroundednessEvaluatorConfig(BaseAnswerEvaluatorConfig):
+    """
+    A base configuration class for groundedness evaluators.
+    """
+
+    llm_response_schema: Optional[Type[BaseModel] | dict[str, Any]] = Field(
+        default=GroundednessEvaluatorFormat,
+        description="The response schema for the LLM.",
+    )
+    print_results: bool = Field(
+        default=True,
+        description="Whether or not to print the results after evaluation.",
     )

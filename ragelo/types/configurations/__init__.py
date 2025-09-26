@@ -3,8 +3,10 @@ from ragelo.types.configurations.answer_evaluator_configs import (
     BaseAnswerEvaluatorConfig,
     CustomPairwiseEvaluatorConfig,
     CustomPromptAnswerEvaluatorConfig,
+    GroundednessEvaluatorConfig,
     PairwiseDomainExpertEvaluatorConfig,
     PairwiseEvaluatorConfig,
+    PointwiseDomainExpertEvaluatorConfig,
 )
 from ragelo.types.configurations.base_configs import BaseConfig, BaseEvaluatorConfig
 from ragelo.types.configurations.cli_configs import CLIConfig
@@ -36,10 +38,12 @@ __all__ = [
     "CustomPromptAnswerEvaluatorConfig",
     "PairwiseEvaluatorConfig",
     "PairwiseDomainExpertEvaluatorConfig",
+    "PointwiseDomainExpertEvaluatorConfig",
     "BaseRetrievalEvaluatorConfig",
     "FewShotEvaluatorConfig",
     "RDNAMEvaluatorConfig",
     "ReasonerEvaluatorConfig",
     "CustomPromptEvaluatorConfig",
     "DomainExpertEvaluatorConfig",
+    "GroundednessEvaluatorConfig",
 ]

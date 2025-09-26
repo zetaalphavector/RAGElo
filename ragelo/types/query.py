@@ -8,7 +8,7 @@ from typing_extensions import Self
 
 from ragelo.logger import logger
 from ragelo.types.evaluables import AgentAnswer, Document, PairwiseGame
-from ragelo.types.results import AnswerEvaluatorResult, RetrievalEvaluatorResult
+from ragelo.types.results import AnswerEvaluatorResult, GroundednessEvaluatorResult, RetrievalEvaluatorResult
 
 
 class Query(BaseModel):
@@ -143,9 +143,17 @@ class Query(BaseModel):
         exist_ok: bool = False,
     ) -> bool: ...
 
+    @overload
     def add_evaluation(
         self,
-        evaluation: RetrievalEvaluatorResult | AnswerEvaluatorResult,
+        evaluation: GroundednessEvaluatorResult,
+        force: bool = False,
+        exist_ok: bool = False,
+    ) -> bool: ...
+
+    def add_evaluation(
+        self,
+        evaluation: (RetrievalEvaluatorResult | AnswerEvaluatorResult | GroundednessEvaluatorResult),
         force: bool = False,
         exist_ok: bool = False,
     ) -> bool:
@@ -162,7 +170,7 @@ class Query(BaseModel):
                     logger.info(f"Document {did} in query {self.qid} already has an evaluation. Overwriting.")
             self.retrieved_docs[did].evaluation = evaluation
             return True
-        if evaluation.pairwise:
+        if isinstance(evaluation, AnswerEvaluatorResult) and evaluation.pairwise:
             agent_a = evaluation.agent_a
             agent_b = evaluation.agent_b
             if agent_a not in self.answers:
@@ -218,6 +226,7 @@ class Query(BaseModel):
                 )
             )
             return True
+
         if evaluation.agent is None:
             raise ValueError("A pointwise AnswerEvaluatorResult must have an agent assigned to it.")
         agent = evaluation.agent
@@ -225,15 +234,28 @@ class Query(BaseModel):
             logger.warning(
                 f"Trying to add evaluation for agent {agent} in query {self.qid}, but {agent} does not have an answer."
             )
-        if self.answers[agent].evaluation is not None and exist_ok:
-            return False
-        if self.answers[agent].evaluation is not None and not force:
-            logger.warning(f"Agent {agent} in query {self.qid} already has an evaluation.")
-            return False
-        if self.answers[agent].evaluation is not None:
-            logger.info(f"Agent {agent} in query {self.qid} already has an evaluation. Overwriting.")
-        self.answers[agent].evaluation = evaluation
-        return True
+
+        if isinstance(evaluation, AnswerEvaluatorResult):
+            if self.answers[agent].evaluation is not None and exist_ok:
+                return False
+            if self.answers[agent].evaluation is not None and not force:
+                logger.warning(f"Agent {agent} in query {self.qid} already has an evaluation.")
+                return False
+            if self.answers[agent].evaluation is not None:
+                logger.info(f"Agent {agent} in query {self.qid} already has an evaluation. Overwriting.")
+            self.answers[agent].evaluation = evaluation
+            return True
+
+        if isinstance(evaluation, GroundednessEvaluatorResult):
+            if self.answers[agent].groundedness_evaluation is not None and exist_ok:
+                return False
+            if self.answers[agent].groundedness_evaluation is not None and not force:
+                logger.warning(f"Agent {agent} in query {self.qid} already has a groundedness evaluation.")
+                return False
+            if self.answers[agent].groundedness_evaluation is not None:
+                logger.info(f"Agent {agent} in query {self.qid} already has a groundedness evaluation. Overwriting.")
+            self.answers[agent].groundedness_evaluation = evaluation
+            return True
 
     def get_qrels(
         self,

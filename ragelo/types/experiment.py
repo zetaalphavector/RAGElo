@@ -21,7 +21,13 @@ from pydantic import BaseModel
 from ragelo.logger import CLILogHandler, logger
 from ragelo.types.evaluables import AgentAnswer, Document
 from ragelo.types.query import Query
-from ragelo.types.results import AnswerEvaluatorResult, EloTournamentResult, EvaluatorResult, RetrievalEvaluatorResult
+from ragelo.types.results import (
+    AnswerEvaluatorResult,
+    EloTournamentResult,
+    EvaluatorResult,
+    GroundednessEvaluatorResult,
+    RetrievalEvaluatorResult,
+)
 
 
 class Experiment:
@@ -173,7 +179,11 @@ class Experiment:
             )
         if answers_csv_path:
             self.add_agent_answers_from_csv(
-                answers_csv_path, csv_agent_col, csv_answer_text_col, csv_query_id_col, exist_ok=True
+                answers_csv_path,
+                csv_agent_col,
+                csv_answer_text_col,
+                csv_query_id_col,
+                exist_ok=True,
             )
 
         if self.evaluations_cache_path and os.path.isfile(self.evaluations_cache_path):
@@ -318,9 +328,21 @@ class Experiment:
         exist_ok: bool = False,
     ): ...
 
+    @overload
     def add_evaluation(
         self,
-        evaluation: RetrievalEvaluatorResult | AnswerEvaluatorResult | EloTournamentResult,
+        evaluation: GroundednessEvaluatorResult,
+        should_save: bool = True,
+        should_print: bool = True,
+        force: bool = False,
+        exist_ok: bool = False,
+    ): ...
+
+    def add_evaluation(
+        self,
+        evaluation: (
+            RetrievalEvaluatorResult | AnswerEvaluatorResult | EloTournamentResult | GroundednessEvaluatorResult
+        ),
         should_save: bool = True,
         should_print: bool = False,
         force: bool = False,
@@ -329,7 +351,7 @@ class Experiment:
         """
         Add an evaluation to the queries and optionally save the result.
         Args:
-            evaluation (RetrievalEvaluatorResult | AnswerEvaluatorResult | EloTournamentResult): The evaluation result to be added.
+            evaluation (RetrievalEvaluatorResult | AnswerEvaluatorResult | EloTournamentResult | GroundednessEvaluatorResult): The evaluation result to be added.
             should_save (bool): Whether to save the result to disk. Defaults to True.
             should_print (bool): Whether to print the result. Defaults to True.
             force (bool): Whether to overwrite an existing evaluation. Defaults to False.
@@ -625,6 +647,8 @@ class Experiment:
                 result_type = "retrieval"
             elif isinstance(result, EloTournamentResult):
                 result_type = "elo_tournament"
+            elif isinstance(result, GroundednessEvaluatorResult):
+                result_type = "groundedness"
             else:
                 raise ValueError(f"Cannot save evaluation of type {type(result)} to cache")
             f.write(json.dumps({result_type: result.model_dump()}, ensure_ascii=False) + "\n")
@@ -695,6 +719,7 @@ class Experiment:
             did = line[document_id_col].strip()
             text = line[document_text_col].strip()
             agent = line.get(agent_col)
+            score = float(line.get("score", 0.0))
             metadata = {
                 k: v for k, v in line.items() if k not in [query_id_col, document_id_col, document_text_col, agent_col]
             }
@@ -708,8 +733,8 @@ class Experiment:
                 doc_obj.add_metadata(metadata)
                 documents_read += 1
             if agent is not None:
-                doc_obj.add_retrieved_by(agent, exist_ok=exist_ok)
-            self.add_retrieved_doc(doc_obj, exist_ok=exist_ok)
+                doc_obj.add_retrieved_by(agent, exist_ok=exist_ok, score=score)
+            self.add_retrieved_doc(doc_obj, exist_ok=exist_ok, score=score)
         if documents_read > 0:
             logger.info(f"Loaded {documents_read} new documents from {file_path}")
 
@@ -919,6 +944,8 @@ class Experiment:
                     continue
             elif result_type == "elo_tournament":
                 result = EloTournamentResult(**result["elo_tournament"])
+            elif result_type == "groundedness":
+                result = GroundednessEvaluatorResult(**result["groundedness"])
             self.add_evaluation(result, should_save=False, should_print=False, exist_ok=True)
 
     def __len__(self):

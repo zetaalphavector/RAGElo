@@ -1,4 +1,4 @@
-from ragelo.evaluators.answer_evaluators import PairwiseAnswerEvaluator
+from ragelo.evaluators.answer_evaluators import GroundednessEvaluator, PairwiseAnswerEvaluator
 from ragelo.evaluators.retrieval_evaluators import (
     DomainExpertEvaluator,
     RDNAMEvaluator,
@@ -12,4 +12,5 @@ __all__ = [
     "RDNAMEvaluator",
     "ReasonerEvaluator",
     "RetrievalEvaluatorFactory",
+    "GroundednessEvaluator",
 ]
