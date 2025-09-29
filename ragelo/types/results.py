@@ -26,7 +26,7 @@ class EvaluatorResult(BaseModel):
         answer = v.get("answer")
         if answer is None and exception is None:
             raise ValidationError(
-                "Either answer or raw_answer must be provided. Otherwise, an exception must be provided."
+                "Either answer or exception must be provided. Otherwise, an exception must be provided."
             )
         return v
 

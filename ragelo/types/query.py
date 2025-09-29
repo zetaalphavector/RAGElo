@@ -127,12 +127,12 @@ class Query(BaseModel):
             return
         self.answers[agent] = answer
 
-    def __get_pairwise_game(self, agent_a: str, agent_b: str) -> PairwiseGame | None:
+    def get_pairwise_game(self, agent_a: str, agent_b: str) -> PairwiseGame | None:
         sorted_agents = sorted([agent_a, agent_b])
         game_key = f"{sorted_agents[0]}-{sorted_agents[1]}"
         return self.pairwise_games.get(game_key, None)
 
-    def __create_pairwise_game(self, agent_a: str, agent_b: str) -> PairwiseGame:
+    def add_pairwise_game(self, agent_a: str, agent_b: str) -> PairwiseGame:
         logger.info(f"Creating a new pairwise game for agents {agent_a} and {agent_b} in query {self.qid}")
         sorted_agents = sorted([agent_a, agent_b])
         game = PairwiseGame(
@@ -194,9 +194,9 @@ class Query(BaseModel):
                     f"{agent_a} and {agent_b}, but {missing_agents} do not have an answer for query {self.qid}"
                 )
                 return False
-            game = self.__get_pairwise_game(agent_a, agent_b)
+            game = self.get_pairwise_game(agent_a, agent_b)
             if game is None:
-                game = self.__create_pairwise_game(agent_a, agent_b)
+                game = self.add_pairwise_game(agent_a, agent_b)
 
             if evaluation.evaluator_name in game.evaluations and not force:
                 if not exist_ok:
