@@ -803,13 +803,13 @@ class Experiment:
         answer_eval_count = 0
         for query in self.queries.values():
             for doc in query.retrieved_docs.values():
-                if doc.evaluation is not None:
-                    doc_eval_count += 1
-                doc.evaluation = None
-            for game in query.pairwise_games:
-                if game.evaluation is not None:
-                    game_eval_count += 1
-                game.evaluation = None
+                if len(doc.evaluations) > 0:
+                    doc_eval_count += len(doc.evaluations)
+                doc.evaluations = {}
+            for game in query.pairwise_games.values():
+                if len(game.evaluations) > 0:
+                    game_eval_count += len(game.evaluations)
+                game.evaluations = {}
             for answer in query.answers.values():
                 if answer.evaluation is not None:
                     answer_eval_count += 1
