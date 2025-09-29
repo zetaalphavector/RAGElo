@@ -1,17 +1,16 @@
 from __future__ import annotations
 
 import itertools
-import json
 import random
 from typing import Any, Callable, Set, Type, get_type_hints
 
-import rich
 from pydantic import BaseModel
 from tenacity import RetryError
 
 from ragelo.evaluators.base_evaluator import BaseEvaluator
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
 from ragelo.logger import logger
+from ragelo.types.answer_formats import AnswerEvaluatorFormat
 from ragelo.types.configurations import BaseAnswerEvaluatorConfig, PairwiseEvaluatorConfig
 from ragelo.types.evaluables import AgentAnswer, Document, Evaluable, PairwiseGame
 from ragelo.types.experiment import Experiment
@@ -26,6 +25,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
     config: BaseAnswerEvaluatorConfig
     evaluable_name: str = "Agent Answer"
     _warned_queries: Set[str] = set()
+    answer_format = AnswerEvaluatorFormat
 
     def evaluate(
         self,
@@ -134,7 +134,6 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 return AnswerEvaluatorResult(
                     qid=query.qid,
                     agent=evaluable.agent,
-                    raw_answer=evaluable.evaluation.raw_answer,
                     answer=evaluable.evaluation.answer,
                     pairwise=False,
                 )
@@ -142,7 +141,6 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 qid=query.qid,
                 agent_a=evaluable.agent_a_answer.agent,
                 agent_b=evaluable.agent_b_answer.agent,
-                raw_answer=evaluable.evaluation.raw_answer,
                 answer=evaluable.evaluation.answer,
                 pairwise=True,
             )

@@ -13,6 +13,7 @@ from ragelo.utils import string_to_template
 @AnswerEvaluatorFactory.register(AnswerEvaluatorTypes.CHAT_PAIRWISE)
 class ChatPairwiseEvaluator(PairwiseAnswerEvaluator):
     config: PairwiseEvaluatorConfig
+
     system_prompt = string_to_template("""
         Please act as an impartial judge and evaluate the quality of the responses provided by two AI assistants tasked to answer the question of a user, based on a set of documents retrieved by a search engine that may or may not be relevant to the question.
         When available, answers will cite specific documents by placing their IDs into square brackets.

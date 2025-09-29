@@ -4,25 +4,43 @@ https://arxiv.org/abs/2309.10621
 """
 
 import numpy as np
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     BaseRetrievalEvaluator,
     RetrievalEvaluatorFactory,
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
-from ragelo.types.answer_formats import (
-    RDNAMAnswerEvaluatorFormat,
-    RDNAMAnswerNoAspects,
-    RDNAMMultipleAnnotatorsAnswer,
-    RDNAMMultipleAnnotatorsAnswerNoAspects,
-)
+from ragelo.types.answer_formats import RDNAMEvaluatorFormat
 from ragelo.types.configurations import RDNAMEvaluatorConfig
 from ragelo.types.evaluables import Document
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.query import Query
 from ragelo.types.types import RetrievalEvaluatorTypes
 from ragelo.utils import string_to_template
+
+
+class RDNAMNoAspects(BaseModel):
+    overall: float = Field(
+        ...,
+        description="An number between 0 and 2 representing the score of the document.",
+    )
+
+
+class RDNAMMUltipleAnnotatorsFormat(BaseModel):
+    annotator_1: RDNAMEvaluatorFormat
+    annotator_2: RDNAMEvaluatorFormat
+    annotator_3: RDNAMEvaluatorFormat
+    annotator_4: RDNAMEvaluatorFormat
+    annotator_5: RDNAMEvaluatorFormat
+
+
+class RDNAMMultipleAnnotatorsNoAspectsFormat(BaseModel):
+    annotator_1: RDNAMNoAspects
+    annotator_2: RDNAMNoAspects
+    annotator_3: RDNAMNoAspects
+    annotator_4: RDNAMNoAspects
+    annotator_5: RDNAMNoAspects
 
 
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.RDNAM)
@@ -61,19 +79,20 @@ class RDNAMEvaluator(BaseRetrievalEvaluator):
         We asked five search engine raters to evaluate the relevance of the web page for the query.
         Each rater used their own independent judgement.
         {%- endif %}""")
+    answer_format = RDNAMEvaluatorFormat
 
     def __init__(self, config: RDNAMEvaluatorConfig, llm_provider: BaseLLMProvider):
         """Initializes an evaluator based on RDNAM framework."""
         super().__init__(config, llm_provider)
         self._role = self.config.annotator_role if self.config.annotator_role else ""
         if self.config.use_aspects and self.config.use_multiple_annotators:
-            self.config.llm_response_schema = RDNAMMultipleAnnotatorsAnswer
+            self.config.llm_response_schema = RDNAMMUltipleAnnotatorsFormat
         elif self.config.use_aspects:
-            self.config.llm_response_schema = RDNAMAnswerEvaluatorFormat
+            self.config.llm_response_schema = RDNAMEvaluatorFormat
         elif self.config.use_multiple_annotators:
-            self.config.llm_response_schema = RDNAMMultipleAnnotatorsAnswerNoAspects
+            self.config.llm_response_schema = RDNAMMultipleAnnotatorsNoAspectsFormat
         else:
-            self.config.llm_response_schema = RDNAMAnswerNoAspects
+            self.config.llm_response_schema = RDNAMNoAspects
 
     def _build_message(self, query: Query, document: Document) -> LLMInputPrompt:
         context = {
@@ -94,7 +113,7 @@ class RDNAMEvaluator(BaseRetrievalEvaluator):
         assert isinstance(parsed, self.config.llm_response_schema)
 
         if self.config.use_multiple_annotators:
-            assert isinstance(parsed, RDNAMMultipleAnnotatorsAnswer)
+            assert isinstance(parsed, RDNAMMUltipleAnnotatorsFormat)
             overall = float(
                 np.mean(
                     [
@@ -127,17 +146,17 @@ class RDNAMEvaluator(BaseRetrievalEvaluator):
                 intent_match = None
                 trustworthiness = None
         else:
-            assert isinstance(parsed, RDNAMAnswerEvaluatorFormat) or isinstance(parsed, RDNAMAnswerNoAspects)
+            assert isinstance(parsed, RDNAMEvaluatorFormat) or isinstance(parsed, RDNAMNoAspects)
             overall = parsed.overall
             if self.config.use_aspects:
-                assert isinstance(parsed, RDNAMAnswerEvaluatorFormat)
+                assert isinstance(parsed, RDNAMEvaluatorFormat)
                 intent_match = parsed.intent_match  # type: ignore
                 trustworthiness = parsed.trustworthiness  # type: ignore
             else:
                 intent_match = None
                 trustworthiness = None
 
-        response = RDNAMAnswerEvaluatorFormat(
+        response = RDNAMEvaluatorFormat(
             overall=overall,
             intent_match=intent_match,
             trustworthiness=trustworthiness,

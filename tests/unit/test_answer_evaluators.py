@@ -10,7 +10,7 @@ from ragelo.evaluators.answer_evaluators import (
     PairwiseAnswerEvaluator,
     PairwiseDomainExpertEvaluator,
 )
-from ragelo.types.answer_formats import PairWiseAnswerAnswerFormat
+from ragelo.types.answer_formats import PairwiseAnswerEvaluatorFormat
 from ragelo.types.evaluables import AgentAnswer
 from ragelo.types.formats import LLMInputPrompt
 from ragelo.types.query import Query
@@ -79,7 +79,7 @@ class TestAnswerEvaluator:
 
         assert isinstance(result, AnswerEvaluatorResult)
         assert isinstance(result.raw_answer, str)
-        assert isinstance(result.answer, PairWiseAnswerAnswerFormat)
+        assert isinstance(result.answer, PairwiseAnswerEvaluatorFormat)
         raw_answer = json.loads(result.raw_answer)
         assert raw_answer.keys() == {"answer_a_analysis", "answer_b_analysis", "comparison_reasoning", "winner"}
         assert result.answer.winner == "A"
@@ -115,7 +115,7 @@ class TestAnswerEvaluator:
             assert len(query.pairwise_games) == 2
             for game in query.pairwise_games:
                 assert isinstance(game.evaluation, AnswerEvaluatorResult)
-                assert isinstance(game.evaluation.answer, PairWiseAnswerAnswerFormat)
+                assert isinstance(game.evaluation.answer, PairwiseAnswerEvaluatorFormat)
                 assert isinstance(game.evaluation.raw_answer, str)
                 assert game.evaluation.exception is None
                 assert game.evaluation.pairwise is True
@@ -138,7 +138,7 @@ class TestPairwiseAnswerEvaluator:
         query = experiment_with_conversations_and_reasonings["0"]
         result = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
         assert isinstance(result, AnswerEvaluatorResult)
-        assert isinstance(result.answer, PairWiseAnswerAnswerFormat)
+        assert isinstance(result.answer, PairwiseAnswerEvaluatorFormat)
         assert isinstance(result.raw_answer, str)
         assert result.answer.winner == "A"
 
@@ -214,7 +214,7 @@ class TestChatPairwiseEvaluator:
 
         result = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
         assert isinstance(result, AnswerEvaluatorResult)
-        assert isinstance(result.answer, PairWiseAnswerAnswerFormat)
+        assert isinstance(result.answer, PairwiseAnswerEvaluatorFormat)
         assert isinstance(result.raw_answer, str)
         assert result.answer.winner == "A"
         llm_call_args = llm_provider_mock.async_call_mocker.call_args_list

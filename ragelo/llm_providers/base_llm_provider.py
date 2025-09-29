@@ -22,7 +22,7 @@ class BaseLLMProvider(ABC):
     def __call__(
         self,
         input: LLMInputPrompt,
-        response_schema: Type[BaseModel] | dict[str, Any] | None = None,
+        response_schema: Type[BaseModel],
     ) -> LLMResponseType:
         """Submits a single query-document pair to the LLM and returns the answer."""
         return call_async_fn(self.call_async, input, response_schema)
@@ -31,7 +31,7 @@ class BaseLLMProvider(ABC):
     async def call_async(
         self,
         input: LLMInputPrompt,
-        response_schema: Type[BaseModel] | dict[str, Any] | None = None,
+        response_schema: Type[BaseModel],
     ) -> LLMResponseType:
         """Submits a single query-document pair to the LLM and returns the answer."""
         raise NotImplementedError

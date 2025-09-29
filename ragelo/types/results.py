@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Any
+from pydantic import BaseModel, ValidationError, model_validator
 
-from pydantic import BaseModel, SerializeAsAny, ValidationError, model_validator
+from ragelo.types.answer_formats import RetrievalEvaluatorFormat
 
 
 class EvaluatorResult(BaseModel):
@@ -10,24 +10,21 @@ class EvaluatorResult(BaseModel):
     Args:
         qid str: The query ID to which the result corresponds.
         agent str | None: The agent that provided the answer or retrieved the document.
-        raw_answer str | None: The raw answer provided by the LLMProvider used in the evaluator.
-        answer Optional[Union[int, str, dict[str, Any]]]: The processed answer provided by the evaluator.
-            If the evaluator uses "multi_field_json" as answer_format, this will be a dictionary with evaluation keys.
+        answer Optional[BaseModel]: The processed answer provided by the evaluator.
     """
 
     qid: str
+    evaluator_name: str
     agent: str | None = None
-    raw_answer: str | None = None
-    answer: float | str | dict[str, Any] | SerializeAsAny[BaseModel] | None = None
+    answer: BaseModel | None = None
     exception: str | None = None
 
     @model_validator(mode="before")
     @classmethod
     def check_agents(cls, v):
         exception = v.get("exception")
-        raw_answer = v.get("raw_answer")
         answer = v.get("answer")
-        if (raw_answer is None or answer is None) and exception is None:
+        if answer is None and exception is None:
             raise ValidationError(
                 "Either answer or raw_answer must be provided. Otherwise, an exception must be provided."
             )
@@ -68,6 +65,7 @@ class RetrievalEvaluatorResult(EvaluatorResult):
     """
 
     did: str
+    answer: RetrievalEvaluatorFormat | None = None
 
 
 class EloTournamentResult(BaseModel):

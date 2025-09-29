@@ -1,6 +1,8 @@
 from ragelo.evaluators.answer_evaluators import PairwiseAnswerEvaluator
 from ragelo.evaluators.retrieval_evaluators import (
+    CustomPromptEvaluator,
     DomainExpertEvaluator,
+    FewShotEvaluator,
     RDNAMEvaluator,
     ReasonerEvaluator,
     RetrievalEvaluatorFactory,
@@ -8,7 +10,9 @@ from ragelo.evaluators.retrieval_evaluators import (
 
 __all__ = [
     "PairwiseAnswerEvaluator",
+    "CustomPromptEvaluator",
     "DomainExpertEvaluator",
+    "FewShotEvaluator",
     "RDNAMEvaluator",
     "ReasonerEvaluator",
     "RetrievalEvaluatorFactory",

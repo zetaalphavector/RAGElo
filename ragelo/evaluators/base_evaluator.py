@@ -3,8 +3,10 @@ from __future__ import annotations
 import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
+from typing import Type
 
 from jinja2 import Template
+from pydantic import BaseModel
 
 from ragelo.cli.presenters import render_failed_evaluations
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
@@ -26,9 +28,11 @@ class BaseEvaluator(ABC):
     system_prompt: Template | None = None
     user_prompt: Template
     evaluable_name: str = "Evaluable"
+    answer_format: Type[BaseModel]
 
     def __init__(self, config: BaseEvaluatorConfig, llm_provider: BaseLLMProvider):
         self.config = config
+        self.answer_format = config.answer_format or config.llm_response_schema
         self.llm_provider = llm_provider
         if config.system_prompt:
             self.system_prompt = config.system_prompt
@@ -103,3 +107,7 @@ class BaseEvaluator(ABC):
     def _process_answer(self, llm_response: LLMResponseType) -> LLMResponseType:
         """Processes the raw answer returned by the LLM. Should be implemented by the subclass if needed."""
         return llm_response
+
+    @classmethod
+    def get_answer_format_class(cls) -> Type[BaseModel]:
+        return cls.answer_format

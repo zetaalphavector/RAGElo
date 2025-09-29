@@ -13,7 +13,7 @@ from ragelo.evaluators.retrieval_evaluators import (
     ReasonerEvaluator,
 )
 from ragelo.types import Document, Query
-from ragelo.types.answer_formats import RDNAMAnswerEvaluatorFormat, RDNAMAnswerNoAspects
+from ragelo.types.answer_formats import RDNAMEvaluatorFormat, RDNAMNoAspects
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.results import RetrievalEvaluatorResult
 from ragelo.utils import string_to_template
@@ -111,7 +111,7 @@ class TestRDNAMEvaluator:
         query = experiment["0"]
         doc = query.retrieved_docs["0"]
         result = evaluator.evaluate(query, doc)
-        assert isinstance(result.answer, RDNAMAnswerEvaluatorFormat)
+        assert isinstance(result.answer, RDNAMEvaluatorFormat)
         assert result.answer.intent_match == 1.0
         assert result.answer.trustworthiness == 0.8
         assert result.answer.overall == 1.2
@@ -257,7 +257,7 @@ class TestFewShotEvaluator:
 class TestReadmeExamples:
     def test_rdnam_example(self, llm_provider_mock_rdnam):
         def side_effect(*args, **kwargs):
-            return LLMResponseType(raw_answer='{"overall": 1.0}', parsed_answer=RDNAMAnswerNoAspects(overall=1))
+            return LLMResponseType(raw_answer='{"overall": 1.0}', parsed_answer=RDNAMNoAspects(overall=1))
 
         llm_provider_mock_rdnam.async_call_mocker = AsyncMock(side_effect=side_effect)
         evaluator = get_retrieval_evaluator("RDNAM", llm_provider=llm_provider_mock_rdnam, write_output=False)
@@ -265,9 +265,9 @@ class TestReadmeExamples:
             query="What is the capital of France?",
             document="Lyon is the second largest city in France.",
         )
-        assert isinstance(result.answer, RDNAMAnswerEvaluatorFormat)
+        assert isinstance(result.answer, RDNAMEvaluatorFormat)
         assert result.answer.overall == 1.0
-        assert result.answer == RDNAMAnswerEvaluatorFormat(overall=1.0, intent_match=None, trustworthiness=None)
+        assert result.answer == RDNAMEvaluatorFormat(overall=1.0, intent_match=None, trustworthiness=None)
         assert result.raw_answer == '{"overall": 1.0}'
 
     def test_custom_prompt_evaluator_example(self, llm_provider_mock):

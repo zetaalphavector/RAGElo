@@ -4,7 +4,7 @@ import re
 from typing import Any, Optional, Type
 
 from jinja2 import Template
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ragelo.types.types import AnswerEvaluatorTypes
 from ragelo.utils import string_to_template
@@ -37,19 +37,29 @@ class BaseEvaluatorConfig(BaseConfig):
         default=None,
         description="The name of the evaluator to use.",
     )
-    llm_response_schema: Optional[Type[BaseModel] | dict[str, Any]] = Field(
-        default=None,
-        description="The response schema for the LLM. If set, should be a json schema or a Pydantic BaseModel (not an instance). Otherwise, the answer will be returned as a string.",
+    llm_response_schema: Type[BaseModel] = Field(
+        description="The response schema for the LLM. Should be a Pydantic BaseModel (not an instance).",
     )
     system_prompt: Optional[Template] = Field(
         default=None,
         description="The system prompt to use for the evaluator.",
     )
-
     user_prompt: Optional[Template] = Field(
         default=None,
         description="The user prompt to use for the evaluator. Should contain at least a {{ query.query }} placeholder for the query's text.",
     )
+
+    answer_format: Type[BaseModel] | None = Field(
+        default=None,
+        description="The answer format that the Evaluator will return. If not set, will use the llm_response_schema.",
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_answer_format(cls, values: dict[str, Any]) -> dict[str, Any]:
+        if values.get("answer_format") is None:
+            values["answer_format"] = values.get("llm_response_schema", None)
+        return values
 
     @field_validator("system_prompt", "user_prompt", mode="before")
     def check_system_prompt_and_user_prompt(cls, v: Optional[str | Template]) -> Optional[Template]:

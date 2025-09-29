@@ -6,7 +6,7 @@ from typing import Any, Callable, Optional, Type
 from jinja2 import Template
 from pydantic import BaseModel, Field, field_validator
 
-from ragelo.types.answer_formats import PairWiseAnswerAnswerFormat
+from ragelo.types.answer_formats import PairwiseAnswerEvaluatorFormat
 from ragelo.types.configurations.base_configs import BaseEvaluatorConfig
 from ragelo.types.evaluables import Document
 from ragelo.types.types import AnswerEvaluatorTypes
@@ -30,7 +30,7 @@ class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
         default=(
             "the correctness, helpfulness, completeness, accuracy, depth, and level of detail of their responses"
         ),
-        description=("A string containing the factors to be used when evaluating an answer. "),
+        description="A string containing the factors to be used when evaluating an answer.",
     )
     document_filter: Optional[Callable[[Document], bool]] = Field(
         default=None,
@@ -55,8 +55,8 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     bidirectional: bool = Field(default=True, description="Whether or not to run each game in both directions")
     n_games_per_query: int = Field(default=100, description="Maximum number of games to generate for each query")
     pairwise: bool = Field(default=True, description="Whether or not to the evaluator is pairwise")
-    llm_response_schema: Optional[Type[BaseModel] | dict[str, Any]] = Field(
-        default=PairWiseAnswerAnswerFormat,
+    llm_response_schema: Type[BaseModel] = Field(
+        default=PairwiseAnswerEvaluatorFormat,
         description="The response schema for the LLM.",
     )
 

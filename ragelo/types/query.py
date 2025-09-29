@@ -28,7 +28,7 @@ class Query(BaseModel):
     metadata: dict[str, Any] | None = None
     retrieved_docs: dict[str, Document] = {}
     answers: dict[str, AgentAnswer] = {}
-    pairwise_games: list[PairwiseGame] = []
+    pairwise_games: dict[str, PairwiseGame] = {}
 
     @field_validator("qid", mode="before")
     def qid_into_string(cls, v):
@@ -127,6 +127,22 @@ class Query(BaseModel):
             return
         self.answers[agent] = answer
 
+    def __get_pairwise_game(self, agent_a: str, agent_b: str) -> PairwiseGame | None:
+        sorted_agents = sorted([agent_a, agent_b])
+        game_key = f"{sorted_agents[0]}-{sorted_agents[1]}"
+        return self.pairwise_games.get(game_key, None)
+
+    def __create_pairwise_game(self, agent_a: str, agent_b: str) -> PairwiseGame:
+        logger.info(f"Creating a new pairwise game for agents {agent_a} and {agent_b} in query {self.qid}")
+        sorted_agents = sorted([agent_a, agent_b])
+        game = PairwiseGame(
+            qid=self.qid,
+            agent_a_answer=self.answers[agent_a],
+            agent_b_answer=self.answers[agent_b],
+        )
+        self.pairwise_games[f"{sorted_agents[0]}-{sorted_agents[1]}"] = game
+        return game
+
     @overload
     def add_evaluation(
         self,
@@ -153,71 +169,46 @@ class Query(BaseModel):
             did = evaluation.did
             if did not in self.retrieved_docs:
                 logger.warning(f"Trying to add evaluation for non-retrieved document {did} in query {self.qid}")
-            if self.retrieved_docs[did].evaluation is not None and not force:
+                return False
+            if evaluation.evaluator_name in self.retrieved_docs[did].evaluations and not force:
                 if not exist_ok:
                     logger.warning(f"Document {did} in query {self.qid} already has an evaluation.")
                 return False
-            if self.retrieved_docs[did].evaluation is not None:
+            if evaluation.evaluator_name in self.retrieved_docs[did].evaluations:
                 if not exist_ok:
                     logger.info(f"Document {did} in query {self.qid} already has an evaluation. Overwriting.")
-            self.retrieved_docs[did].evaluation = evaluation
+            self.retrieved_docs[did].evaluations[evaluation.evaluator_name] = evaluation
             return True
+
         if evaluation.pairwise:
             agent_a = evaluation.agent_a
             agent_b = evaluation.agent_b
-            if agent_a not in self.answers:
+            if agent_a not in self.answers or agent_b not in self.answers:
+                missing_agents = []
+                if agent_a not in self.answers:
+                    missing_agents.append(agent_a)
+                if agent_b not in self.answers:
+                    missing_agents.append(agent_b)
                 logger.warning(
                     "Trying to add a pairwise evaluation for a comparison between agents "
-                    f"{agent_a} and {agent_b}, but {agent_a} does not have an answer for query {self.qid}"
-                )
-            if agent_b not in self.answers:
-                logger.warning(
-                    "Trying to add a pairwise evaluation for a comparison between agents "
-                    f"{agent_a} and {agent_b}, but {agent_b} does not have an answer for query {self.qid}"
-                )
-            for game in self.pairwise_games:
-                if game.agent_a_answer.agent == agent_a and game.agent_b_answer.agent == agent_b:
-                    if game.evaluation is not None:
-                        if not force:
-                            if not exist_ok:
-                                logger.warning(
-                                    f"Query {self.qid} already has an evaluation for agents {agent_a} and {agent_b}."
-                                )
-                            return False
-                        if not exist_ok:
-                            logger.info(
-                                f"Query {self.qid} already has an evaluation for agents {agent_a} and {agent_b}. "
-                                "Overwriting."
-                            )
-                    game.evaluation = evaluation
-                    return True
-            logger.info(
-                f"Trying to add a pairwise evaluation for a comparison between agents {agent_a} and {agent_b},"
-                f" but no game was found for query {self.qid}. Creating a new game."
-            )
-            agent_a = evaluation.agent_a
-            agent_b = evaluation.agent_b
-            if agent_a not in self.answers:
-                logger.warning(
-                    f"Trying to add a pairwise evaluation for a comparison between agents {agent_a} and {agent_b},"
-                    f" but {agent_a} does not have an answer for query {self.qid}"
+                    f"{agent_a} and {agent_b}, but {missing_agents} do not have an answer for query {self.qid}"
                 )
                 return False
-            if agent_b not in self.answers:
-                logger.warning(
-                    f"Trying to add a pairwise evaluation for a comparison between agents {agent_a} and {agent_b},"
-                    f" but {agent_b} does not have an answer for query {self.qid}"
-                )
+            game = self.__get_pairwise_game(agent_a, agent_b)
+            if game is None:
+                game = self.__create_pairwise_game(agent_a, agent_b)
+
+            if evaluation.evaluator_name in game.evaluations and not force:
+                if not exist_ok:
+                    logger.warning(f"Query {self.qid} already has an evaluation for agents {agent_a} and {agent_b}.")
                 return False
-            self.pairwise_games.append(
-                PairwiseGame(
-                    qid=self.qid,
-                    agent_a_answer=self.answers[agent_a],
-                    agent_b_answer=self.answers[agent_b],
-                    evaluation=evaluation,
+            if evaluation.evaluator_name in game.evaluations and not exist_ok:
+                logger.info(
+                    f"Query {self.qid} already has an evaluation for agents {agent_a} and {agent_b}. Overwriting."
                 )
-            )
+            game.evaluations[evaluation.evaluator_name] = evaluation
             return True
+
         if evaluation.agent is None:
             raise ValueError("A pointwise AnswerEvaluatorResult must have an agent assigned to it.")
         agent = evaluation.agent
@@ -225,14 +216,14 @@ class Query(BaseModel):
             logger.warning(
                 f"Trying to add evaluation for agent {agent} in query {self.qid}, but {agent} does not have an answer."
             )
-        if self.answers[agent].evaluation is not None and exist_ok:
             return False
-        if self.answers[agent].evaluation is not None and not force:
-            logger.warning(f"Agent {agent} in query {self.qid} already has an evaluation.")
+        if evaluation.evaluator_name in self.answers[agent].evaluations and not force:
+            if not exist_ok:
+                logger.warning(f"Agent {agent} in query {self.qid} already has an evaluation.")
             return False
-        if self.answers[agent].evaluation is not None:
+        if evaluation.evaluator_name in self.answers[agent].evaluations and not exist_ok:
             logger.info(f"Agent {agent} in query {self.qid} already has an evaluation. Overwriting.")
-        self.answers[agent].evaluation = evaluation
+        self.answers[agent].evaluations[evaluation.evaluator_name] = evaluation
         return True
 
     def get_qrels(

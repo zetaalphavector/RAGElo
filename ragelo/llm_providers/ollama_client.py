@@ -64,7 +64,7 @@ class OllamaProvider(BaseLLMProvider):
                 f"\n\nYour output should be a JSON string that STRICTLY adheres to the following schema:\n{schema}"
             )
             call_kwargs["response_format"] = {"type": "json_object"}
-            answers = await self.__ollama_client.chat.completions.create(**call_kwargs)
+            answers = await self.__ollama_client.chat.completions.create(**call_kwargs)  # type: ignore
             if not answers.choices or not answers.choices[0].message or not answers.choices[0].message.content:
                 raise ValueError("Ollama did not return any completions.")
             parsed_answer = json.loads(answers.choices[0].message.content)
@@ -78,7 +78,7 @@ class OllamaProvider(BaseLLMProvider):
 
         else:
             call_kwargs["response_format"] = response_schema
-            answers = await self.__ollama_client.chat.completions.parse(**call_kwargs)
+            answers = await self.__ollama_client.chat.completions.parse(**call_kwargs)  # type: ignore
             if not answers.choices or not answers.choices[0].message or not answers.choices[0].message.content:
                 raise ValueError("Ollama did not return any completions.")
             parsed_answer = answers.choices[0].message.parsed

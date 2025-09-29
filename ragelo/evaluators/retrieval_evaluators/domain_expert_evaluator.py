@@ -12,6 +12,7 @@ from ragelo.utils import string_to_template
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.DOMAIN_EXPERT)
 class DomainExpertEvaluator(BaseRetrievalEvaluator):
     config: DomainExpertEvaluatorConfig
+
     system_prompt = string_to_template("""
         You are a domain expert in {{ expert_in }}.{% if company %} You work for {{ company }}.{% endif %} You are tasked with evaluating the performance of a retrieval system for question answering in this domain. The question answering system will be used by internal users{% if company %} of {{ company }}{% endif %}{% if domain_short %} but it also serves some of your external users like {{ domain_short }}{% endif %}. 
         These users are interested in a retrieval system that provides relevant passages based on their questions.
@@ -45,11 +46,7 @@ class DomainExpertEvaluator(BaseRetrievalEvaluator):
         Given the analysis above, assign a relevance score of 0, 1, or 2 to the retrieved document for this query, where:
         - 0: the document is not relevant to the query
         - 1: the document is somewhat relevant to the query
-        - 2: the document is highly relevant to the query
-
-        Respond STRICTLY as a JSON object with the following keys:
-        - "reasoning": a concise explanation of your judgment
-        - "score": an integer (0, 1, or 2)""")
+        - 2: the document is highly relevant to the query""")
 
     user_prompt = string_to_template("""
         User query:

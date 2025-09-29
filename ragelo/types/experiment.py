@@ -15,8 +15,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Literal, overload
 
-import rich
-
+from ragelo.cli.presenters import render_evaluation, render_retrieval_summary
 from ragelo.logger import CLILogHandler, logger
 from ragelo.types.evaluables import AgentAnswer, ChatMessage, Document, PairwiseGame
 from ragelo.types.query import Query
@@ -125,8 +124,9 @@ class Experiment:
         self.save_on_disk = save_on_disk
         self.save_path = Path(save_path) if save_path else None
         self.evaluations_cache_path = Path(evaluations_cache_path) if evaluations_cache_path else None
+        self.verbose = verbose
 
-        if verbose:
+        if self.verbose:
             logger.setLevel(logging.INFO)
             if len(logger.handlers) == 0:
                 logger.addHandler(CLILogHandler(use_rich=rich_print))
@@ -135,20 +135,19 @@ class Experiment:
             logger.handlers = []
             logger.addHandler(CLILogHandler(use_rich=rich_print))
 
+        self.queries = {}
         if self.save_on_disk:
             if not self.save_path:
                 self.save_path = Path("ragelo_cache") / f"{self.experiment_name}.json"
             if not self.evaluations_cache_path:
                 self.evaluations_cache_path = self.save_path.with_name(f"{self.experiment_name}_results.jsonl")
+            self.save_path.parent.mkdir(exist_ok=True)
+            self.evaluations_cache_path.parent.mkdir(exist_ok=True)
+            if self.save_path.stat().st_size > 0:
+                self._load_from_cache(self.save_path)
         else:
             logger.info("No save path provided. Will not save the experiment to disk.")
-        self.save_path.parent.mkdir(exist_ok=True)
-        self.evaluations_cache_path.parent.mkdir(exist_ok=True)
 
-        if self.save_path and self.save_path.is_file() and self.save_path.stat().st_size > 0:
-            self._load_from_cache(self.save_path)
-        else:
-            self.queries = {}
         if queries_csv_path:
             self.add_queries_from_csv(queries_csv_path, csv_query_id_col, csv_query_text_col, exist_ok=True)
         if documents_csv_path:
@@ -165,7 +164,7 @@ class Experiment:
                 answers_csv_path, csv_agent_col, csv_answer_text_col, csv_query_id_col, exist_ok=True
             )
 
-        if self.evaluations_cache_path and os.path.isfile(self.evaluations_cache_path):
+        if self.evaluations_cache_path and self.evaluations_cache_path.is_file():
             self._load_results_from_cache(self.evaluations_cache_path)
         if clear_evaluations:
             self.__clear_all_evaluations()
@@ -335,6 +334,7 @@ class Experiment:
         self,
         evaluation: RetrievalEvaluatorResult | AnswerEvaluatorResult | EloTournamentResult,
         should_save: bool = True,
+        should_print: bool | None = None,
         force: bool = False,
         exist_ok: bool = False,
     ):
@@ -345,6 +345,7 @@ class Experiment:
             should_save (bool): Whether to save the result to disk. Defaults to True.
             force (bool): Whether to overwrite an existing evaluation. Defaults to False.
             exist_ok (bool): Whether to warn if an evaluation already exists. Defaults to False.
+            should_print (bool | None): Whether to print the evaluation. Defaults to None. If None, will use the verbose attribute.
         """
         if isinstance(evaluation, EloTournamentResult):
             self.elo_tournaments.append(evaluation)
@@ -358,6 +359,11 @@ class Experiment:
             return
         if should_save:
             self.save_results(evaluation)
+
+        if should_print is None:
+            should_print = self.verbose
+        if should_print:
+            render_evaluation(evaluation, self.rich_print)
 
     def evaluate_retrieval(
         self,
@@ -424,25 +430,7 @@ class Experiment:
                 for k, v in ir_measures.calc_aggregate(measures, qrels, run).items()  # type: ignore
             }
 
-        key_metric = metrics[0]
-        max_agent_len = max([len(agent) for agent in results.keys()]) + 3
-        max_metric_len = max([len(metric) for metric in metrics])
-        sorted_agents = sorted(results.items(), key=lambda x: x[1][key_metric], reverse=True)
-        if self.rich_print:
-            rich.print("---[bold cyan] Retrieval Scores [/bold cyan] ---")
-            if relevance_threshold > 0:
-                rich.print(f"[bold yellow]Relevance threshold: {relevance_threshold}[/bold yellow]")
-            header = f"[bold magenta]{'Agent Name':<{max_agent_len}}"
-            header += "\t".join([f"{m:<{max_metric_len}}" for m in metrics])
-            header += "[/bold magenta]"
-            rich.print(f"[bold cyan]{header}[/bold cyan]")
-            for agent, scores in sorted_agents:
-                row = f"[bold white]{agent:<{max_agent_len}}[/bold white]"
-                row += "\t".join([f"{scores[metric]:<{max_metric_len},.4f}" for metric in metrics])
-                rich.print(row)
-
-        else:
-            print(results)
+        render_retrieval_summary(results, metrics, relevance_threshold, self.rich_print)
         return results
 
     def get_qrels(
@@ -482,7 +470,7 @@ class Experiment:
     def get_runs(
         self,
         agents: list[str] | None = None,
-        output_path: str | None = None,
+        output_path: str | Path | None = None,
         output_format: str = "trec",
     ) -> dict[str, dict[str, dict[str, float]]]:
         """
@@ -506,22 +494,24 @@ class Experiment:
             for agent, run in runs.items():
                 runs_by_agent[agent].update(run)
         if output_path:
+            if isinstance(output_path, str):
+                output_path = Path(output_path)
             if output_format.lower() == "trec":
-                if not os.path.isdir(output_path):
-                    os.makedirs(output_path, exist_ok=True)
+                if not output_path.is_dir():
+                    output_path.mkdir(exist_ok=True)
                 for agent, run in runs_by_agent.items():
-                    with open(f"{output_path}/{agent}.run", "w") as f:
+                    with (output_path / f"{agent}.run").open("w") as f:
                         for qid, docs in run.items():
                             sorted_scores = sorted(docs.items(), key=lambda x: x[1], reverse=True)
                             for idx, (did, score) in enumerate(sorted_scores):
                                 f.write(f"{qid} Q0 {did} {idx + 1} {score} {agent}\n")
             elif output_format.lower() == "json":
-                with open(output_path, "w") as f:
+                with output_path.open("w") as f:
                     json.dump(runs_by_agent, f)
 
         return runs_by_agent
 
-    def save(self, output_path: str | None = None):
+    def save(self, output_path: str | Path | None = None) -> None:
         """
         Persist the current state of the model to disk if caching is enabled.
         This method checks if caching is enabled by evaluating the `save_cache` attribute.
@@ -538,6 +528,8 @@ class Experiment:
             if self.save_path is None:
                 raise ValueError("Cannot save experiment without a save path")
             output_path = self.save_path
+        if isinstance(output_path, str):
+            output_path = Path(output_path)
         output_dict: dict[str, Any] = {}
 
         # Do not save evaluations. They will be saved on _results.jsonl and loaded from there.
@@ -546,11 +538,14 @@ class Experiment:
             "answers": {"__all__": "evaluation"},
             "pairwise_games": {"__all__": "evaluation"},
         }
-        output_dict["queries"] = {qid: query.model_dump(exclude=exclude_fields) for qid, query in self.queries.items()}
+        output_dict["queries"] = {
+            qid: query.model_dump(exclude=exclude_fields)  # type: ignore
+            for qid, query in self.queries.items()
+        }
         output_dict["experiment_name"] = self.experiment_name
         output_dict["elo_tournaments"] = [tournament.model_dump() for tournament in self.elo_tournaments]
 
-        with open(output_path, "w") as f:
+        with output_path.open("w") as f:
             json.dump(output_dict, f, indent=4, ensure_ascii=False)
 
     def save_results(self, result: EvaluatorResult | EloTournamentResult):
@@ -850,10 +845,11 @@ class Experiment:
         for qid, q_data in queries_data.items():
             q_object = Query(qid=qid, query=q_data["query"], metadata=q_data.get("metadata"))
             for did, doc_data in q_data.get("retrieved_docs", {}).items():
-                doc_object = Document(did=did, text=doc_data["text"], metadata=doc_data.get("metadata"))
+                doc_object = Document(qid=qid, did=did, text=doc_data["text"], metadata=doc_data.get("metadata"))
                 q_object.add_retrieved_doc(doc_object)
             for agent, answer_data in q_data.get("answers", {}).items():
                 answer_object = AgentAnswer(
+                    qid=qid,
                     agent=agent,
                     text=answer_data["text"],
                     metadata=answer_data.get("metadata"),
@@ -865,7 +861,9 @@ class Experiment:
                 q_object.add_agent_answer(answer_object)
             for game_data in q_data.get("pairwise_games", []):
                 game_object = PairwiseGame(
+                    qid=qid,
                     agent_a_answer=AgentAnswer(
+                        qid=qid,
                         agent=game_data["agent_a"],
                         text=game_data["text"],
                         metadata=game_data.get("metadata"),
@@ -875,6 +873,7 @@ class Experiment:
                         ],
                     ),
                     agent_b_answer=AgentAnswer(
+                        qid=qid,
                         agent=game_data["agent_b"],
                         text=game_data["text"],
                         metadata=game_data.get("metadata"),
