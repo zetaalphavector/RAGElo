@@ -26,7 +26,7 @@ class Evaluable(BaseModel):
 
     qid: str
     metadata: dict[str, Any] | None = None
-    evaluation: EvaluatorResult | None = None
+    evaluations: dict[str, EvaluatorResult] = {}
 
     @field_validator("qid", mode="before")
     def qid_into_string(cls, v):
@@ -65,7 +65,7 @@ class Document(Evaluable):
     did: str
     text: str
     retrieved_by: dict[str, float] = {}
-    evaluation: RetrievalEvaluatorResult | None = None
+    evaluations: dict[str, RetrievalEvaluatorResult] = {}
 
     @field_validator("did", mode="before")
     def did_into_string(cls, v):
@@ -144,7 +144,7 @@ class AgentAnswer(Evaluable):
     agent: str
     text: str | None = None
     conversation: list[ChatMessage] | None = None
-    evaluation: AnswerEvaluatorResult | None = None
+    evaluations: dict[str, AnswerEvaluatorResult] = {}
 
     @model_validator(mode="before")
     @classmethod
@@ -184,4 +184,13 @@ class PairwiseGame(Evaluable):
 
     agent_a_answer: AgentAnswer
     agent_b_answer: AgentAnswer
-    evaluation: AnswerEvaluatorResult | None = None
+    evaluations: dict[str, AnswerEvaluatorResult] = {}
+
+    @model_validator(mode="before")
+    @classmethod
+    def ensure_agent_order(cls, values):
+        agent_a_name = values.get("agent_a_answer").agent
+        agent_b_name = values.get("agent_b_answer").agent
+        if agent_a_name > agent_b_name:
+            values["agent_a_answer"], values["agent_b_answer"] = values["agent_b_answer"], values["agent_a_answer"]
+        return values
