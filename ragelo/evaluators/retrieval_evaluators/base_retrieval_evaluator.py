@@ -4,11 +4,8 @@ and returns a score or a label for each document."""
 
 from __future__ import annotations
 
-import json
 from typing import Any, Callable, Type, get_type_hints
 
-import rich
-from pydantic import BaseModel
 from tenacity import RetryError
 
 from ragelo.evaluators.base_evaluator import BaseEvaluator
@@ -142,24 +139,6 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             system_prompt=system_prompt,
             user_message=user_message,
         )
-
-    def _print_response(self, evaluation: RetrievalEvaluatorResult, rich_print: bool = True):
-        if isinstance(evaluation.answer, dict):
-            answer = json.dumps(evaluation.answer, indent=4, ensure_ascii=False)
-        elif isinstance(evaluation.answer, BaseModel):
-            answer = evaluation.answer.model_dump_json(indent=4)
-        else:
-            answer = str(evaluation.answer)
-        if rich_print:
-            rich.print(f"[bold blue]🔎 Query ID[/bold blue]: {evaluation.qid}")
-            rich.print(f"[bold blue]📜 Document ID[/bold blue]: {evaluation.did}")
-            rich.print(f"[bold blue]Parsed Answer[/bold blue]: {answer}")
-            rich.print("")
-        else:
-            print(f"Query ID: {evaluation.qid}")
-            print(f"Document ID: {evaluation.did}")
-            print(f"Parsed Answer: {answer}")
-            print("")
 
     @classmethod
     def from_config(cls, config: BaseRetrievalEvaluatorConfig, llm_provider: BaseLLMProvider):

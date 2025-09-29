@@ -3,11 +3,10 @@ from __future__ import annotations
 import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from typing import Optional
 
-import rich
 from jinja2 import Template
 
+from ragelo.cli.presenters import render_failed_evaluations
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.types.configurations import BaseEvaluatorConfig
 from ragelo.types.evaluables import Evaluable
@@ -24,7 +23,7 @@ class BaseEvaluator(ABC):
     """
 
     config: BaseEvaluatorConfig
-    system_prompt: Optional[Template] = None
+    system_prompt: Template | None = None
     user_prompt: Template
     evaluable_name: str = "Evaluable"
 
@@ -91,16 +90,11 @@ class BaseEvaluator(ABC):
                     evaluation,
                     exist_ok=True,
                     force=self.config.force,
+                    should_print=self.config.verbose,
                 )
-                if self.config.verbose:
-                    self._print_response(evaluation, experiment.rich_print)
         pbar.close()
         if self.config.verbose:
-            self._print_failed_evaluations(evaluations, failed)
-
-    @abstractmethod
-    def _print_response(self, evaluation: EvaluatorResult, rich_print: bool = True):
-        raise NotImplementedError
+            render_failed_evaluations(evaluations, failed, self.config.rich_print)
 
     @abstractmethod
     def _get_tuples_to_evaluate(self, queries: Experiment) -> Sequence[tuple[Query, Evaluable]]:
@@ -109,15 +103,3 @@ class BaseEvaluator(ABC):
     def _process_answer(self, llm_response: LLMResponseType) -> LLMResponseType:
         """Processes the raw answer returned by the LLM. Should be implemented by the subclass if needed."""
         return llm_response
-
-    def _print_failed_evaluations(self, total_evaluations: int, failed_evaluations: int):
-        if self.config.rich_print:
-            rich.print("✅ Done!")
-            if failed_evaluations > 0:
-                rich.print(f"[bold red]Failed evaluations: {failed_evaluations}[/bold red]")
-            rich.print(f"[bold green]Total evaluations: {total_evaluations}[/bold green]")
-            return
-        print("✅ Done!")
-        if failed_evaluations > 0:
-            print(f"Failed evaluations: {failed_evaluations}")
-        print(f"Total evaluations: {total_evaluations}")

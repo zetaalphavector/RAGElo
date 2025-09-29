@@ -3,7 +3,6 @@ from __future__ import annotations
 import random
 
 import numpy as np
-import rich
 
 from ragelo.agent_rankers.base_agent_ranker import AgentRanker, AgentRankerFactory
 from ragelo.logger import logger
@@ -60,21 +59,7 @@ class EloRanker(AgentRanker):
             total_tournaments=self.config.tournaments,
         )
         experiment.add_evaluation(result)
-        self._print_elo_tournament_result(result, experiment.rich_print)
         return result
-
-    def _print_elo_tournament_result(self, result: EloTournamentResult, rich_print: bool = True):
-        scores = sorted(result.scores.items(), key=lambda x: x[1], reverse=True)
-        if rich_print:
-            rich.print("-------[bold white] Agents Elo Ratings [/bold white]-------")
-        else:
-            print("------- Agents Elo Ratings -------")
-        for agent, rating in scores:
-            std_dev = result.std_dev.get(agent, 0)
-            if rich_print:
-                rich.print(f"[bold white]{agent:<15}[/bold white]: {rating:.1f}(±{std_dev:.1f})")
-            else:
-                print(f"{agent:<15}: {rating:.1f} (±{std_dev:.1f})")
 
     def get_agents_ratings(self):
         return self.agents_scores

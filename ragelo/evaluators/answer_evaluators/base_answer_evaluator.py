@@ -247,35 +247,6 @@ class BaseAnswerEvaluator(BaseEvaluator):
             user_message=user_message,
         )
 
-    def _print_response(self, evaluation: AnswerEvaluatorResult, rich_print: bool = True):
-        if evaluation.pairwise:
-            agent_a = evaluation.agent_a
-            agent_b = evaluation.agent_b
-        else:
-            agent = evaluation.agent
-        if isinstance(evaluation.answer, dict):
-            answer = json.dumps(evaluation.answer, indent=4, ensure_ascii=False)
-        elif isinstance(evaluation.answer, BaseModel):
-            answer = evaluation.answer.model_dump_json(indent=4)
-        else:
-            answer = str(evaluation.answer)
-        if rich_print:
-            rich.print(f"[bold blue]🔎 Query ID[/bold blue]: {evaluation.qid}")
-            if agent_a and agent_b:
-                rich.print(f"[bold bright_cyan] {agent_a:<18} [/bold bright_cyan] 🆚  [bold red] {agent_b}[/bold red]")
-            elif agent:
-                rich.print(f"[bold bright_cyan]🕵️ Agent[/bold bright_cyan]: {agent}")
-            rich.print(f"[bold blue]Parsed Answer[/bold blue]: {answer}")
-            rich.print("")
-        else:
-            print(f"Query ID: {evaluation.qid}")
-            if agent_a and agent_b:
-                print(f"{agent_a} vs {agent_b}")
-            elif agent:
-                print(f"Agent: {agent}")
-            print(f"Parsed Answer: {answer}")
-            print("")
-
     @classmethod
     def from_config(cls, config: BaseAnswerEvaluatorConfig, llm_provider: BaseLLMProvider):
         return cls(config, llm_provider)
