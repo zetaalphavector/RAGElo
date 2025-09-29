@@ -27,12 +27,12 @@ def render_evaluation(
             rich.print("-------[bold white] Agents Elo Ratings [/bold white]-------")
         else:
             print("------- Agents Elo Ratings -------")
-        for agent, rating in scores:
-            std_dev = evaluation.std_dev.get(agent, 0)
+        for _agent, rating in scores:
+            std_dev = evaluation.std_dev.get(_agent, 0)
         if rich_print:
-            rich.print(f"[bold white]{agent:<15}[/bold white]: {rating:.1f}(±{std_dev:.1f})")
+            rich.print(f"[bold white]{_agent:<15}[/bold white]: {rating:.1f}(±{std_dev:.1f})")
         else:
-            print(f"{agent:<15}: {rating:.1f} (±{std_dev:.1f})")
+            print(f"{_agent:<15}: {rating:.1f} (±{std_dev:.1f})")
         return
     if evaluation.answer is None:
         return
