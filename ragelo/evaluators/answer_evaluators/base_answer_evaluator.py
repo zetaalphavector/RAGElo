@@ -130,30 +130,39 @@ class BaseAnswerEvaluator(BaseEvaluator):
             raise ValueError(f"can't evaluate a {type_name} in an Answer Evaluator")
 
         if evaluable.evaluation is not None and not self.config.force:
+            parsed_answer = self.answer_format.model_validate(evaluable.evaluation.answer)
             if isinstance(evaluable, AgentAnswer):
                 return AnswerEvaluatorResult(
                     qid=query.qid,
                     agent=evaluable.agent,
-                    answer=evaluable.evaluation.answer,
+                    answer=parsed_answer,
                     pairwise=False,
                 )
             return AnswerEvaluatorResult(
                 qid=query.qid,
                 agent_a=evaluable.agent_a_answer.agent,
                 agent_b=evaluable.agent_b_answer.agent,
-                answer=evaluable.evaluation.answer,
+                answer=parsed_answer,
                 pairwise=True,
             )
 
         if isinstance(evaluable, AgentAnswer):
-            agent = evaluable.agent
-            prompt = self._build_message(query, evaluable)
+            return await self._evalaute_pointwise(query, evaluable)
         elif isinstance(evaluable, PairwiseGame):
-            agent = (evaluable.agent_a_answer.agent, evaluable.agent_b_answer.agent)
-            prompt = self._build_message_pairwise(query, evaluable)
+            return await self._evaluate_pairwise(query, evaluable)
+
         else:
             raise ValueError(f"Unknown evaluable type {type(evaluable)}")
 
+    async def _evalaute_pointwise(self, query: Query, evaluable: AgentAnswer) -> AnswerEvaluatorResult:
+        """
+        Evaluates a single agent's answer asynchronously.
+        Args:
+            query (Query): The query to evaluate.
+            evaluable (AgentAnswer): The agent's answer to evaluate.
+        """
+        agent = evaluable.agent
+        prompt = self._build_message(query, evaluable)
         exc = None
         try:
             llm_response = await self.llm_provider.call_async(
@@ -161,34 +170,95 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 response_schema=self.config.llm_response_schema,
             )
             llm_response = self._process_answer(llm_response)
-        except ValueError as e:
-            logger.warning(
-                f"Failed to PARSE answer for qid: {query.qid} agent(s): {agent}\nRaw answer: {llm_response.raw_answer}"
-            )
-            exc = str(e)
         except Exception as e:
-            logger.warning(f"Failed to FETCH answers for qid: {query.qid}")
-            logger.warning(f"agent(s): {agent}")
-            if isinstance(e, RetryError):
-                exc = str(e.last_attempt.exception())
-            else:
-                exc = str(e)
-        if isinstance(evaluable, AgentAnswer):
-            return AnswerEvaluatorResult(
-                qid=query.qid,
-                agent=evaluable.agent,
-                raw_answer=llm_response.raw_answer,
-                answer=llm_response.parsed_answer,
-                pairwise=False,
-                exception=exc,
+            exc = str(e) + f"\nRaw answer: {llm_response.raw_answer}"
+            logger.warning(f"Failed to GET answer for qid: {query.qid} and agent: {agent}: {exc}")
+        return AnswerEvaluatorResult(
+            qid=query.qid,
+            agent=agent,
+            answer=llm_response.parsed_answer,
+            pairwise=False,
+            exception=exc,
+        )
+
+    async def _evaluate_pairwise(self, query: Query, evaluable: PairwiseGame) -> AnswerEvaluatorResult:
+        """
+        Evaluates a pairwise game asynchronously.
+        Args:
+            query (Query): The query to evaluate.
+            evaluable (PairwiseGame): The pairwise game to evaluate.
+        """
+        agent = (evaluable.agent_a_answer.agent, evaluable.agent_b_answer.agent)
+        game = evaluable
+        prompt = self._build_message_pairwise(query, evaluable)
+        try:
+            llm_response = await self.llm_provider.call_async(
+                input=prompt,
+                response_schema=self.config.llm_response_schema,
             )
-        assert isinstance(evaluable, PairwiseGame)
+            llm_response = self._process_answer(llm_response)
+        except Exception as e:
+            exc = str(e) + f"\nRaw answer: {llm_response.raw_answer}"
+            logger.warning(f"Failed to GET answer for qid: {query.qid} and agent(s): {agent}: {exc}")
+        answer = AnswerEvaluatorResult(
+            qid=query.qid,
+            agent_a=evaluable.agent_a_answer.agent,
+            agent_b=evaluable.agent_b_answer.agent,
+            answer=llm_response.parsed_answer,
+            pairwise=True,
+            exception=exc,
+        )
+        if not self.config.bidirectional:
+            return answer
+
+        winner = llm_response.parsed_answer.winner
+        inverse_game = PairwiseGame(
+            qid=game.qid,
+            agent_a_answer=game.agent_b_answer,
+            agent_b_answer=game.agent_a_answer,
+        )
+        inverse_prompt = self._build_message_pairwise(query, inverse_game, inverse=True)
+        inverse_llm_response = await self.llm_provider.call_async(
+            input=inverse_prompt,
+            response_schema=self.config.llm_response_schema,
+        )
+        inverse_llm_response = self._process_answer(inverse_llm_response)
+        inverse_answer = AnswerEvaluatorResult(
+            qid=query.qid,
+            agent_a=evaluable.agent_b_answer.agent,
+            agent_b=evaluable.agent_a_answer.agent,
+            answer=inverse_llm_response.parsed_answer,
+            pairwise=True,
+            exception=exc,
+        )
+        winner_inverse = inverse_llm_response.parsed_answer.winner
+        if winner_inverse == "A" and winner == "B":
+            return answer
+        if winner_inverse == "B" and winner == "C":
+            return inverse_answer
+        if winner_inverse == "C" and winner == "A":
+            return answer
+        # Assume a tie
+        processed_answer = self.answer_format.model_validate(
+            {
+                "answer_a_analysis": answer.answer.answer_a_analysis
+                + " \n\n "
+                + inverse_answer.answer.answer_a_analysis,
+                "answer_b_analysis": answer.answer.answer_b_analysis
+                + " \n\n "
+                + inverse_answer.answer.answer_b_analysis,
+                "comparison_reasoning": answer.answer.comparison_reasoning
+                + " \n\n "
+                + inverse_answer.answer.comparison_reasoning,
+                "winner": "C",
+            }
+        )
+
         return AnswerEvaluatorResult(
             qid=query.qid,
             agent_a=evaluable.agent_a_answer.agent,
             agent_b=evaluable.agent_b_answer.agent,
-            raw_answer=llm_response.raw_answer,
-            answer=llm_response.parsed_answer,
+            answer=processed_answer,
             pairwise=True,
             exception=exc,
         )
@@ -234,10 +304,18 @@ class BaseAnswerEvaluator(BaseEvaluator):
             user_message=user_message,
         )
 
-    def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> LLMInputPrompt:
+    def _build_message_pairwise(self, query: Query, game: PairwiseGame, inverse: bool = False) -> LLMInputPrompt:
         """Builds the message to send to the LLM evaluator based on a pairwise game"""
         documents = self._filter_documents(query)
-        context = {"query": query, "game": game, "documents": documents}
+        if inverse:
+            reverse_game = PairwiseGame(
+                qid=game.qid,
+                agent_a_answer=game.agent_b_answer,
+                agent_b_answer=game.agent_a_answer,
+            )
+            context = {"query": query, "game": reverse_game, "documents": documents}
+        else:
+            context = {"query": query, "game": game, "documents": documents}
         user_message = self.user_prompt.render(**context)
         system_prompt = self.system_prompt.render(**context) if self.system_prompt else None
         return LLMInputPrompt(
@@ -261,24 +339,16 @@ class BaseAnswerEvaluator(BaseEvaluator):
         for query in experiment:
             query_agents = list(query.answers.keys())
             pairs = list(itertools.combinations(query_agents, 2))
-            if self.config.bidirectional:
-                pairs += [(b, a) for a, b in pairs]
             random.shuffle(pairs)
 
             # Filter out games that already exist
-            existing_games = {(a.agent_a_answer.agent, a.agent_b_answer.agent) for a in query.pairwise_games}
+            existing_games = [g for g in pairs if query.get_pairwise_game(g[0], g[1]) is not None]
             games = [g for g in pairs if g not in existing_games]
 
             games_to_add = min(self.config.n_games_per_query - len(existing_games), len(games))
             games = games[:games_to_add]
             for agent_a, agent_b in games:
-                query.pairwise_games.append(
-                    PairwiseGame(
-                        qid=query.qid,
-                        agent_a_answer=query.answers[agent_a],
-                        agent_b_answer=query.answers[agent_b],
-                    )
-                )
+                query.add_pairwise_game(agent_a, agent_b)
 
     def _filter_documents(self, query: Query) -> list[Document]:
         documents = []
