@@ -5,6 +5,14 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
+class RetrievalEvaluatorFormat(BaseModel):
+    reasoning: str = Field(..., description="A concise explanation and reasoning of the relevance of the document.")
+    score: int = Field(
+        ...,
+        description="Your relevance score for the document. 0 for non-relevant, 1 for somewhat relevant and 2 for highly relevant.",
+    )
+
+
 class AnswerEvaluatorFormat(BaseModel):
     reasoning: str = Field(..., description="A concise explanation and reasoning of the quality of the answer.")
     score: int = Field(
@@ -20,14 +28,6 @@ class PairwiseAnswerEvaluatorFormat(BaseModel):
         ..., description="A string with your comparison between the two answers and their differences"
     )
     winner: Literal["A", "B", "C"] = Field(..., description="The winner of the pairwise comparison.")
-
-
-class RetrievalEvaluatorFormat(BaseModel):
-    reasoning: str = Field(..., description="A concise explanation and reasoning of the relevance of the document.")
-    score: int = Field(
-        ...,
-        description="Your relevance score for the document. 0 for non-relevant, 1 for somewhat relevant and 2 for highly relevant.",
-    )
 
 
 class RDNAMEvaluatorFormat(BaseModel):
