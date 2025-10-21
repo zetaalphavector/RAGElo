@@ -7,6 +7,7 @@ import rich
 from ragelo.types.results import (
     AnswerEvaluatorResult,
     EloTournamentResult,
+    EvaluatorResult,
     PairwiseGameEvaluatorResult,
     RetrievalEvaluatorResult,
 )
@@ -71,13 +72,11 @@ def _render_retrieval_evaluation(evaluation: RetrievalEvaluatorResult, rich_prin
 
 
 def render_evaluation(
-    evaluation: RetrievalEvaluatorResult | AnswerEvaluatorResult | PairwiseGameEvaluatorResult | EloTournamentResult,
+    evaluation: EvaluatorResult | EloTournamentResult,
     rich_print: bool = True,
 ):
     if isinstance(evaluation, EloTournamentResult):
         return _render_elo_tournament(evaluation, rich_print)
-    if isinstance(evaluation, RetrievalEvaluatorResult) and evaluation.score is None and not evaluation.reasoning:
-        return
 
     if isinstance(evaluation, RetrievalEvaluatorResult):
         return _render_retrieval_evaluation(evaluation, rich_print)

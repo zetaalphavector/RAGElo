@@ -358,17 +358,16 @@ class Experiment:
 
     def evaluate_retrieval(
         self,
-        relevance_key: str = "relevance",
         metrics: list[str] = ["Precision@10", "nDCG@10", "Judged@10"],
         relevance_threshold: int = 0,
+        retrieval_evaluator_name: str | None = None,
     ) -> dict[str, dict[str, float]]:
         """
         Evaluate the retrieval performance of agents using specified metrics.
         Args:
-            relevance_key (str): The key in the answer object that contains an integer with the relevance of the
-                document.
             metrics (list[str]): A list of metrics to use. defaults to ["Precision@10", "nDCG@10", "Judged@10"].
             relevance_threshold (int): The threshold above which a document is considered relevant (default is 0).
+            retrieval_evaluator_name (str | None): The name of the retrieval evaluator to use to get the relevance of the documents.
         Returns:
             dict[str, dict[str, float]]: A dictionary where keys are agent names and values are dictionaries of scores.
         Raises:
@@ -380,7 +379,7 @@ class Experiment:
         - If the `rich` package is not installed, the results are printed using plain `print`.
 
         Example:
-        >>> results = evaluate_retrieval(relevance_key="relevance", metrics=["Precision@10", "nDCG@10"], relevance_threshold=1)
+        >>> results = evaluate_retrieval(metrics=["Precision@10", "nDCG@10"], relevance_threshold=1)
         >>> print(results)
         {
             "agent1": {
@@ -400,8 +399,8 @@ class Experiment:
         except ImportError:
             raise ImportError("ir_measures is not installed. Please install it with `pip install ir-measures`")
         qrels = self.get_qrels(
-            relevance_key=relevance_key,
             relevance_threshold=relevance_threshold,
+            retrieval_evaluator_name=retrieval_evaluator_name,
         )
         runs = self.get_runs()
         measures = []
@@ -426,24 +425,29 @@ class Experiment:
 
     def get_qrels(
         self,
-        relevance_key: str | None = "relevance",
         relevance_threshold: int = 0,
         output_path: str | None = None,
         output_format: Literal["trec", "json"] = "trec",
-    ) -> dict[str, dict[str, int]]:
+        retrieval_evaluator_name: str | None = None,
+    ) -> dict[str, dict[str, float]]:
         """
         Retrieve the qrels (query relevance judgments) for the queries.
         Args:
-            relevance_key (str | None): The key to use for determining relevance. Defaults to "relevance".
             relevance_threshold (int): The threshold value for relevance. Defaults to 0.
+            output_path (str | None): The path to save the qrels to disk. If None, the qrels are not saved.
+            output_format (Literal["trec", "json"]): The format to save the qrels. Defaults to "trec". If TREC, output_path should be a
+                directory, and each query will have a separate file.
+            retrieval_evaluator_name (str | None): The name of the retrieval evaluator to use to get the relevance of the documents.
         Returns:
-            dict[str, dict[str, int]]: A dictionary where each key is a query ID and the value is another dictionary
+            dict[str, dict[str, float]]: A dictionary where each key is a query ID and the value is another dictionary
                                        mapping document IDs to their relevance scores.
         """
 
         qrels = {}
         for qid, query in self.queries.items():
-            qrels[qid] = query.get_qrels(relevance_key, relevance_threshold)
+            qrels[qid] = query.get_qrels(
+                relevance_threshold=relevance_threshold, retrieval_evaluator_name=retrieval_evaluator_name
+            )
         if output_path:
             with open(output_path, "w") as f:
                 if output_format.lower() == "trec":
