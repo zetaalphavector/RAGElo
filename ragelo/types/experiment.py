@@ -883,7 +883,6 @@ class Experiment:
     def _load_results_from_cache(self, cache_path: Path | None):
         from ragelo.evaluators.evaluator_utils import get_evaluator_result_type
 
-        missing_queries = set()
         if cache_path is None:
             return
         assert cache_path.is_file()
@@ -910,9 +909,6 @@ class Experiment:
                 raise ValueError(f"Unknown result type {type(result)}")
 
             self.add_evaluation((query, evaluable), result, should_save=False, exist_ok=True, should_print=False)
-
-        if len(missing_queries) > 0:
-            logger.warning(f"Loaded {len(self.queries)} results from cache. {len(missing_queries)} queries missing")
 
     def __len__(self):
         return len(self.queries)
