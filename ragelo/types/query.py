@@ -6,8 +6,6 @@ from typing import Any, Type
 from pydantic import BaseModel, field_validator
 from typing_extensions import Self
 
-from ragelo.evaluators.answer_evaluators.base_answer_evaluator import get_answer_evaluator_result_type
-from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import get_retrieval_evaluator_result_type
 from ragelo.logger import logger
 from ragelo.types.evaluables import AgentAnswer, Document, Evaluable, PairwiseGame
 from ragelo.types.results import EvaluatorResult, RetrievalEvaluatorResult
@@ -136,20 +134,18 @@ class Query(BaseModel):
 
     def add_pairwise_game(self, agent_a: str, agent_b: str) -> PairwiseGame:
         logger.info(f"Creating a new pairwise game for agents {agent_a} and {agent_b} in query {self.qid}")
-        sorted_agents = sorted([agent_a, agent_b])
         game = PairwiseGame(
             qid=self.qid,
             agent_a_answer=self.answers[agent_a],
             agent_b_answer=self.answers[agent_b],
         )
-        self.pairwise_games[f"{sorted_agents[0]}-{sorted_agents[1]}"] = game
+        self.pairwise_games[game.game_id] = game
         return game
 
     def add_evaluation(
         self,
         evaluable: Evaluable,
         evaluation: EvaluatorResult,
-        evaluator_name: str,
         force: bool = False,
         exist_ok: bool = False,
     ) -> bool:
@@ -157,23 +153,21 @@ class Query(BaseModel):
         Args:
             evaluable Evaluable: The evaluable object to add the evaluation to.
             evaluation EvaluatorResult | EloTournamentResult: The evaluation result to add to the query.
-            evaluator_name str: The name of the evaluator.
             force bool: Whether to overwrite existing evaluations.
             exist_ok bool: Whether to raise an error if the evaluation already exists.
         """
-        expected_result_type: Type[EvaluatorResult]
-        if isinstance(evaluable, Document):
-            expected_result_type = get_retrieval_evaluator_result_type(evaluator_name)
-        elif isinstance(evaluable, AgentAnswer) or isinstance(evaluable, PairwiseGame):
-            expected_result_type = get_answer_evaluator_result_type(evaluator_name)
-        else:
-            raise ValueError(f"Unknown Evaluable type {type(evaluable)}")
+        # Import here to avoid circular imports
+        from ragelo.evaluators.evaluator_utils import get_evaluator_result_type
+
+        expected_result_type = get_evaluator_result_type(evaluation.evaluator_name)
         if not isinstance(evaluation, expected_result_type):
+            evaluator_name = evaluation.evaluator_name
             raise TypeError(
                 f"Evaluator {evaluator_name} must produce a {expected_result_type} for {evaluable.__class__.__name__}; got {type(evaluation)}"
             )
 
         # Enforce single, consistent type per evaluator name on this evaluable
+        evaluator_name = evaluation.evaluator_name
         if evaluator_name in evaluable.evaluations and not force:
             if not exist_ok:
                 evaluable_id = getattr(evaluable, "did", getattr(evaluable, "agent", type(evaluable).__name__))

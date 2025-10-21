@@ -15,8 +15,6 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel
-
 from ragelo.logger import CLILogHandler, logger
 from ragelo.presenters import render_evaluation, render_retrieval_summary
 from ragelo.types.evaluables import AgentAnswer, ChatMessage, Document, Evaluable, PairwiseGame
@@ -333,26 +331,21 @@ class Experiment:
             force (bool): Whether to overwrite an existing evaluation. Defaults to False.
             exist_ok (bool): Whether to warn if an evaluation already exists. Defaults to False.
         """
-        evaluator_name = getattr(evaluation, "evaluator_name", "unknown")
         if isinstance(evaluation, EloTournamentResult):
             self.elo_tournaments.append(evaluation)
             added = True
             evaluable = None
         else:
-            qid = tuple[0].qid
+            qid = evaluation.qid
             if qid not in self.queries:
                 raise ValueError(f"Query {qid} not found in queries")
             evaluable = tuple[1]
-            # Get evaluator name from the evaluation result
-            added = self.queries[qid].add_evaluation(
-                evaluable, evaluation, evaluator_name, force=force, exist_ok=exist_ok
-            )
+            added = self.queries[qid].add_evaluation(evaluable, evaluation, force=force, exist_ok=exist_ok)
         if not added:
             return
         if should_save:
-            self.save_result(evaluation, evaluable, evaluator_name)
-        if should_print is None:
-            should_print = self.verbose
+            self.save_result(evaluation)
+        should_print = should_print or self.verbose
         if should_print:
             render_evaluation(evaluation, self.rich_print)
 
@@ -519,10 +512,9 @@ class Experiment:
         """
         if not self.save_on_disk:
             return
+        output_path = output_path or self.save_path
         if output_path is None:
-            if self.save_path is None:
-                raise ValueError("Cannot save experiment without a save path")
-            output_path = self.save_path
+            raise ValueError("Cannot save experiment without a save path")
         if isinstance(output_path, str):
             output_path = Path(output_path)
         output_dict: dict[str, Any] = {}
@@ -543,12 +535,7 @@ class Experiment:
         with output_path.open("w") as f:
             json.dump(output_dict, f, indent=4, ensure_ascii=False)
 
-    def save_result(
-        self,
-        result: BaseModel | EloTournamentResult,
-        evaluable: Evaluable | None,
-        evaluator_name: str,
-    ):
+    def save_result(self, result: EvaluatorResult | EloTournamentResult):
         """
         Persist a single evaluation result to the cache file.
         This method writes the given evaluation result to a cache file specified by
@@ -568,21 +555,9 @@ class Experiment:
             return
         if self.evaluations_cache_path is None:
             raise ValueError("Results cache path not set. Cannot dump result")
+
         with open(self.evaluations_cache_path, "a+") as f:
-            if isinstance(result, PairwiseGameEvaluatorResult):
-                result_type = "pairwise_answer"
-            elif isinstance(result, AnswerEvaluatorResult):
-                result_type = "answer"
-            elif isinstance(result, RetrievalEvaluatorResult):
-                result_type = "retrieval"
-            elif isinstance(result, EloTournamentResult):
-                result_type = "elo_tournament"
-            else:
-                raise ValueError(f"Cannot save evaluation of type {type(result)} to cache")
-            # Store evaluator_name and evaluable key for future-proofing
-            payload = result.model_dump()
-            payload["evaluator_name"] = getattr(result, "evaluator_name", evaluator_name)
-            f.write(json.dumps({result_type: payload}, ensure_ascii=False) + "\n")
+            f.write(result.model_dump_json(ensure_ascii=False) + "\n")
 
     def add_queries_from_csv(
         self,
@@ -900,7 +875,7 @@ class Experiment:
                         ],
                     ),
                 )
-                q_object.pairwise_games.append(game_object)
+                # q_object.add_pairwise_game(game_object)
             self.queries[qid] = q_object
 
         self._load_results_from_cache(self.evaluations_cache_path)
@@ -912,9 +887,12 @@ class Experiment:
         assert cache_path.is_file()
         for line in cache_path.open():
             result = json.loads(line)
+            evaluator_name = result.get("evaluator_name")
+            if evaluator_name is None:
+                logger.error("Evaluator name not found in result. Skipping")
+                continue
             result_type = list(result.keys())[0]
             payload = result[result_type]
-            # evaluator_name should be present in payload, but keep compatibility
             evaluator_name = payload.get("evaluator_name", "unknown")
 
             if result_type == "answer":

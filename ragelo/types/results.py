@@ -19,8 +19,7 @@ class EvaluatorResult(BaseModel):
         default=None,
         description="The query ID to which the result corresponds.",
     )
-    evaluator_name: Annotated[str | None, SkipJsonSchema] = Field(
-        default=None,
+    evaluator_name: Annotated[str, SkipJsonSchema] = Field(
         description="The name of the evaluator that produced this result.",
     )
     exception: Annotated[str | None, SkipJsonSchema] = None
@@ -120,6 +119,7 @@ Winner: {self.winner}"""
 class EloTournamentResult(BaseModel):
     """A class to store the results of an Elo tournament between multiple agents."""
 
+    evaluator_name: str = "EloTournament"
     agents: list[str]
     scores: dict[str, float]
     games_played: dict[str, int]

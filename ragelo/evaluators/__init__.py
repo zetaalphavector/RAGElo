@@ -1,4 +1,5 @@
 from ragelo.evaluators.answer_evaluators import PairwiseAnswerEvaluator
+from ragelo.evaluators.evaluator_utils import get_evaluator_result_type
 from ragelo.evaluators.retrieval_evaluators import (
     CustomPromptEvaluator,
     DomainExpertEvaluator,
@@ -16,4 +17,5 @@ __all__ = [
     "RDNAMEvaluator",
     "ReasonerEvaluator",
     "RetrievalEvaluatorFactory",
+    "get_evaluator_result_type",
 ]
