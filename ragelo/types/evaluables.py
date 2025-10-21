@@ -189,6 +189,7 @@ class PairwiseGame(Evaluable):
 
     agent_a_answer: AgentAnswer
     agent_b_answer: AgentAnswer
+    game_id: str | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -198,3 +199,10 @@ class PairwiseGame(Evaluable):
         if agent_a_name > agent_b_name:
             values["agent_a_answer"], values["agent_b_answer"] = values["agent_b_answer"], values["agent_a_answer"]
         return values
+
+    @model_validator(mode="after")
+    def add_game_id(self) -> Self:
+        """Adds a game ID to the pairwise game."""
+        sorted_agents = sorted([self.agent_a_answer.agent, self.agent_b_answer.agent])
+        self.game_id = f"{sorted_agents[0]}-{sorted_agents[1]}"
+        return self

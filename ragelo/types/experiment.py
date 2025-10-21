@@ -881,6 +881,8 @@ class Experiment:
         self._load_results_from_cache(self.evaluations_cache_path)
 
     def _load_results_from_cache(self, cache_path: Path | None):
+        from ragelo.evaluators.evaluator_utils import get_evaluator_result_type
+
         missing_queries = set()
         if cache_path is None:
             return
@@ -891,44 +893,23 @@ class Experiment:
             if evaluator_name is None:
                 logger.error("Evaluator name not found in result. Skipping")
                 continue
-            result_type = list(result.keys())[0]
-            payload = result[result_type]
-            evaluator_name = payload.get("evaluator_name", "unknown")
-
-            if result_type == "answer":
-                result = AnswerEvaluatorResult(**payload)
-            elif result_type == "pairwise_answer":
-                result = PairwiseGameEvaluatorResult(**payload)
-            elif result_type == "retrieval":
-                result = RetrievalEvaluatorResult(**payload)
-            elif result_type == "elo_tournament":
-                result = EloTournamentResult(**payload)
-                self.add_evaluation((None, None), result, should_save=False, exist_ok=True)
+            if evaluator_name == "EloTournament":
+                result = EloTournamentResult.model_validate(result)
                 continue
-
-            if result.qid not in self.queries:
-                if result.qid not in missing_queries:
-                    logger.warning(f"Query {result.qid} found in results cache but not found in queries. Skipping")
-                missing_queries.add(result.qid)
-                continue
-
-            # Find the evaluable based on the result type
+            expected_result_type = get_evaluator_result_type(evaluator_name)
+            result = expected_result_type.model_validate(result)
             query = self.queries[result.qid]
-            evaluable = None
 
             if isinstance(result, RetrievalEvaluatorResult):
                 evaluable = query.retrieved_docs.get(result.did)
             elif isinstance(result, PairwiseGameEvaluatorResult):
-                # Find the pairwise game
-                for game in query.pairwise_games.values():
-                    if game.agent_a_answer.agent == result.agent_a and game.agent_b_answer.agent == result.agent_b:
-                        evaluable = game
-                        break
+                evaluable = query.pairwise_games.get(result.game_id)
             elif isinstance(result, AnswerEvaluatorResult):
-                # Find the agent answer
                 evaluable = query.answers.get(result.agent)
+            else:
+                raise ValueError(f"Unknown result type {type(result)}")
 
-                self.add_evaluation((query, evaluable), result, should_save=False, exist_ok=True)
+            self.add_evaluation((query, evaluable), result, should_save=False, exist_ok=True, should_print=False)
 
         if len(missing_queries) > 0:
             logger.warning(f"Loaded {len(self.queries)} results from cache. {len(missing_queries)} queries missing")
