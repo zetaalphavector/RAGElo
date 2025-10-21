@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from abc import ABC, abstractmethod
-from typing import Any, Type, get_type_hints
+from typing import Type, get_type_hints
 
 from pydantic import BaseModel
 

@@ -16,6 +16,7 @@ from ragelo.types.configurations import RDNAMEvaluatorConfig
 from ragelo.types.evaluables import Document
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.query import Query
+from ragelo.types.results import RDNAMEvaluatorResult
 from ragelo.types.types import RetrievalEvaluatorTypes
 from ragelo.utils import string_to_template
 
@@ -114,7 +115,7 @@ class RDNAMEvaluator(BaseRetrievalEvaluator):
 
         if self.config.use_multiple_annotators:
             assert isinstance(parsed, RDNAMMUltipleAnnotatorsFormat)
-            overall = float(
+            score = float(
                 np.mean(
                     [
                         parsed.annotator_1.overall,
@@ -147,7 +148,7 @@ class RDNAMEvaluator(BaseRetrievalEvaluator):
                 trustworthiness = None
         else:
             assert isinstance(parsed, RDNAMEvaluatorFormat) or isinstance(parsed, RDNAMNoAspects)
-            overall = parsed.overall
+            score = parsed.score
             if self.config.use_aspects:
                 assert isinstance(parsed, RDNAMEvaluatorFormat)
                 intent_match = parsed.intent_match  # type: ignore
@@ -157,7 +158,7 @@ class RDNAMEvaluator(BaseRetrievalEvaluator):
                 trustworthiness = None
 
         response = RDNAMEvaluatorFormat(
-            overall=overall,
+            score=score,
             intent_match=intent_match,
             trustworthiness=trustworthiness,
         )
@@ -166,3 +167,8 @@ class RDNAMEvaluator(BaseRetrievalEvaluator):
             raw_answer=llm_response.raw_answer,
             parsed_answer=response,
         )
+
+    async def evaluate_async(self, eval_sample: tuple[Query, Document]) -> RDNAMEvaluatorResult:
+        # Reuse base logic (including error handling and flattening), then cast to specialized class
+        base_result = await super().evaluate_async(eval_sample)
+        return RDNAMEvaluatorResult(**base_result.model_dump())

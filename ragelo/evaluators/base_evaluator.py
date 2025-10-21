@@ -68,34 +68,40 @@ class BaseEvaluator(ABC):
 
         awaitables_ended = False
         pending: set[asyncio.Future] = set()
-        aws = map(self.evaluate_async, tuples_to_eval)
-        aws = iter(aws)
+        tuples_iter = iter(tuples_to_eval)
+        future_to_tuple: dict[asyncio.Future, tuple[Query, Evaluable]] = {}
         failed = 0
         evaluations = 0
         while pending or not awaitables_ended:
             while len(pending) < n_threads and not awaitables_ended:
                 try:
-                    aw = next(aws)
+                    eval_tuple = next(tuples_iter)
                 except StopIteration:
                     awaitables_ended = True
                 else:
-                    pending.add(asyncio.ensure_future(aw))
+                    future = asyncio.ensure_future(self.evaluate_async(eval_tuple))
+                    pending.add(future)
+                    future_to_tuple[future] = eval_tuple
             if not pending:
                 break
             done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
             while done:
-                evaluation = await done.pop()
+                finished = done.pop()
+                evaluation = await finished
+                eval_tuple = future_to_tuple.pop(finished, None)
                 evaluations += 1
                 pbar.update()
                 if evaluation.exception:
                     failed += 1
                     continue
-                experiment.add_evaluation(
-                    evaluation,
-                    exist_ok=True,
-                    force=self.config.force,
-                    should_print=self.config.verbose,
-                )
+                if eval_tuple is not None:
+                    experiment.add_evaluation(
+                        eval_tuple,
+                        evaluation,
+                        exist_ok=True,
+                        force=self.config.force,
+                        should_print=self.config.verbose,
+                    )
         pbar.close()
         if self.config.verbose:
             render_failed_evaluations(evaluations, failed, self.config.rich_print)

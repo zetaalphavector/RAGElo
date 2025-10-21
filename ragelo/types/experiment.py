@@ -15,11 +15,24 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Literal, overload
 
+from pydantic import BaseModel
+
 from ragelo.cli.presenters import render_evaluation, render_retrieval_summary
 from ragelo.logger import CLILogHandler, logger
-from ragelo.types.evaluables import AgentAnswer, ChatMessage, Document, PairwiseGame
+from ragelo.types.answer_formats import (
+    AnswerEvaluatorFormat,
+    PairwiseAnswerEvaluatorFormat,
+    RDNAMEvaluatorFormat,
+    RetrievalEvaluatorFormat,
+)
+from ragelo.types.evaluables import AgentAnswer, ChatMessage, Document, Evaluable, PairwiseGame
 from ragelo.types.query import Query
-from ragelo.types.results import AnswerEvaluatorResult, EloTournamentResult, EvaluatorResult, RetrievalEvaluatorResult
+from ragelo.types.results import (
+    AnswerEvaluatorResult,
+    EloTournamentResult,
+    PairwiseGameEvaluatorResult,
+    RetrievalEvaluatorResult,
+)
 
 
 class Experiment:
@@ -300,39 +313,10 @@ class Experiment:
             raise ValueError(f"Query {query_id} not found in queries")
         self.queries[query_id].add_agent_answer(answer, force=force, exist_ok=exist_ok)
 
-    @overload
     def add_evaluation(
         self,
-        evaluation: RetrievalEvaluatorResult,
-        should_save: bool = True,
-        should_print: bool = True,
-        force: bool = False,
-        exist_ok: bool = False,
-    ): ...
-
-    @overload
-    def add_evaluation(
-        self,
-        evaluation: AnswerEvaluatorResult,
-        should_save: bool = True,
-        should_print: bool = True,
-        force: bool = False,
-        exist_ok: bool = False,
-    ): ...
-
-    @overload
-    def add_evaluation(
-        self,
-        evaluation: EloTournamentResult,
-        should_save: bool = True,
-        should_print: bool = True,
-        force: bool = False,
-        exist_ok: bool = False,
-    ): ...
-
-    def add_evaluation(
-        self,
-        evaluation: RetrievalEvaluatorResult | AnswerEvaluatorResult | EloTournamentResult,
+        tuple: tuple[Query, Evaluable],
+        evaluation: BaseModel | EloTournamentResult,
         should_save: bool = True,
         should_print: bool | None = None,
         force: bool = False,
@@ -341,25 +325,31 @@ class Experiment:
         """
         Add an evaluation to the queries and optionally save the result.
         Args:
-            evaluation (RetrievalEvaluatorResult | AnswerEvaluatorResult | EloTournamentResult): The evaluation result to be added.
+            tuple (tuple[Query, Evaluable]): The query and evaluable to add the evaluation to.
+            evaluation (BaseModel): The evaluation result to be added.
             should_save (bool): Whether to save the result to disk. Defaults to True.
+            should_print (bool | None): Whether to print the evaluation. Defaults to None. If None, will use the verbose attribute.
             force (bool): Whether to overwrite an existing evaluation. Defaults to False.
             exist_ok (bool): Whether to warn if an evaluation already exists. Defaults to False.
-            should_print (bool | None): Whether to print the evaluation. Defaults to None. If None, will use the verbose attribute.
         """
+        evaluator_name = getattr(evaluation, "evaluator_name", "unknown")
         if isinstance(evaluation, EloTournamentResult):
             self.elo_tournaments.append(evaluation)
             added = True
+            evaluable = None
         else:
-            qid = evaluation.qid
+            qid = tuple[0].qid
             if qid not in self.queries:
                 raise ValueError(f"Query {qid} not found in queries")
-            added = self.queries[qid].add_evaluation(evaluation, force=force, exist_ok=exist_ok)
+            evaluable = tuple[1]
+            # Get evaluator name from the evaluation result
+            added = self.queries[qid].add_evaluation(
+                evaluable, evaluation, evaluator_name, force=force, exist_ok=exist_ok
+            )
         if not added:
             return
         if should_save:
-            self.save_results(evaluation)
-
+            self.save_result(evaluation, evaluable, evaluator_name)
         if should_print is None:
             should_print = self.verbose
         if should_print:
@@ -534,9 +524,9 @@ class Experiment:
 
         # Do not save evaluations. They will be saved on _results.jsonl and loaded from there.
         exclude_fields = {
-            "retrieved_docs": {"__all__": "evaluation"},
-            "answers": {"__all__": "evaluation"},
-            "pairwise_games": {"__all__": "evaluation"},
+            "retrieved_docs": {"__all__": {"evaluations"}},
+            "answers": {"__all__": {"evaluations"}},
+            "pairwise_games": {"__all__": {"evaluations"}},
         }
         output_dict["queries"] = {
             qid: query.model_dump(exclude=exclude_fields)  # type: ignore
@@ -548,7 +538,7 @@ class Experiment:
         with output_path.open("w") as f:
             json.dump(output_dict, f, indent=4, ensure_ascii=False)
 
-    def save_results(self, result: EvaluatorResult | EloTournamentResult):
+    def save_result(self, result: BaseModel | EloTournamentResult, evaluable: Evaluable | None, evaluator_name: str):
         """
         Persist a single evaluation result to the cache file.
         This method writes the given evaluation result to a cache file specified by
@@ -556,8 +546,9 @@ class Experiment:
         to the file. The type of the result (either "answer", "retrieval", or "pairwise_answer") is included
         in the serialized data.
         Args:
-            result (EvaluatorResult | EloTournamentResult): The evaluation result
-                to be persisted to the cache.
+            result (BaseModel | EloTournamentResult): The evaluation result
+            evaluable (Evaluable): The evaluable object to which the evaluation result belongs.
+            evaluator_name (str): The name of the evaluator used to generate the result.
         Raises:
             ValueError: If `self.evaluations_cache_path` is not set or if the type of `result`
                 is not recognized.
@@ -568,7 +559,7 @@ class Experiment:
         if self.evaluations_cache_path is None:
             raise ValueError("Results cache path not set. Cannot dump result")
         with open(self.evaluations_cache_path, "a+") as f:
-            if isinstance(result, AnswerEvaluatorResult) and result.pairwise:
+            if isinstance(result, PairwiseGameEvaluatorResult):
                 result_type = "pairwise_answer"
             elif isinstance(result, AnswerEvaluatorResult):
                 result_type = "answer"
@@ -578,7 +569,10 @@ class Experiment:
                 result_type = "elo_tournament"
             else:
                 raise ValueError(f"Cannot save evaluation of type {type(result)} to cache")
-            f.write(json.dumps({result_type: result.model_dump()}, ensure_ascii=False) + "\n")
+            # Store evaluator_name and evaluable key for future-proofing
+            payload = result.model_dump()
+            payload["evaluator_name"] = getattr(result, "evaluator_name", evaluator_name)
+            f.write(json.dumps({result_type: payload}, ensure_ascii=False) + "\n")
 
     def add_queries_from_csv(
         self,
@@ -811,9 +805,9 @@ class Experiment:
                     game_eval_count += len(game.evaluations)
                 game.evaluations = {}
             for answer in query.answers.values():
-                if answer.evaluation is not None:
-                    answer_eval_count += 1
-                answer.evaluation = None
+                if len(answer.evaluations) > 0:
+                    answer_eval_count += len(answer.evaluations)
+                answer.evaluations = {}
         self.elo_tournaments = []
         if doc_eval_count > 0 or game_eval_count > 0 or answer_eval_count > 0:
             logger.info(
@@ -896,20 +890,63 @@ class Experiment:
         for line in cache_path.open():
             result = json.loads(line)
             result_type = list(result.keys())[0]
+            payload = result[result_type]
+            # evaluator_name should be present in payload, but keep compatibility
+            evaluator_name = payload.get("evaluator_name", "unknown")
+
             if result_type == "answer":
-                result = AnswerEvaluatorResult(**result["answer"])
+                result = AnswerEvaluatorResult(**payload)
             elif result_type == "pairwise_answer":
-                result = AnswerEvaluatorResult(**result["pairwise_answer"])
+                result = PairwiseGameEvaluatorResult(**payload)
             elif result_type == "retrieval":
-                result = RetrievalEvaluatorResult(**result["retrieval"])
+                result = RetrievalEvaluatorResult(**payload)
             elif result_type == "elo_tournament":
-                result = EloTournamentResult(**result["elo_tournament"])
-            if not isinstance(result, EloTournamentResult) and result.qid not in self.queries:
+                result = EloTournamentResult(**payload)
+                self.add_evaluation((None, None), result, should_save=False, exist_ok=True)
+                continue
+
+            if result.qid not in self.queries:
                 if result.qid not in missing_queries:
                     logger.warning(f"Query {result.qid} found in results cache but not found in queries. Skipping")
                 missing_queries.add(result.qid)
                 continue
-            self.add_evaluation(result, should_save=False, exist_ok=True)
+
+            # Find the evaluable based on the result type
+            query = self.queries[result.qid]
+            evaluable = None
+
+            if isinstance(result, RetrievalEvaluatorResult):
+                evaluable = query.retrieved_docs.get(result.did)
+            elif isinstance(result, PairwiseGameEvaluatorResult):
+                # Find the pairwise game
+                for game in query.pairwise_games.values():
+                    if game.agent_a_answer.agent == result.agent_a and game.agent_b_answer.agent == result.agent_b:
+                        evaluable = game
+                        break
+            elif isinstance(result, AnswerEvaluatorResult):
+                # Find the agent answer
+                evaluable = query.answers.get(result.agent)
+
+            if evaluable is not None:
+                # Coerce answer to a BaseModel if we can identify evaluator schema
+                if hasattr(result, "answer") and result.answer is not None:
+                    if isinstance(result, RetrievalEvaluatorResult):
+                        target_schema = RetrievalEvaluatorFormat
+                    elif isinstance(result, PairwiseGameEvaluatorResult):
+                        target_schema = PairwiseAnswerEvaluatorFormat
+                    elif isinstance(result, AnswerEvaluatorResult):
+                        target_schema = AnswerEvaluatorFormat
+                    else:
+                        target_schema = None
+                    try:
+                        if target_schema is not None and not isinstance(result.answer, BaseModel):
+                            # If it's a dict, parse into target_schema
+                            if isinstance(result.answer, dict):
+                                result.answer = target_schema.model_validate(result.answer)
+                    except Exception:
+                        # Leave as-is if parsing fails
+                        pass
+                self.add_evaluation((query, evaluable), result, should_save=False, exist_ok=True)
 
         if len(missing_queries) > 0:
             logger.warning(f"Loaded {len(self.queries)} results from cache. {len(missing_queries)} queries missing")

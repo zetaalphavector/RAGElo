@@ -59,7 +59,12 @@ class OllamaProvider(BaseLLMProvider):
 
         call_kwargs["messages"] = messages
         if self.config.json_mode:
-            schema = json.dumps(response_schema, indent=4)
+            # Build a JSON schema from a Pydantic model class when available
+            if isinstance(response_schema, type) and issubclass(response_schema, BaseModel):
+                schema_dict = response_schema.model_json_schema()
+            else:
+                schema_dict = response_schema  # type: ignore
+            schema = json.dumps(schema_dict, indent=4)
             messages[-1]["content"] += (
                 f"\n\nYour output should be a JSON string that STRICTLY adheres to the following schema:\n{schema}"
             )

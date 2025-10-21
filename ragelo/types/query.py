@@ -7,8 +7,8 @@ from pydantic import BaseModel, field_validator
 from typing_extensions import Self
 
 from ragelo.logger import logger
-from ragelo.types.evaluables import AgentAnswer, Document, PairwiseGame
-from ragelo.types.results import AnswerEvaluatorResult, RetrievalEvaluatorResult
+from ragelo.types.evaluables import AgentAnswer, Document, Evaluable, PairwiseGame
+from ragelo.types.results import RetrievalEvaluatorResult
 
 
 class Query(BaseModel):
@@ -143,154 +143,103 @@ class Query(BaseModel):
         self.pairwise_games[f"{sorted_agents[0]}-{sorted_agents[1]}"] = game
         return game
 
-    @overload
     def add_evaluation(
         self,
-        evaluation: RetrievalEvaluatorResult,
-        force: bool = False,
-        exist_ok: bool = False,
-    ) -> bool: ...
-
-    @overload
-    def add_evaluation(
-        self,
-        evaluation: AnswerEvaluatorResult,
-        force: bool = False,
-        exist_ok: bool = False,
-    ) -> bool: ...
-
-    def add_evaluation(
-        self,
-        evaluation: RetrievalEvaluatorResult | AnswerEvaluatorResult,
+        evaluable: Evaluable,
+        evaluation: BaseModel,
+        evaluator_name: str,
         force: bool = False,
         exist_ok: bool = False,
     ) -> bool:
-        if isinstance(evaluation, RetrievalEvaluatorResult):
-            did = evaluation.did
-            if did not in self.retrieved_docs:
-                logger.warning(f"Trying to add evaluation for non-retrieved document {did} in query {self.qid}")
-                return False
-            if evaluation.evaluator_name in self.retrieved_docs[did].evaluations and not force:
-                if not exist_ok:
-                    logger.warning(f"Document {did} in query {self.qid} already has an evaluation.")
-                return False
-            if evaluation.evaluator_name in self.retrieved_docs[did].evaluations:
-                if not exist_ok:
-                    logger.info(f"Document {did} in query {self.qid} already has an evaluation. Overwriting.")
-            self.retrieved_docs[did].evaluations[evaluation.evaluator_name] = evaluation
-            return True
+        """Add an evaluation to the query.
+        Args:
+            evaluable Evaluable: The evaluable object to add the evaluation to.
+            evaluation BaseModel: The evaluation result to add to the query.
+            evaluator_name str: The name of the evaluator.
+            force bool: Whether to overwrite existing evaluations.
+            exist_ok bool: Whether to raise an error if the evaluation already exists.
+        """
+        # Enforce correct evaluation type per evaluable
+        from ragelo.types.results import AnswerEvaluatorResult, PairwiseGameEvaluatorResult, RetrievalEvaluatorResult
 
-        if evaluation.pairwise:
-            agent_a = evaluation.agent_a
-            agent_b = evaluation.agent_b
-            if agent_a not in self.answers or agent_b not in self.answers:
-                missing_agents = []
-                if agent_a not in self.answers:
-                    missing_agents.append(agent_a)
-                if agent_b not in self.answers:
-                    missing_agents.append(agent_b)
-                logger.warning(
-                    "Trying to add a pairwise evaluation for a comparison between agents "
-                    f"{agent_a} and {agent_b}, but {missing_agents} do not have an answer for query {self.qid}"
-                )
-                return False
-            game = self.get_pairwise_game(agent_a, agent_b)
-            if game is None:
-                game = self.add_pairwise_game(agent_a, agent_b)
-
-            if evaluation.evaluator_name in game.evaluations and not force:
-                if not exist_ok:
-                    logger.warning(f"Query {self.qid} already has an evaluation for agents {agent_a} and {agent_b}.")
-                return False
-            if evaluation.evaluator_name in game.evaluations and not exist_ok:
-                logger.info(
-                    f"Query {self.qid} already has an evaluation for agents {agent_a} and {agent_b}. Overwriting."
-                )
-            game.evaluations[evaluation.evaluator_name] = evaluation
-            return True
-
-        if evaluation.agent is None:
-            raise ValueError("A pointwise AnswerEvaluatorResult must have an agent assigned to it.")
-        agent = evaluation.agent
-        if agent not in self.answers:
-            logger.warning(
-                f"Trying to add evaluation for agent {agent} in query {self.qid}, but {agent} does not have an answer."
+        if isinstance(evaluable, Document) and not isinstance(evaluation, RetrievalEvaluatorResult):
+            raise TypeError(
+                f"Evaluator {evaluator_name} must produce RetrievalEvaluatorResult for documents; got {type(evaluation)}"
             )
-            return False
-        if evaluation.evaluator_name in self.answers[agent].evaluations and not force:
+        if isinstance(evaluable, AgentAnswer) and not isinstance(evaluation, AnswerEvaluatorResult):
+            raise TypeError(
+                f"Evaluator {evaluator_name} must produce AnswerEvaluatorResult for agent answers; got {type(evaluation)}"
+            )
+        if isinstance(evaluable, PairwiseGame) and not isinstance(evaluation, PairwiseGameEvaluatorResult):
+            raise TypeError(
+                f"Evaluator {evaluator_name} must produce PairwiseGameEvaluatorResult for pairwise games; got {type(evaluation)}"
+            )
+
+        # Enforce single, consistent type per evaluator name on this evaluable
+        if evaluator_name in evaluable.evaluations and not force:
             if not exist_ok:
-                logger.warning(f"Agent {agent} in query {self.qid} already has an evaluation.")
+                evaluable_id = getattr(evaluable, "did", getattr(evaluable, "agent", type(evaluable).__name__))
+                logger.warning(
+                    f"Evaluable {evaluable_id} in query {self.qid} already has an evaluation for {evaluator_name}."
+                )
             return False
-        if evaluation.evaluator_name in self.answers[agent].evaluations and not exist_ok:
-            logger.info(f"Agent {agent} in query {self.qid} already has an evaluation. Overwriting.")
-        self.answers[agent].evaluations[evaluation.evaluator_name] = evaluation
+        if evaluator_name in evaluable.evaluations and force:
+            # If overwriting, ensure same result class type to keep strict mapping per evaluator
+            existing = evaluable.evaluations[evaluator_name]
+            if type(existing) is not type(evaluation):
+                raise TypeError(
+                    f"Overwriting evaluation for {evaluator_name} must keep the same type. "
+                    f"Existing: {type(existing)}, New: {type(evaluation)}"
+                )
+        evaluable.evaluations[evaluator_name] = evaluation
         return True
 
     def get_qrels(
         self,
-        relevance_key: str | None = "relevance",
         relevance_threshold: int = 0,
+        retrieval_evaluator_name: str | None = None,
     ) -> dict[str, int]:
         """Get a qrels-formatted dictionary with the relevance of the retrieved documents.
         Args:
-            relevance_key str: The key in the answer object that contains an integer with the relevance of the
-                document.
             relevance_threshold int: The minimum relevance value to consider a document as relevant.
                 Documents with a relevance lower than this value will be considered as 0.
+            retrieval_evaluator_name str: The name of the retrieval evaluator to use to get the relevance of the documents.
         """
         qrels = {}
         if len(self.retrieved_docs) == 0:
             logger.warning(f"Query {self.qid} does not have any retrieved documents. Returning empty qrels.")
         docs_without_relevance = 0
         for did, document in self.retrieved_docs.items():
-            if document.evaluation is None:
-                docs_without_relevance += 1
-                continue
-            answer = document.evaluation.answer
-            if isinstance(answer, BaseModel):
-                answer = answer.model_dump()
-            if isinstance(answer, int):
-                relevance = answer
-            if isinstance(answer, float):
-                relevance = int(answer)
-            elif isinstance(answer, str):
-                try:
-                    relevance = int(answer)
-                except ValueError:
-                    logger.warning(
-                        f"Document {did} has a relevance key ({relevance_key})"
-                        f" that cannot be converted to an int ({answer})."
-                        " Skipping."
-                    )
+            if retrieval_evaluator_name is None:
+                for key, value in document.evaluations.items():
+                    if isinstance(value, RetrievalEvaluatorResult):
+                        retrieval_evaluator_name = key
+                        break
+                if retrieval_evaluator_name is None:
+                    logger.warning("No valid retrieval evaluator result found.")
                     docs_without_relevance += 1
                     continue
-            elif isinstance(answer, dict):
-                if relevance_key is None or relevance_key not in answer:
-                    logger.warning(
-                        f"Document {did} does not have a relevance key ({relevance_key}) in the evaluation. Skipping."
-                    )
-                    docs_without_relevance += 1
-                    continue
-                # check if the relevance is a number or a str that can be converted to an int
-                if not isinstance(answer[relevance_key], int):
-                    try:
-                        relevance = int(answer[relevance_key])
-                    except ValueError:
-                        logger.warning(
-                            f"Document {did} has a relevance key ({relevance_key})"
-                            f" that cannot be converted to an int ({answer[relevance_key]})."
-                            " Skipping."
-                        )
-                        docs_without_relevance += 1
-                        continue
-                relevance = int(answer[relevance_key])
-            else:
+                logger.info(f"No retrieval evaluator name provided. Using {retrieval_evaluator_name}.")
+            if retrieval_evaluator_name not in document.evaluations:
                 logger.warning(
-                    f"Unsupported relevance type {type(answer)} for document {did} in query {self.qid}. Skipping."
+                    f"Document {did} in query {self.qid} does not have an evaluation from {retrieval_evaluator_name}."
                 )
                 docs_without_relevance += 1
                 continue
-            qrels[did] = 0 if relevance < relevance_threshold else relevance
+            evaluation = document.evaluations[retrieval_evaluator_name]
+            # Read flattened score
+            try:
+                score = getattr(evaluation, "score")
+            except AttributeError:
+                logger.warning(f"Evaluation {evaluation} does not have a score attribute.")
+                docs_without_relevance += 1
+                continue
+            if not isinstance(score, int) and not isinstance(score, float):
+                logger.warning(f"Score {score} is not an integer or a float.")
+                docs_without_relevance += 1
+                continue
+
+            qrels[did] = 0 if score < relevance_threshold else score
         if docs_without_relevance > 0:
             logger.warning(f"Query {self.qid} has {docs_without_relevance} documents without relevance.")
         if docs_without_relevance == len(self.retrieved_docs):

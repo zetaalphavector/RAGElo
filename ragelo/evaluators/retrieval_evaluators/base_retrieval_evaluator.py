@@ -54,7 +54,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         document = Document.assemble_document(document, query.qid, doc_metadata)
         result = call_async_fn(self.evaluate_async, (query, document))
 
-        if result.exception or result.raw_answer is None or result.answer is None:
+        if result.exception or result.answer is None:
             raise ValueError(
                 f"Failed to evaluate qid: {query.qid} did: {document.did}",
                 f"Exception: {result.exception}",
@@ -71,43 +71,51 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         if not isinstance(document, Document):
             type_name = type(document).__name__
             raise ValueError(f"can't evaluate a {type_name} in a Retrieval Evaluator")
+
         exc = None
-        if document.evaluation is not None and not self.config.force:
-            return RetrievalEvaluatorResult(
-                did=document.did,
-                qid=query.qid,
-                raw_answer=document.evaluation.raw_answer,
-                answer=document.evaluation.answer,
-                exception=document.evaluation.exception,
-            )
+        evaluator_name = str(self.config.evaluator_name)
+        if evaluator_name in document.evaluations and not self.config.force:
+            cached_eval = document.evaluations[evaluator_name]
+            if isinstance(cached_eval, RetrievalEvaluatorResult):
+                return cached_eval
         llm_input = self._build_message(query, document)
+        llm_response = LLMResponseType(raw_answer="", parsed_answer=None)
         try:
             llm_response = await self.llm_provider.call_async(
                 input=llm_input,
                 response_schema=self.config.llm_response_schema,
             )
             llm_response = self._process_answer(llm_response)
-        except ValueError as e:
-            logger.warning(f"Failed to PARSE answer for qid: {query.qid} did: {document.did}")
-            try:
-                llm_response = LLMResponseType(raw_answer=llm_response.raw_answer, parsed_answer=None)
-            except Exception:
-                llm_response = LLMResponseType(raw_answer="", parsed_answer=None)
-            exc = str(e)
         except Exception as e:
-            logger.warning(f"Failed to FETCH answers for qid: {query.qid} did: {document.did}")
             if isinstance(e, RetryError):
-                exc = str(e.last_attempt.exception())
-            else:
-                exc = str(e)
+                e = str(e) + "\nLLM Error: \n" + str(e.last_attempt.exception())
+            elif llm_response.raw_answer:
+                exc = str(e) + f"\nRaw answer: {llm_response.raw_answer}"
+            logger.warning(f"Failed to generate answer for qid: {query.qid} and document: {document.did}: {exc}")
+
+        # Map parsed_answer into flattened fields when possible
+        parsed = llm_response.parsed_answer
+        score = None
+        reasoning = None
+        intent_match = None
+        trustworthiness = None
+        if parsed is not None:
             try:
-                llm_response = LLMResponseType(raw_answer=llm_response.raw_answer, parsed_answer=None)
+                reasoning = getattr(parsed, "reasoning", None)
+                score = getattr(parsed, "score", None)
+                intent_match = getattr(parsed, "intent_match", None)
+                trustworthiness = getattr(parsed, "trustworthiness", None)
             except Exception:
-                llm_response = LLMResponseType(raw_answer="", parsed_answer=None)
+                pass
+
         return RetrievalEvaluatorResult(
             qid=query.qid,
             did=document.did,
-            answer=llm_response.parsed_answer,
+            evaluator_name=str(self.config.evaluator_name),
+            score=score,
+            reasoning=reasoning,
+            intent_match=intent_match,
+            trustworthiness=trustworthiness,
             exception=exc,
         )
 
@@ -118,9 +126,10 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         tuples_to_eval = []
         all_tuples = 0
         missing_evaluations = 0
+        evaluator_name = str(self.config.evaluator_name)
         for q in experiment:
             for d in q.retrieved_docs.values():
-                if d.evaluation is None:
+                if evaluator_name not in d.evaluations:
                     missing_evaluations += 1
                 tuples_to_eval.append((q, d))
                 all_tuples += 1

@@ -31,9 +31,9 @@ class PairwiseAnswerEvaluatorFormat(BaseModel):
 
 
 class RDNAMEvaluatorFormat(BaseModel):
-    overall: float = Field(
+    score: float = Field(
         ...,
-        description="An number between 0 and 2 representing the score of the document.",
+        description="A number between 0 and 2 representing the relevance score of the document.",
     )
     intent_match: float | None = Field(
         ...,
@@ -42,3 +42,17 @@ class RDNAMEvaluatorFormat(BaseModel):
     trustworthiness: float | None = Field(
         ..., description="An number between 0 and 2 representing the trustworthiness of the document."
     )
+
+
+class EloTournamentResult(BaseModel):
+    """A class to store the results of an Elo tournament between multiple agents."""
+
+    agents: list[str]
+    scores: dict[str, float]
+    games_played: dict[str, int]
+    wins: dict[str, int]
+    loses: dict[str, int]
+    ties: dict[str, int]
+    std_dev: dict[str, float]
+    total_games: int
+    total_tournaments: int

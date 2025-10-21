@@ -52,7 +52,13 @@ class OpenAIProvider(BaseLLMProvider):
             instructions = None
 
         if self.config.json_mode:
-            schema = json.dumps(response_schema, indent=4)
+            # Build a JSON schema from a Pydantic model class when available
+            if isinstance(response_schema, type) and issubclass(response_schema, BaseModel):
+                schema_dict = response_schema.model_json_schema()
+            else:
+                # Fallback for dict-like schemas provided directly
+                schema_dict = response_schema  # type: ignore
+            schema = json.dumps(schema_dict, indent=4)
             if isinstance(llm_input, str):
                 llm_input += (
                     f"\n\nYour output should be a JSON string that STRICTLY adheres to the following schema:\n{schema}"

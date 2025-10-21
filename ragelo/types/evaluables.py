@@ -26,7 +26,7 @@ class Evaluable(BaseModel):
 
     qid: str
     metadata: dict[str, Any] | None = None
-    evaluations: dict[str, EvaluatorResult] = {}
+    evaluations: dict[str, BaseModel] = {}
 
     @field_validator("qid", mode="before")
     def qid_into_string(cls, v):
@@ -65,7 +65,6 @@ class Document(Evaluable):
     did: str
     text: str
     retrieved_by: dict[str, float] = {}
-    evaluations: dict[str, RetrievalEvaluatorResult] = {}
 
     @field_validator("did", mode="before")
     def did_into_string(cls, v):
@@ -112,6 +111,13 @@ class Document(Evaluable):
         document.add_metadata(metadata)
         return document
 
+    @property
+    def evaluation(self):
+        """Returns the first available evaluation for backwards compatibility with templates."""
+        if not self.evaluations:
+            return None
+        return next(iter(self.evaluations.values()))
+
     @staticmethod
     def assemble_documents(
         documents: list,
@@ -144,7 +150,6 @@ class AgentAnswer(Evaluable):
     agent: str
     text: str | None = None
     conversation: list[ChatMessage] | None = None
-    evaluations: dict[str, AnswerEvaluatorResult] = {}
 
     @model_validator(mode="before")
     @classmethod
@@ -184,7 +189,6 @@ class PairwiseGame(Evaluable):
 
     agent_a_answer: AgentAnswer
     agent_b_answer: AgentAnswer
-    evaluations: dict[str, AnswerEvaluatorResult] = {}
 
     @model_validator(mode="before")
     @classmethod

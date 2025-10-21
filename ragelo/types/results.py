@@ -1,71 +1,87 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, ValidationError, model_validator
+from typing import Literal
 
-from ragelo.types.answer_formats import RetrievalEvaluatorFormat
+from pydantic import BaseModel, Field
+
+from ragelo.types.answer_formats import AnswerEvaluatorFormat, PairwiseAnswerEvaluatorFormat, RetrievalEvaluatorFormat
 
 
 class EvaluatorResult(BaseModel):
     """Generic class with the results of an evaluator.
     Args:
         qid str: The query ID to which the result corresponds.
+        evaluator_name str: The name of the evaluator that produced this result.
         agent str | None: The agent that provided the answer or retrieved the document.
-        answer Optional[BaseModel]: The processed answer provided by the evaluator.
+        exception Optional[str]: Any exception captured during evaluation.
     """
 
-    qid: str
-    evaluator_name: str
+    qid: str = Field(
+        ...,
+        description="The query ID to which the result corresponds.",
+    )
+    evaluator_name: str = Field(
+        default="unknown",
+        description="The name of the evaluator that produced this result.",
+    )
     agent: str | None = None
-    answer: BaseModel | None = None
     exception: str | None = None
-
-    @model_validator(mode="before")
-    @classmethod
-    def check_agents(cls, v):
-        exception = v.get("exception")
-        answer = v.get("answer")
-        if answer is None and exception is None:
-            raise ValidationError(
-                "Either answer or exception must be provided. Otherwise, an exception must be provided."
-            )
-        return v
-
-
-class AnswerEvaluatorResult(EvaluatorResult):
-    """The results of an answer evaluator.
-    Args:
-        agent str | None: The agent that provided the answer. Only used if pairwise=False.
-        agent_a str | None: The first agent that provided the answer. Only used if the evaluator is pairwise.
-        agent_b str | None: The second agent that provided the answer. Only used if the evaluator is pairwise.
-        pairwise bool: Whether the evaluation is pairwise or not.
-    """
-
-    agent: str | None = None
-    agent_a: str | None = None
-    agent_b: str | None = None
-    pairwise: bool = False
-
-    @model_validator(mode="before")
-    @classmethod
-    def check_agents(cls, v):
-        agent = v.get("agent")
-        agent_a = v.get("agent_a")
-        agent_b = v.get("agent_b")
-        if agent is None and agent_a is None and agent_b is None:
-            raise ValidationError("Either agent or agent_a and agent_b must be provided")
-        if agent_a is not None and agent_b is not None:
-            v["pairwise"] = True
-        return v
 
 
 class RetrievalEvaluatorResult(EvaluatorResult):
-    """The results of a retrieval evaluator.
+    """Flattened results of a retrieval evaluator.
     Args:
         did str: The document ID to which the result corresponds.
+        score Optional[float|int]: Normalized relevance score (e.g., 0-2). If unavailable, may be None.
+        reasoning Optional[str]: Reasoning for the score when available.
+        intent_match Optional[float]: Optional aspect (RDNAM).
+        trustworthiness Optional[float]: Optional aspect (RDNAM).
     """
 
     did: str
-    answer: RetrievalEvaluatorFormat | None = None
+    score: float | int | None = None
+    reasoning: str | None = None
+
+
+class RDNAMEvaluatorResult(RetrievalEvaluatorResult):
+    """Specialized retrieval result for RDNAM.
+    Keeps flattened fields but signals specific evaluator semantics.
+    """
+
+    intent_match: float | None = None
+    trustworthiness: float | None = None
+
+
+class AnswerEvaluatorResult(EvaluatorResult):
+    """Flattened results of an answer evaluator for a single agent answer.
+    Args:
+        agent str: The agent that provided the answer.
+        score Optional[int]: Quality score.
+        reasoning Optional[str]: Reasoning for the score when available.
+    """
+
+    agent: str
+    score: int | None = None
+    reasoning: str | None = None
+
+
+class PairwiseGameEvaluatorResult(EvaluatorResult):
+    """Flattened results of a pairwise game evaluator.
+    Args:
+        agent_a str: The first agent that provided the answer.
+        agent_b str: The second agent that provided the answer.
+        answer_a_analysis Optional[str]
+        answer_b_analysis Optional[str]
+        comparison_reasoning Optional[str]
+        winner Literal["A","B","C"]
+    """
+
+    agent_a: str
+    agent_b: str
+    answer_a_analysis: str | None = None
+    answer_b_analysis: str | None = None
+    comparison_reasoning: str | None = None
+    winner: Literal["A", "B", "C"] | None = None
 
 
 class EloTournamentResult(BaseModel):
