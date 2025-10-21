@@ -7,14 +7,9 @@ import pytest
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 
+from ragelo.evaluators.retrieval_evaluators.rdnam_evaluator import RDNAMMUltipleAnnotatorsFormat
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.llm_providers.openai_client import OpenAIConfiguration
-from ragelo.types.answer_formats import (
-    PairwiseAnswerEvaluatorFormat,
-    RDNAMEvaluatorFormat,
-    RDNAMMUltipleAnnotatorsFormat,
-    RetrievalEvaluatorFormat,
-)
 from ragelo.types.configurations import (
     BaseAnswerEvaluatorConfig,
     BaseEvaluatorConfig,
@@ -32,7 +27,13 @@ from ragelo.types.configurations.retrieval_evaluator_configs import FewShotExamp
 from ragelo.types.evaluables import ChatMessage
 from ragelo.types.experiment import Experiment
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
-from ragelo.types.results import AnswerEvaluatorResult, EloTournamentResult, RetrievalEvaluatorResult
+from ragelo.types.results import (
+    AnswerEvaluatorResult,
+    EloTournamentResult,
+    PairwiseGameEvaluatorResult,
+    RDNAMEvaluatorResult,
+    RetrievalEvaluatorResult,
+)
 from ragelo.types.types import AnswerEvaluatorTypes, RetrievalEvaluatorTypes
 from ragelo.utils import string_to_template
 
@@ -77,7 +78,7 @@ def llm_provider_config():
 
 def answer_model_factory(input: LLMInputPrompt, response_schema, **kwargs):
     # Mirror OpenAIProvider behavior: response format is inferred from response_schema
-    if response_schema == RetrievalEvaluatorFormat:
+    if response_schema == RetrievalEvaluatorResult:
         return LLMResponseType(
             raw_answer='{"reasoning": "The document is very relevant", "score": 2}',
             parsed_answer=response_schema(
@@ -85,7 +86,7 @@ def answer_model_factory(input: LLMInputPrompt, response_schema, **kwargs):
                 score=2,
             ),
         )
-    if response_schema == PairwiseAnswerEvaluatorFormat:
+    if response_schema == PairwiseGameEvaluatorResult:
         return LLMResponseType(
             raw_answer='{"answer_a_analysis": "The document is very relevant", "answer_b_analysis": "The document is not relevant", "comparison_reasoning": "The document is more relevant for the user question", "winner": "A"}',
             parsed_answer=response_schema(
@@ -430,7 +431,7 @@ def llm_provider_mock(llm_provider_config):
 
 @pytest.fixture
 def llm_provider_mock_retrieval(llm_provider_config):
-    mocked_answer = RetrievalEvaluatorFormat(
+    mocked_answer = RetrievalEvaluatorResult(
         reasoning="The document is very relevant",
         score=2,
     )
@@ -446,11 +447,11 @@ def llm_provider_mock_retrieval(llm_provider_config):
 @pytest.fixture
 def llm_provider_mock_rdnam(llm_provider_config):
     mocked_answer = RDNAMMUltipleAnnotatorsFormat(
-        annotator_1=RDNAMEvaluatorFormat(intent_match=2, trustworthiness=1, overall=1),
-        annotator_2=RDNAMEvaluatorFormat(intent_match=1, trustworthiness=1, overall=2),
-        annotator_3=RDNAMEvaluatorFormat(intent_match=1, trustworthiness=1, overall=1),
-        annotator_4=RDNAMEvaluatorFormat(intent_match=0, trustworthiness=0, overall=0),
-        annotator_5=RDNAMEvaluatorFormat(intent_match=1, trustworthiness=1, overall=2),
+        annotator_1=RDNAMEvaluatorResult(intent_match=2, trustworthiness=1, overall=1),
+        annotator_2=RDNAMEvaluatorResult(intent_match=1, trustworthiness=1, overall=2),
+        annotator_3=RDNAMEvaluatorResult(intent_match=1, trustworthiness=1, overall=1),
+        annotator_4=RDNAMEvaluatorResult(intent_match=0, trustworthiness=0, overall=0),
+        annotator_5=RDNAMEvaluatorResult(intent_match=1, trustworthiness=1, overall=2),
     )
     LLM_response = LLMResponseType(raw_answer=mocked_answer.model_dump_json(), parsed_answer=mocked_answer)
 
@@ -469,7 +470,7 @@ def llm_provider_reasoner_mock(llm_provider_config):
     provider = MockLLMProvider(llm_provider_config)
     answer = LLMResponseType(
         raw_answer='{"reasoning": "The document is very relevant", "score": 2}',
-        parsed_answer=RetrievalEvaluatorFormat(
+        parsed_answer=RetrievalEvaluatorResult(
             reasoning="The document is very relevant",
             score=2,
         ),

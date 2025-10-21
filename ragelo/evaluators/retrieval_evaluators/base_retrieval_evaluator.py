@@ -11,7 +11,6 @@ from tenacity import RetryError
 from ragelo.evaluators.base_evaluator import BaseEvaluator
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
 from ragelo.logger import logger
-from ragelo.types.answer_formats import RetrievalEvaluatorFormat
 from ragelo.types.configurations import BaseRetrievalEvaluatorConfig
 from ragelo.types.evaluables import Document, Evaluable
 from ragelo.types.experiment import Experiment
@@ -29,7 +28,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
 
     config: BaseRetrievalEvaluatorConfig
     evaluable_name: str = "Retrieved document"
-    answer_format = RetrievalEvaluatorFormat
+    answer_format = RetrievalEvaluatorResult
 
     def __init__(self, config: BaseRetrievalEvaluatorConfig, llm_provider: BaseLLMProvider):
         super().__init__(config, llm_provider)

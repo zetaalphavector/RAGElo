@@ -11,7 +11,6 @@ from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     RetrievalEvaluatorFactory,
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
-from ragelo.types.answer_formats import RDNAMEvaluatorFormat
 from ragelo.types.configurations import RDNAMEvaluatorConfig
 from ragelo.types.evaluables import Document
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
@@ -29,11 +28,11 @@ class RDNAMNoAspects(BaseModel):
 
 
 class RDNAMMUltipleAnnotatorsFormat(BaseModel):
-    annotator_1: RDNAMEvaluatorFormat
-    annotator_2: RDNAMEvaluatorFormat
-    annotator_3: RDNAMEvaluatorFormat
-    annotator_4: RDNAMEvaluatorFormat
-    annotator_5: RDNAMEvaluatorFormat
+    annotator_1: RDNAMEvaluatorResult
+    annotator_2: RDNAMEvaluatorResult
+    annotator_3: RDNAMEvaluatorResult
+    annotator_4: RDNAMEvaluatorResult
+    annotator_5: RDNAMEvaluatorResult
 
 
 class RDNAMMultipleAnnotatorsNoAspectsFormat(BaseModel):
@@ -80,7 +79,7 @@ class RDNAMEvaluator(BaseRetrievalEvaluator):
         We asked five search engine raters to evaluate the relevance of the web page for the query.
         Each rater used their own independent judgement.
         {%- endif %}""")
-    answer_format = RDNAMEvaluatorFormat
+    answer_format = RDNAMEvaluatorResult
 
     def __init__(self, config: RDNAMEvaluatorConfig, llm_provider: BaseLLMProvider):
         """Initializes an evaluator based on RDNAM framework."""
@@ -89,7 +88,7 @@ class RDNAMEvaluator(BaseRetrievalEvaluator):
         if self.config.use_aspects and self.config.use_multiple_annotators:
             self.config.llm_response_schema = RDNAMMUltipleAnnotatorsFormat
         elif self.config.use_aspects:
-            self.config.llm_response_schema = RDNAMEvaluatorFormat
+            self.config.llm_response_schema = RDNAMEvaluatorResult
         elif self.config.use_multiple_annotators:
             self.config.llm_response_schema = RDNAMMultipleAnnotatorsNoAspectsFormat
         else:
@@ -147,17 +146,17 @@ class RDNAMEvaluator(BaseRetrievalEvaluator):
                 intent_match = None
                 trustworthiness = None
         else:
-            assert isinstance(parsed, RDNAMEvaluatorFormat) or isinstance(parsed, RDNAMNoAspects)
+            assert isinstance(parsed, RDNAMEvaluatorResult) or isinstance(parsed, RDNAMNoAspects)
             score = parsed.score
             if self.config.use_aspects:
-                assert isinstance(parsed, RDNAMEvaluatorFormat)
+                assert isinstance(parsed, RDNAMEvaluatorResult)
                 intent_match = parsed.intent_match  # type: ignore
                 trustworthiness = parsed.trustworthiness  # type: ignore
             else:
                 intent_match = None
                 trustworthiness = None
 
-        response = RDNAMEvaluatorFormat(
+        response = RDNAMEvaluatorResult(
             score=score,
             intent_match=intent_match,
             trustworthiness=trustworthiness,

@@ -13,24 +13,19 @@ import os
 import warnings
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Literal, overload
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
-from ragelo.cli.presenters import render_evaluation, render_retrieval_summary
 from ragelo.logger import CLILogHandler, logger
-from ragelo.types.answer_formats import (
-    AnswerEvaluatorFormat,
-    PairwiseAnswerEvaluatorFormat,
-    RDNAMEvaluatorFormat,
-    RetrievalEvaluatorFormat,
-)
+from ragelo.presenters import render_evaluation, render_retrieval_summary
 from ragelo.types.evaluables import AgentAnswer, ChatMessage, Document, Evaluable, PairwiseGame
 from ragelo.types.query import Query
 from ragelo.types.results import (
     AnswerEvaluatorResult,
     EloTournamentResult,
     PairwiseGameEvaluatorResult,
+    RDNAMEvaluatorResult,
     RetrievalEvaluatorResult,
 )
 
@@ -155,7 +150,9 @@ class Experiment:
             if not self.evaluations_cache_path:
                 self.evaluations_cache_path = self.save_path.with_name(f"{self.experiment_name}_results.jsonl")
             self.save_path.parent.mkdir(exist_ok=True)
+            self.save_path.touch()
             self.evaluations_cache_path.parent.mkdir(exist_ok=True)
+            self.evaluations_cache_path.touch()
             if self.save_path.stat().st_size > 0:
                 self._load_from_cache(self.save_path)
         else:
@@ -174,7 +171,11 @@ class Experiment:
             )
         if answers_csv_path:
             self.add_agent_answers_from_csv(
-                answers_csv_path, csv_agent_col, csv_answer_text_col, csv_query_id_col, exist_ok=True
+                answers_csv_path,
+                csv_agent_col,
+                csv_answer_text_col,
+                csv_query_id_col,
+                exist_ok=True,
             )
 
         if self.evaluations_cache_path and self.evaluations_cache_path.is_file():
@@ -529,7 +530,7 @@ class Experiment:
             "pairwise_games": {"__all__": {"evaluations"}},
         }
         output_dict["queries"] = {
-            qid: query.model_dump(exclude=exclude_fields)  # type: ignore
+            qid: query.model_dump(exclude=exclude_fields, exclude_unset=True, exclude_defaults=True)
             for qid, query in self.queries.items()
         }
         output_dict["experiment_name"] = self.experiment_name
@@ -538,7 +539,12 @@ class Experiment:
         with output_path.open("w") as f:
             json.dump(output_dict, f, indent=4, ensure_ascii=False)
 
-    def save_result(self, result: BaseModel | EloTournamentResult, evaluable: Evaluable | None, evaluator_name: str):
+    def save_result(
+        self,
+        result: BaseModel | EloTournamentResult,
+        evaluable: Evaluable | None,
+        evaluator_name: str,
+    ):
         """
         Persist a single evaluation result to the cache file.
         This method writes the given evaluation result to a cache file specified by
@@ -839,21 +845,34 @@ class Experiment:
         for qid, q_data in queries_data.items():
             q_object = Query(qid=qid, query=q_data["query"], metadata=q_data.get("metadata"))
             for did, doc_data in q_data.get("retrieved_docs", {}).items():
-                doc_object = Document(qid=qid, did=did, text=doc_data["text"], metadata=doc_data.get("metadata"))
+                doc_object = Document(
+                    qid=qid,
+                    did=did,
+                    text=doc_data["text"],
+                    metadata=doc_data.get("metadata"),
+                )
                 q_object.add_retrieved_doc(doc_object)
             for agent, answer_data in q_data.get("answers", {}).items():
+                conversation_data = answer_data.get("conversation")
+                if conversation_data is None:
+                    conversation = None
+                else:
+                    conversation = [
+                        ChatMessage(sender=sender, content=content)
+                        for sender, content in answer_data.get("conversation")
+                    ]
                 answer_object = AgentAnswer(
                     qid=qid,
                     agent=agent,
                     text=answer_data["text"],
                     metadata=answer_data.get("metadata"),
-                    conversation=[
-                        ChatMessage(sender=sender, content=content)
-                        for sender, content in answer_data.get("conversation", {}).items()
-                    ],
+                    conversation=conversation,
                 )
                 q_object.add_agent_answer(answer_object)
             for game_data in q_data.get("pairwise_games", []):
+                conversation_data = game_data.get("conversation", {})
+                if conversation_data is None:
+                    conversation_data = {}
                 game_object = PairwiseGame(
                     qid=qid,
                     agent_a_answer=AgentAnswer(
@@ -863,7 +882,7 @@ class Experiment:
                         metadata=game_data.get("metadata"),
                         conversation=[
                             ChatMessage(sender=sender, content=content)
-                            for sender, content in game_data.get("conversation", {}).items()
+                            for sender, content in conversation_data.items()
                         ],
                     ),
                     agent_b_answer=AgentAnswer(
@@ -873,7 +892,7 @@ class Experiment:
                         metadata=game_data.get("metadata"),
                         conversation=[
                             ChatMessage(sender=sender, content=content)
-                            for sender, content in game_data.get("conversation", {}).items()
+                            for sender, content in conversation_data.items()
                         ],
                     ),
                 )
@@ -927,25 +946,6 @@ class Experiment:
                 # Find the agent answer
                 evaluable = query.answers.get(result.agent)
 
-            if evaluable is not None:
-                # Coerce answer to a BaseModel if we can identify evaluator schema
-                if hasattr(result, "answer") and result.answer is not None:
-                    if isinstance(result, RetrievalEvaluatorResult):
-                        target_schema = RetrievalEvaluatorFormat
-                    elif isinstance(result, PairwiseGameEvaluatorResult):
-                        target_schema = PairwiseAnswerEvaluatorFormat
-                    elif isinstance(result, AnswerEvaluatorResult):
-                        target_schema = AnswerEvaluatorFormat
-                    else:
-                        target_schema = None
-                    try:
-                        if target_schema is not None and not isinstance(result.answer, BaseModel):
-                            # If it's a dict, parse into target_schema
-                            if isinstance(result.answer, dict):
-                                result.answer = target_schema.model_validate(result.answer)
-                    except Exception:
-                        # Leave as-is if parsing fails
-                        pass
                 self.add_evaluation((query, evaluable), result, should_save=False, exist_ok=True)
 
         if len(missing_queries) > 0:

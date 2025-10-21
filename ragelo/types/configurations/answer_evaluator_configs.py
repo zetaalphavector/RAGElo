@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Callable, Optional, Type
+from typing import Callable, Optional, Type
 
 from jinja2 import Template
 from pydantic import BaseModel, Field, field_validator
 
-from ragelo.types.answer_formats import PairwiseAnswerEvaluatorFormat
 from ragelo.types.configurations.base_configs import BaseEvaluatorConfig
 from ragelo.types.evaluables import Document
+from ragelo.types.results import PairwiseGameEvaluatorResult
 from ragelo.types.types import AnswerEvaluatorTypes
 
 
@@ -56,7 +56,7 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     n_games_per_query: int = Field(default=100, description="Maximum number of games to generate for each query")
     pairwise: bool = Field(default=True, description="Whether or not to the evaluator is pairwise")
     llm_response_schema: Type[BaseModel] = Field(
-        default=PairwiseAnswerEvaluatorFormat,
+        default=PairwiseGameEvaluatorResult,
         description="The response schema for the LLM.",
     )
 

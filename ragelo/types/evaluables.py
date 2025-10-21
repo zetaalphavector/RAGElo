@@ -6,7 +6,7 @@ from pydantic import BaseModel, field_validator, model_validator
 from typing_extensions import Self
 
 from ragelo.logger import logger
-from ragelo.types.results import AnswerEvaluatorResult, EvaluatorResult, RetrievalEvaluatorResult
+from ragelo.types.results import EvaluatorResult
 
 
 class ChatMessage(BaseModel):
@@ -26,7 +26,7 @@ class Evaluable(BaseModel):
 
     qid: str
     metadata: dict[str, Any] | None = None
-    evaluations: dict[str, BaseModel] = {}
+    evaluations: dict[str, EvaluatorResult] = {}
 
     @field_validator("qid", mode="before")
     def qid_into_string(cls, v):

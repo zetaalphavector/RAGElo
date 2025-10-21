@@ -8,8 +8,8 @@ from typing import Type
 from jinja2 import Template
 from pydantic import BaseModel
 
-from ragelo.cli.presenters import render_failed_evaluations
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
+from ragelo.presenters import render_failed_evaluations
 from ragelo.types.configurations import BaseEvaluatorConfig
 from ragelo.types.evaluables import Evaluable
 from ragelo.types.experiment import Experiment

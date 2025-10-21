@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
-
-from ragelo.types.answer_formats import AnswerEvaluatorFormat, PairwiseAnswerEvaluatorFormat, RetrievalEvaluatorFormat
+from pydantic.json_schema import SkipJsonSchema
 
 
 class EvaluatorResult(BaseModel):
@@ -16,16 +15,18 @@ class EvaluatorResult(BaseModel):
         exception Optional[str]: Any exception captured during evaluation.
     """
 
-    qid: str = Field(
-        ...,
+    qid: Annotated[str | None, SkipJsonSchema] = Field(
+        default=None,
         description="The query ID to which the result corresponds.",
     )
-    evaluator_name: str = Field(
-        default="unknown",
+    evaluator_name: Annotated[str | None, SkipJsonSchema] = Field(
+        default=None,
         description="The name of the evaluator that produced this result.",
     )
-    agent: str | None = None
-    exception: str | None = None
+    exception: Annotated[str | None, SkipJsonSchema] = None
+
+    def strigify_answer(self) -> str:
+        return self.model_dump_json(indent=4)
 
 
 class RetrievalEvaluatorResult(EvaluatorResult):
@@ -38,9 +39,15 @@ class RetrievalEvaluatorResult(EvaluatorResult):
         trustworthiness Optional[float]: Optional aspect (RDNAM).
     """
 
-    did: str
-    score: float | int | None = None
-    reasoning: str | None = None
+    did: Annotated[str | None, SkipJsonSchema] = None
+    reasoning: str = Field(..., description="A concise explanation and reasoning of the relevance of the document.")
+    score: float | int = Field(
+        ...,
+        description="Your relevance score for the document. 0 for non-relevant, 1 for somewhat relevant and 2 for highly relevant.",
+    )
+
+    def strigify_answer(self) -> str:
+        return f"Score: {self.score}\nReasoning: {self.reasoning}"
 
 
 class RDNAMEvaluatorResult(RetrievalEvaluatorResult):
@@ -48,8 +55,20 @@ class RDNAMEvaluatorResult(RetrievalEvaluatorResult):
     Keeps flattened fields but signals specific evaluator semantics.
     """
 
-    intent_match: float | None = None
-    trustworthiness: float | None = None
+    score: float = Field(
+        ...,
+        description="An number between 0 and 2 representing the score of the document.",
+    )
+    intent_match: float | None = Field(
+        ...,
+        description="An number between 0 and 2 representing the match of the document to the query intent.",
+    )
+    trustworthiness: float | None = Field(
+        ..., description="An number between 0 and 2 representing the trustworthiness of the document."
+    )
+
+    def strigify_answer(self) -> str:
+        return f"Score: {self.score}\nReasoning: {self.reasoning}\nIntent Match: {self.intent_match}\nTrustworthiness: {self.trustworthiness}"
 
 
 class AnswerEvaluatorResult(EvaluatorResult):
@@ -60,9 +79,15 @@ class AnswerEvaluatorResult(EvaluatorResult):
         reasoning Optional[str]: Reasoning for the score when available.
     """
 
-    agent: str
-    score: int | None = None
-    reasoning: str | None = None
+    agent: Annotated[str, SkipJsonSchema]
+    reasoning: str = Field(..., description="A concise explanation and reasoning of the quality of the answer.")
+    score: int = Field(
+        ...,
+        description="Your score for the quality of the answer. 0 if the answer does not answer the question, 1 if the answer answers the question but is not very helpful and 2 if the answer answers the question and is very helpful.",
+    )
+
+    def strigify_answer(self) -> str:
+        return f"Score: {self.score}\nReasoning: {self.reasoning}"
 
 
 class PairwiseGameEvaluatorResult(EvaluatorResult):
@@ -76,12 +101,20 @@ class PairwiseGameEvaluatorResult(EvaluatorResult):
         winner Literal["A","B","C"]
     """
 
-    agent_a: str
-    agent_b: str
-    answer_a_analysis: str | None = None
-    answer_b_analysis: str | None = None
-    comparison_reasoning: str | None = None
-    winner: Literal["A", "B", "C"] | None = None
+    agent_a: Annotated[str, SkipJsonSchema]
+    agent_b: Annotated[str, SkipJsonSchema]
+    answer_a_analysis: str = Field(..., description="A string with your analysis of assistant A's answer")
+    answer_b_analysis: str = Field(..., description="A string with your analysis of assistant B's answer")
+    comparison_reasoning: str = Field(
+        ..., description="A string with your comparison between the two answers and their differences"
+    )
+    winner: Literal["A", "B", "C"] = Field(..., description="The winner of the pairwise comparison.")
+
+    def strigify_answer(self) -> str:
+        return f"""Answer A Analysis: {self.answer_a_analysis}
+Answer B Analysis: {self.answer_b_analysis}
+Comparison Reasoning: {self.comparison_reasoning}
+Winner: {self.winner}"""
 
 
 class EloTournamentResult(BaseModel):
