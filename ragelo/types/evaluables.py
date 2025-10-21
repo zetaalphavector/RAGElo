@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, computed_field, field_validator, model_validator
 from typing_extensions import Self
 
 from ragelo.logger import logger
@@ -189,7 +189,6 @@ class PairwiseGame(Evaluable):
 
     agent_a_answer: AgentAnswer
     agent_b_answer: AgentAnswer
-    game_id: str | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -197,12 +196,12 @@ class PairwiseGame(Evaluable):
         agent_a_name = values.get("agent_a_answer").agent
         agent_b_name = values.get("agent_b_answer").agent
         if agent_a_name > agent_b_name:
-            values["agent_a_answer"], values["agent_b_answer"] = values["agent_b_answer"], values["agent_a_answer"]
+            values["agent_a_answer"], values["agent_b_answer"] = (values["agent_b_answer"], values["agent_a_answer"])
         return values
 
-    @model_validator(mode="after")
-    def add_game_id(self) -> Self:
-        """Adds a game ID to the pairwise game."""
+    @computed_field
+    @property
+    def game_id(self) -> str:
+        """The ID of the pairwise game."""
         sorted_agents = sorted([self.agent_a_answer.agent, self.agent_b_answer.agent])
-        self.game_id = f"{sorted_agents[0]}-{sorted_agents[1]}"
-        return self
+        return f"{sorted_agents[0]}-{sorted_agents[1]}"
