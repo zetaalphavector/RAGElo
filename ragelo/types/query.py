@@ -6,9 +6,11 @@ from typing import Any
 from pydantic import BaseModel, field_validator
 from typing_extensions import Self
 
+from ragelo.evaluators.answer_evaluators.base_answer_evaluator import get_answer_evaluator_result_type
+from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import get_retrieval_evaluator_result_type
 from ragelo.logger import logger
 from ragelo.types.evaluables import AgentAnswer, Document, Evaluable, PairwiseGame
-from ragelo.types.results import RetrievalEvaluatorResult
+from ragelo.types.results import EvaluatorResult, RetrievalEvaluatorResult
 
 
 class Query(BaseModel):
@@ -146,7 +148,7 @@ class Query(BaseModel):
     def add_evaluation(
         self,
         evaluable: Evaluable,
-        evaluation: BaseModel,
+        evaluation: EvaluatorResult,
         evaluator_name: str,
         force: bool = False,
         exist_ok: bool = False,
@@ -154,25 +156,20 @@ class Query(BaseModel):
         """Add an evaluation to the query.
         Args:
             evaluable Evaluable: The evaluable object to add the evaluation to.
-            evaluation BaseModel: The evaluation result to add to the query.
+            evaluation EvaluatorResult | EloTournamentResult: The evaluation result to add to the query.
             evaluator_name str: The name of the evaluator.
             force bool: Whether to overwrite existing evaluations.
             exist_ok bool: Whether to raise an error if the evaluation already exists.
         """
-        # Enforce correct evaluation type per evaluable
-        from ragelo.types.results import AnswerEvaluatorResult, PairwiseGameEvaluatorResult, RetrievalEvaluatorResult
-
-        if isinstance(evaluable, Document) and not isinstance(evaluation, RetrievalEvaluatorResult):
+        if isinstance(evaluable, Document):
+            expected_result_type = get_retrieval_evaluator_result_type(evaluator_name)
+        elif isinstance(evaluable, AgentAnswer) or isinstance(evaluable, PairwiseGame):
+            expected_result_type = get_answer_evaluator_result_type(evaluator_name)
+        else:
+            raise ValueError(f"Unknown Evaluable type {type(evaluable)}")
+        if not isinstance(evaluation, expected_result_type):
             raise TypeError(
-                f"Evaluator {evaluator_name} must produce RetrievalEvaluatorResult for documents; got {type(evaluation)}"
-            )
-        if isinstance(evaluable, AgentAnswer) and not isinstance(evaluation, AnswerEvaluatorResult):
-            raise TypeError(
-                f"Evaluator {evaluator_name} must produce AnswerEvaluatorResult for agent answers; got {type(evaluation)}"
-            )
-        if isinstance(evaluable, PairwiseGame) and not isinstance(evaluation, PairwiseGameEvaluatorResult):
-            raise TypeError(
-                f"Evaluator {evaluator_name} must produce PairwiseGameEvaluatorResult for pairwise games; got {type(evaluation)}"
+                f"Evaluator {evaluator_name} must produce a {expected_result_type} for {evaluable.__class__.__name__}; got {type(evaluation)}"
             )
 
         # Enforce single, consistent type per evaluator name on this evaluable
@@ -183,14 +180,6 @@ class Query(BaseModel):
                     f"Evaluable {evaluable_id} in query {self.qid} already has an evaluation for {evaluator_name}."
                 )
             return False
-        if evaluator_name in evaluable.evaluations and force:
-            # If overwriting, ensure same result class type to keep strict mapping per evaluator
-            existing = evaluable.evaluations[evaluator_name]
-            if type(existing) is not type(evaluation):
-                raise TypeError(
-                    f"Overwriting evaluation for {evaluator_name} must keep the same type. "
-                    f"Existing: {type(existing)}, New: {type(evaluation)}"
-                )
         evaluable.evaluations[evaluator_name] = evaluation
         return True
 
