@@ -23,7 +23,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
     config: BaseAnswerEvaluatorConfig
     evaluable_name: str = "Agent Answer"
     _warned_queries: Set[str] = set()
-    answer_format = AnswerEvaluatorResult
+    result_format = AnswerEvaluatorResult
 
     def evaluate(
         self,
@@ -404,6 +404,23 @@ class AnswerEvaluatorFactory:
         return inner_wrapper
 
     @classmethod
+    def get_evaluator_result_type(cls, evaluator_name: AnswerEvaluatorTypes) -> Type[AnswerEvaluatorResult]:
+        """Gets the answer evaluator result type for a specific evaluator type.
+
+        Args:
+            evaluator_name (AnswerEvaluatorTypes): The name of the evaluator.
+
+        Returns:
+            Type: The answer evaluator result type for the evaluator.
+        """
+        if evaluator_name not in cls.registry:
+            raise ValueError(
+                f"Unknown answer evaluator {evaluator_name}\nValid options are {list(cls.registry.keys())}"
+            )
+        evaluator_class = cls.registry[evaluator_name]
+        return evaluator_class.result_format
+
+    @classmethod
     def create(
         cls,
         evaluator_name: AnswerEvaluatorTypes,
@@ -465,3 +482,20 @@ def get_answer_evaluator(
         config=config,
         **kwargs,
     )
+
+
+def get_answer_evaluator_result_type(evaluator_name: AnswerEvaluatorTypes | str) -> Type[AnswerEvaluatorResult]:
+    """Gets the answer evaluator result type for a specific evaluator type.
+
+    Args:
+        evaluator_name (AnswerEvaluatorTypes | str): The name of the answer evaluator.
+
+    Returns:
+        Type: The answer evaluator result type for the evaluator.
+    """
+    if isinstance(evaluator_name, str):
+        try:
+            evaluator_name = AnswerEvaluatorTypes(evaluator_name)
+        except ValueError:
+            raise ValueError(f"Unknown answer evaluator {evaluator_name}")
+    return AnswerEvaluatorFactory.get_evaluator_result_type(evaluator_name)

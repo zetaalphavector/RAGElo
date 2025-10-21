@@ -31,10 +31,10 @@ class OllamaProvider(BaseLLMProvider):
         """Calls the Ollama Local API asynchronously.
 
         Args:
-            user_prompt: The user prompt to send to the model.
-            system_prompt: The system prompt to send to the model.
-            answer_format: The format of the answer to return.
-            response_schema: The response schema for structured output.
+            input: A LLMInputPrompt object containing the system prompt, user message, or a list of messages.
+            response_schema: The schema of the response to expect. If config.json_mode is True, we will dump the response_schema to a JSON string and add it to the instructions.
+        Returns:
+            The response from the Ollama API, formatted according to the response_schema. The LLMResponseType.raw_answer  contains the raw LLM response as a string and the LLMResponseType.parsed_answer contains the parsed response. This can be a number or string (if response_schema is None) a dictionary (if response_schema is a dictionary) or a Pydantic BaseModel (if response_schema is a Pydantic BaseModel)).
         """
         messages = []
         call_kwargs = {

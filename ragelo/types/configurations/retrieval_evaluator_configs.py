@@ -128,4 +128,3 @@ class RDNAMEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default=False,
         description="Should the prompt ask the LLM to mimic multiple annotators?",
     )
-    answer_format: Type[BaseModel] = RDNAMEvaluatorResult

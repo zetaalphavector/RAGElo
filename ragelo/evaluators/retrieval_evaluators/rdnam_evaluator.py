@@ -79,7 +79,7 @@ class RDNAMEvaluator(BaseRetrievalEvaluator):
         We asked five search engine raters to evaluate the relevance of the web page for the query.
         Each rater used their own independent judgement.
         {%- endif %}""")
-    answer_format = RDNAMEvaluatorResult
+    result_format = RDNAMEvaluatorResult
 
     def __init__(self, config: RDNAMEvaluatorConfig, llm_provider: BaseLLMProvider):
         """Initializes an evaluator based on RDNAM framework."""

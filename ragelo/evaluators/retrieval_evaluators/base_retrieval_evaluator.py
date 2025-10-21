@@ -28,7 +28,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
 
     config: BaseRetrievalEvaluatorConfig
     evaluable_name: str = "Retrieved document"
-    answer_format = RetrievalEvaluatorResult
+    result_format = RetrievalEvaluatorResult
 
     def __init__(self, config: BaseRetrievalEvaluatorConfig, llm_provider: BaseLLMProvider):
         super().__init__(config, llm_provider)
@@ -174,6 +174,23 @@ class RetrievalEvaluatorFactory:
         return inner_wrapper
 
     @classmethod
+    def get_evaluator_result_type(cls, evaluator_name: RetrievalEvaluatorTypes) -> Type[RetrievalEvaluatorResult]:
+        """Gets the retrieval evaluator result type for a specific evaluator type.
+
+        Args:
+            evaluator_name (RetrievalEvaluatorTypes): The name of the evaluator.
+
+        Returns:
+            Type: The retrieval evaluator result type for the evaluator.
+        """
+        if evaluator_name not in cls.registry:
+            raise ValueError(
+                f"Unknown retrieval evaluator {evaluator_name}\nValid options are {list(cls.registry.keys())}"
+            )
+        evaluator_class = cls.registry[evaluator_name]
+        return evaluator_class.result_format
+
+    @classmethod
     def create(
         cls,
         evaluator_name: RetrievalEvaluatorTypes,
@@ -226,3 +243,22 @@ def get_retrieval_evaluator(
         config=config,
         **kwargs,
     )
+
+
+def get_retrieval_evaluator_result_type(
+    evaluator_name: RetrievalEvaluatorTypes | str,
+) -> Type[RetrievalEvaluatorResult]:
+    """Gets the retrieval evaluator result type for a specific evaluator type.
+
+    Args:
+        evaluator_name (RetrievalEvaluatorTypes | str): The name of the retrieval evaluator.
+
+    Returns:
+        Type: The retrieval evaluator result type for the evaluator.
+    """
+    if isinstance(evaluator_name, str):
+        try:
+            evaluator_name = RetrievalEvaluatorTypes(evaluator_name)
+        except ValueError:
+            raise ValueError(f"Unknown retrieval evaluator {evaluator_name}")
+    return RetrievalEvaluatorFactory.get_evaluator_result_type(evaluator_name)
