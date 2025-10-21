@@ -557,7 +557,7 @@ class Experiment:
             raise ValueError("Results cache path not set. Cannot dump result")
 
         with open(self.evaluations_cache_path, "a+") as f:
-            f.write(result.model_dump_json(ensure_ascii=False) + "\n")
+            f.write(result.model_dump_json() + "\n")
 
     def add_queries_from_csv(
         self,
@@ -898,13 +898,22 @@ class Experiment:
             expected_result_type = get_evaluator_result_type(evaluator_name)
             result = expected_result_type.model_validate(result)
             query = self.queries[result.qid]
-
+            evaluable: Evaluable
             if isinstance(result, RetrievalEvaluatorResult):
-                evaluable = query.retrieved_docs.get(result.did)
+                if result.did not in query.retrieved_docs:
+                    logger.warning(f"Document {result.did} not found in query {result.qid}. Skipping")
+                    continue
+                evaluable = query.retrieved_docs[result.did]
             elif isinstance(result, PairwiseGameEvaluatorResult):
-                evaluable = query.pairwise_games.get(result.game_id)
+                if result.game_id not in query.pairwise_games:
+                    logger.warning(f"Pairwise game {result.game_id} not found in query {result.qid}. Skipping")
+                    continue
+                evaluable = query.pairwise_games[result.game_id]
             elif isinstance(result, AnswerEvaluatorResult):
-                evaluable = query.answers.get(result.agent)
+                if result.agent not in query.answers:
+                    logger.warning(f"Answer from agent {result.agent} not found in query {result.qid}. Skipping")
+                    continue
+                evaluable = query.answers[result.agent]
             else:
                 raise ValueError(f"Unknown result type {type(result)}")
 

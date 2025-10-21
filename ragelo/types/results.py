@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 from pydantic.json_schema import SkipJsonSchema
 
 
@@ -15,14 +15,13 @@ class EvaluatorResult(BaseModel):
         exception Optional[str]: Any exception captured during evaluation.
     """
 
-    qid: Annotated[str | None, SkipJsonSchema] = Field(
-        default=None,
-        description="The query ID to which the result corresponds.",
-    )
+    qid: Annotated[str, SkipJsonSchema] = Field(description="The query ID to which the result corresponds.")
     evaluator_name: Annotated[str, SkipJsonSchema] = Field(
-        description="The name of the evaluator that produced this result.",
+        description="The name of the evaluator that produced this result."
     )
-    exception: Annotated[str | None, SkipJsonSchema] = None
+    exception: Annotated[str | None, SkipJsonSchema] = Field(
+        default=None, description="Any exception captured during evaluation."
+    )
 
     def strigify_answer(self) -> str:
         return self.model_dump_json(indent=4)
@@ -38,7 +37,7 @@ class RetrievalEvaluatorResult(EvaluatorResult):
         trustworthiness Optional[float]: Optional aspect (RDNAM).
     """
 
-    did: Annotated[str | None, SkipJsonSchema] = None
+    did: Annotated[str, SkipJsonSchema] = Field(description="The document ID to which the result corresponds.")
     reasoning: str = Field(..., description="A concise explanation and reasoning of the relevance of the document.")
     score: float | int = Field(
         ...,
@@ -78,7 +77,7 @@ class AnswerEvaluatorResult(EvaluatorResult):
         reasoning Optional[str]: Reasoning for the score when available.
     """
 
-    agent: Annotated[str, SkipJsonSchema]
+    agent: Annotated[str, SkipJsonSchema] = Field(description="The agent that provided the answer.")
     reasoning: str = Field(..., description="A concise explanation and reasoning of the quality of the answer.")
     score: int = Field(
         ...,
@@ -114,6 +113,13 @@ class PairwiseGameEvaluatorResult(EvaluatorResult):
 Answer B Analysis: {self.answer_b_analysis}
 Comparison Reasoning: {self.comparison_reasoning}
 Winner: {self.winner}"""
+
+    @computed_field
+    @property
+    def game_id(self) -> str:
+        """The ID of the pairwise game."""
+        sorted_agents = sorted([self.agent_a, self.agent_b])
+        return f"{sorted_agents[0]}-{sorted_agents[1]}"
 
 
 class EloTournamentResult(BaseModel):
