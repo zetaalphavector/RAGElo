@@ -77,8 +77,15 @@ class PairwiseAnswerEvaluator(BaseAnswerEvaluator):
             {{ game.agent_b_answer.text }}
         [The End of Assistant B's Answer]""")
 
-    def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> LLMInputPrompt:
+    def _build_message_pairwise(self, query: Query, game: PairwiseGame, inverse: bool = False) -> LLMInputPrompt:
         documents = self._filter_documents(query)
+        if inverse:
+            reverse_game = PairwiseGame(
+                qid=game.qid,
+                agent_a_answer=game.agent_b_answer,
+                agent_b_answer=game.agent_a_answer,
+            )
+            game = reverse_game
         context = {
             "factors": self.config.factors,
             "query": query,
