@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import Any
+from typing import Any, Type
 
 from pydantic import BaseModel, field_validator
 from typing_extensions import Self
@@ -161,6 +161,7 @@ class Query(BaseModel):
             force bool: Whether to overwrite existing evaluations.
             exist_ok bool: Whether to raise an error if the evaluation already exists.
         """
+        expected_result_type: Type[EvaluatorResult]
         if isinstance(evaluable, Document):
             expected_result_type = get_retrieval_evaluator_result_type(evaluator_name)
         elif isinstance(evaluable, AgentAnswer) or isinstance(evaluable, PairwiseGame):
@@ -187,7 +188,7 @@ class Query(BaseModel):
         self,
         relevance_threshold: int = 0,
         retrieval_evaluator_name: str | None = None,
-    ) -> dict[str, int]:
+    ) -> dict[str, float]:
         """Get a qrels-formatted dictionary with the relevance of the retrieved documents.
         Args:
             relevance_threshold int: The minimum relevance value to consider a document as relevant.
@@ -228,7 +229,7 @@ class Query(BaseModel):
                 docs_without_relevance += 1
                 continue
 
-            qrels[did] = 0 if score < relevance_threshold else score
+            qrels[did] = 0.0 if score < relevance_threshold else score
         if docs_without_relevance > 0:
             logger.warning(f"Query {self.qid} has {docs_without_relevance} documents without relevance.")
         if docs_without_relevance == len(self.retrieved_docs):
