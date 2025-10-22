@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 from openai import AsyncOpenAI
 from pydantic import BaseModel, ValidationError
@@ -36,7 +37,7 @@ class OllamaProvider(BaseLLMProvider):
             The response from the Ollama API, formatted according to the response_schema. The LLMResponseType.raw_answer  contains the raw LLM response as a string and the LLMResponseType.parsed_answer contains the parsed response. This can be a number or string (if response_schema is None) a dictionary (if response_schema is a dictionary) or a Pydantic BaseModel (if response_schema is a Pydantic BaseModel)).
         """
         messages = []
-        call_kwargs = {
+        call_kwargs: dict[str, Any] = {
             "model": self.config.model,
             "temperature": self.config.temperature,
             "max_tokens": self.config.max_tokens,
