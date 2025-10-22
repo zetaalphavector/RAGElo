@@ -87,7 +87,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             llm_response = self._process_answer(llm_response)
         except Exception as e:
             if isinstance(e, RetryError):
-                e = str(e) + "\nLLM Error: \n" + str(e.last_attempt.exception())
+                exc = str(e) + "\nLLM Error: \n" + str(e.last_attempt.exception())
             elif llm_response.raw_answer:
                 exc = str(e) + f"\nRaw answer: {llm_response.raw_answer}"
             logger.warning(f"Failed to generate answer for qid: {query.qid} and document: {document.did}: {exc}")

@@ -92,20 +92,19 @@ class BaseEvaluator(ABC):
             while done:
                 finished = done.pop()
                 evaluation = await finished
-                eval_tuple = future_to_tuple.pop(finished, None)
+                eval_tuple = future_to_tuple.pop(finished)
                 evaluations += 1
                 pbar.update()
                 if evaluation.exception:
                     failed += 1
                     continue
-                if eval_tuple is not None:
-                    experiment.add_evaluation(
-                        eval_tuple,
-                        evaluation,
-                        exist_ok=True,
-                        force=self.config.force,
-                        should_print=self.config.verbose,
-                    )
+                experiment.add_evaluation(
+                    eval_tuple,
+                    evaluation,
+                    exist_ok=True,
+                    force=self.config.force,
+                    should_print=self.config.verbose,
+                )
         pbar.close()
         if self.config.verbose:
             render_failed_evaluations(evaluations, failed, self.config.rich_print)
