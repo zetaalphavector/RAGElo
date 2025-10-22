@@ -1,4 +1,4 @@
-import os
+from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
@@ -8,12 +8,21 @@ from ragelo.cli.cli import app
 runner = CliRunner()
 
 
+def _cleanup_files(*paths: str | Path):
+    for path in paths:
+        path = Path(path)
+        if path.exists():
+            path.unlink()
+
+
 @pytest.mark.requires_openai
 def test_run_all_cli():
-    if os.path.exists("tests/data/output.json"):
-        os.remove("tests/data/output.json")
-    if os.path.exists("tests/data/output_results.jsonl"):
-        os.remove("tests/data/output_results.jsonl")
+    experiment_name = "cli-run-all"
+    output_file = Path("tests/data/cli-run-all.json")
+    results_file = Path("tests/data/cli-run-all_results.jsonl")
+
+    _cleanup_files(output_file, results_file)
+
     result = runner.invoke(
         app,
         [
@@ -25,33 +34,45 @@ def test_run_all_cli():
             "--data-dir",
             "tests/data/",
             "--experiment-name",
-            "test",
+            experiment_name,
             "--output-file",
-            "output.json",
+            output_file.name,
             "--force",
         ],
     )
+    stdout = result.stdout
+
     assert result.exit_code == 0
-    assert "Agents Elo Ratings" in result.stdout
-    assert result.stdout.startswith("Creating a cache file for the experiment's evaluations")
-    assert "🔎 Query ID: 0\n📜 Document ID: 0" in result.stdout
-    assert "🔎 Query ID: 0\n agent1              🆚   agent2\nParsed Answer:" in result.stdout
-    assert "Total evaluations: 4" in result.stdout
-    assert "Total evaluations: 2" in result.stdout
-    assert "Evaluating Retrieved documents" in result.stdout
-    assert "Evaluating Agent Answers" in result.stdout
-    assert len(result.stdout.split("✅ Done!")) == 3
-    assert os.path.exists("tests/data/output.json")
-    assert os.path.exists("tests/data/output_results.jsonl")
-    assert not os.path.exists("ragelo_cache/test.json")
-    os.remove("tests/data/output.json")
-    os.remove("tests/data/output_results.jsonl")
+    assert f"Loaded 2 queries from {Path('tests/data/queries.csv').resolve()}" in stdout
+    assert f"Loaded 4 new documents from {Path('tests/data/documents.csv').resolve()}" in stdout
+    assert f"Loaded 2 answers from {Path('tests/data/answers.csv').resolve()}" in stdout
+    assert "Evaluating Retrieved documents" in stdout
+    assert "Evaluating Agent Answers" in stdout
+    assert "🔎 Query ID: 0" in stdout
+    assert "📜 Document ID: 0" in stdout
+    assert "👤 Agent A" in stdout
+    assert "👤 Agent B" in stdout
+    assert "Parsed Answer" in stdout
+    assert "Agents Elo Ratings" in stdout
+    assert stdout.count("✅ Done!") == 2
+    assert stdout.count("Total evaluations: 4") == 1
+    assert stdout.count("Total evaluations: 2") == 1
+
+    assert output_file.exists()
+    assert results_file.exists()
+    assert not Path(f"ragelo_cache/{experiment_name}.json").exists()
+
+    _cleanup_files(output_file, results_file)
 
 
 @pytest.mark.requires_openai
 def test_run_reasoner_cli():
-    if os.path.exists("tests/data/test-output.json"):
-        os.remove("tests/data/test-output.json")
+    experiment_name = "cli-reasoner"
+    output_file = Path("tests/data/cli-reasoner.json")
+    results_file = Path("tests/data/cli-reasoner_results.jsonl")
+
+    _cleanup_files(output_file, results_file)
+
     result = runner.invoke(
         app,
         [
@@ -63,24 +84,39 @@ def test_run_reasoner_cli():
             "--data-dir",
             "tests/data/",
             "--experiment-name",
-            "test",
+            experiment_name,
             "--output-file",
-            "test-output.json",
-            "--no-save-results",
+            output_file.name,
             "--force",
         ],
     )
+    stdout = result.stdout
+
     assert result.exit_code == 0
-    assert "✅ Done!" in result.stdout
-    assert result.stdout.startswith("Loaded 2 queries from")
-    assert "🔎 Query ID: 0\n📜 Document ID: 0" in result.stdout
-    assert "Total evaluations: 4" in result.stdout
-    assert os.path.exists("tests/data/test-output.json")
-    os.remove("tests/data/test-output.json")
+    assert f"Loaded 2 queries from {Path('tests/data/queries.csv').resolve()}" in stdout
+    assert f"Loaded 4 new documents from {Path('tests/data/documents.csv').resolve()}" in stdout
+    assert "Evaluating Retrieved documents" in stdout
+    assert "🔎 Query ID: 0" in stdout
+    assert "📜 Document ID: 0" in stdout
+    assert "Parsed Answer" in stdout
+    assert stdout.count("✅ Done!") == 1
+    assert stdout.count("Total evaluations: 4") == 1
+
+    assert output_file.exists()
+    assert results_file.exists()
+    assert not Path(f"ragelo_cache/{experiment_name}.json").exists()
+
+    _cleanup_files(output_file, results_file)
 
 
 @pytest.mark.requires_openai
 def test_run_answer_cli():
+    experiment_name = "cli-pairwise"
+    output_file = Path("tests/data/cli-pairwise.json")
+    results_file = Path("tests/data/cli-pairwise_results.jsonl")
+
+    _cleanup_files(output_file, results_file)
+
     result = runner.invoke(
         app,
         [
@@ -93,21 +129,32 @@ def test_run_answer_cli():
             "--data-dir",
             "tests/data/",
             "--experiment-name",
-            "test",
+            experiment_name,
             "--output-file",
-            "test-output.json",
-            "--no-save-results",
+            output_file.name,
             "--force",
             "--add-reasoning",
         ],
     )
+    stdout = result.stdout
+
     assert result.exit_code == 0
-    assert len(result.stdout.split("✅ Done!")) == 3
-    assert len(result.stdout.split("Total evaluations: 4")) == 3
-    assert result.stdout.startswith("Loaded 2 queries from")
-    assert "🔎 Query ID: 0\n📜 Document ID: 0" in result.stdout
-    assert "Evaluating Retrieved documents" in result.stdout
-    assert "🔎 Query ID: 0\n agent2              🆚   agent1\nParsed Answer" in result.stdout
-    assert "🔎 Query ID: 1\n agent1              🆚   agent2\nParsed Answer" in result.stdout
-    assert os.path.exists("tests/data/test-output.json")
-    os.remove("tests/data/test-output.json")
+    assert f"Loaded 2 queries from {Path('tests/data/queries.csv').resolve()}" in stdout
+    assert f"Loaded 4 new documents from {Path('tests/data/documents.csv').resolve()}" in stdout
+    assert f"Loaded 2 answers from {Path('tests/data/answers.csv').resolve()}" in stdout
+    assert "Evaluating Retrieved documents" in stdout
+    assert "Evaluating Agent Answers" in stdout
+    assert "🔎 Query ID: 0" in stdout
+    assert "📜 Document ID: 0" in stdout
+    assert "👤 Agent A" in stdout
+    assert "👤 Agent B" in stdout
+    assert "Parsed Answer" in stdout
+    assert stdout.count("✅ Done!") == 2
+    assert stdout.count("Total evaluations: 4") == 1
+    assert stdout.count("Total evaluations: 2") == 1
+
+    assert output_file.exists()
+    assert results_file.exists()
+    assert not Path(f"ragelo_cache/{experiment_name}.json").exists()
+
+    _cleanup_files(output_file, results_file)
