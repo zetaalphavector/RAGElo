@@ -41,11 +41,13 @@ def test_run_all_cli():
         ],
     )
     stdout = result.stdout
+    # Normalize stdout by removing newlines that Rich may insert for line wrapping
+    stdout_normalized = stdout.replace("\n", " ")
 
     assert result.exit_code == 0
-    assert f"Loaded 2 queries from {Path('tests/data/queries.csv').resolve()}" in stdout
-    assert f"Loaded 4 new documents from {Path('tests/data/documents.csv').resolve()}" in stdout
-    assert f"Loaded 2 answers from {Path('tests/data/answers.csv').resolve()}" in stdout
+    assert f"Loaded 2 queries from {Path('tests/data/queries.csv').resolve()}" in stdout_normalized
+    assert f"Loaded 4 new documents from {Path('tests/data/documents.csv').resolve()}" in stdout_normalized
+    assert f"Loaded 4 answers from {Path('tests/data/answers.csv').resolve()}" in stdout_normalized
     assert "Evaluating Retrieved documents" in stdout
     assert "Evaluating Agent Answers" in stdout
     assert "🔎 Query ID: 0" in stdout
@@ -91,10 +93,12 @@ def test_run_reasoner_cli():
         ],
     )
     stdout = result.stdout
+    # Normalize stdout by removing newlines that Rich may insert for line wrapping
+    stdout_normalized = stdout.replace("\n", " ")
 
     assert result.exit_code == 0
-    assert f"Loaded 2 queries from {Path('tests/data/queries.csv').resolve()}" in stdout
-    assert f"Loaded 4 new documents from {Path('tests/data/documents.csv').resolve()}" in stdout
+    assert f"Loaded 2 queries from {Path('tests/data/queries.csv').resolve()}" in stdout_normalized
+    assert f"Loaded 4 new documents from {Path('tests/data/documents.csv').resolve()}" in stdout_normalized
     assert "Evaluating Retrieved documents" in stdout
     assert "🔎 Query ID: 0" in stdout
     assert "📜 Document ID: 0" in stdout
@@ -137,11 +141,13 @@ def test_run_answer_cli():
         ],
     )
     stdout = result.stdout
+    # Normalize stdout by removing newlines that Rich may insert for line wrapping
+    stdout_normalized = stdout.replace("\n", " ")
 
     assert result.exit_code == 0
-    assert f"Loaded 2 queries from {Path('tests/data/queries.csv').resolve()}" in stdout
-    assert f"Loaded 4 new documents from {Path('tests/data/documents.csv').resolve()}" in stdout
-    assert f"Loaded 2 answers from {Path('tests/data/answers.csv').resolve()}" in stdout
+    assert f"Loaded 2 queries from {Path('tests/data/queries.csv').resolve()}" in stdout_normalized
+    assert f"Loaded 4 new documents from {Path('tests/data/documents.csv').resolve()}" in stdout_normalized
+    assert f"Loaded 4 answers from {Path('tests/data/answers.csv').resolve()}" in stdout_normalized
     assert "Evaluating Retrieved documents" in stdout
     assert "Evaluating Agent Answers" in stdout
     assert "🔎 Query ID: 0" in stdout
