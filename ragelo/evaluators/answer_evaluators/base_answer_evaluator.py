@@ -23,7 +23,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
     config: BaseAnswerEvaluatorConfig
     evaluable_name: str = "Agent Answer"
     _warned_queries: set[str] = set()
-    result_type = AnswerEvaluatorResult
+    result_type: type[AnswerEvaluatorResult] | type[PairwiseGameEvaluatorResult]
 
     def evaluate(
         self,
@@ -190,6 +190,11 @@ class BaseAnswerEvaluator(BaseEvaluator):
         agent = (evaluable.agent_a_answer.agent, evaluable.agent_b_answer.agent)
         game = evaluable
         prompt = self._build_message_pairwise(query, evaluable)
+        if not issubclass(self.result_type, PairwiseGameEvaluatorResult):
+            raise ValueError(
+                f"For a pairwise game, the result type must be a {PairwiseGameEvaluatorResult.__name__} not a {self.result_type.__name__}"
+            )
+        exc = None
         try:
             llm_response = await self.llm_provider.call_async(
                 input=prompt,
@@ -199,20 +204,31 @@ class BaseAnswerEvaluator(BaseEvaluator):
         except Exception as e:
             exc = str(e) + f"\nRaw answer: {llm_response.raw_answer}"
             logger.warning(f"Failed to generate answer for qid: {query.qid} and agents: {agent}: {exc}")
+            return PairwiseGameEvaluatorResult(
+                qid=query.qid,
+                agent_a=evaluable.agent_a_answer.agent,
+                agent_b=evaluable.agent_b_answer.agent,
+                evaluator_name=str(self.config.evaluator_name),
+                answer_a_analysis=None,
+                answer_b_analysis=None,
+                comparison_reasoning=None,
+                winner=None,
+                exception=exc,
+            )
         parsed = llm_response.parsed_answer
+        winner = getattr(parsed, "winner", None)
         answer = PairwiseGameEvaluatorResult(
             qid=query.qid,
             agent_a=evaluable.agent_a_answer.agent,
             agent_b=evaluable.agent_b_answer.agent,
             evaluator_name=str(self.config.evaluator_name),
-            answer_a_analysis=(getattr(parsed, "answer_a_analysis", None) if parsed is not None else None),
-            answer_b_analysis=(getattr(parsed, "answer_b_analysis", None) if parsed is not None else None),
-            comparison_reasoning=(getattr(parsed, "comparison_reasoning", None) if parsed is not None else None),
-            winner=(getattr(parsed, "winner", None) if parsed is not None else None),
+            answer_a_analysis=getattr(parsed, "answer_a_analysis", None),
+            answer_b_analysis=getattr(parsed, "answer_b_analysis", None),
+            comparison_reasoning=getattr(parsed, "comparison_reasoning", None),
+            winner=winner,
             exception=exc,
         )
 
-        winner = llm_response.parsed_answer.winner
         inverse_game = PairwiseGame(
             qid=game.qid,
             agent_a_answer=game.agent_b_answer,
@@ -402,7 +418,9 @@ class AnswerEvaluatorFactory:
         return inner_wrapper
 
     @classmethod
-    def get_evaluator_result_type(cls, evaluator_name: AnswerEvaluatorTypes) -> type[AnswerEvaluatorResult]:
+    def get_evaluator_result_type(
+        cls, evaluator_name: AnswerEvaluatorTypes
+    ) -> type[AnswerEvaluatorResult] | type[PairwiseGameEvaluatorResult]:
         """Gets the answer evaluator result type for a specific evaluator type.
 
         Args:
@@ -482,7 +500,9 @@ def get_answer_evaluator(
     )
 
 
-def get_answer_evaluator_result_type(evaluator_name: AnswerEvaluatorTypes | str) -> type[AnswerEvaluatorResult]:
+def get_answer_evaluator_result_type(
+    evaluator_name: AnswerEvaluatorTypes | str,
+) -> type[AnswerEvaluatorResult] | type[PairwiseGameEvaluatorResult]:
     """Gets the answer evaluator result type for a specific evaluator type.
 
     Args:

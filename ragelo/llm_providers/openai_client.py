@@ -48,7 +48,7 @@ class OpenAIProvider(BaseLLMProvider):
             llm_input = input.user_message
         else:
             raise ValueError("No input provided")
-        parsed_answer: str | dict[str, Any] | T_Result | None = None
+        parsed_answer: dict[str, Any] | T_Result
         if input.system_prompt:
             instructions = input.system_prompt
         else:

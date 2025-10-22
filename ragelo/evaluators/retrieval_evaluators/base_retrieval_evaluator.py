@@ -78,7 +78,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             if isinstance(cached_eval, RetrievalEvaluatorResult):
                 return cached_eval
         llm_input = self._build_message(query, document)
-        llm_response = LLMResponseType(raw_answer="", parsed_answer=None)
+        llm_response = LLMResponseType[RetrievalEvaluatorResult](raw_answer="", parsed_answer=None)
         try:
             llm_response = await self.llm_provider.call_async(
                 input=llm_input,
@@ -92,7 +92,6 @@ class BaseRetrievalEvaluator(BaseEvaluator):
                 exc = str(e) + f"\nRaw answer: {llm_response.raw_answer}"
             logger.warning(f"Failed to generate answer for qid: {query.qid} and document: {document.did}: {exc}")
 
-        # Map parsed_answer into flattened fields when possible
         parsed = llm_response.parsed_answer
         score = None
         reasoning = None

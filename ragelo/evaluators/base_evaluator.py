@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
 from jinja2 import Template
 
@@ -16,6 +16,7 @@ from ragelo.types.query import Query
 from ragelo.types.results import EvaluatorResult
 from ragelo.utils import call_async_fn, get_pbar
 
+T_Result = TypeVar("T_Result", bound=EvaluatorResult)
 if TYPE_CHECKING:
     from ragelo.types.experiment import Experiment
 
@@ -113,6 +114,6 @@ class BaseEvaluator(ABC):
     def _get_tuples_to_evaluate(self, queries: Experiment) -> Sequence[tuple[Query, Evaluable]]:
         raise NotImplementedError
 
-    def _process_answer(self, llm_response: LLMResponseType) -> LLMResponseType:
+    def _process_answer(self, llm_response: LLMResponseType[T_Result]) -> LLMResponseType[T_Result]:
         """Processes the raw answer returned by the LLM. Should be implemented by the subclass if needed."""
         return llm_response

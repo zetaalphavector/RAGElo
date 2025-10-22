@@ -31,4 +31,4 @@ class LLMInputPrompt(BaseModel):
 
 class LLMResponseType(BaseModel, Generic[T_Result]):
     raw_answer: str
-    parsed_answer: T_Result | None
+    parsed_answer: T_Result
