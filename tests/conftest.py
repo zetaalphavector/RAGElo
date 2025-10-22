@@ -29,6 +29,7 @@ from ragelo.types.evaluables import ChatMessage
 from ragelo.types.experiment import Experiment
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.results import (
+    AnswerEvaluationAnswer,
     AnswerEvaluatorResult,
     EloTournamentResult,
     PairwiseEvaluationAnswer,
@@ -389,8 +390,8 @@ def retrieval_evaluation():
     return RetrievalEvaluatorResult(
         qid="0",
         did="0",
-        raw_answer="Document is relevant. Score: 1.0",
-        answer=1,
+        evaluator_name="reasoner",
+        answer=RetrievalEvaluationAnswer(reasoning="The document is relevant", score=1.0),
     )
 
 
@@ -399,21 +400,25 @@ def answer_evaluation():
     return AnswerEvaluatorResult(
         qid="0",
         agent="agent1",
-        pairwise=False,
-        raw_answer="Answer is good. Scores: {'quality': 1.0, 'relevance': 0.8}",
-        answer={"quality": 1.0, "relevance": 0.8},
+        evaluator_name="custom_prompt",
+        answer=AnswerEvaluationAnswer(reasoning="Good quality answer", score=1),
     )
 
 
 @pytest.fixture
 def pairwise_answer_evaluation():
-    return AnswerEvaluatorResult(
+    return PairwiseGameEvaluatorResult(
         qid="0",
         agent_a="agent1",
         agent_b="agent2",
-        pairwise=True,
-        raw_answer="Answer [[A]] is better than [[B]]",
-        answer="A",
+        game_id="agent1_vs_agent2",
+        evaluator_name="pairwise",
+        answer=PairwiseEvaluationAnswer(
+            answer_a_analysis="Answer A is good",
+            answer_b_analysis="Answer B is less good",
+            comparison_reasoning="A is better",
+            winner="A",
+        ),
     )
 
 

@@ -527,8 +527,7 @@ class Experiment:
             "pairwise_games": {"__all__": {"evaluations"}},
         }
         output_dict["queries"] = {
-            qid: query.model_dump(exclude=exclude_fields, exclude_unset=True, exclude_defaults=True)
-            for qid, query in self.queries.items()
+            qid: query.model_dump(exclude=exclude_fields, exclude_defaults=True) for qid, query in self.queries.items()
         }
         output_dict["experiment_name"] = self.experiment_name
         output_dict["elo_tournaments"] = [tournament.model_dump() for tournament in self.elo_tournaments]
@@ -849,34 +848,16 @@ class Experiment:
                     conversation=conversation,
                 )
                 q_object.add_agent_answer(answer_object)
-            for game_data in q_data.get("pairwise_games", []):
-                conversation_data = game_data.get("conversation", {})
-                if conversation_data is None:
-                    conversation_data = {}
-                game_object = PairwiseGame(
-                    qid=qid,
-                    agent_a_answer=AgentAnswer(
-                        qid=qid,
-                        agent=game_data["agent_a"],
-                        text=game_data["text"],
-                        metadata=game_data.get("metadata"),
-                        conversation=[
-                            ChatMessage(sender=sender, content=content)
-                            for sender, content in conversation_data.items()
-                        ],
-                    ),
-                    agent_b_answer=AgentAnswer(
-                        qid=qid,
-                        agent=game_data["agent_b"],
-                        text=game_data["text"],
-                        metadata=game_data.get("metadata"),
-                        conversation=[
-                            ChatMessage(sender=sender, content=content)
-                            for sender, content in conversation_data.items()
-                        ],
-                    ),
-                )
-                # q_object.add_pairwise_game(game_object)
+            # Load pairwise games
+            pairwise_games_data = q_data.get("pairwise_games", {})
+            if isinstance(pairwise_games_data, dict):
+                for game_id, game_data in pairwise_games_data.items():
+                    # Reconstruct the pairwise game from saved data
+                    agent_a = game_data.get("agent_a_answer", {}).get("agent")
+                    agent_b = game_data.get("agent_b_answer", {}).get("agent")
+                    if agent_a and agent_b:
+                        # Simply create the game - answers are already loaded
+                        q_object.add_pairwise_game(agent_a, agent_b)
             self.queries[qid] = q_object
 
         self._load_results_from_cache(self.evaluations_cache_path)
@@ -888,16 +869,29 @@ class Experiment:
             return
         assert cache_path.is_file()
         for line in cache_path.open():
-            result = json.loads(line)
+            try:
+                result = json.loads(line)
+            except json.JSONDecodeError as e:
+                logger.error(f"Invalid JSON in results cache, skipping line: {e}")
+                continue
             evaluator_name = result.get("evaluator_name")
             if evaluator_name is None:
                 logger.error("Evaluator name not found in result. Skipping")
                 continue
-            if evaluator_name == "EloTournament":
-                result = EloTournamentResult.model_validate(result)
+            try:
+                if evaluator_name == "EloTournament":
+                    result = EloTournamentResult.model_validate(result)
+                    continue
+                expected_result_type = get_evaluator_result_type(evaluator_name)
+                result = expected_result_type.model_validate(result)
+            except (ValueError, Exception) as e:
+                logger.error(f"Failed to validate result for evaluator {evaluator_name}: {e}")
                 continue
-            expected_result_type = get_evaluator_result_type(evaluator_name)
-            result = expected_result_type.model_validate(result)
+
+            if result.qid not in self.queries:
+                logger.warning(f"Query {result.qid} not found. Skipping evaluation.")
+                continue
+
             query = self.queries[result.qid]
             evaluable: Evaluable
             if isinstance(result, RetrievalEvaluatorResult):
@@ -916,7 +910,8 @@ class Experiment:
                     continue
                 evaluable = query.answers[result.agent]
             else:
-                raise ValueError(f"Unknown result type {type(result)}")
+                logger.error(f"Unknown result type {type(result)}. Skipping.")
+                continue
 
             self.add_evaluation((query, evaluable), result, should_save=False, exist_ok=True, should_print=False)
 

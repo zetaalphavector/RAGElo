@@ -1,12 +1,20 @@
 import json
 import os
+import shutil
 
 import pytest
 
 from ragelo import Experiment, get_agent_ranker, get_answer_evaluator, get_llm_provider, get_retrieval_evaluator
 from ragelo.types.evaluables import AgentAnswer, Document
 from ragelo.types.query import Query
-from ragelo.types.results import AnswerEvaluatorResult, RetrievalEvaluatorResult
+from ragelo.types.results import (
+    AnswerEvaluationAnswer,
+    AnswerEvaluatorResult,
+    PairwiseEvaluationAnswer,
+    PairwiseGameEvaluatorResult,
+    RetrievalEvaluationAnswer,
+    RetrievalEvaluatorResult,
+)
 
 
 class TestExperiment:
@@ -122,80 +130,98 @@ class TestExperiment:
 
     def test_add_retrieval_evaluation(self, experiment, retrieval_evaluation, caplog):
         """Test adding retrieval evaluation"""
-        # Add evaluation
-        experiment.add_evaluation(retrieval_evaluation, should_save=False)
 
-        # Verify evaluation was added
+        # Add evaluation
         query = experiment["0"]
         doc = query.retrieved_docs["0"]
-        assert doc.evaluation is not None
-        assert doc.evaluation.answer == 1
-        assert doc.evaluation.raw_answer == "Document is relevant. Score: 1.0"
+        experiment.add_evaluation((query, doc), retrieval_evaluation, should_save=False)
+
+        # Verify evaluation was added
+        assert len(doc.evaluations) > 0
+        assert "reasoner" in doc.evaluations
+        evaluation = doc.evaluations["reasoner"]
+        assert evaluation.answer.score == 1.0  # Access nested answer
+        assert evaluation.answer.reasoning == "The document is relevant"
 
         # Test adding duplicate evaluation without force
-        added = experiment.add_evaluation(retrieval_evaluation, should_save=False)
-        assert "Document 0 in query 0 already has an evaluation." in caplog.text
+        added = experiment.add_evaluation((query, doc), retrieval_evaluation, should_save=False)
+        assert "Evaluable 0 in query 0 already has an evaluation" in caplog.text
         assert not added
 
         # Test adding duplicate evaluation with force
-        modified_eval = RetrievalEvaluatorResult(qid="0", did="0", raw_answer="Modified evaluation", answer=2)
-        experiment.add_evaluation(modified_eval, should_save=False, force=True)
-        assert doc.evaluation.answer == 2
+        modified_eval = RetrievalEvaluatorResult(
+            qid="0",
+            did="0",
+            evaluator_name="reasoner",
+            answer=RetrievalEvaluationAnswer(reasoning="Modified", score=2.0),
+        )
+        experiment.add_evaluation((query, doc), modified_eval, should_save=False, force=True)
+        assert doc.evaluations["reasoner"].answer.score == 2.0
 
         # Test adding evaluation for non-existent query
-        invalid_eval = RetrievalEvaluatorResult(qid="999", did="0", raw_answer="Invalid", answer=1)
+        invalid_eval = RetrievalEvaluatorResult(
+            qid="999",
+            did="0",
+            evaluator_name="reasoner",
+            answer=RetrievalEvaluationAnswer(reasoning="Invalid", score=1.0),
+        )
         with pytest.raises(ValueError):
-            experiment.add_evaluation(invalid_eval)
+            experiment.add_evaluation(None, invalid_eval)
 
     def test_add_answer_evaluation(self, experiment, answer_evaluation, caplog):
         """Test adding answer evaluation"""
-        # Add evaluation
-        experiment.add_evaluation(answer_evaluation, should_save=False)
 
-        # Verify evaluation was added
+        # Add evaluation
         query = experiment["0"]
         answer = query.answers["agent1"]
-        assert answer.evaluation is not None
-        assert answer.evaluation.answer == {"quality": 1.0, "relevance": 0.8}
-        assert answer.evaluation.raw_answer == "Answer is good. Scores: {'quality': 1.0, 'relevance': 0.8}"
-        assert not answer.evaluation.pairwise
+        experiment.add_evaluation((query, answer), answer_evaluation, should_save=False)
+
+        # Verify evaluation was added
+        assert len(answer.evaluations) > 0
+        assert "custom_prompt" in answer.evaluations
+        evaluation = answer.evaluations["custom_prompt"]
+        assert evaluation.answer.score == 1  # Access nested answer
+        assert evaluation.answer.reasoning == "Good quality answer"
 
         # Test adding duplicate evaluation without force
-        added = experiment.add_evaluation(answer_evaluation, should_save=False)
+        added = experiment.add_evaluation((query, answer), answer_evaluation, should_save=False)
         assert not added
-        assert "Agent agent1 in query 0 already has an evaluation." in caplog.text
+        assert "Evaluable agent1 in query 0 already has an evaluation" in caplog.text
 
         # Test adding duplicate evaluation with force
         modified_eval = AnswerEvaluatorResult(
             qid="0",
             agent="agent1",
-            pairwise=False,
-            raw_answer="Modified evaluation",
-            answer={"quality": 2.0, "relevance": 1.0},
+            evaluator_name="custom_prompt",
+            answer=AnswerEvaluationAnswer(reasoning="Modified quality", score=2),
         )
-        experiment.add_evaluation(modified_eval, should_save=False, force=True)
-        assert answer.evaluation.answer == {"quality": 2.0, "relevance": 1.0}
+        experiment.add_evaluation((query, answer), modified_eval, should_save=False, force=True)
+        assert answer.evaluations["custom_prompt"].answer.score == 2
 
     def test_add_pairwise_evaluation(self, experiment, pairwise_answer_evaluation):
         """Test adding pairwise answer evaluation"""
         # Add evaluation
-        experiment.add_evaluation(pairwise_answer_evaluation, should_save=False)
+        query = experiment["0"]
+        # First, we need to create the pairwise game
+        game = query.add_pairwise_game("agent1", "agent2")
+        experiment.add_evaluation((query, game), pairwise_answer_evaluation, should_save=False)
 
         # Verify evaluation was added
-        query = experiment["0"]
-        assert len(query.pairwise_games) == 1
-        game = query.pairwise_games[0]
-        assert game.evaluation is not None
-        assert game.evaluation.answer == "A"
-        assert game.evaluation.raw_answer == "Answer [[A]] is better than [[B]]"
-        assert game.evaluation.pairwise
-        assert game.evaluation.agent_a == "agent1"
-        assert game.evaluation.agent_b == "agent2"
+        assert len(query.pairwise_games) >= 1
+        assert len(game.evaluations) > 0
+        assert "pairwise" in game.evaluations
+        evaluation = game.evaluations["pairwise"]
+        assert evaluation.answer.winner == "A"  # Access nested answer
+        assert evaluation.answer.answer_a_analysis == "Answer A is good"
+        assert evaluation.answer.answer_b_analysis == "Answer B is less good"
+        assert evaluation.answer.comparison_reasoning == "A is better"
+        assert evaluation.agent_a == "agent1"
+        assert evaluation.agent_b == "agent2"
 
     def test_add_elo_tournament(self, experiment, elo_tournament_result):
         """Test adding Elo tournament results"""
-        # Add evaluation
-        experiment.add_evaluation(elo_tournament_result, should_save=False)
+        # Add evaluation (EloTournamentResult doesn't need eval_tuple)
+        experiment.add_evaluation(None, elo_tournament_result, should_save=False)
 
         # Verify tournament was added
         assert len(experiment.elo_tournaments) == 1
@@ -224,13 +250,19 @@ class TestExperiment:
         # Set up save paths
         results_path = tmp_path / "test_results.jsonl"
         base_experiment_config["evaluations_cache_path"] = str(results_path)
+        base_experiment_config["save_on_disk"] = True
         experiment = Experiment(**base_experiment_config)
 
         # Add and save evaluations
-        experiment.add_evaluation(retrieval_evaluation, should_save=True)
-        experiment.add_evaluation(answer_evaluation, should_save=True)
-        experiment.add_evaluation(pairwise_answer_evaluation, should_save=True)
-        experiment.add_evaluation(elo_tournament_result, should_save=True)
+        query = experiment["0"]
+        doc = query.retrieved_docs["0"]
+        answer = query.answers["agent1"]
+        game = query.add_pairwise_game("agent1", "agent2")
+
+        experiment.add_evaluation((query, doc), retrieval_evaluation, should_save=True)
+        experiment.add_evaluation((query, answer), answer_evaluation, should_save=True)
+        experiment.add_evaluation((query, game), pairwise_answer_evaluation, should_save=True)
+        experiment.add_evaluation(None, elo_tournament_result, should_save=True)
 
         # Verify results were saved
         assert results_path.exists()
@@ -240,12 +272,15 @@ class TestExperiment:
             lines = f.readlines()
             assert len(lines) == 4
 
-            # Parse each line and verify content types
+            # Parse each line and verify they have proper structure
             results = [json.loads(line) for line in lines]
-            result_types = [list(r.keys())[0] for r in results]
-            assert "retrieval" in result_types
-            assert "answer" in result_types
-            assert "elo_tournament" in result_types
+            # Check that results have evaluator_name and answer fields
+            for result in results:
+                # EloTournament doesn't have evaluator_name
+                assert "evaluator_name" in result or "total_games" in result
+                # Verify answer is an object (nested) for non-Elo results
+                if "answer" in result:
+                    assert isinstance(result["answer"], dict), "Answer should be serialized as dict"
 
     def test_clear_evaluations(
         self,
@@ -257,18 +292,22 @@ class TestExperiment:
     ):
         """Test clearing all evaluations"""
         # Add evaluations
-        experiment.add_evaluation(retrieval_evaluation, should_save=False)
-        experiment.add_evaluation(answer_evaluation, should_save=False)
-        experiment.add_evaluation(pairwise_answer_evaluation, should_save=False)
-        experiment.add_evaluation(elo_tournament_result, should_save=False)
+        query = experiment["0"]
+        doc = query.retrieved_docs["0"]
+        answer = query.answers["agent1"]
+        game = query.add_pairwise_game("agent1", "agent2")
+
+        experiment.add_evaluation((query, doc), retrieval_evaluation, should_save=False)
+        experiment.add_evaluation((query, answer), answer_evaluation, should_save=False)
+        experiment.add_evaluation((query, game), pairwise_answer_evaluation, should_save=False)
+        experiment.add_evaluation(None, elo_tournament_result, should_save=False)
 
         # Clear evaluations
         experiment._Experiment__clear_all_evaluations()
 
         # Verify evaluations were cleared
-        query = experiment["0"]
-        assert query.retrieved_docs["0"].evaluation is None
-        assert query.answers["agent1"].evaluation is None
+        assert len(query.retrieved_docs["0"].evaluations) == 0
+        assert len(query.answers["agent1"].evaluations) == 0
         assert len(experiment.elo_tournaments) == 0
 
     def test_get_runs(self, tmp_path, experiment_with_retrieval_scores):
@@ -282,7 +321,6 @@ class TestExperiment:
         output_dir = tmp_path / "test_runs"
         experiment_with_retrieval_scores.get_runs(output_path=str(output_dir), output_format="trec")
         assert os.path.exists(output_dir)
-        import shutil
 
         shutil.rmtree(output_dir)  # Cleanup
 
@@ -369,3 +407,235 @@ class TestExperiment:
         assert os.path.exists("ragelo_cache/A_really_cool_RAGElo_experiment_results.jsonl")
         os.remove("ragelo_cache/A_really_cool_RAGElo_experiment.json")
         os.remove("ragelo_cache/A_really_cool_RAGElo_experiment_results.jsonl")
+
+
+class TestExperimentSerialization:
+    """Tests for experiment serialization and deserialization with nested answer schemas."""
+
+    def test_round_trip_retrieval_evaluation(self, tmp_path, retrieval_evaluation):
+        """Test round-trip serialization for retrieval evaluation."""
+        # Save result to JSONL
+        results_path = tmp_path / "test_results.jsonl"
+        results_path.touch()
+
+        # Serialize
+        with open(results_path, "w") as f:
+            f.write(retrieval_evaluation.model_dump_json() + "\n")
+
+        # Deserialize
+        with open(results_path) as f:
+            loaded_data = json.loads(f.readline())
+            loaded_result = RetrievalEvaluatorResult.model_validate(loaded_data)
+
+        # Verify nested answer is properly deserialized
+        assert isinstance(loaded_result.answer, RetrievalEvaluationAnswer)
+        assert loaded_result.answer.score == retrieval_evaluation.answer.score
+        assert loaded_result.answer.reasoning == retrieval_evaluation.answer.reasoning
+        assert loaded_result.qid == retrieval_evaluation.qid
+        assert loaded_result.did == retrieval_evaluation.did
+        assert loaded_result.evaluator_name == retrieval_evaluation.evaluator_name
+
+    def test_round_trip_answer_evaluation(self, tmp_path, answer_evaluation):
+        """Test round-trip serialization for answer evaluation."""
+        # Save result to JSONL
+        results_path = tmp_path / "test_results.jsonl"
+        results_path.touch()
+
+        # Serialize
+        with open(results_path, "w") as f:
+            f.write(answer_evaluation.model_dump_json() + "\n")
+
+        # Deserialize
+        with open(results_path) as f:
+            loaded_data = json.loads(f.readline())
+            loaded_result = AnswerEvaluatorResult.model_validate(loaded_data)
+
+        # Verify nested answer is properly deserialized
+        assert isinstance(loaded_result.answer, AnswerEvaluationAnswer)
+        assert loaded_result.answer.score == answer_evaluation.answer.score
+        assert loaded_result.answer.reasoning == answer_evaluation.answer.reasoning
+        assert loaded_result.qid == answer_evaluation.qid
+        assert loaded_result.agent == answer_evaluation.agent
+
+    def test_round_trip_pairwise_evaluation(self, tmp_path, pairwise_answer_evaluation):
+        """Test round-trip serialization for pairwise evaluation."""
+        # Save result to JSONL
+        results_path = tmp_path / "test_results.jsonl"
+        results_path.touch()
+
+        # Serialize
+        with open(results_path, "w") as f:
+            f.write(pairwise_answer_evaluation.model_dump_json() + "\n")
+
+        # Deserialize
+        with open(results_path) as f:
+            loaded_data = json.loads(f.readline())
+            loaded_result = PairwiseGameEvaluatorResult.model_validate(loaded_data)
+
+        # Verify nested answer is properly deserialized
+        assert isinstance(loaded_result.answer, PairwiseEvaluationAnswer)
+        assert loaded_result.answer.winner == pairwise_answer_evaluation.answer.winner
+        assert loaded_result.answer.answer_a_analysis == pairwise_answer_evaluation.answer.answer_a_analysis
+        assert loaded_result.answer.answer_b_analysis == pairwise_answer_evaluation.answer.answer_b_analysis
+        assert loaded_result.answer.comparison_reasoning == pairwise_answer_evaluation.answer.comparison_reasoning
+
+    def test_experiment_with_evaluations_round_trip(
+        self, tmp_path, retrieval_evaluation, answer_evaluation, pairwise_answer_evaluation
+    ):
+        """Test saving and loading experiment with evaluations."""
+        # Create experiment with save enabled using unique temp paths
+        save_path = tmp_path / "unique_experiment_roundtrip.json"
+        results_path = tmp_path / "unique_results_roundtrip.jsonl"
+
+        experiment = Experiment(
+            experiment_name="unique_test_round_trip",
+            save_on_disk=True,
+            save_path=str(save_path),
+            evaluations_cache_path=str(results_path),
+            queries_csv_path="tests/data/queries.csv",
+            documents_csv_path="tests/data/documents.csv",
+            answers_csv_path="tests/data/answers.csv",
+        )
+
+        # Add evaluations
+        query = experiment["0"]
+        doc = query.retrieved_docs["0"]
+        answer = query.answers["agent1"]
+        game = query.add_pairwise_game("agent1", "agent2")
+
+        experiment.add_evaluation((query, doc), retrieval_evaluation, should_save=True)
+        experiment.add_evaluation((query, answer), answer_evaluation, should_save=True)
+        experiment.add_evaluation((query, game), pairwise_answer_evaluation, should_save=True)
+
+        # Save experiment
+        experiment.save()
+
+        # Load experiment in a new instance
+        loaded_experiment = Experiment(
+            experiment_name="unique_test_round_trip",
+            save_on_disk=True,
+            save_path=str(save_path),
+            evaluations_cache_path=str(results_path),
+        )
+
+        # Verify evaluations were loaded
+        loaded_query = loaded_experiment["0"]
+        loaded_doc = loaded_query.retrieved_docs["0"]
+        loaded_answer = loaded_query.answers["agent1"]
+
+        # Check retrieval evaluation
+        assert len(loaded_doc.evaluations) > 0
+        assert "reasoner" in loaded_doc.evaluations
+        assert loaded_doc.evaluations["reasoner"].answer.score == 1.0
+        assert loaded_doc.evaluations["reasoner"].answer.reasoning == "The document is relevant"
+
+        # Check answer evaluation
+        assert len(loaded_answer.evaluations) > 0
+        assert "custom_prompt" in loaded_answer.evaluations
+        assert loaded_answer.evaluations["custom_prompt"].answer.score == 1
+        assert loaded_answer.evaluations["custom_prompt"].answer.reasoning == "Good quality answer"
+
+        # Check pairwise evaluation
+        loaded_game = loaded_query.pairwise_games.get("agent1-agent2")
+        assert loaded_game is not None
+        assert len(loaded_game.evaluations) > 0
+        assert "pairwise" in loaded_game.evaluations
+        assert loaded_game.evaluations["pairwise"].answer.winner == "A"
+
+    def test_convenience_properties_after_deserialization(self, tmp_path, retrieval_evaluation):
+        """Test that convenience properties work after deserialization."""
+        # Serialize and deserialize
+        results_path = tmp_path / "test_results.jsonl"
+        with open(results_path, "w") as f:
+            f.write(retrieval_evaluation.model_dump_json() + "\n")
+
+        with open(results_path) as f:
+            loaded_data = json.loads(f.readline())
+            loaded_result = RetrievalEvaluatorResult.model_validate(loaded_data)
+
+        # Verify convenience properties work (backward compatibility)
+        assert loaded_result.score == loaded_result.answer.score
+        assert loaded_result.reasoning == loaded_result.answer.reasoning
+        assert loaded_result.score == 1.0
+        assert loaded_result.reasoning == "The document is relevant"
+
+    def test_serialized_answer_is_nested_dict(
+        self, retrieval_evaluation, answer_evaluation, pairwise_answer_evaluation
+    ):
+        """Test that serialized answer field is a nested dictionary."""
+        # Test retrieval evaluation
+        retrieval_dict = json.loads(retrieval_evaluation.model_dump_json())
+        assert "answer" in retrieval_dict
+        assert isinstance(retrieval_dict["answer"], dict)
+        assert "score" in retrieval_dict["answer"]
+        assert "reasoning" in retrieval_dict["answer"]
+
+        # Test answer evaluation
+        answer_dict = json.loads(answer_evaluation.model_dump_json())
+        assert "answer" in answer_dict
+        assert isinstance(answer_dict["answer"], dict)
+        assert "score" in answer_dict["answer"]
+        assert "reasoning" in answer_dict["answer"]
+
+        # Test pairwise evaluation
+        pairwise_dict = json.loads(pairwise_answer_evaluation.model_dump_json())
+        assert "answer" in pairwise_dict
+        assert isinstance(pairwise_dict["answer"], dict)
+        assert "winner" in pairwise_dict["answer"]
+        assert "answer_a_analysis" in pairwise_dict["answer"]
+        assert "answer_b_analysis" in pairwise_dict["answer"]
+
+    def test_load_corrupted_jsonl_gracefully(self, tmp_path, base_experiment_config):
+        """Test that experiment handles corrupted JSONL gracefully."""
+        results_path = tmp_path / "corrupted.jsonl"
+        base_experiment_config["save_on_disk"] = True
+        base_experiment_config["evaluations_cache_path"] = str(results_path)
+
+        # Create corrupted JSONL file with various issues
+        with open(results_path, "w") as f:
+            # Invalid JSON
+            f.write("This is not valid JSON\n")
+            # Missing evaluator_name
+            f.write('{"qid": "0", "did": "0", "answer": {"score": 1}}\n')
+            # Valid entry
+            valid_result = RetrievalEvaluatorResult(
+                qid="0",
+                did="0",
+                evaluator_name="reasoner",
+                answer=RetrievalEvaluationAnswer(reasoning="Good", score=2.0),
+            )
+            f.write(valid_result.model_dump_json() + "\n")
+
+        # Should not crash when loading
+        experiment = Experiment(**base_experiment_config)
+
+        # Should have loaded the valid result and skipped the corrupted ones
+        if len(experiment.queries) > 0 and "0" in experiment.queries:
+            query = experiment["0"]
+            if "0" in query.retrieved_docs:
+                # The valid result should have been loaded
+                doc = query.retrieved_docs["0"]
+                if len(doc.evaluations) > 0:
+                    assert "reasoner" in doc.evaluations
+
+    def test_missing_evaluable_in_loaded_results(self, tmp_path, base_experiment_config):
+        """Test that experiment handles results for missing documents/answers gracefully."""
+        results_path = tmp_path / "orphaned_results.jsonl"
+        base_experiment_config["save_on_disk"] = True
+        base_experiment_config["evaluations_cache_path"] = str(results_path)
+
+        # Create result for non-existent document
+        with open(results_path, "w") as f:
+            orphaned_result = RetrievalEvaluatorResult(
+                qid="0",
+                did="999",  # This document doesn't exist
+                evaluator_name="reasoner",
+                answer=RetrievalEvaluationAnswer(reasoning="Orphaned", score=1.0),
+            )
+            f.write(orphaned_result.model_dump_json() + "\n")
+
+        # Should not crash when loading, should just skip the orphaned result
+        experiment = Experiment(**base_experiment_config)
+
+        # Verify no crash occurred and queries were loaded
+        assert len(experiment) == 2

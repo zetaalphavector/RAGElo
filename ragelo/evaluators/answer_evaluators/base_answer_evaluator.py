@@ -23,7 +23,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
     config: BaseAnswerEvaluatorConfig
     evaluable_name: str = "Agent Answer"
     _warned_queries: set[str] = set()
-    result_type: type[AnswerEvaluatorResult] | type[PairwiseGameEvaluatorResult]
+    result_type: type[AnswerEvaluatorResult] | type[PairwiseGameEvaluatorResult] = AnswerEvaluatorResult
 
     def evaluate(
         self,
