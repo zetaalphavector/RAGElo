@@ -52,7 +52,6 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     """Configuration for the pairwise evaluator."""
 
     evaluator_name: AnswerEvaluatorTypes = AnswerEvaluatorTypes.PAIRWISE
-    bidirectional: bool = Field(default=True, description="Whether or not to run each game in both directions")
     n_games_per_query: int = Field(default=100, description="Maximum number of games to generate for each query")
     pairwise: bool = Field(default=True, description="Whether or not to the evaluator is pairwise")
     llm_response_schema: Type[BaseModel] = Field(

@@ -98,7 +98,6 @@ def test_run_answer_cli():
             "test-output.json",
             "--no-save-results",
             "--force",
-            "--bidirectional",
             "--add-reasoning",
         ],
     )

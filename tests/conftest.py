@@ -527,7 +527,7 @@ def pairwise_answer_eval_config(base_answer_eval_config):
         {{ game.agent_b_answer.text }}
         [The End of Assistant B's Answer]
     """
-    return PairwiseEvaluatorConfig(bidirectional=True, **base_config)
+    return PairwiseEvaluatorConfig(**base_config)
 
 
 @pytest.fixture
@@ -538,7 +538,7 @@ def chat_pairwise_answer_eval_config(base_answer_eval_config):
     base_config["pairwise"] = True
     base_config["evaluator_name"] = AnswerEvaluatorTypes.CHAT_PAIRWISE
 
-    return PairwiseEvaluatorConfig(bidirectional=True, **base_config)
+    return PairwiseEvaluatorConfig(**base_config)
 
 
 @pytest.fixture

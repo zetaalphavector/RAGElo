@@ -211,8 +211,6 @@ class BaseAnswerEvaluator(BaseEvaluator):
             winner=(getattr(parsed, "winner", None) if parsed is not None else None),
             exception=exc,
         )
-        if not self.config.bidirectional:
-            return answer
 
         winner = llm_response.parsed_answer.winner
         inverse_game = PairwiseGame(
