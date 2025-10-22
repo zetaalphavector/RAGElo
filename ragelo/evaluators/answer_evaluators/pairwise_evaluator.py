@@ -48,7 +48,7 @@ class PairwiseAnswerEvaluator(BaseAnswerEvaluator):
         ## Workflow
         First, you should analyze each of the two answers, explaining whether or not each of them correctly answers the user's question, based on the relevant documents retrieved. 
         Then, you should compare the two responses and provide a short explanation on their differences, explaining in which aspects each answer is better or worst than the other. 
-        After providing your explanation, output your final verdict by strictly following his format: "A" if assistant A is better, "B" if assistant B is better, or "C" for a tie.""")
+        After providing your explanation, output your final verdict by strictly following his format: "A" if assistant A is better, "B" if assistant B is better, or "C" for a tie.""")  # noqa: E501
 
     user_prompt = string_to_template("""
         [User Question]
@@ -75,7 +75,7 @@ class PairwiseAnswerEvaluator(BaseAnswerEvaluator):
 
         [The Start of Assistant B's Answer]
             {{ game.agent_b_answer.text }}
-        [The End of Assistant B's Answer]""")
+        [The End of Assistant B's Answer]""")  # noqa: E501
 
     def _build_message_pairwise(self, query: Query, game: PairwiseGame, inverse: bool = False) -> LLMInputPrompt:
         documents = self._filter_documents(query)

@@ -18,7 +18,8 @@ class RetrievalEvaluationAnswer(EvaluationAnswer):
     reasoning: str = Field(..., description="A concise explanation and reasoning of the relevance of the document.")
     score: float | int = Field(
         ...,
-        description="Your relevance score for the document. 0 for non-relevant, 1 for somewhat relevant and 2 for highly relevant.",
+        description="Your relevance score for the document. 0 for non-relevant, 1 for somewhat relevant "
+        "and 2 for highly relevant.",
     )
 
 
@@ -28,7 +29,11 @@ class AnswerEvaluationAnswer(EvaluationAnswer):
     reasoning: str = Field(..., description="A concise explanation and reasoning of the quality of the answer.")
     score: int = Field(
         ...,
-        description="Your score for the quality of the answer. 0 if the answer does not answer the question, 1 if the answer answers the question but is not very helpful and 2 if the answer answers the question and is very helpful.",
+        description=(
+            "Your score for the quality of the answer. 0 if the answer does not answer the question, "
+            "1 if the answer answers the question but is not very helpful and 2 if the answer answers the question "
+            "and is very helpful."
+        ),
     )
 
 

@@ -163,7 +163,8 @@ class Query(BaseModel):
         if not isinstance(evaluation, expected_result_type):
             evaluator_name = evaluation.evaluator_name
             raise TypeError(
-                f"Evaluator {evaluator_name} must produce a {expected_result_type} for {evaluable.__class__.__name__}; got {type(evaluation)}"
+                f"Evaluator {evaluator_name} must produce a {expected_result_type} for "
+                f"{evaluable.__class__.__name__}; got {type(evaluation)}"
             )
 
         # Enforce single, consistent type per evaluator name on this evaluable
@@ -187,7 +188,8 @@ class Query(BaseModel):
         Args:
             relevance_threshold int: The minimum relevance value to consider a document as relevant.
                 Documents with a relevance lower than this value will be considered as 0.
-            retrieval_evaluator_name str: The name of the retrieval evaluator to use to get the relevance of the documents.
+            retrieval_evaluator_name str: The name of the retrieval evaluator to use to get the relevance
+                of the documents.
         """
         qrels = {}
         if len(self.retrieved_docs) == 0:

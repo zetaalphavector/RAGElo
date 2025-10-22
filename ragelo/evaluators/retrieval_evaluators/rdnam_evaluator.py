@@ -40,7 +40,7 @@ class RDNAMEvaluator(BaseRetrievalEvaluator):
         1 = relevant, may be partly helpful but might contain other irrelevant content
         0 = not relevant, should never be shown for this query
         Assume that you are writing a report on the subject of the topic. If you would use any of the information contained in the document in such a report, mark it 1. If the document is primarily about the topic, or contains vital information about the topic, mark it 2. Otherwise, mark it 0.
-        """)
+        """)  # noqa: E501
     user_prompt = string_to_template("""
         # Query
         A person has typed {{ query.query }} into a search engine.

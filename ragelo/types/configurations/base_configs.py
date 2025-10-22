@@ -45,12 +45,17 @@ class BaseEvaluatorConfig(BaseConfig):
     )
     user_prompt: Optional[Template] = Field(
         default=None,
-        description="The user prompt to use for the evaluator. Should contain at least a {{ query.query }} placeholder for the query's text.",
+        description=(
+            "The user prompt to use for the evaluator. Should contain at least "
+            "a {{ query.query }} placeholder for the query's text."
+        ),
     )
 
     result_type: type[EvaluationAnswer] | None = Field(
         default=None,
-        description="Override the result type that the Evaluator will return. Most evaluators have a default result type.",
+        description=(
+            "Override the result type that the Evaluator will return. Most evaluators have a default result type."
+        ),
     )
 
     @field_validator("system_prompt", "user_prompt", mode="before")

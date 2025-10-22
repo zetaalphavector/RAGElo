@@ -205,7 +205,8 @@ class BaseAnswerEvaluator(BaseEvaluator):
 
         if not issubclass(self.result_type, PairwiseGameEvaluatorResult):
             raise ValueError(
-                f"For a pairwise game, the result type must be a {PairwiseGameEvaluatorResult.__name__} not a {self.result_type.__name__}"
+                f"For a pairwise game, the result type must be a "
+                f"{PairwiseGameEvaluatorResult.__name__} not a {self.result_type.__name__}"
             )
 
         # Get the answer schema type from the result_type's 'answer' field

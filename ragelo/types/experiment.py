@@ -96,7 +96,7 @@ class Experiment:
                 to avoid re-computing evaluations. If not set, will create one based on experiment_name.
             save_on_disk (bool, defaults to True): Whether to save the experiment to disk using the experiment_name.
             verbose (bool, defaults to False): Whether to print information about the experiment.
-            rich_print (bool, defaults to True): Whether to print information about the experiment using the rich library.
+            rich_print (bool, defaults to True): Whether to print information about the experiment using rich.
             clear_evaluations (bool, defaults to False): If set to True, will clear all existing evaluations and
                 re-compute as needed.
             queries_csv_path (Optional[str]): An optional path to a CSV file with the queries to be used.
@@ -324,10 +324,12 @@ class Experiment:
         """
         Add an evaluation to the queries and optionally save the result.
         Args:
-            eval_tuple (tuple[Query, Evaluable] | None): The query and evaluable to add the evaluation to. If None, the evaluation is an EloTournamentResult.
+            eval_tuple (tuple[Query, Evaluable] | None): The query and evaluable to add the evaluation to.
+                If None, the evaluation is an EloTournamentResult.
             evaluation (EvaluatorResult | EloTournamentResult): The evaluation result to be added.
             should_save (bool): Whether to save the result to disk. Defaults to True.
-            should_print (bool | None): Whether to print the evaluation. Defaults to None. If None, will use the verbose attribute.
+            should_print (bool | None): Whether to print the evaluation. Defaults to None.
+                If None, will use the verbose attribute.
             force (bool): Whether to overwrite an existing evaluation. Defaults to False.
             exist_ok (bool): Whether to warn if an evaluation already exists. Defaults to False.
         """
@@ -361,7 +363,8 @@ class Experiment:
         Args:
             metrics (list[str]): A list of metrics to use. defaults to ["Precision@10", "nDCG@10", "Judged@10"].
             relevance_threshold (int): The threshold above which a document is considered relevant (default is 0).
-            retrieval_evaluator_name (str | None): The name of the retrieval evaluator to use to get the relevance of the documents.
+            retrieval_evaluator_name (str | None): The name of the retrieval evaluator to use to get the relevance
+                of the documents.
         Returns:
             dict[str, dict[str, float]]: A dictionary where keys are agent names and values are dictionaries of scores.
         Raises:
@@ -429,12 +432,13 @@ class Experiment:
         Args:
             relevance_threshold (int): The threshold value for relevance. Defaults to 0.
             output_path (str | None): The path to save the qrels to disk. If None, the qrels are not saved.
-            output_format (Literal["trec", "json"]): The format to save the qrels. Defaults to "trec". If TREC, output_path should be a
-                directory, and each query will have a separate file.
-            retrieval_evaluator_name (str | None): The name of the retrieval evaluator to use to get the relevance of the documents.
+            output_format (Literal["trec", "json"]): The format to save the qrels. Defaults to "trec". If TREC,
+                output_path should be a directory, and each query will have a separate file.
+            retrieval_evaluator_name (str | None): The name of the retrieval evaluator to use to get the relevance of
+                the documents.
         Returns:
             dict[str, dict[str, float]]: A dictionary where each key is a query ID and the value is another dictionary
-                                       mapping document IDs to their relevance scores.
+                mapping document IDs to their relevance scores.
         """
 
         qrels = {}
@@ -507,7 +511,8 @@ class Experiment:
         If caching is enabled, it attempts to write the model's current state to the file
         specified by `cache_path`. If `cache_path` is not set, a ValueError is raised.
         Args:
-            output_path (str | None): The path to save the experiment to disk. If None, the experiment will be saved to the path specified by `self.save_path`.
+            output_path (str | None): The path to save the experiment to disk. If None, the experiment will be saved to
+                the path specified by `self.save_path`.
         Raises:
             ValueError: If `cache_path` is None and caching is enabled.
         """

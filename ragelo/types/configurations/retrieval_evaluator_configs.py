@@ -29,7 +29,7 @@ class FewShotExample(BaseModel):
 class BaseRetrievalEvaluatorConfig(BaseEvaluatorConfig):
     user_prompt: Optional[Template] = Field(
         default=None,
-        description="The user prompt to use for the evaluator. Should contain at least a {{ query.query }} and a {{ document.text }} placeholder for the query and the document text.",
+        description="The user prompt to use for the evaluator. Should contain at least a {{ query.query }} and a {{ document.text }} placeholder for the query and the document text.",  # noqa: E501
     )
 
     @field_validator("user_prompt", mode="after")

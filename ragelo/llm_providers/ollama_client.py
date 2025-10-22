@@ -34,9 +34,15 @@ class OllamaProvider(BaseLLMProvider):
 
         Args:
             input: A LLMInputPrompt object containing the system prompt, user message, or a list of messages.
-            response_schema: The schema of the response to expect. If config.json_mode is True, we will dump the response_schema to a JSON string and add it to the instructions.
+            response_schema: The schema of the response to expect. If config.json_mode is True,
+                we will dump the response_schema to a JSON string and add it to the instructions.
         Returns:
-            The response from the Ollama API, formatted according to the response_schema. The LLMResponseType.raw_answer  contains the raw LLM response as a string and the LLMResponseType.parsed_answer contains the parsed response. This can be a number or string (if response_schema is None) a dictionary (if response_schema is a dictionary) or a Pydantic BaseModel (if response_schema is a Pydantic BaseModel)).
+            The response from the Ollama API, formatted according to the response_schema.
+                The LLMResponseType.raw_answer contains the raw LLM response as a string and the
+                LLMResponseType.parsed_answer contains the parsed response.
+                This can be a number or string (if response_schema is None) a dictionary
+                (if response_schema is a dictionary) or a Pydantic BaseModel
+                (if response_schema is a Pydantic BaseModel)).
         """
         messages = []
         call_kwargs: dict[str, Any] = {
@@ -48,7 +54,8 @@ class OllamaProvider(BaseLLMProvider):
 
         if input.system_prompt and input.messages:
             raise ValueError(
-                "If the input to the LLMProvider is a list of messages, you should not provide the system prompt as a unique parameter. Please combine both in a single input list"
+                "If the input to the LLMProvider is a list of messages, you should not provide the system prompt as a "
+                "unique parameter. Please combine both in a single input list"
             )
         if input.system_prompt:
             messages.append({"role": "system", "content": input.system_prompt})
