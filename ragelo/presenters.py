@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Dict
-
 import rich
 
 from ragelo.types.results import (
@@ -87,7 +85,7 @@ def render_evaluation(
 
 
 def render_retrieval_summary(
-    results: Dict[str, Dict[str, float]],
+    results: dict[str, dict[str, float]],
     metrics: list[str],
     relevance_threshold: int = 0,
     rich_print_enabled: bool = True,
