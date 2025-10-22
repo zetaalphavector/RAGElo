@@ -277,7 +277,7 @@ To install the development dependencies, download the repository and run the fol
 
 ```bash
 git clone https://github.com/zeta-alpha/ragelo && cd ragelo
-pip install -e '.[dev]'
+uv pip install -e '.[dev]'
 ```
 
 This will install the requirement dependencies in an editable mode (i.e., any changes to the code don't need to be rebuilt.)
