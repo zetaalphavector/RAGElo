@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import TypeVar
 
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 from openai.types.responses import ResponseTextConfigParam
@@ -11,8 +12,9 @@ from tenacity import retry, stop_after_attempt, wait_random_exponential
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, LLMProviderFactory
 from ragelo.types.configurations import OpenAIConfiguration
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
-from ragelo.types.results import T_Result
 from ragelo.types.types import LLMProviderTypes
+
+T_Schema = TypeVar("T_Schema", bound=BaseModel)
 
 
 @LLMProviderFactory.register(LLMProviderTypes.OPENAI)
@@ -29,7 +31,7 @@ class OpenAIProvider(BaseLLMProvider):
             self.config.temperature = None
 
     @retry(wait=wait_random_exponential(min=1, max=120), stop=stop_after_attempt(3))
-    async def call_async(self, input: LLMInputPrompt, response_schema: type[T_Result]) -> LLMResponseType[T_Result]:
+    async def call_async(self, input: LLMInputPrompt, response_schema: type[T_Schema]) -> LLMResponseType[T_Schema]:
         """Calls the OpenAI API asynchronously.
 
         Args:
@@ -101,7 +103,7 @@ class OpenAIProvider(BaseLLMProvider):
             parsed_answer = answers.output_parsed
             raw_answer = answers.output_text
 
-        return LLMResponseType[T_Result](
+        return LLMResponseType(
             raw_answer=raw_answer,
             parsed_answer=parsed_answer,
         )

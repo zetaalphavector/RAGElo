@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
 from jinja2 import Template
 
@@ -13,11 +13,13 @@ from ragelo.types.configurations import BaseEvaluatorConfig
 from ragelo.types.evaluables import Evaluable
 from ragelo.types.formats import LLMResponseType
 from ragelo.types.query import Query
-from ragelo.types.results import EvaluatorResult, T_Result
+from ragelo.types.results import EvaluatorResult
 from ragelo.utils import call_async_fn, get_pbar
 
 if TYPE_CHECKING:
     from ragelo.types.experiment import Experiment
+
+T_Result = TypeVar("T_Result", bound=EvaluatorResult)
 
 
 class BaseEvaluator(ABC):

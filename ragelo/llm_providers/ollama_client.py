@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, TypeVar
 
 from openai import AsyncOpenAI
 from pydantic import BaseModel, ValidationError
@@ -11,6 +11,8 @@ from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, LLMProviderF
 from ragelo.types.configurations import OllamaConfiguration
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.types import LLMProviderTypes
+
+T_Schema = TypeVar("T_Schema", bound=BaseModel)
 
 
 @LLMProviderFactory.register(LLMProviderTypes.OLLAMA)

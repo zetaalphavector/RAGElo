@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any, Type
 from unittest.mock import AsyncMock
 
@@ -30,8 +31,10 @@ from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.results import (
     AnswerEvaluatorResult,
     EloTournamentResult,
+    PairwiseEvaluationAnswer,
     PairwiseGameEvaluatorResult,
     RDNAMEvaluatorResult,
+    RetrievalEvaluationAnswer,
     RetrievalEvaluatorResult,
 )
 from ragelo.types.types import AnswerEvaluatorTypes, RetrievalEvaluatorTypes
@@ -200,6 +203,90 @@ def openai_client_mock(mocker, responses_api_mock):
     openai_client.responses.parse = mocker.AsyncMock(side_effect=create_side_effect)
 
     return openai_client
+
+
+@pytest.fixture
+def flexible_openai_client_mock(mocker):
+    """Flexible OpenAI client mock that can work with any answer schema.
+
+    This mock dynamically generates responses based on the schema provided,
+    supporting both json_mode=True (responses.create) and json_mode=False (responses.parse).
+    """
+
+    openai_client = mocker.AsyncMock(AsyncOpenAI)
+    type(openai_client).responses = mocker.AsyncMock()
+
+    def get_sample_data_for_schema(schema_type):
+        """Generate sample data for different answer schemas."""
+        if schema_type == RetrievalEvaluationAnswer or schema_type.__name__ == "RetrievalEvaluationAnswer":
+            return {"reasoning": "The document is highly relevant to the query", "score": 2}
+        elif schema_type == PairwiseEvaluationAnswer or schema_type.__name__ == "PairwiseEvaluationAnswer":
+            return {
+                "answer_a_analysis": "Answer A is comprehensive and accurate",
+                "answer_b_analysis": "Answer B is less detailed",
+                "comparison_reasoning": "Answer A provides more depth",
+                "winner": "A",
+            }
+        else:
+            # Fallback for other schemas
+            return {"score": 1, "reasoning": "Generic response"}
+
+    def create_side_effect(*args, **kwargs):
+        """Mock responses.create (used when json_mode=True)."""
+        resp = mocker.Mock()
+        resp.output_text = '{"reasoning": "The document is highly relevant to the query", "score": 2}'
+        return resp
+
+    def parse_side_effect(*args, **kwargs):
+        """Mock responses.parse (used when json_mode=False)."""
+        text_format = kwargs.get("text_format")
+        resp = mocker.Mock()
+
+        if text_format:
+            sample_data = get_sample_data_for_schema(text_format)
+
+            resp.output_text = json.dumps(sample_data)
+            resp.output_parsed = text_format(**sample_data)
+        else:
+            resp.output_text = "Generic response"
+            resp.output_parsed = None
+
+        return resp
+
+    openai_client.responses.create = mocker.AsyncMock(side_effect=create_side_effect)
+    openai_client.responses.parse = mocker.AsyncMock(side_effect=parse_side_effect)
+
+    return openai_client
+
+
+@pytest.fixture
+def openai_provider_structured(flexible_openai_client_mock, monkeypatch):
+    """OpenAI provider configured for structured mode (json_mode=False) with mocked client."""
+    from ragelo.llm_providers.openai_client import OpenAIProvider
+
+    config = OpenAIConfiguration(
+        api_key="fake_key",
+        model="fake_model",
+        json_mode=False,
+    )
+    provider = OpenAIProvider(config=config)
+    monkeypatch.setattr(provider, "_OpenAIProvider__openai_client", flexible_openai_client_mock)
+    return provider
+
+
+@pytest.fixture
+def openai_provider_json_mode(flexible_openai_client_mock, monkeypatch):
+    """OpenAI provider configured for JSON mode (json_mode=True) with mocked client."""
+    from ragelo.llm_providers.openai_client import OpenAIProvider
+
+    config = OpenAIConfiguration(
+        api_key="fake_key",
+        model="fake_model",
+        json_mode=True,
+    )
+    provider = OpenAIProvider(config=config)
+    monkeypatch.setattr(provider, "_OpenAIProvider__openai_client", flexible_openai_client_mock)
+    return provider
 
 
 @pytest.fixture
