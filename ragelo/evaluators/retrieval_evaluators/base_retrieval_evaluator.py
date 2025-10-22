@@ -28,7 +28,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
 
     config: BaseRetrievalEvaluatorConfig
     evaluable_name: str = "Retrieved document"
-    result_type = RetrievalEvaluatorResult
+    result_type: type[RetrievalEvaluatorResult] = RetrievalEvaluatorResult
 
     def __init__(self, config: BaseRetrievalEvaluatorConfig, llm_provider: BaseLLMProvider):
         super().__init__(config, llm_provider)
@@ -77,43 +77,41 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             cached_eval = document.evaluations[evaluator_name]
             if isinstance(cached_eval, RetrievalEvaluatorResult):
                 return cached_eval
+
+        # Get the answer schema type from the result_type's 'answer' field
+        answer_field = self.result_type.model_fields.get("answer")
+        if not answer_field or not answer_field.annotation:
+            raise ValueError(f"Result type {self.result_type} does not have an 'answer' field with annotation")
+
+        answer_type = answer_field.annotation
+        # Handle Optional types (answer_type might be "SomeType | None")
+        if hasattr(answer_type, "__args__"):
+            # Get the first non-None type from the union
+            answer_type = next((arg for arg in answer_type.__args__ if arg is not type(None)), answer_type)
+
         llm_input = self._build_message(query, document)
-        llm_response = LLMResponseType[RetrievalEvaluatorResult](raw_answer="", parsed_answer=None)
+        parsed_answer = None
+        raw_answer = ""
         try:
             llm_response = await self.llm_provider.call_async(
                 input=llm_input,
-                response_schema=self.result_type,
+                response_schema=answer_type,
             )
             llm_response = self._process_answer(llm_response)
+            parsed_answer = llm_response.parsed_answer
+            raw_answer = llm_response.raw_answer
         except Exception as e:
             if isinstance(e, RetryError):
                 exc = str(e) + "\nLLM Error: \n" + str(e.last_attempt.exception())
-            elif llm_response.raw_answer:
-                exc = str(e) + f"\nRaw answer: {llm_response.raw_answer}"
+            elif raw_answer:
+                exc = str(e) + f"\nRaw answer: {raw_answer}"
             logger.warning(f"Failed to generate answer for qid: {query.qid} and document: {document.did}: {exc}")
 
-        parsed = llm_response.parsed_answer
-        score = None
-        reasoning = None
-        intent_match = None
-        trustworthiness = None
-        if parsed is not None:
-            try:
-                reasoning = getattr(parsed, "reasoning", None)
-                score = getattr(parsed, "score", None)
-                intent_match = getattr(parsed, "intent_match", None)
-                trustworthiness = getattr(parsed, "trustworthiness", None)
-            except Exception:
-                pass
-
-        return RetrievalEvaluatorResult(
+        return self.result_type(
             qid=query.qid,
             did=document.did,
             evaluator_name=str(self.config.evaluator_name),
-            score=score,
-            reasoning=reasoning,
-            intent_match=intent_match,
-            trustworthiness=trustworthiness,
+            answer=parsed_answer,
             exception=exc,
         )
 

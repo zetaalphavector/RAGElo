@@ -4,7 +4,6 @@ https://arxiv.org/abs/2309.10621
 """
 
 import numpy as np
-from pydantic import BaseModel, Field
 
 from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     BaseRetrievalEvaluator,
@@ -15,32 +14,19 @@ from ragelo.types.configurations import RDNAMEvaluatorConfig
 from ragelo.types.evaluables import Document
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.query import Query
-from ragelo.types.results import RDNAMEvaluatorResult
+from ragelo.types.results import (
+    RDNAMEvaluationAnswer,
+    RDNAMEvaluatorResult,
+    RDNAMMultipleAnnotatorsAnswer,
+    RDNAMMUltipleAnnotatorsFormat,
+    RDNAMMultipleAnnotatorsNoAspectsAnswer,
+    RDNAMMultipleAnnotatorsNoAspectsFormat,
+    RDNAMNoAspects,
+    RDNAMNoAspectsAnswer,
+    T_Result,
+)
 from ragelo.types.types import RetrievalEvaluatorTypes
 from ragelo.utils import string_to_template
-
-
-class RDNAMNoAspects(BaseModel):
-    overall: float = Field(
-        ...,
-        description="An number between 0 and 2 representing the score of the document.",
-    )
-
-
-class RDNAMMUltipleAnnotatorsFormat(BaseModel):
-    annotator_1: RDNAMEvaluatorResult
-    annotator_2: RDNAMEvaluatorResult
-    annotator_3: RDNAMEvaluatorResult
-    annotator_4: RDNAMEvaluatorResult
-    annotator_5: RDNAMEvaluatorResult
-
-
-class RDNAMMultipleAnnotatorsNoAspectsFormat(BaseModel):
-    annotator_1: RDNAMNoAspects
-    annotator_2: RDNAMNoAspects
-    annotator_3: RDNAMNoAspects
-    annotator_4: RDNAMNoAspects
-    annotator_5: RDNAMNoAspects
 
 
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.RDNAM)
@@ -79,7 +65,12 @@ class RDNAMEvaluator(BaseRetrievalEvaluator):
         We asked five search engine raters to evaluate the relevance of the web page for the query.
         Each rater used their own independent judgement.
         {%- endif %}""")
-    result_type = RDNAMEvaluatorResult
+    result_type: (
+        type[RDNAMEvaluatorResult]
+        | type[RDNAMMUltipleAnnotatorsFormat]
+        | type[RDNAMMultipleAnnotatorsNoAspectsFormat]
+        | type[RDNAMNoAspects]
+    ) = RDNAMEvaluatorResult
 
     def __init__(self, config: RDNAMEvaluatorConfig, llm_provider: BaseLLMProvider):
         """Initializes an evaluator based on RDNAM framework."""
@@ -107,67 +98,72 @@ class RDNAMEvaluator(BaseRetrievalEvaluator):
             user_message=self.user_prompt.render(**context),
         )
 
-    def _process_answer(self, llm_response: LLMResponseType) -> LLMResponseType:
+    def _process_answer(self, llm_response: LLMResponseType[T_Result]) -> LLMResponseType[T_Result]:
         parsed = llm_response.parsed_answer
-        assert isinstance(self.result_type, type(BaseModel))
-        assert isinstance(parsed, self.result_type)
+        if parsed is None:
+            return llm_response
 
         if self.config.use_multiple_annotators:
-            assert isinstance(parsed, RDNAMMUltipleAnnotatorsFormat)
-            score = float(
-                np.mean(
-                    [
-                        parsed.annotator_1.overall,
-                        parsed.annotator_2.overall,
-                        parsed.annotator_3.overall,
-                        parsed.annotator_4.overall,
-                        parsed.annotator_5.overall,
-                    ]
-                )
-            )
+            # parsed is RDNAMMultipleAnnotatorsAnswer or RDNAMMultipleAnnotatorsNoAspectsAnswer
             if self.config.use_aspects:
-                trustworthiness = [
+                assert isinstance(parsed, RDNAMMultipleAnnotatorsAnswer)
+                score = float(
+                    np.mean(
+                        [
+                            parsed.annotator_1.score,
+                            parsed.annotator_2.score,
+                            parsed.annotator_3.score,
+                            parsed.annotator_4.score,
+                            parsed.annotator_5.score,
+                        ]
+                    )
+                )
+                trustworthiness_vals = [
                     parsed.annotator_1.trustworthiness,
                     parsed.annotator_2.trustworthiness,
                     parsed.annotator_3.trustworthiness,
                     parsed.annotator_4.trustworthiness,
                     parsed.annotator_5.trustworthiness,
                 ]
-                intent_match = [
+                intent_match_vals = [
                     parsed.annotator_1.intent_match,
                     parsed.annotator_2.intent_match,
                     parsed.annotator_3.intent_match,
                     parsed.annotator_4.intent_match,
                     parsed.annotator_5.intent_match,
                 ]
-                intent_match = float(np.mean(intent_match))  # type: ignore
-                trustworthiness = float(np.mean(trustworthiness))  # type: ignore
-            else:
-                intent_match = None
-                trustworthiness = None
-        else:
-            assert isinstance(parsed, RDNAMEvaluatorResult) or isinstance(parsed, RDNAMNoAspects)
-            score = parsed.score
-            if self.config.use_aspects:
-                assert isinstance(parsed, RDNAMEvaluatorResult)
-                intent_match = parsed.intent_match  # type: ignore
-                trustworthiness = parsed.trustworthiness  # type: ignore
-            else:
-                intent_match = None
-                trustworthiness = None
+                intent_match: float | None = float(np.mean(intent_match_vals))  # type: ignore
+                trustworthiness: float | None = float(np.mean(trustworthiness_vals))  # type: ignore
 
-        response = RDNAMEvaluatorResult(
-            score=score,
-            intent_match=intent_match,
-            trustworthiness=trustworthiness,
-        )
+                # Create aggregated answer
+                response = RDNAMEvaluationAnswer(
+                    score=score,
+                    reasoning="Aggregated from 5 annotators",
+                    intent_match=intent_match,
+                    trustworthiness=trustworthiness,
+                )
+            else:
+                assert isinstance(parsed, RDNAMMultipleAnnotatorsNoAspectsAnswer)
+                score = float(
+                    np.mean(
+                        [
+                            parsed.annotator_1.overall,
+                            parsed.annotator_2.overall,
+                            parsed.annotator_3.overall,
+                            parsed.annotator_4.overall,
+                            parsed.annotator_5.overall,
+                        ]
+                    )
+                )
+                # Create aggregated answer without aspects
+                response = RDNAMNoAspectsAnswer(
+                    overall=score,
+                )
+        else:
+            # parsed is already RDNAMEvaluationAnswer or RDNAMNoAspectsAnswer
+            response = parsed  # type: ignore
 
         return LLMResponseType(
             raw_answer=llm_response.raw_answer,
-            parsed_answer=response,
+            parsed_answer=response,  # type: ignore
         )
-
-    async def evaluate_async(self, eval_sample: tuple[Query, Document]) -> RDNAMEvaluatorResult:
-        # Reuse base logic (including error handling and flattening), then cast to specialized class
-        base_result = await super().evaluate_async(eval_sample)
-        return RDNAMEvaluatorResult(**base_result.model_dump())

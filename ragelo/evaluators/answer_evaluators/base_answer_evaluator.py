@@ -14,7 +14,7 @@ from ragelo.types.evaluables import AgentAnswer, Document, Evaluable, PairwiseGa
 from ragelo.types.experiment import Experiment
 from ragelo.types.formats import LLMInputPrompt
 from ragelo.types.query import Query
-from ragelo.types.results import AnswerEvaluatorResult, PairwiseGameEvaluatorResult
+from ragelo.types.results import AnswerEvaluatorResult, PairwiseEvaluationAnswer, PairwiseGameEvaluatorResult
 from ragelo.types.types import AnswerEvaluatorTypes
 from ragelo.utils import call_async_fn
 
@@ -151,32 +151,39 @@ class BaseAnswerEvaluator(BaseEvaluator):
             evaluable (AgentAnswer): The agent's answer to evaluate.
         """
         agent = evaluable.agent
+
+        # Get the answer schema type from the result_type's 'answer' field
+        answer_field = self.result_type.model_fields.get("answer")
+        if not answer_field or not answer_field.annotation:
+            raise ValueError(f"Result type {self.result_type} does not have an 'answer' field with annotation")
+
+        answer_type = answer_field.annotation
+        # Handle Optional types (answer_type might be "SomeType | None")
+        if hasattr(answer_type, "__args__"):
+            # Get the first non-None type from the union
+            answer_type = next((arg for arg in answer_type.__args__ if arg is not type(None)), answer_type)
+
         prompt = self._build_message(query, evaluable)
         exc = None
+        parsed_answer = None
+        raw_answer = ""
         try:
             llm_response = await self.llm_provider.call_async(
                 input=prompt,
-                response_schema=self.result_type,
+                response_schema=answer_type,
             )
             llm_response = self._process_answer(llm_response)
+            parsed_answer = llm_response.parsed_answer
+            raw_answer = llm_response.raw_answer
         except Exception as e:
-            exc = str(e) + f"\nRaw answer: {llm_response.raw_answer}"
+            exc = str(e) + f"\nRaw answer: {raw_answer}"
             logger.warning(f"Failed to generate answer for qid: {query.qid} and agent: {agent}: {exc}")
-        parsed = llm_response.parsed_answer
-        score = None
-        reasoning = None
-        if parsed is not None:
-            try:
-                reasoning = getattr(parsed, "reasoning", None)
-                score = getattr(parsed, "score", None)
-            except Exception:
-                pass
+
         return AnswerEvaluatorResult(
             qid=query.qid,
             agent=agent,
             evaluator_name=str(self.config.evaluator_name),
-            score=score,
-            reasoning=reasoning,
+            answer=parsed_answer,
             exception=exc,
         )
 
@@ -189,43 +196,54 @@ class BaseAnswerEvaluator(BaseEvaluator):
         """
         agent = (evaluable.agent_a_answer.agent, evaluable.agent_b_answer.agent)
         game = evaluable
-        prompt = self._build_message_pairwise(query, evaluable)
+
         if not issubclass(self.result_type, PairwiseGameEvaluatorResult):
             raise ValueError(
                 f"For a pairwise game, the result type must be a {PairwiseGameEvaluatorResult.__name__} not a {self.result_type.__name__}"
             )
+
+        # Get the answer schema type from the result_type's 'answer' field
+        answer_field = self.result_type.model_fields.get("answer")
+        if not answer_field or not answer_field.annotation:
+            raise ValueError(f"Result type {self.result_type} does not have an 'answer' field with annotation")
+
+        answer_type = answer_field.annotation
+        # Handle Optional types (answer_type might be "SomeType | None")
+        if hasattr(answer_type, "__args__"):
+            # Get the first non-None type from the union
+            answer_type = next((arg for arg in answer_type.__args__ if arg is not type(None)), answer_type)
+
+        prompt = self._build_message_pairwise(query, evaluable)
         exc = None
+        parsed_answer = None
+        raw_answer = ""
         try:
             llm_response = await self.llm_provider.call_async(
                 input=prompt,
-                response_schema=self.result_type,
+                response_schema=answer_type,
             )
             llm_response = self._process_answer(llm_response)
+            parsed_answer = llm_response.parsed_answer
+            raw_answer = llm_response.raw_answer
         except Exception as e:
-            exc = str(e) + f"\nRaw answer: {llm_response.raw_answer}"
+            exc = str(e) + f"\nRaw answer: {raw_answer}"
             logger.warning(f"Failed to generate answer for qid: {query.qid} and agents: {agent}: {exc}")
-            return PairwiseGameEvaluatorResult(
+            return self.result_type(
                 qid=query.qid,
                 agent_a=evaluable.agent_a_answer.agent,
                 agent_b=evaluable.agent_b_answer.agent,
                 evaluator_name=str(self.config.evaluator_name),
-                answer_a_analysis=None,
-                answer_b_analysis=None,
-                comparison_reasoning=None,
-                winner=None,
+                answer=None,
                 exception=exc,
             )
-        parsed = llm_response.parsed_answer
-        winner = getattr(parsed, "winner", None)
-        answer = PairwiseGameEvaluatorResult(
+
+        winner = getattr(parsed_answer, "winner", None) if parsed_answer else None
+        answer = self.result_type(
             qid=query.qid,
             agent_a=evaluable.agent_a_answer.agent,
             agent_b=evaluable.agent_b_answer.agent,
             evaluator_name=str(self.config.evaluator_name),
-            answer_a_analysis=getattr(parsed, "answer_a_analysis", None),
-            answer_b_analysis=getattr(parsed, "answer_b_analysis", None),
-            comparison_reasoning=getattr(parsed, "comparison_reasoning", None),
-            winner=winner,
+            answer=parsed_answer,
             exception=exc,
         )
 
@@ -237,40 +255,43 @@ class BaseAnswerEvaluator(BaseEvaluator):
         inverse_prompt = self._build_message_pairwise(query, inverse_game, inverse=True)
         inverse_llm_response = await self.llm_provider.call_async(
             input=inverse_prompt,
-            response_schema=self.result_type,
+            response_schema=answer_type,
         )
         inverse_llm_response = self._process_answer(inverse_llm_response)
         inv = inverse_llm_response.parsed_answer
-        inverse_answer = PairwiseGameEvaluatorResult(
+        inverse_answer = self.result_type(
             qid=query.qid,
             agent_a=evaluable.agent_b_answer.agent,
             agent_b=evaluable.agent_a_answer.agent,
             evaluator_name=str(self.config.evaluator_name),
-            answer_a_analysis=(getattr(inv, "answer_a_analysis", None) if inv is not None else None),
-            answer_b_analysis=(getattr(inv, "answer_b_analysis", None) if inv is not None else None),
-            comparison_reasoning=(getattr(inv, "comparison_reasoning", None) if inv is not None else None),
-            winner=(getattr(inv, "winner", None) if inv is not None else None),
+            answer=inv,
             exception=exc,
         )
-        winner_inverse = inverse_llm_response.parsed_answer.winner
+
+        winner_inverse = getattr(inv, "winner", None) if inv is not None else None
         if winner_inverse == "A" and winner == "B":
             return answer
         if winner_inverse == "B" and winner == "C":
             return inverse_answer
         if winner_inverse == "C" and winner == "A":
             return answer
-        # Assume a tie
-        return PairwiseGameEvaluatorResult(
-            qid=query.qid,
-            agent_a=evaluable.agent_a_answer.agent,
-            agent_b=evaluable.agent_b_answer.agent,
-            evaluator_name=str(self.config.evaluator_name),
+
+        # Assume a tie - merge the analyses from both directions
+
+        merged_answer = PairwiseEvaluationAnswer(
             answer_a_analysis=(answer.answer_a_analysis or "") + " \n\n " + (inverse_answer.answer_a_analysis or ""),
             answer_b_analysis=(answer.answer_b_analysis or "") + " \n\n " + (inverse_answer.answer_b_analysis or ""),
             comparison_reasoning=(answer.comparison_reasoning or "")
             + " \n\n "
             + (inverse_answer.comparison_reasoning or ""),
             winner="C",
+        )
+        return self.result_type(
+            qid=query.qid,
+            agent_a=evaluable.agent_a_answer.agent,
+            agent_b=evaluable.agent_b_answer.agent,
+            evaluator_name=str(self.config.evaluator_name),
+            answer=merged_answer,
             exception=exc,
         )
 

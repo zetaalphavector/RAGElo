@@ -1,57 +1,50 @@
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal, TypeVar
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, Field, computed_field, field_serializer, model_validator
 from pydantic.json_schema import SkipJsonSchema
 
 
-class EvaluatorResult(BaseModel):
-    """Generic class with the results of an evaluator.
-    Args:
-        qid str: The query ID to which the result corresponds.
-        evaluator_name str: The name of the evaluator that produced this result.
-        agent str | None: The agent that provided the answer or retrieved the document.
-        exception Optional[str]: Any exception captured during evaluation.
-    """
+class EvaluationAnswer(BaseModel):
+    """Base class for LLM-generated evaluation content (without metadata)."""
 
-    qid: Annotated[str, SkipJsonSchema] = Field(description="The query ID to which the result corresponds.")
-    evaluator_name: Annotated[str, SkipJsonSchema] = Field(
-        description="The name of the evaluator that produced this result."
-    )
-    exception: Annotated[str | None, SkipJsonSchema] = Field(
-        default=None, description="Any exception captured during evaluation."
-    )
-
-    def strigify_answer(self) -> str:
-        return self.model_dump_json(indent=4)
+    pass
 
 
-class RetrievalEvaluatorResult(EvaluatorResult):
-    """Flattened results of a retrieval evaluator.
-    Args:
-        did str: The document ID to which the result corresponds.
-        score Optional[float|int]: Normalized relevance score (e.g., 0-2). If unavailable, may be None.
-        reasoning Optional[str]: Reasoning for the score when available.
-        intent_match Optional[float]: Optional aspect (RDNAM).
-        trustworthiness Optional[float]: Optional aspect (RDNAM).
-    """
+class RetrievalEvaluationAnswer(EvaluationAnswer):
+    """LLM-generated evaluation for retrieval tasks."""
 
-    did: Annotated[str, SkipJsonSchema] = Field(description="The document ID to which the result corresponds.")
     reasoning: str = Field(..., description="A concise explanation and reasoning of the relevance of the document.")
     score: float | int = Field(
         ...,
         description="Your relevance score for the document. 0 for non-relevant, 1 for somewhat relevant and 2 for highly relevant.",
     )
 
-    def strigify_answer(self) -> str:
-        return f"Score: {self.score}\nReasoning: {self.reasoning}"
+
+class AnswerEvaluationAnswer(EvaluationAnswer):
+    """LLM-generated evaluation for answer quality tasks."""
+
+    reasoning: str = Field(..., description="A concise explanation and reasoning of the quality of the answer.")
+    score: int = Field(
+        ...,
+        description="Your score for the quality of the answer. 0 if the answer does not answer the question, 1 if the answer answers the question but is not very helpful and 2 if the answer answers the question and is very helpful.",
+    )
 
 
-class RDNAMEvaluatorResult(RetrievalEvaluatorResult):
-    """Specialized retrieval result for RDNAM.
-    Keeps flattened fields but signals specific evaluator semantics.
-    """
+class PairwiseEvaluationAnswer(EvaluationAnswer):
+    """LLM-generated evaluation for pairwise comparison tasks."""
+
+    answer_a_analysis: str = Field(..., description="A string with your analysis of assistant A's answer")
+    answer_b_analysis: str = Field(..., description="A string with your analysis of assistant B's answer")
+    comparison_reasoning: str = Field(
+        ..., description="A string with your comparison between the two answers and their differences"
+    )
+    winner: Literal["A", "B", "C"] = Field(..., description="The winner of the pairwise comparison.")
+
+
+class RDNAMEvaluationAnswer(RetrievalEvaluationAnswer):
+    """LLM-generated evaluation for RDNAM retrieval tasks."""
 
     score: float = Field(
         ...,
@@ -65,54 +58,209 @@ class RDNAMEvaluatorResult(RetrievalEvaluatorResult):
         ..., description="An number between 0 and 2 representing the trustworthiness of the document."
     )
 
+
+class RDNAMNoAspectsAnswer(EvaluationAnswer):
+    """LLM-generated evaluation for RDNAM without aspects."""
+
+    overall: float = Field(
+        ...,
+        description="An number between 0 and 2 representing the score of the document.",
+    )
+
+
+class RDNAMMultipleAnnotatorsAnswer(EvaluationAnswer):
+    """LLM-generated evaluation simulating 5 RDNAM annotators."""
+
+    annotator_1: RDNAMEvaluationAnswer
+    annotator_2: RDNAMEvaluationAnswer
+    annotator_3: RDNAMEvaluationAnswer
+    annotator_4: RDNAMEvaluationAnswer
+    annotator_5: RDNAMEvaluationAnswer
+
+
+class RDNAMMultipleAnnotatorsNoAspectsAnswer(EvaluationAnswer):
+    """LLM-generated evaluation simulating 5 RDNAM annotators without aspects."""
+
+    annotator_1: RDNAMNoAspectsAnswer
+    annotator_2: RDNAMNoAspectsAnswer
+    annotator_3: RDNAMNoAspectsAnswer
+    annotator_4: RDNAMNoAspectsAnswer
+    annotator_5: RDNAMNoAspectsAnswer
+
+
+class EvaluatorResult(BaseModel):
+    """Generic class with the results of an evaluator.
+    Args:
+        qid str: The query ID to which the result corresponds.
+        evaluator_name str: The name of the evaluator that produced this result.
+        exception Optional[str]: Any exception captured during evaluation.
+        answer: The LLM-generated evaluation content (without metadata).
+    """
+
+    qid: Annotated[str, SkipJsonSchema] = Field(description="The query ID to which the result corresponds.")
+    evaluator_name: Annotated[str, SkipJsonSchema] = Field(
+        description="The name of the evaluator that produced this result."
+    )
+    exception: Annotated[str | None, SkipJsonSchema] = Field(
+        default=None, description="Any exception captured during evaluation."
+    )
+    answer: EvaluationAnswer | None = Field(default=None, description="The LLM-generated evaluation content.")
+
+    @field_serializer("answer")
+    def serialize_answer(self, answer: EvaluationAnswer | None, _info) -> dict[str, Any] | None:
+        """Serialize the answer field using its actual runtime type, not the base type."""
+        if answer is None:
+            return None
+        # Use the actual class's model_dump to get all fields
+        return answer.model_dump()
+
     def strigify_answer(self) -> str:
-        return f"Score: {self.score}\nReasoning: {self.reasoning}\nIntent Match: {self.intent_match}\nTrustworthiness: {self.trustworthiness}"
+        return self.model_dump_json(indent=4)
+
+
+class RetrievalEvaluatorResult(EvaluatorResult):
+    """Results of a retrieval evaluator.
+    Args:
+        did str: The document ID to which the result corresponds.
+        answer: The LLM-generated evaluation with score and reasoning (typically RetrievalEvaluationAnswer).
+    """
+
+    did: Annotated[str, SkipJsonSchema] = Field(description="The document ID to which the result corresponds.")
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_answer_type(cls, data: Any) -> Any:
+        """Ensure answer is deserialized as the correct subclass type."""
+        if isinstance(data, dict) and "answer" in data and data["answer"] is not None:
+            answer_data = data["answer"]
+            if isinstance(answer_data, dict) and not isinstance(answer_data, BaseModel):
+                # Deserialize as RetrievalEvaluationAnswer by default
+                data["answer"] = RetrievalEvaluationAnswer.model_validate(answer_data)
+        return data
+
+    @property
+    def score(self) -> float | int | None:
+        """Convenience property to access the score from the nested answer."""
+        if self.answer and hasattr(self.answer, "score"):
+            return self.answer.score  # type: ignore
+        return None
+
+    @property
+    def reasoning(self) -> str | None:
+        """Convenience property to access the reasoning from the nested answer."""
+        if self.answer and hasattr(self.answer, "reasoning"):
+            return self.answer.reasoning  # type: ignore
+        return None
+
+    def strigify_answer(self) -> str:
+        if self.answer and hasattr(self.answer, "score") and hasattr(self.answer, "reasoning"):
+            return f"Score: {self.answer.score}\nReasoning: {self.answer.reasoning}"  # type: ignore
+        return "No answer available"
 
 
 class AnswerEvaluatorResult(EvaluatorResult):
-    """Flattened results of an answer evaluator for a single agent answer.
+    """Results of an answer evaluator for a single agent answer.
     Args:
         agent str: The agent that provided the answer.
-        score Optional[int]: Quality score.
-        reasoning Optional[str]: Reasoning for the score when available.
+        answer: The LLM-generated evaluation with score and reasoning (typically AnswerEvaluationAnswer).
     """
 
     agent: Annotated[str, SkipJsonSchema] = Field(description="The agent that provided the answer.")
-    reasoning: str = Field(..., description="A concise explanation and reasoning of the quality of the answer.")
-    score: int = Field(
-        ...,
-        description="Your score for the quality of the answer. 0 if the answer does not answer the question, 1 if the answer answers the question but is not very helpful and 2 if the answer answers the question and is very helpful.",
-    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_answer_type(cls, data: Any) -> Any:
+        """Ensure answer is deserialized as the correct subclass type."""
+        if isinstance(data, dict) and "answer" in data and data["answer"] is not None:
+            answer_data = data["answer"]
+            if isinstance(answer_data, dict) and not isinstance(answer_data, BaseModel):
+                # Deserialize as AnswerEvaluationAnswer by default
+                data["answer"] = AnswerEvaluationAnswer.model_validate(answer_data)
+        return data
+
+    @property
+    def score(self) -> int | None:
+        """Convenience property to access the score from the nested answer."""
+        if self.answer and hasattr(self.answer, "score"):
+            return self.answer.score  # type: ignore
+        return None
+
+    @property
+    def reasoning(self) -> str | None:
+        """Convenience property to access the reasoning from the nested answer."""
+        if self.answer and hasattr(self.answer, "reasoning"):
+            return self.answer.reasoning  # type: ignore
+        return None
 
     def strigify_answer(self) -> str:
-        return f"Score: {self.score}\nReasoning: {self.reasoning}"
+        if self.answer and hasattr(self.answer, "score") and hasattr(self.answer, "reasoning"):
+            return f"Score: {self.answer.score}\nReasoning: {self.answer.reasoning}"  # type: ignore
+        return "No answer available"
 
 
 class PairwiseGameEvaluatorResult(EvaluatorResult):
-    """Flattened results of a pairwise game evaluator.
+    """Results of a pairwise game evaluator.
     Args:
         agent_a str: The first agent that provided the answer.
         agent_b str: The second agent that provided the answer.
-        answer_a_analysis Optional[str]
-        answer_b_analysis Optional[str]
-        comparison_reasoning Optional[str]
-        winner Literal["A","B","C"]
+        answer: The LLM-generated pairwise evaluation (typically PairwiseEvaluationAnswer).
     """
 
     agent_a: Annotated[str, SkipJsonSchema]
     agent_b: Annotated[str, SkipJsonSchema]
-    answer_a_analysis: str = Field(..., description="A string with your analysis of assistant A's answer")
-    answer_b_analysis: str = Field(..., description="A string with your analysis of assistant B's answer")
-    comparison_reasoning: str = Field(
-        ..., description="A string with your comparison between the two answers and their differences"
-    )
-    winner: Literal["A", "B", "C"] = Field(..., description="The winner of the pairwise comparison.")
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_answer_type(cls, data: Any) -> Any:
+        """Ensure answer is deserialized as the correct subclass type."""
+        if isinstance(data, dict) and "answer" in data and data["answer"] is not None:
+            answer_data = data["answer"]
+            if isinstance(answer_data, dict) and not isinstance(answer_data, BaseModel):
+                # Deserialize as PairwiseEvaluationAnswer by default
+                data["answer"] = PairwiseEvaluationAnswer.model_validate(answer_data)
+        return data
+
+    @property
+    def answer_a_analysis(self) -> str | None:
+        """Convenience property to access answer_a_analysis from the nested answer."""
+        if self.answer and hasattr(self.answer, "answer_a_analysis"):
+            return self.answer.answer_a_analysis  # type: ignore
+        return None
+
+    @property
+    def answer_b_analysis(self) -> str | None:
+        """Convenience property to access answer_b_analysis from the nested answer."""
+        if self.answer and hasattr(self.answer, "answer_b_analysis"):
+            return self.answer.answer_b_analysis  # type: ignore
+        return None
+
+    @property
+    def comparison_reasoning(self) -> str | None:
+        """Convenience property to access comparison_reasoning from the nested answer."""
+        if self.answer and hasattr(self.answer, "comparison_reasoning"):
+            return self.answer.comparison_reasoning  # type: ignore
+        return None
+
+    @property
+    def winner(self) -> Literal["A", "B", "C"] | None:
+        """Convenience property to access winner from the nested answer."""
+        if self.answer and hasattr(self.answer, "winner"):
+            return self.answer.winner  # type: ignore
+        return None
 
     def strigify_answer(self) -> str:
-        return f"""Answer A Analysis: {self.answer_a_analysis}
-Answer B Analysis: {self.answer_b_analysis}
-Comparison Reasoning: {self.comparison_reasoning}
-Winner: {self.winner}"""
+        if (
+            self.answer
+            and hasattr(self.answer, "answer_a_analysis")
+            and hasattr(self.answer, "answer_b_analysis")
+            and hasattr(self.answer, "comparison_reasoning")
+            and hasattr(self.answer, "winner")
+        ):
+            return f"""Answer A Analysis: {self.answer.answer_a_analysis}
+Answer B Analysis: {self.answer.answer_b_analysis}
+Comparison Reasoning: {self.answer.comparison_reasoning}
+Winner: {self.answer.winner}"""
+        return "No answer available"
 
     @computed_field
     @property
@@ -135,3 +283,95 @@ class EloTournamentResult(BaseModel):
     std_dev: dict[str, float]
     total_games: int
     total_tournaments: int
+
+
+class RDNAMEvaluatorResult(RetrievalEvaluatorResult):
+    """Specialized retrieval result for RDNAM (answer is typically RDNAMEvaluationAnswer)."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_answer_type(cls, data: Any) -> Any:
+        """Ensure answer is deserialized as RDNAMEvaluationAnswer."""
+        if isinstance(data, dict) and "answer" in data and data["answer"] is not None:
+            answer_data = data["answer"]
+            if isinstance(answer_data, dict) and not isinstance(answer_data, BaseModel):
+                # Deserialize as RDNAMEvaluationAnswer
+                data["answer"] = RDNAMEvaluationAnswer.model_validate(answer_data)
+        return data
+
+    @property
+    def intent_match(self) -> float | None:
+        """Convenience property to access intent_match from the nested answer."""
+        if self.answer and hasattr(self.answer, "intent_match"):
+            return self.answer.intent_match  # type: ignore
+        return None
+
+    @property
+    def trustworthiness(self) -> float | None:
+        """Convenience property to access trustworthiness from the nested answer."""
+        if self.answer and hasattr(self.answer, "trustworthiness"):
+            return self.answer.trustworthiness  # type: ignore
+        return None
+
+    def strigify_answer(self) -> str:
+        if (
+            self.answer
+            and hasattr(self.answer, "score")
+            and hasattr(self.answer, "reasoning")
+            and hasattr(self.answer, "intent_match")
+            and hasattr(self.answer, "trustworthiness")
+        ):
+            return f"Score: {self.answer.score}\nReasoning: {self.answer.reasoning}\nIntent Match: {self.answer.intent_match}\nTrustworthiness: {self.answer.trustworthiness}"
+        return "No answer available"
+
+
+class RDNAMNoAspects(RetrievalEvaluatorResult):
+    """RDNAM result without aspects (answer is typically RDNAMNoAspectsAnswer)."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_answer_type(cls, data: Any) -> Any:
+        """Ensure answer is deserialized as RDNAMNoAspectsAnswer."""
+        if isinstance(data, dict) and "answer" in data and data["answer"] is not None:
+            answer_data = data["answer"]
+            if isinstance(answer_data, dict) and not isinstance(answer_data, BaseModel):
+                data["answer"] = RDNAMNoAspectsAnswer.model_validate(answer_data)
+        return data
+
+    @property
+    def overall(self) -> float | None:
+        """Convenience property to access overall score from the nested answer."""
+        if self.answer and hasattr(self.answer, "overall"):
+            return self.answer.overall  # type: ignore
+        return None
+
+
+class RDNAMMUltipleAnnotatorsFormat(RetrievalEvaluatorResult):
+    """RDNAM result simulating multiple annotators (answer is typically RDNAMMultipleAnnotatorsAnswer)."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_answer_type(cls, data: Any) -> Any:
+        """Ensure answer is deserialized as RDNAMMultipleAnnotatorsAnswer."""
+        if isinstance(data, dict) and "answer" in data and data["answer"] is not None:
+            answer_data = data["answer"]
+            if isinstance(answer_data, dict) and not isinstance(answer_data, BaseModel):
+                data["answer"] = RDNAMMultipleAnnotatorsAnswer.model_validate(answer_data)
+        return data
+
+
+class RDNAMMultipleAnnotatorsNoAspectsFormat(RetrievalEvaluatorResult):
+    """RDNAM result simulating multiple annotators without aspects (answer is typically RDNAMMultipleAnnotatorsNoAspectsAnswer)."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_answer_type(cls, data: Any) -> Any:
+        """Ensure answer is deserialized as RDNAMMultipleAnnotatorsNoAspectsAnswer."""
+        if isinstance(data, dict) and "answer" in data and data["answer"] is not None:
+            answer_data = data["answer"]
+            if isinstance(answer_data, dict) and not isinstance(answer_data, BaseModel):
+                data["answer"] = RDNAMMultipleAnnotatorsNoAspectsAnswer.model_validate(answer_data)
+        return data
+
+
+T_Result = TypeVar("T_Result", bound=EvaluatorResult)

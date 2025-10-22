@@ -2,17 +2,13 @@ from __future__ import annotations
 
 import os
 from abc import ABC, abstractmethod
-from typing import TypeVar, get_type_hints
-
-from pydantic import BaseModel
+from typing import get_type_hints
 
 from ragelo.types.configurations import LLMProviderConfig
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
-from ragelo.types.results import EvaluatorResult
+from ragelo.types.results import T_Result
 from ragelo.types.types import LLMProviderTypes
 from ragelo.utils import call_async_fn
-
-T_Result = TypeVar("T_Result", bound=EvaluatorResult)
 
 
 class BaseLLMProvider(ABC):

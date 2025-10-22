@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-from typing import Generic, TypeVar
+from typing import Generic
 
 from pydantic import BaseModel, model_validator
 
 from ragelo.logger import logger
-from ragelo.types.results import EvaluatorResult
-
-T_Result = TypeVar("T_Result", bound=EvaluatorResult)
+from ragelo.types.results import T_Result
 
 
 class LLMInputPrompt(BaseModel):

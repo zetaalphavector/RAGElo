@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from typing import Any, TypeVar
 
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 from openai.types.responses import ResponseTextConfigParam
@@ -12,10 +11,8 @@ from tenacity import retry, stop_after_attempt, wait_random_exponential
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, LLMProviderFactory
 from ragelo.types.configurations import OpenAIConfiguration
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
-from ragelo.types.results import EvaluatorResult
+from ragelo.types.results import T_Result
 from ragelo.types.types import LLMProviderTypes
-
-T_Result = TypeVar("T_Result", bound=EvaluatorResult)
 
 
 @LLMProviderFactory.register(LLMProviderTypes.OPENAI)
@@ -37,9 +34,11 @@ class OpenAIProvider(BaseLLMProvider):
 
         Args:
             input: A LLMInputPrompt object containing the system prompt, user message, or a list of messages.
-            response_schema: The schema of the response to expect. If config.json_mode is True, we will dump the response_schema to a JSON string and add it to the instructions.
+            response_schema: The schema of the response (typically an EvaluationAnswer subclass like RetrievalEvaluationAnswer).
+                This is the schema the LLM should fill in, without metadata fields.
         Returns:
-            The response from the OpenAI Responses API, formatted according to the answer_format. The LLMResponseType.raw_answer  contains the raw LLM response as a string and the LLMResponseType.parsed_answer contains the parsed response. This can be a number or string (if response_schema is None) a dictionary (if response_schema is a dictionary) or a Pydantic BaseModel (if response_schema is a Pydantic BaseModel)).
+            The response from the OpenAI Responses API. The LLMResponseType.raw_answer contains the raw LLM response
+            as a string and the LLMResponseType.parsed_answer contains the parsed response as an instance of response_schema.
         """
         llm_input: str | list[dict[str, str]]
         if input.messages:
