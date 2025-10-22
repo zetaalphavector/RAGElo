@@ -48,7 +48,6 @@ class OpenAIProvider(BaseLLMProvider):
             llm_input = input.user_message
         else:
             raise ValueError("No input provided")
-        parsed_answer: dict[str, Any] | T_Result
         if input.system_prompt:
             instructions = input.system_prompt
         else:
@@ -79,9 +78,8 @@ class OpenAIProvider(BaseLLMProvider):
                 text=ResponseTextConfigParam(format=ResponseFormatJSONObject(type="json_object")),
             )
             raw_answer = answers.output_text
-            parsed_answer = json.loads(raw_answer)
             try:
-                parsed_answer = response_schema.model_validate_json(parsed_answer)
+                parsed_answer = response_schema.model_validate_json(raw_answer)
             except ValidationError as e:
                 raise ValueError(
                     f"Failed to parse raw JSON answer {raw_answer} into the response schema {response_schema}: {e}"
@@ -96,6 +94,11 @@ class OpenAIProvider(BaseLLMProvider):
                 temperature=self.config.temperature,
                 max_output_tokens=self.config.max_tokens,
             )
+            if not isinstance(answers.output_parsed, response_schema):
+                raise ValueError(
+                    f"OpenAI failed to parse response into the response schema {response_schema}. "
+                    f"The response was: {answers.output_text}"
+                )
             parsed_answer = answers.output_parsed
             raw_answer = answers.output_text
 
