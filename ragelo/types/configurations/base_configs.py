@@ -50,16 +50,16 @@ class BaseEvaluatorConfig(BaseConfig):
         description="The user prompt to use for the evaluator. Should contain at least a {{ query.query }} placeholder for the query's text.",
     )
 
-    result_format: Type[EvaluatorResult] | None = Field(
+    result_type: Type[EvaluatorResult] | None = Field(
         default=None,
         description="The result format that the Evaluator will return. If not set, will use the llm_response_schema.",
     )
 
     @model_validator(mode="before")
     @classmethod
-    def validate_result_format(cls, values: dict[str, Any]) -> dict[str, Any]:
-        if values.get("result_format") is None:
-            values["result_format"] = values.get("llm_response_schema", None)
+    def validate_result_type(cls, values: dict[str, Any]) -> dict[str, Any]:
+        if values.get("result_type") is None:
+            values["result_type"] = values.get("llm_response_schema", None)
         return values
 
     @field_validator("system_prompt", "user_prompt", mode="before")

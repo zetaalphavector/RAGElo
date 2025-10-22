@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from typing import Any
-
 from pydantic import BaseModel, model_validator
 
 from ragelo.logger import logger
+from ragelo.types.results import EvaluatorResult
 
 
 class LLMInputPrompt(BaseModel):
@@ -28,4 +27,4 @@ class LLMInputPrompt(BaseModel):
 
 class LLMResponseType(BaseModel):
     raw_answer: str
-    parsed_answer: BaseModel | None
+    parsed_answer: EvaluatorResult | None

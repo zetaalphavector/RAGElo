@@ -29,11 +29,14 @@ class BaseEvaluator(ABC):
     system_prompt: Template | None = None
     user_prompt: Template
     evaluable_name: str = "Evaluable"
-    result_format: Type[EvaluatorResult]
+    result_type: Type[EvaluatorResult]
 
     def __init__(self, config: BaseEvaluatorConfig, llm_provider: BaseLLMProvider):
         self.config = config
-        self.result_format = config.result_format or config.llm_response_schema
+        if config.result_type:
+            self.result_type = config.result_type
+        else:
+            raise ValueError(f"Result format not set for evaluator {self.config.evaluator_name}")
         self.llm_provider = llm_provider
         if config.system_prompt:
             self.system_prompt = config.system_prompt

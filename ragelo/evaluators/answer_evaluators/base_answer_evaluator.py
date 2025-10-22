@@ -23,7 +23,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
     config: BaseAnswerEvaluatorConfig
     evaluable_name: str = "Agent Answer"
     _warned_queries: Set[str] = set()
-    result_format = AnswerEvaluatorResult
+    result_type = AnswerEvaluatorResult
 
     def evaluate(
         self,
@@ -156,7 +156,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
         try:
             llm_response = await self.llm_provider.call_async(
                 input=prompt,
-                response_schema=self.config.llm_response_schema,
+                response_schema=self.result_type,
             )
             llm_response = self._process_answer(llm_response)
         except Exception as e:
@@ -193,7 +193,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
         try:
             llm_response = await self.llm_provider.call_async(
                 input=prompt,
-                response_schema=self.config.llm_response_schema,
+                response_schema=self.result_type,
             )
             llm_response = self._process_answer(llm_response)
         except Exception as e:
@@ -223,7 +223,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
         inverse_prompt = self._build_message_pairwise(query, inverse_game, inverse=True)
         inverse_llm_response = await self.llm_provider.call_async(
             input=inverse_prompt,
-            response_schema=self.config.llm_response_schema,
+            response_schema=self.result_type,
         )
         inverse_llm_response = self._process_answer(inverse_llm_response)
         inv = inverse_llm_response.parsed_answer
@@ -418,7 +418,7 @@ class AnswerEvaluatorFactory:
                 f"Unknown answer evaluator {evaluator_name}\nValid options are {list(cls.registry.keys())}"
             )
         evaluator_class = cls.registry[evaluator_name]
-        return evaluator_class.result_format
+        return evaluator_class.result_type
 
     @classmethod
     def create(

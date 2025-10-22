@@ -79,20 +79,20 @@ class RDNAMEvaluator(BaseRetrievalEvaluator):
         We asked five search engine raters to evaluate the relevance of the web page for the query.
         Each rater used their own independent judgement.
         {%- endif %}""")
-    result_format = RDNAMEvaluatorResult
+    result_type = RDNAMEvaluatorResult
 
     def __init__(self, config: RDNAMEvaluatorConfig, llm_provider: BaseLLMProvider):
         """Initializes an evaluator based on RDNAM framework."""
         super().__init__(config, llm_provider)
         self._role = self.config.annotator_role if self.config.annotator_role else ""
         if self.config.use_aspects and self.config.use_multiple_annotators:
-            self.config.llm_response_schema = RDNAMMUltipleAnnotatorsFormat
+            self.result_type = RDNAMMUltipleAnnotatorsFormat
         elif self.config.use_aspects:
-            self.config.llm_response_schema = RDNAMEvaluatorResult
+            self.result_type = RDNAMEvaluatorResult
         elif self.config.use_multiple_annotators:
-            self.config.llm_response_schema = RDNAMMultipleAnnotatorsNoAspectsFormat
+            self.result_type = RDNAMMultipleAnnotatorsNoAspectsFormat
         else:
-            self.config.llm_response_schema = RDNAMNoAspects
+            self.result_type = RDNAMNoAspects
 
     def _build_message(self, query: Query, document: Document) -> LLMInputPrompt:
         context = {
@@ -109,8 +109,8 @@ class RDNAMEvaluator(BaseRetrievalEvaluator):
 
     def _process_answer(self, llm_response: LLMResponseType) -> LLMResponseType:
         parsed = llm_response.parsed_answer
-        assert isinstance(self.config.llm_response_schema, type(BaseModel))
-        assert isinstance(parsed, self.config.llm_response_schema)
+        assert isinstance(self.result_type, type(BaseModel))
+        assert isinstance(parsed, self.result_type)
 
         if self.config.use_multiple_annotators:
             assert isinstance(parsed, RDNAMMUltipleAnnotatorsFormat)

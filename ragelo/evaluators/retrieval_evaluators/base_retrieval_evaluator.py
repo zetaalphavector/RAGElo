@@ -28,7 +28,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
 
     config: BaseRetrievalEvaluatorConfig
     evaluable_name: str = "Retrieved document"
-    result_format = RetrievalEvaluatorResult
+    result_type = RetrievalEvaluatorResult
 
     def __init__(self, config: BaseRetrievalEvaluatorConfig, llm_provider: BaseLLMProvider):
         super().__init__(config, llm_provider)
@@ -188,7 +188,7 @@ class RetrievalEvaluatorFactory:
                 f"Unknown retrieval evaluator {evaluator_name}\nValid options are {list(cls.registry.keys())}"
             )
         evaluator_class = cls.registry[evaluator_name]
-        return evaluator_class.result_format
+        return evaluator_class.result_type
 
     @classmethod
     def create(

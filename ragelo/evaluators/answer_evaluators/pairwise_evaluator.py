@@ -13,7 +13,7 @@ class PairwiseAnswerEvaluator(BaseAnswerEvaluator):
     """An evaluator that evaluates RAG-based answers pairwise, with document reasoning and citations."""
 
     config: PairwiseEvaluatorConfig
-    result_format = PairwiseGameEvaluatorResult
+    result_type = PairwiseGameEvaluatorResult
     user_prompt_document = "[{did}] {doc}"
     user_prompt_annotation = "[{did}] {annotation}"
     user_prompt_document_and_annotation = "[{{ d.did }}] Content: {{ d.text }}\n Evaluation: {{ d.evaluation.answer }}"
