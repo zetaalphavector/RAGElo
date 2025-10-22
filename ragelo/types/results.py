@@ -5,87 +5,16 @@ from typing import Annotated, Any, Literal, TypeVar
 from pydantic import BaseModel, Field, computed_field, field_serializer, model_validator
 from pydantic.json_schema import SkipJsonSchema
 
-
-class EvaluationAnswer(BaseModel):
-    """Base class for LLM-generated evaluation content (without metadata)."""
-
-    pass
-
-
-class RetrievalEvaluationAnswer(EvaluationAnswer):
-    """LLM-generated evaluation for retrieval tasks."""
-
-    reasoning: str = Field(..., description="A concise explanation and reasoning of the relevance of the document.")
-    score: float | int = Field(
-        ...,
-        description="Your relevance score for the document. 0 for non-relevant, 1 for somewhat relevant and 2 for highly relevant.",
-    )
-
-
-class AnswerEvaluationAnswer(EvaluationAnswer):
-    """LLM-generated evaluation for answer quality tasks."""
-
-    reasoning: str = Field(..., description="A concise explanation and reasoning of the quality of the answer.")
-    score: int = Field(
-        ...,
-        description="Your score for the quality of the answer. 0 if the answer does not answer the question, 1 if the answer answers the question but is not very helpful and 2 if the answer answers the question and is very helpful.",
-    )
-
-
-class PairwiseEvaluationAnswer(EvaluationAnswer):
-    """LLM-generated evaluation for pairwise comparison tasks."""
-
-    answer_a_analysis: str = Field(..., description="A string with your analysis of assistant A's answer")
-    answer_b_analysis: str = Field(..., description="A string with your analysis of assistant B's answer")
-    comparison_reasoning: str = Field(
-        ..., description="A string with your comparison between the two answers and their differences"
-    )
-    winner: Literal["A", "B", "C"] = Field(..., description="The winner of the pairwise comparison.")
-
-
-class RDNAMEvaluationAnswer(RetrievalEvaluationAnswer):
-    """LLM-generated evaluation for RDNAM retrieval tasks."""
-
-    score: float = Field(
-        ...,
-        description="An number between 0 and 2 representing the score of the document.",
-    )
-    intent_match: float | None = Field(
-        ...,
-        description="An number between 0 and 2 representing the match of the document to the query intent.",
-    )
-    trustworthiness: float | None = Field(
-        ..., description="An number between 0 and 2 representing the trustworthiness of the document."
-    )
-
-
-class RDNAMNoAspectsAnswer(EvaluationAnswer):
-    """LLM-generated evaluation for RDNAM without aspects."""
-
-    score: float = Field(
-        ...,
-        description="An number between 0 and 2 representing the overall score of the document.",
-    )
-
-
-class RDNAMMultipleAnnotatorsAnswer(EvaluationAnswer):
-    """LLM-generated evaluation simulating 5 RDNAM annotators."""
-
-    annotator_1: RDNAMEvaluationAnswer
-    annotator_2: RDNAMEvaluationAnswer
-    annotator_3: RDNAMEvaluationAnswer
-    annotator_4: RDNAMEvaluationAnswer
-    annotator_5: RDNAMEvaluationAnswer
-
-
-class RDNAMMultipleAnnotatorsNoAspectsAnswer(EvaluationAnswer):
-    """LLM-generated evaluation simulating 5 RDNAM annotators without aspects."""
-
-    annotator_1: RDNAMNoAspectsAnswer
-    annotator_2: RDNAMNoAspectsAnswer
-    annotator_3: RDNAMNoAspectsAnswer
-    annotator_4: RDNAMNoAspectsAnswer
-    annotator_5: RDNAMNoAspectsAnswer
+from ragelo.types.answer_formats import (
+    AnswerEvaluationAnswer,
+    EvaluationAnswer,
+    PairwiseEvaluationAnswer,
+    RDNAMEvaluationAnswer,
+    RDNAMMultipleAnnotatorsAnswer,
+    RDNAMMultipleAnnotatorsNoAspectsAnswer,
+    RDNAMNoAspectsAnswer,
+    RetrievalEvaluationAnswer,
+)
 
 
 class EvaluatorResult(BaseModel):
@@ -126,6 +55,7 @@ class RetrievalEvaluatorResult(EvaluatorResult):
     """
 
     did: Annotated[str, SkipJsonSchema] = Field(description="The document ID to which the result corresponds.")
+    answer: RetrievalEvaluationAnswer
 
     @model_validator(mode="before")
     @classmethod
@@ -166,6 +96,7 @@ class AnswerEvaluatorResult(EvaluatorResult):
     """
 
     agent: Annotated[str, SkipJsonSchema] = Field(description="The agent that provided the answer.")
+    answer: AnswerEvaluationAnswer
 
     @model_validator(mode="before")
     @classmethod
@@ -208,6 +139,7 @@ class PairwiseGameEvaluatorResult(EvaluatorResult):
 
     agent_a: Annotated[str, SkipJsonSchema]
     agent_b: Annotated[str, SkipJsonSchema]
+    answer: PairwiseEvaluationAnswer
 
     @model_validator(mode="before")
     @classmethod
@@ -288,6 +220,8 @@ class EloTournamentResult(BaseModel):
 class RDNAMEvaluatorResult(RetrievalEvaluatorResult):
     """Specialized retrieval result for RDNAM (answer is typically RDNAMEvaluationAnswer)."""
 
+    answer: RDNAMEvaluationAnswer
+
     @model_validator(mode="before")
     @classmethod
     def validate_answer_type(cls, data: Any) -> Any:
@@ -325,8 +259,10 @@ class RDNAMEvaluatorResult(RetrievalEvaluatorResult):
         return "No answer available"
 
 
-class RDNAMNoAspects(RetrievalEvaluatorResult):
+class RDNAMNoAspectsResult(RetrievalEvaluatorResult):
     """RDNAM result without aspects (answer is typically RDNAMNoAspectsAnswer)."""
+
+    answer: RDNAMNoAspectsAnswer
 
     @model_validator(mode="before")
     @classmethod
@@ -346,8 +282,10 @@ class RDNAMNoAspects(RetrievalEvaluatorResult):
         return None
 
 
-class RDNAMMUltipleAnnotatorsFormat(RetrievalEvaluatorResult):
+class RDNAMMUltipleAnnotatorsResult(RetrievalEvaluatorResult):
     """RDNAM result simulating multiple annotators (answer is typically RDNAMMultipleAnnotatorsAnswer)."""
+
+    answer: RDNAMMultipleAnnotatorsAnswer
 
     @model_validator(mode="before")
     @classmethod
@@ -360,8 +298,10 @@ class RDNAMMUltipleAnnotatorsFormat(RetrievalEvaluatorResult):
         return data
 
 
-class RDNAMMultipleAnnotatorsNoAspectsFormat(RetrievalEvaluatorResult):
+class RDNAMMultipleAnnotatorsNoAspectsResult(RetrievalEvaluatorResult):
     """RDNAM result simulating multiple annotators without aspects (answer is typically RDNAMMultipleAnnotatorsNoAspectsAnswer)."""
+
+    answer: RDNAMMultipleAnnotatorsNoAspectsAnswer
 
     @model_validator(mode="before")
     @classmethod

@@ -10,19 +10,21 @@ from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     RetrievalEvaluatorFactory,
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
+from ragelo.types.answer_formats import (
+    RDNAMEvaluationAnswer,
+    RDNAMMultipleAnnotatorsAnswer,
+    RDNAMMultipleAnnotatorsNoAspectsAnswer,
+    RDNAMNoAspectsAnswer,
+)
 from ragelo.types.configurations import RDNAMEvaluatorConfig
 from ragelo.types.evaluables import Document
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.query import Query
 from ragelo.types.results import (
-    RDNAMEvaluationAnswer,
     RDNAMEvaluatorResult,
-    RDNAMMultipleAnnotatorsAnswer,
-    RDNAMMUltipleAnnotatorsFormat,
-    RDNAMMultipleAnnotatorsNoAspectsAnswer,
-    RDNAMMultipleAnnotatorsNoAspectsFormat,
-    RDNAMNoAspects,
-    RDNAMNoAspectsAnswer,
+    RDNAMMultipleAnnotatorsNoAspectsResult,
+    RDNAMMUltipleAnnotatorsResult,
+    RDNAMNoAspectsResult,
     T_Result,
 )
 from ragelo.types.types import RetrievalEvaluatorTypes
@@ -67,9 +69,9 @@ class RDNAMEvaluator(BaseRetrievalEvaluator):
         {%- endif %}""")
     result_type: (
         type[RDNAMEvaluatorResult]
-        | type[RDNAMMUltipleAnnotatorsFormat]
-        | type[RDNAMMultipleAnnotatorsNoAspectsFormat]
-        | type[RDNAMNoAspects]
+        | type[RDNAMMUltipleAnnotatorsResult]
+        | type[RDNAMMultipleAnnotatorsNoAspectsResult]
+        | type[RDNAMNoAspectsResult]
     ) = RDNAMEvaluatorResult
 
     def __init__(self, config: RDNAMEvaluatorConfig, llm_provider: BaseLLMProvider):
@@ -77,13 +79,13 @@ class RDNAMEvaluator(BaseRetrievalEvaluator):
         super().__init__(config, llm_provider)
         self._role = self.config.annotator_role if self.config.annotator_role else ""
         if self.config.use_aspects and self.config.use_multiple_annotators:
-            self.result_type = RDNAMMUltipleAnnotatorsFormat
+            self.result_type = RDNAMMUltipleAnnotatorsResult
         elif self.config.use_aspects:
             self.result_type = RDNAMEvaluatorResult
         elif self.config.use_multiple_annotators:
-            self.result_type = RDNAMMultipleAnnotatorsNoAspectsFormat
+            self.result_type = RDNAMMultipleAnnotatorsNoAspectsResult
         else:
-            self.result_type = RDNAMNoAspects
+            self.result_type = RDNAMNoAspectsResult
 
     def _build_message(self, query: Query, document: Document) -> LLMInputPrompt:
         context = {
@@ -142,6 +144,7 @@ class RDNAMEvaluator(BaseRetrievalEvaluator):
                     intent_match=intent_match,
                     trustworthiness=trustworthiness,
                 )
+                self.result_type = RDNAMEvaluatorResult
             else:
                 assert isinstance(parsed, RDNAMMultipleAnnotatorsNoAspectsAnswer)
                 score = float(
@@ -159,6 +162,7 @@ class RDNAMEvaluator(BaseRetrievalEvaluator):
                 response = RDNAMNoAspectsAnswer(
                     score=score,
                 )
+                self.result_type = RDNAMNoAspectsResult
         else:
             # parsed is already RDNAMEvaluationAnswer or RDNAMNoAspectsAnswer
             response = parsed  # type: ignore

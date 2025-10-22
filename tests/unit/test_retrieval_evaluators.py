@@ -11,14 +11,14 @@ from ragelo.evaluators.retrieval_evaluators import (
     ReasonerEvaluator,
 )
 from ragelo.types import Document, Query
-from ragelo.types.formats import LLMInputPrompt, LLMResponseType
-from ragelo.types.results import (
+from ragelo.types.answer_formats import (
     EvaluationAnswer,
     RDNAMEvaluationAnswer,
     RDNAMNoAspectsAnswer,
     RetrievalEvaluationAnswer,
-    RetrievalEvaluatorResult,
 )
+from ragelo.types.formats import LLMInputPrompt, LLMResponseType
+from ragelo.types.results import RetrievalEvaluatorResult
 from ragelo.utils import string_to_template
 
 

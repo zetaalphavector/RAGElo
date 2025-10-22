@@ -8,9 +8,16 @@ import pytest
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 
-from ragelo.evaluators.retrieval_evaluators.rdnam_evaluator import RDNAMMUltipleAnnotatorsFormat
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.llm_providers.openai_client import OpenAIConfiguration
+from ragelo.types.answer_formats import (
+    AnswerEvaluationAnswer,
+    EvaluationAnswer,
+    PairwiseEvaluationAnswer,
+    RDNAMEvaluationAnswer,
+    RDNAMMultipleAnnotatorsAnswer,
+    RetrievalEvaluationAnswer,
+)
 from ragelo.types.configurations import (
     BaseAnswerEvaluatorConfig,
     BaseEvaluatorConfig,
@@ -29,14 +36,9 @@ from ragelo.types.evaluables import ChatMessage
 from ragelo.types.experiment import Experiment
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.results import (
-    AnswerEvaluationAnswer,
     AnswerEvaluatorResult,
     EloTournamentResult,
-    PairwiseEvaluationAnswer,
     PairwiseGameEvaluatorResult,
-    RDNAMEvaluationAnswer,
-    RDNAMMultipleAnnotatorsAnswer,
-    RetrievalEvaluationAnswer,
     RetrievalEvaluatorResult,
 )
 from ragelo.types.types import AnswerEvaluatorTypes, RetrievalEvaluatorTypes
@@ -90,13 +92,19 @@ def answer_model_factory(input: LLMInputPrompt, response_schema, **kwargs):
                 score=2,
             ),
         )
-    if response_schema == PairwiseEvaluationAnswer:
-        raw_answer = (
-            '{"answer_a_analysis": "Answer A is good", "answer_b_analysis": "Answer B is bad", "comparison_reasoning": "A is better", "winner": "A"}',
-        )
-        return LLMResponseType(
-            raw_answer=raw_answer, parsed_answer=PairwiseEvaluationAnswer.model_validate_json(raw_answer)
-        )
+    if issubclass(response_schema, PairwiseEvaluationAnswer):
+        raw_answer = '{"answer_a_analysis": "Answer A is good", "answer_b_analysis": "Answer B is bad", "comparison_reasoning": "A is better", "winner": "A"}'
+        return LLMResponseType(raw_answer=raw_answer, parsed_answer=response_schema.model_validate_json(raw_answer))
+    # Check if it's a subclass of EvaluationAnswer (covers custom answer schemas)
+    if issubclass(response_schema, EvaluationAnswer):
+        # Try to instantiate with generic data
+        try:
+            raw_answer = '{"reasoning": "Generic", "score": 1}'
+            return LLMResponseType(
+                raw_answer=raw_answer, parsed_answer=response_schema.model_validate_json(raw_answer)
+            )
+        except:
+            pass
     if response_schema == AnswerFormat:
         return LLMResponseType(
             raw_answer='{"keyA": "valueA", "keyB": "valueB"}',
@@ -104,7 +112,7 @@ def answer_model_factory(input: LLMInputPrompt, response_schema, **kwargs):
         )
     if response_schema == AnswerEvaluatorFormat:
         return LLMResponseType(
-            raw_answer='{"quality": 1, "trustworthiness": 0, "originality": 0}',
+            raw_answer='{"quality": 1, "trustworthiness": 0, "originality": 0, "reasoning": "Test", "score": 1}',
             parsed_answer=response_schema(quality=1, trustworthiness=0, originality=0),
         )
     elif isinstance(response_schema, dict):
@@ -333,29 +341,42 @@ def experiment_with_conversations_and_reasonings(experiment):
             content="According to [3], Lyon is the second largest city in France. Meanwhile, Paris is its capital [2].",
         ),
     ]
-    experiment.queries["0"].retrieved_docs["0"].evaluation = RetrievalEvaluatorResult(
+    # Add evaluations to the evaluations dict with evaluator_name as key
+    experiment.queries["0"].retrieved_docs["0"].evaluations["reasoner"] = RetrievalEvaluatorResult(
         qid=experiment.queries["0"].qid,
         did="0",
-        raw_answer="The document is very relevant as it directly answers the user's question about the capital of Brazil",
-        answer="The document is very relevant as it directly answers the user's question about the capital of Brazil",
+        evaluator_name="reasoner",
+        answer=RetrievalEvaluationAnswer(
+            reasoning="The document is very relevant as it directly answers the user's question about the capital of Brazil",
+            score=2,
+        ),
     )
-    experiment.queries["0"].retrieved_docs["1"].evaluation = RetrievalEvaluatorResult(
+    experiment.queries["0"].retrieved_docs["1"].evaluations["reasoner"] = RetrievalEvaluatorResult(
         qid=experiment.queries["0"].qid,
         did="1",
-        raw_answer="The document is somewhat relevant as it provides historical information about the capital of Brazil, but it does not provide the current capital.",
-        answer="The document is somewhat relevant as it provides historical information about the capital of Brazil, but it does not provide the current capital.",
+        evaluator_name="reasoner",
+        answer=RetrievalEvaluationAnswer(
+            reasoning="The document is somewhat relevant as it provides historical information about the capital of Brazil, but it does not provide the current capital.",
+            score=1,
+        ),
     )
-    experiment.queries["1"].retrieved_docs["2"].evaluation = RetrievalEvaluatorResult(
+    experiment.queries["1"].retrieved_docs["2"].evaluations["reasoner"] = RetrievalEvaluatorResult(
         qid=experiment.queries["1"].qid,
         did="2",
-        raw_answer="The document is very relevant as it directly answers the user's question about the capital of France.",
-        answer="The document is very relevant as it directly answers the user's question about the capital of France.",
+        evaluator_name="reasoner",
+        answer=RetrievalEvaluationAnswer(
+            reasoning="The document is very relevant as it directly answers the user's question about the capital of France.",
+            score=2,
+        ),
     )
-    experiment.queries["1"].retrieved_docs["3"].evaluation = RetrievalEvaluatorResult(
+    experiment.queries["1"].retrieved_docs["3"].evaluations["reasoner"] = RetrievalEvaluatorResult(
         qid=experiment.queries["1"].qid,
         did="3",
-        raw_answer="The document is not relevant to the user question as it does not provide information about the capital of France.",
-        answer="The document is not relevant to the user question as it does not provide information about the capital of France.",
+        evaluator_name="reasoner",
+        answer=RetrievalEvaluationAnswer(
+            reasoning="The document is not relevant to the user question as it does not provide information about the capital of France.",
+            score=0,
+        ),
     )
     return experiment
 
@@ -575,10 +596,13 @@ class AnswerFormat(BaseModel):
     keyB: str
 
 
-class AnswerEvaluatorFormat(BaseModel):
+class AnswerEvaluatorFormat(AnswerEvaluationAnswer):
     quality: int
     trustworthiness: int
     originality: int
+    # Override inherited fields to make them optional
+    reasoning: str = "Test reasoning"
+    score: int = 1
 
 
 @pytest.fixture
@@ -597,6 +621,7 @@ def base_answer_eval_config(base_eval_config, answer_eval_format):
     base_config["system_prompt"] = "This is a system prompt"
     base_config["user_prompt"] = "Query: {{ query.query }}\nAnswer: {{ answer.text }}"
     base_config["llm_response_schema"] = answer_eval_format
+    base_config["evaluator_name"] = "custom_prompt"
     return BaseAnswerEvaluatorConfig(**base_config)
 
 

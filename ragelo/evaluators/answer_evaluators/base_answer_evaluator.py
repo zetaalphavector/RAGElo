@@ -122,7 +122,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
         Args:
             eval_sample (tuple[Query, Evaluable]): The query and evaluable to evaluate.
         """
-        agent: str | tuple[str, str]
+
         query, evaluable = eval_sample
 
         if not isinstance(evaluable, AgentAnswer) and not isinstance(evaluable, PairwiseGame):
@@ -247,12 +247,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
             exception=exc,
         )
 
-        inverse_game = PairwiseGame(
-            qid=game.qid,
-            agent_a_answer=game.agent_b_answer,
-            agent_b_answer=game.agent_a_answer,
-        )
-        inverse_prompt = self._build_message_pairwise(query, inverse_game, inverse=True)
+        inverse_prompt = self._build_message_pairwise(query, game, inverse=True)
         inverse_llm_response = await self.llm_provider.call_async(
             input=inverse_prompt,
             response_schema=answer_type,
