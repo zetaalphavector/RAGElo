@@ -10,8 +10,8 @@ from pydantic import BaseModel, ValidationError
 from tenacity import retry, stop_after_attempt, wait_random_exponential
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, LLMProviderFactory
+from ragelo.types import LLMInputPrompt, LLMResponseType
 from ragelo.types.configurations import OpenAIConfiguration
-from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.types import LLMProviderTypes
 
 T_Schema = TypeVar("T_Schema", bound=BaseModel)
@@ -36,11 +36,12 @@ class OpenAIProvider(BaseLLMProvider):
 
         Args:
             input: A LLMInputPrompt object containing the system prompt, user message, or a list of messages.
-            response_schema: The schema of the response (typically an EvaluationAnswer subclass like RetrievalEvaluationAnswer).
-                This is the schema the LLM should fill in, without metadata fields.
+            response_schema: The schema of the response (typically an EvaluationAnswer subclass like
+                RetrievalEvaluationAnswer or AnswerEvaluationAnswer). This is the schema the LLM should fill in.
         Returns:
             The response from the OpenAI Responses API. The LLMResponseType.raw_answer contains the raw LLM response
-            as a string and the LLMResponseType.parsed_answer contains the parsed response as an instance of response_schema.
+            as a string and the LLMResponseType.parsed_answer contains the parsed response as an instance
+            of response_schema.
         """
         llm_input: str | list[dict[str, str]]
         if input.messages:

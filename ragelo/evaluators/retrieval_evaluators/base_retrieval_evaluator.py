@@ -4,21 +4,21 @@ and returns a score or a label for each document."""
 
 from __future__ import annotations
 
-from typing import Any, Callable, get_type_hints
+from typing import TYPE_CHECKING, Any, Callable, get_type_hints
 
 from tenacity import RetryError
 
 from ragelo.evaluators.base_evaluator import BaseEvaluator
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
 from ragelo.logger import logger
+from ragelo.types import LLMInputPrompt, Query, RetrievalEvaluatorResult
 from ragelo.types.configurations import BaseRetrievalEvaluatorConfig
 from ragelo.types.evaluables import Document, Evaluable
-from ragelo.types.experiment import Experiment
-from ragelo.types.formats import LLMInputPrompt, LLMResponseType
-from ragelo.types.query import Query
-from ragelo.types.results import RetrievalEvaluatorResult
 from ragelo.types.types import RetrievalEvaluatorTypes
 from ragelo.utils import call_async_fn
+
+if TYPE_CHECKING:
+    from ragelo.types.experiment import Experiment
 
 
 class BaseRetrievalEvaluator(BaseEvaluator):

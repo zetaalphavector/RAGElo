@@ -79,6 +79,9 @@ exclude = ["docs/examples/notebooks"]
 line-length = 119
 fix = true
 
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
 [tool.ruff.lint.isort]
 combine-as-imports = true
 split-on-trailing-comma = false
@@ -91,4 +94,3 @@ markers = [
     "requires_openai: marks tests as requiring a valid OpenAI api key (deselect with '-m \"not requires_openai\"')",
     "serial",
 ]
-

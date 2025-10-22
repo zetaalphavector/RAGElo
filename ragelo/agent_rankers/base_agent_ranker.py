@@ -3,9 +3,8 @@ from __future__ import annotations
 from typing import Any, cast, get_type_hints
 
 from ragelo.logger import logger
+from ragelo.types import Experiment, PairwiseGameEvaluatorResult
 from ragelo.types.configurations.agent_ranker_configs import AgentRankerConfig
-from ragelo.types.experiment import Experiment
-from ragelo.types.results import PairwiseGameEvaluatorResult
 from ragelo.types.types import AgentRankerTypes
 
 

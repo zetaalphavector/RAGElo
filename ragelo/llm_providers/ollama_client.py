@@ -8,8 +8,8 @@ from pydantic import BaseModel, ValidationError
 from tenacity import retry, stop_after_attempt, wait_random_exponential
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, LLMProviderFactory
+from ragelo.types import LLMInputPrompt, LLMResponseType
 from ragelo.types.configurations import OllamaConfiguration
-from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.types import LLMProviderTypes
 
 T_Schema = TypeVar("T_Schema", bound=BaseModel)

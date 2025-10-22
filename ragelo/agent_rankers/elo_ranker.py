@@ -6,9 +6,8 @@ import numpy as np
 
 from ragelo.agent_rankers.base_agent_ranker import AgentRanker, AgentRankerFactory
 from ragelo.logger import logger
+from ragelo.types import EloTournamentResult, Experiment
 from ragelo.types.configurations import EloAgentRankerConfig
-from ragelo.types.experiment import Experiment
-from ragelo.types.results import EloTournamentResult
 from ragelo.types.types import AgentRankerTypes
 
 

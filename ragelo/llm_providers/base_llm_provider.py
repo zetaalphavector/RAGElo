@@ -6,8 +6,8 @@ from typing import TypeVar, get_type_hints
 
 from pydantic import BaseModel
 
+from ragelo.types import LLMInputPrompt, LLMResponseType
 from ragelo.types.configurations import LLMProviderConfig
-from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.types import LLMProviderTypes
 from ragelo.utils import call_async_fn
 

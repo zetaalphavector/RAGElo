@@ -255,7 +255,8 @@ class RDNAMEvaluatorResult(RetrievalEvaluatorResult):
             and hasattr(self.answer, "intent_match")
             and hasattr(self.answer, "trustworthiness")
         ):
-            return f"Score: {self.answer.score}\nReasoning: {self.answer.reasoning}\nIntent Match: {self.answer.intent_match}\nTrustworthiness: {self.answer.trustworthiness}"
+            return f"Score: {self.answer.score}\nReasoning: {self.answer.reasoning}\
+            Intent Match: {self.answer.intent_match}\nTrustworthiness: {self.answer.trustworthiness}"
         return "No answer available"
 
 
@@ -299,7 +300,9 @@ class RDNAMMUltipleAnnotatorsResult(RetrievalEvaluatorResult):
 
 
 class RDNAMMultipleAnnotatorsNoAspectsResult(RetrievalEvaluatorResult):
-    """RDNAM result simulating multiple annotators without aspects (answer is typically RDNAMMultipleAnnotatorsNoAspectsAnswer)."""
+    """
+    RDNAM result simulating multiple annotators without aspects (typically RDNAMMultipleAnnotatorsNoAspectsAnswer).
+    """
 
     answer: RDNAMMultipleAnnotatorsNoAspectsAnswer
 

@@ -92,8 +92,7 @@ def answer_model_factory(input: LLMInputPrompt, response_schema, **kwargs):
             # Handle specialized RDNAMEvaluationAnswer subclass
             if isinstance(response_schema, type) and response_schema.__name__ == "RDNAMEvaluationAnswer":
                 raw_answer = (
-                    '{"reasoning": "Doc judged with aspects", "score": 2,'
-                    ' "intent_match": 2.0, "trustworthiness": 2.0}'
+                    '{"reasoning": "Doc judged with aspects", "score": 2, "intent_match": 2.0, "trustworthiness": 2.0}'
                 )
                 return LLMResponseType(
                     raw_answer=raw_answer,
@@ -117,7 +116,7 @@ def answer_model_factory(input: LLMInputPrompt, response_schema, **kwargs):
     except Exception:
         pass
     if isinstance(response_schema, type) and issubclass(response_schema, PairwiseEvaluationAnswer):
-        raw_answer = '{"answer_a_analysis": "Answer A is good", "answer_b_analysis": "Answer B is bad", "comparison_reasoning": "A is better", "winner": "A"}'
+        raw_answer = '{"answer_a_analysis": "Answer A is good", "answer_b_analysis": "Answer B is bad", "comparison_reasoning": "A is better", "winner": "A"}'  # noqa: E501
         return LLMResponseType(raw_answer=raw_answer, parsed_answer=response_schema.model_validate_json(raw_answer))
     # Check if it's a subclass of EvaluationAnswer (covers custom answer schemas)
     if isinstance(response_schema, type) and issubclass(response_schema, EvaluationAnswer):
@@ -127,7 +126,7 @@ def answer_model_factory(input: LLMInputPrompt, response_schema, **kwargs):
             return LLMResponseType(
                 raw_answer=raw_answer, parsed_answer=response_schema.model_validate_json(raw_answer)
             )
-        except:
+        except Exception:
             pass
     if response_schema == AnswerFormat:
         return LLMResponseType(
@@ -362,7 +361,7 @@ def experiment_with_conversations_and_reasonings(experiment):
         ChatMessage(sender="user", content="What is the capital of France?"),
         ChatMessage(
             sender="agent2",
-            content="According to [3], Lyon is the second largest city in France. Meanwhile, Paris is its capital [2].",
+            content="According to [3], Lyon is the second largest city in France. Meanwhile, Paris is its capital [2].",  # noqa: E501
         ),
     ]
     # Add evaluations to the evaluations dict with evaluator_name as key
@@ -371,7 +370,7 @@ def experiment_with_conversations_and_reasonings(experiment):
         did="0",
         evaluator_name="reasoner",
         answer=RetrievalEvaluationAnswer(
-            reasoning="The document is very relevant as it directly answers the user's question about the capital of Brazil",
+            reasoning="The document is very relevant as it directly answers the user's question about the capital of Brazil",  # noqa: E501
             score=2,
         ),
     )
@@ -380,7 +379,7 @@ def experiment_with_conversations_and_reasonings(experiment):
         did="1",
         evaluator_name="reasoner",
         answer=RetrievalEvaluationAnswer(
-            reasoning="The document is somewhat relevant as it provides historical information about the capital of Brazil, but it does not provide the current capital.",
+            reasoning="The document is somewhat relevant as it provides historical information about the capital of Brazil, but it does not provide the current capital.",  # noqa: E501
             score=1,
         ),
     )
@@ -389,7 +388,7 @@ def experiment_with_conversations_and_reasonings(experiment):
         did="2",
         evaluator_name="reasoner",
         answer=RetrievalEvaluationAnswer(
-            reasoning="The document is very relevant as it directly answers the user's question about the capital of France.",
+            reasoning="The document is very relevant as it directly answers the user's question about the capital of France.",  # noqa: E501
             score=2,
         ),
     )
@@ -398,7 +397,7 @@ def experiment_with_conversations_and_reasonings(experiment):
         did="3",
         evaluator_name="reasoner",
         answer=RetrievalEvaluationAnswer(
-            reasoning="The document is not relevant to the user question as it does not provide information about the capital of France.",
+            reasoning="The document is not relevant to the user question as it does not provide information about the capital of France.",  # noqa: E501
             score=0,
         ),
     )
