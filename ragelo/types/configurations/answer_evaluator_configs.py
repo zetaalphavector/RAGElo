@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Callable, Optional, Type
+from typing import Callable, Optional
 
 from jinja2 import Template
 from pydantic import BaseModel, Field, field_validator
@@ -54,10 +54,6 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
     evaluator_name: AnswerEvaluatorTypes = AnswerEvaluatorTypes.PAIRWISE
     n_games_per_query: int = Field(default=100, description="Maximum number of games to generate for each query")
     pairwise: bool = Field(default=True, description="Whether or not to the evaluator is pairwise")
-    llm_response_schema: Type[BaseModel] = Field(
-        default=PairwiseGameEvaluatorResult,
-        description="The response schema for the LLM.",
-    )
 
     @field_validator("user_prompt", mode="after")
     def validate_user_prompt(cls, prompt: Template) -> Template:

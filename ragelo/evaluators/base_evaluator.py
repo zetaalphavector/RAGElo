@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Type
+from typing import TYPE_CHECKING
 
 from jinja2 import Template
 
@@ -29,7 +29,7 @@ class BaseEvaluator(ABC):
     system_prompt: Template | None = None
     user_prompt: Template
     evaluable_name: str = "Evaluable"
-    result_type: Type[EvaluatorResult]
+    result_type: type[EvaluatorResult]
 
     def __init__(self, config: BaseEvaluatorConfig, llm_provider: BaseLLMProvider):
         self.config = config

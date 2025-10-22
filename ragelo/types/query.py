@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import Any, Type
+from typing import Any
 
 from pydantic import BaseModel, field_validator
 from typing_extensions import Self

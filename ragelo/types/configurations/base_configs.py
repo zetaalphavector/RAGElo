@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Optional, Type
+from typing import Optional
 
 from jinja2 import Template
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ragelo.types.results import EvaluatorResult
 from ragelo.types.types import AnswerEvaluatorTypes
@@ -38,9 +38,7 @@ class BaseEvaluatorConfig(BaseConfig):
         default=None,
         description="The name of the evaluator to use.",
     )
-    llm_response_schema: Type[BaseModel] = Field(
-        description="The response schema for the LLM. Should be a Pydantic BaseModel (not an instance).",
-    )
+
     system_prompt: Optional[Template] = Field(
         default=None,
         description="The system prompt to use for the evaluator.",
@@ -50,17 +48,10 @@ class BaseEvaluatorConfig(BaseConfig):
         description="The user prompt to use for the evaluator. Should contain at least a {{ query.query }} placeholder for the query's text.",
     )
 
-    result_type: Type[EvaluatorResult] | None = Field(
+    result_type: type[EvaluatorResult] | None = Field(
         default=None,
-        description="The result format that the Evaluator will return. If not set, will use the llm_response_schema.",
+        description="Override the result type that the Evaluator will return. Most evaluators have a default result type.",
     )
-
-    @model_validator(mode="before")
-    @classmethod
-    def validate_result_type(cls, values: dict[str, Any]) -> dict[str, Any]:
-        if values.get("result_type") is None:
-            values["result_type"] = values.get("llm_response_schema", None)
-        return values
 
     @field_validator("system_prompt", "user_prompt", mode="before")
     def check_system_prompt_and_user_prompt(cls, v: Optional[str | Template]) -> Optional[Template]:

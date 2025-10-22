@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from typing import Type
 
 from openai import AsyncOpenAI
 from pydantic import BaseModel, ValidationError
@@ -27,7 +26,7 @@ class OllamaProvider(BaseLLMProvider):
         self.__ollama_client = self.__get_ollama_client(config)
 
     @retry(wait=wait_random_exponential(min=1, max=120), stop=stop_after_attempt(1))
-    async def call_async(self, input: LLMInputPrompt, response_schema: Type[BaseModel]) -> LLMResponseType:
+    async def call_async(self, input: LLMInputPrompt, response_schema: type[BaseModel]) -> LLMResponseType:
         """Calls the Ollama Local API asynchronously.
 
         Args:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Type
+from typing import Any, TypeVar
 
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 from openai.types.responses import ResponseTextConfigParam
@@ -12,7 +12,10 @@ from tenacity import retry, stop_after_attempt, wait_random_exponential
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, LLMProviderFactory
 from ragelo.types.configurations import OpenAIConfiguration
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
+from ragelo.types.results import EvaluatorResult
 from ragelo.types.types import LLMProviderTypes
+
+T_Result = TypeVar("T_Result", bound=EvaluatorResult)
 
 
 @LLMProviderFactory.register(LLMProviderTypes.OPENAI)
@@ -29,7 +32,7 @@ class OpenAIProvider(BaseLLMProvider):
             self.config.temperature = None
 
     @retry(wait=wait_random_exponential(min=1, max=120), stop=stop_after_attempt(3))
-    async def call_async(self, input: LLMInputPrompt, response_schema: Type[BaseModel]) -> LLMResponseType:
+    async def call_async(self, input: LLMInputPrompt, response_schema: type[T_Result]) -> LLMResponseType[T_Result]:
         """Calls the OpenAI API asynchronously.
 
         Args:
@@ -45,7 +48,7 @@ class OpenAIProvider(BaseLLMProvider):
             llm_input = input.user_message
         else:
             raise ValueError("No input provided")
-        parsed_answer: str | dict[str, Any] | BaseModel | None = None
+        parsed_answer: str | dict[str, Any] | T_Result | None = None
         if input.system_prompt:
             instructions = input.system_prompt
         else:
@@ -96,7 +99,7 @@ class OpenAIProvider(BaseLLMProvider):
             parsed_answer = answers.output_parsed
             raw_answer = answers.output_text
 
-        return LLMResponseType(
+        return LLMResponseType[T_Result](
             raw_answer=raw_answer,
             parsed_answer=parsed_answer,
         )

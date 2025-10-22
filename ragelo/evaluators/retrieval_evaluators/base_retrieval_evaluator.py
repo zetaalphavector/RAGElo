@@ -4,7 +4,7 @@ and returns a score or a label for each document."""
 
 from __future__ import annotations
 
-from typing import Any, Callable, Type, get_type_hints
+from typing import Any, Callable, get_type_hints
 
 from tenacity import RetryError
 
@@ -82,7 +82,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         try:
             llm_response = await self.llm_provider.call_async(
                 input=llm_input,
-                response_schema=self.config.llm_response_schema,
+                response_schema=self.result_type,
             )
             llm_response = self._process_answer(llm_response)
         except Exception as e:
@@ -154,18 +154,18 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         return cls(config, llm_provider)
 
     @classmethod
-    def get_config_class(cls) -> Type[BaseRetrievalEvaluatorConfig]:
+    def get_config_class(cls) -> type[BaseRetrievalEvaluatorConfig]:
         return get_type_hints(cls)["config"]
 
 
 class RetrievalEvaluatorFactory:
-    registry: dict[RetrievalEvaluatorTypes, Type[BaseRetrievalEvaluator]] = {}
+    registry: dict[RetrievalEvaluatorTypes, type[BaseRetrievalEvaluator]] = {}
 
     @classmethod
     def register(cls, evaluator_name: RetrievalEvaluatorTypes) -> Callable:
         def inner_wrapper(
-            wrapped_class: Type[BaseRetrievalEvaluator],
-        ) -> Type[BaseRetrievalEvaluator]:
+            wrapped_class: type[BaseRetrievalEvaluator],
+        ) -> type[BaseRetrievalEvaluator]:
             if evaluator_name in cls.registry:
                 logger.debug(f"Overwriting {evaluator_name} in registry")
             cls.registry[evaluator_name] = wrapped_class
@@ -174,14 +174,14 @@ class RetrievalEvaluatorFactory:
         return inner_wrapper
 
     @classmethod
-    def get_evaluator_result_type(cls, evaluator_name: RetrievalEvaluatorTypes) -> Type[RetrievalEvaluatorResult]:
+    def get_evaluator_result_type(cls, evaluator_name: RetrievalEvaluatorTypes) -> type[RetrievalEvaluatorResult]:
         """Gets the retrieval evaluator result type for a specific evaluator type.
 
         Args:
             evaluator_name (RetrievalEvaluatorTypes): The name of the evaluator.
 
         Returns:
-            Type: The retrieval evaluator result type for the evaluator.
+            type: The retrieval evaluator result type for the evaluator.
         """
         if evaluator_name not in cls.registry:
             raise ValueError(
@@ -247,14 +247,14 @@ def get_retrieval_evaluator(
 
 def get_retrieval_evaluator_result_type(
     evaluator_name: RetrievalEvaluatorTypes | str,
-) -> Type[RetrievalEvaluatorResult]:
+) -> type[RetrievalEvaluatorResult]:
     """Gets the retrieval evaluator result type for a specific evaluator type.
 
     Args:
         evaluator_name (RetrievalEvaluatorTypes | str): The name of the retrieval evaluator.
 
     Returns:
-        Type: The retrieval evaluator result type for the evaluator.
+        type: The retrieval evaluator result type for the evaluator.
     """
     if isinstance(evaluator_name, str):
         try:

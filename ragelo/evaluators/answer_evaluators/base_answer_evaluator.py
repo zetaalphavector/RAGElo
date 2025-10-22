@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import itertools
 import random
-from typing import Any, Callable, Set, Type, get_type_hints
+from typing import Any, Callable, get_type_hints
 
 from pydantic import BaseModel
 
@@ -22,7 +22,7 @@ from ragelo.utils import call_async_fn
 class BaseAnswerEvaluator(BaseEvaluator):
     config: BaseAnswerEvaluatorConfig
     evaluable_name: str = "Agent Answer"
-    _warned_queries: Set[str] = set()
+    _warned_queries: set[str] = set()
     result_type = AnswerEvaluatorResult
 
     def evaluate(
@@ -324,7 +324,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
         return cls(config, llm_provider)
 
     @classmethod
-    def get_config_class(cls) -> Type[BaseAnswerEvaluatorConfig]:
+    def get_config_class(cls) -> type[BaseAnswerEvaluatorConfig]:
         return get_type_hints(cls)["config"]
 
     def __add_pairwise_games(self, experiment: Experiment):
@@ -389,11 +389,11 @@ class BaseAnswerEvaluator(BaseEvaluator):
 
 
 class AnswerEvaluatorFactory:
-    registry: dict[AnswerEvaluatorTypes, Type[BaseAnswerEvaluator]] = {}
+    registry: dict[AnswerEvaluatorTypes, type[BaseAnswerEvaluator]] = {}
 
     @classmethod
     def register(cls, name: AnswerEvaluatorTypes) -> Callable:
-        def inner_wrapper(wrapped_class: Type[BaseAnswerEvaluator]):
+        def inner_wrapper(wrapped_class: type[BaseAnswerEvaluator]):
             if name in cls.registry:
                 logger.warning(f"Overwriting {name} in registry")
             cls.registry[name] = wrapped_class
@@ -402,14 +402,14 @@ class AnswerEvaluatorFactory:
         return inner_wrapper
 
     @classmethod
-    def get_evaluator_result_type(cls, evaluator_name: AnswerEvaluatorTypes) -> Type[AnswerEvaluatorResult]:
+    def get_evaluator_result_type(cls, evaluator_name: AnswerEvaluatorTypes) -> type[AnswerEvaluatorResult]:
         """Gets the answer evaluator result type for a specific evaluator type.
 
         Args:
             evaluator_name (AnswerEvaluatorTypes): The name of the evaluator.
 
         Returns:
-            Type: The answer evaluator result type for the evaluator.
+            type: The answer evaluator result type for the evaluator.
         """
         if evaluator_name not in cls.registry:
             raise ValueError(
@@ -482,14 +482,14 @@ def get_answer_evaluator(
     )
 
 
-def get_answer_evaluator_result_type(evaluator_name: AnswerEvaluatorTypes | str) -> Type[AnswerEvaluatorResult]:
+def get_answer_evaluator_result_type(evaluator_name: AnswerEvaluatorTypes | str) -> type[AnswerEvaluatorResult]:
     """Gets the answer evaluator result type for a specific evaluator type.
 
     Args:
         evaluator_name (AnswerEvaluatorTypes | str): The name of the answer evaluator.
 
     Returns:
-        Type: The answer evaluator result type for the evaluator.
+        type: The answer evaluator result type for the evaluator.
     """
     if isinstance(evaluator_name, str):
         try:

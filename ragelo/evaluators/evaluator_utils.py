@@ -2,22 +2,20 @@
 
 from __future__ import annotations
 
-from typing import Type
-
 from ragelo.types.results import EvaluatorResult
 from ragelo.types.types import AnswerEvaluatorTypes, RetrievalEvaluatorTypes
 
 
 def get_evaluator_result_type(
     evaluator_name: str | AnswerEvaluatorTypes | RetrievalEvaluatorTypes,
-) -> Type[EvaluatorResult]:
+) -> type[EvaluatorResult]:
     """Gets the result type for any evaluator (answer or retrieval).
 
     Args:
         evaluator_name: The name of the evaluator (string or enum).
 
     Returns:
-        Type[EvaluatorResult]: The result type for the evaluator.
+        type[EvaluatorResult]: The result type for the evaluator.
 
     Raises:
         ValueError: If the evaluator name is not found in either registry.

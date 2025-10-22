@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import re
-from typing import Optional, Type
+from typing import Optional
 
 from jinja2 import Template
 from pydantic import BaseModel, Field, field_validator
 
 from ragelo.types.configurations.base_configs import BaseEvaluatorConfig
-from ragelo.types.results import RDNAMEvaluatorResult, RetrievalEvaluatorResult
 from ragelo.types.types import RetrievalEvaluatorTypes
 from ragelo.utils import string_to_template
 
@@ -32,7 +31,6 @@ class BaseRetrievalEvaluatorConfig(BaseEvaluatorConfig):
         default=None,
         description="The user prompt to use for the evaluator. Should contain at least a {{ query.query }} and a {{ document.text }} placeholder for the query and the document text.",
     )
-    llm_response_schema: Type[BaseModel] = Field(default=RetrievalEvaluatorResult)
 
     @field_validator("user_prompt", mode="after")
     def validate_user_prompt(cls, prompt: Optional[Template]) -> Optional[Template]:
