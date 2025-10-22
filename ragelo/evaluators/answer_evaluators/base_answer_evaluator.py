@@ -136,14 +136,14 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 return cached_eval
 
         if isinstance(evaluable, AgentAnswer):
-            return await self._evalaute_pointwise(query, evaluable)
+            return await self._evaluate_pointwise(query, evaluable)
         elif isinstance(evaluable, PairwiseGame):
             return await self._evaluate_pairwise(query, evaluable)
 
         else:
             raise ValueError(f"Unknown evaluable type {type(evaluable)}")
 
-    async def _evalaute_pointwise(self, query: Query, evaluable: AgentAnswer) -> AnswerEvaluatorResult:
+    async def _evaluate_pointwise(self, query: Query, evaluable: AgentAnswer) -> AnswerEvaluatorResult:
         """
         Evaluates a single agent's answer asynchronously.
         Args:
