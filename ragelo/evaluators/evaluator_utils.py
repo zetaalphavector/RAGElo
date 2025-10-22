@@ -1,4 +1,4 @@
-"""Utility functions for evaluators that avoid circular imports."""
+"""Utility functions for evaluator result-type resolution."""
 
 from __future__ import annotations
 
@@ -6,44 +6,39 @@ from ragelo.types.results import EvaluatorResult
 from ragelo.types.types import AnswerEvaluatorTypes, RetrievalEvaluatorTypes
 
 
-def get_evaluator_result_type(
+def resolve_evaluator_result_type(
     evaluator_name: str | AnswerEvaluatorTypes | RetrievalEvaluatorTypes,
+    evaluable: object | None = None,
 ) -> type[EvaluatorResult]:
-    """Gets the result type for any evaluator (answer or retrieval).
+    """Resolve the expected result type for an evaluator.
 
-    Args:
-        evaluator_name: The name of the evaluator (string or enum).
-
-    Returns:
-        type[EvaluatorResult]: The result type for the evaluator.
-
-    Raises:
-        ValueError: If the evaluator name is not found in either registry.
+    - If `evaluable` is provided, route to the proper registry by evaluable kind to
+      avoid name collisions (e.g., domain_expert existing for both answer and retrieval).
+    - If `evaluable` is None, fall back to name-only resolution (answer first, then retrieval).
     """
-    # Import here to avoid circular imports
+    # Import locally to avoid circular imports
     from ragelo.evaluators.answer_evaluators.base_answer_evaluator import AnswerEvaluatorFactory
     from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import RetrievalEvaluatorFactory
+    from ragelo.types.evaluables import AgentAnswer, Document, PairwiseGame
 
-    # Convert string to appropriate enum if needed
-    evaluator_name_str = str(evaluator_name)
+    name_str = str(evaluator_name)
 
-    # Try AnswerEvaluatorTypes first
+    # Contextual resolution
+    if evaluable is not None:
+        if isinstance(evaluable, Document):
+            try:
+                return RetrievalEvaluatorFactory.get_evaluator_result_type(RetrievalEvaluatorTypes(name_str))
+            except Exception:
+                pass
+        if isinstance(evaluable, (AgentAnswer, PairwiseGame)):
+            try:
+                return AnswerEvaluatorFactory.get_evaluator_result_type(AnswerEvaluatorTypes(name_str))
+            except Exception:
+                pass
+
+    # Name-only resolution (Answer first, then Retrieval)
     try:
-        answer_enum = AnswerEvaluatorTypes(evaluator_name_str)
-        return AnswerEvaluatorFactory.get_evaluator_result_type(answer_enum)
-    except (ValueError, KeyError):
+        return AnswerEvaluatorFactory.get_evaluator_result_type(AnswerEvaluatorTypes(name_str))
+    except Exception:
         pass
-
-    # Try RetrievalEvaluatorTypes
-    try:
-        retrieval_enum = RetrievalEvaluatorTypes(evaluator_name_str)
-        return RetrievalEvaluatorFactory.get_evaluator_result_type(retrieval_enum)
-    except (ValueError, KeyError):
-        pass
-
-    # If neither worked, raise an error
-    raise ValueError(
-        f"Unknown evaluator '{evaluator_name}'. "
-        f"Valid answer evaluators: {[e.value for e in AnswerEvaluatorTypes]}. "
-        f"Valid retrieval evaluators: {[e.value for e in RetrievalEvaluatorTypes]}."
-    )
+    return RetrievalEvaluatorFactory.get_evaluator_result_type(RetrievalEvaluatorTypes(name_str))

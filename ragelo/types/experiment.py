@@ -863,7 +863,7 @@ class Experiment:
         self._load_results_from_cache(self.evaluations_cache_path)
 
     def _load_results_from_cache(self, cache_path: Path | None):
-        from ragelo.evaluators.evaluator_utils import get_evaluator_result_type
+        from ragelo.evaluators.evaluator_utils import resolve_evaluator_result_type
 
         if cache_path is None:
             return
@@ -882,7 +882,7 @@ class Experiment:
                 if evaluator_name == "EloTournament":
                     result = EloTournamentResult.model_validate(result)
                     continue
-                expected_result_type = get_evaluator_result_type(evaluator_name)
+                expected_result_type = resolve_evaluator_result_type(evaluator_name)
                 result = expected_result_type.model_validate(result)
             except (ValueError, Exception) as e:
                 logger.error(f"Failed to validate result for evaluator {evaluator_name}: {e}")
