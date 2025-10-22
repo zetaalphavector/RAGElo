@@ -147,17 +147,17 @@ class RDNAMEvaluator(BaseRetrievalEvaluator):
                 score = float(
                     np.mean(
                         [
-                            parsed.annotator_1.overall,
-                            parsed.annotator_2.overall,
-                            parsed.annotator_3.overall,
-                            parsed.annotator_4.overall,
-                            parsed.annotator_5.overall,
+                            parsed.annotator_1.score,
+                            parsed.annotator_2.score,
+                            parsed.annotator_3.score,
+                            parsed.annotator_4.score,
+                            parsed.annotator_5.score,
                         ]
                     )
                 )
                 # Create aggregated answer without aspects
                 response = RDNAMNoAspectsAnswer(
-                    overall=score,
+                    score=score,
                 )
         else:
             # parsed is already RDNAMEvaluationAnswer or RDNAMNoAspectsAnswer

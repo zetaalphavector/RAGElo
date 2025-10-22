@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING, TypeVar
 
 from jinja2 import Template
+from pydantic import create_model
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.presenters import render_failed_evaluations
@@ -36,8 +37,10 @@ class BaseEvaluator(ABC):
     def __init__(self, config: BaseEvaluatorConfig, llm_provider: BaseLLMProvider):
         self.config = config
         if config.result_type:
-            self.result_type = config.result_type
-        else:
+            self.result_type = create_model(
+                config.result_type.__name__, answer=(config.result_type, ...), __base__=self.result_type
+            )
+        elif not hasattr(self, "result_type"):
             raise ValueError(f"Result format not set for evaluator {self.config.evaluator_name}")
         self.llm_provider = llm_provider
         if config.system_prompt:

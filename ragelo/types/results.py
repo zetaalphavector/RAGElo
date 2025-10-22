@@ -62,9 +62,9 @@ class RDNAMEvaluationAnswer(RetrievalEvaluationAnswer):
 class RDNAMNoAspectsAnswer(EvaluationAnswer):
     """LLM-generated evaluation for RDNAM without aspects."""
 
-    overall: float = Field(
+    score: float = Field(
         ...,
-        description="An number between 0 and 2 representing the score of the document.",
+        description="An number between 0 and 2 representing the overall score of the document.",
     )
 
 
@@ -339,10 +339,10 @@ class RDNAMNoAspects(RetrievalEvaluatorResult):
         return data
 
     @property
-    def overall(self) -> float | None:
-        """Convenience property to access overall score from the nested answer."""
-        if self.answer and hasattr(self.answer, "overall"):
-            return self.answer.overall  # type: ignore
+    def score(self) -> float | None:
+        """Convenience property to access score score from the nested answer."""
+        if self.answer and hasattr(self.answer, "score"):
+            return self.answer.score  # type: ignore
         return None
 
 

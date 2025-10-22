@@ -6,7 +6,7 @@ from typing import Optional
 from jinja2 import Template
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from ragelo.types.results import EvaluatorResult
+from ragelo.types.results import EvaluationAnswer
 from ragelo.types.types import AnswerEvaluatorTypes
 from ragelo.utils import string_to_template
 
@@ -48,7 +48,7 @@ class BaseEvaluatorConfig(BaseConfig):
         description="The user prompt to use for the evaluator. Should contain at least a {{ query.query }} placeholder for the query's text.",
     )
 
-    result_type: type[EvaluatorResult] | None = Field(
+    result_type: type[EvaluationAnswer] | None = Field(
         default=None,
         description="Override the result type that the Evaluator will return. Most evaluators have a default result type.",
     )
