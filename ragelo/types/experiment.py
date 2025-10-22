@@ -17,7 +17,7 @@ from typing import Any, Literal
 
 from ragelo.logger import CLILogHandler, logger
 from ragelo.presenters import render_evaluation, render_retrieval_summary
-from ragelo.types.evaluables import AgentAnswer, ChatMessage, Document, Evaluable, PairwiseGame
+from ragelo.types.evaluables import AgentAnswer, ChatMessage, Document, Evaluable
 from ragelo.types.query import Query
 from ragelo.types.results import (
     AnswerEvaluatorResult,

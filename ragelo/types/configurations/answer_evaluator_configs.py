@@ -4,11 +4,10 @@ import re
 from typing import Callable, Optional
 
 from jinja2 import Template
-from pydantic import BaseModel, Field, field_validator
+from pydantic import Field, field_validator
 
 from ragelo.types.configurations.base_configs import BaseEvaluatorConfig
 from ragelo.types.evaluables import Document
-from ragelo.types.results import PairwiseGameEvaluatorResult
 from ragelo.types.types import AnswerEvaluatorTypes
 
 
