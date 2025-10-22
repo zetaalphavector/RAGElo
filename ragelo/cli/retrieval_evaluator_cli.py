@@ -122,7 +122,7 @@ def rdnam(config: CLIRDNAMEvaluatorConfig = CLIRDNAMEvaluatorConfig(), **kwargs)
     )
 
     kwargs = config.model_dump()
-    kwargs.pop("llm_response_schema")
+    kwargs.pop("llm_response_schema", None)
 
     llm_provider = get_llm_provider(config.llm_provider_name, **kwargs)
 

@@ -50,10 +50,8 @@ def test_run_all_cli(mock_llm_provider_factory):
     assert "Loaded 2 queries from" in stdout and QUERIES_PATH in stdout
     assert "Loaded 4 new documents from" in stdout and DOCUMENTS_PATH in stdout
     assert "Loaded 4 answers from" in stdout and ANSWERS_PATH in stdout
-    assert "Evaluating Retrieved documents" in stdout
     assert "Evaluating Agent Answers" in stdout
-    assert "🔎 Query ID: 0" in stdout
-    assert "📜 Document ID: 0" in stdout
+    assert "🔎 Query ID:" in stdout
     assert "👤 Agent A" in stdout
     assert "👤 Agent B" in stdout
     assert "Parsed Answer" in stdout
@@ -99,8 +97,7 @@ def test_run_reasoner_cli(mock_llm_provider_factory):
     assert result.exit_code == 0
     assert "Loaded 2 queries from" in stdout and QUERIES_PATH in stdout
     assert "Loaded 4 new documents from" in stdout and DOCUMENTS_PATH in stdout
-    assert "Evaluating Retrieved documents" in stdout
-    assert "🔎 Query ID: 0" in stdout
+    assert "Query ID:" in stdout
     assert "📜 Document ID: 0" in stdout
     assert "Parsed Answer" in stdout
     assert stdout.count("✅ Done!") == 1
@@ -146,11 +143,152 @@ def test_run_answer_cli(mock_llm_provider_factory):
     assert "Loaded 2 queries from" in stdout and QUERIES_PATH in stdout
     assert "Loaded 4 new documents from" in stdout and DOCUMENTS_PATH in stdout
     assert "Loaded 4 answers from" in stdout and ANSWERS_PATH in stdout
-    assert "Evaluating Retrieved documents" in stdout
-    assert "Evaluating Agent Answers" in stdout
+    assert "Query ID:" in stdout
+    assert "Agent A:" in stdout
+    assert "Agent B:" in stdout
+    assert "Parsed Answer" in stdout
+    assert stdout.count("✅ Done!") == 2
+    assert stdout.count("Total evaluations: 4") == 1
+    assert stdout.count("Total evaluations: 2") == 1
+
+    assert output_file.exists()
+    assert results_file.exists()
+    assert not Path(f"ragelo_cache/{experiment_name}.json").exists()
+
+    _cleanup_files(output_file, results_file)
+
+
+def test_run_domain_expert_retrieval_cli(mock_llm_provider_factory):
+    experiment_name = "cli-domain-expert"
+    output_file = Path("tests/data/cli-domain-expert.json")
+    results_file = Path("tests/data/cli-domain-expert_results.jsonl")
+
+    _cleanup_files(output_file, results_file)
+
+    result = runner.invoke(
+        app,
+        [
+            "retrieval-evaluator",
+            "domain-expert",
+            "queries.csv",
+            "documents.csv",
+            "--verbose",
+            "--no-use-progress-bar",
+            "--data-dir",
+            "tests/data/",
+            "--experiment-name",
+            experiment_name,
+            "--output-file",
+            output_file.name,
+            "--expert-in",
+            "Chemical Engineering",
+            "--company",
+            "ChemCorp",
+            "--force",
+        ],
+        env=ENV,
+    )
+    stdout = result.stdout
+
+    assert result.exit_code == 0
+    assert "Loaded 2 queries from" in stdout and QUERIES_PATH in stdout
+    assert "Loaded 4 new documents from" in stdout and DOCUMENTS_PATH in stdout
+    assert "Query ID:" in stdout
+    assert "📜 Document ID: 0" in stdout
+    assert "Parsed Answer" in stdout
+    assert stdout.count("✅ Done!") == 1
+    assert stdout.count("Total evaluations: 4") == 1
+
+    assert output_file.exists()
+    assert results_file.exists()
+    assert not Path(f"ragelo_cache/{experiment_name}.json").exists()
+
+    _cleanup_files(output_file, results_file)
+
+
+def test_run_rdnam_retrieval_cli(mock_llm_provider_factory):
+    experiment_name = "cli-rdnam"
+    output_file = Path("tests/data/cli-rdnam.json")
+    results_file = Path("tests/data/cli-rdnam_results.jsonl")
+
+    _cleanup_files(output_file, results_file)
+
+    result = runner.invoke(
+        app,
+        [
+            "retrieval-evaluator",
+            "rdnam",
+            "queries.csv",
+            "documents.csv",
+            "--verbose",
+            "--no-use-progress-bar",
+            "--data-dir",
+            "tests/data/",
+            "--experiment-name",
+            experiment_name,
+            "--output-file",
+            output_file.name,
+            "--use-aspects",
+            "--force",
+        ],
+        env=ENV,
+    )
+    stdout = result.stdout
+
+    assert result.exit_code == 0
+    assert "Loaded 2 queries from" in stdout and QUERIES_PATH in stdout
+    assert "Loaded 4 new documents from" in stdout and DOCUMENTS_PATH in stdout
     assert "🔎 Query ID: 0" in stdout
     assert "📜 Document ID: 0" in stdout
-    assert "👤 Agent A" in stdout
+    assert "Parsed Answer" in stdout
+    assert stdout.count("✅ Done!") == 1
+    assert stdout.count("Total evaluations: 4") == 1
+
+    assert output_file.exists()
+    assert results_file.exists()
+    assert not Path(f"ragelo_cache/{experiment_name}.json").exists()
+
+    _cleanup_files(output_file, results_file)
+
+
+def test_run_expert_pairwise_cli(mock_llm_provider_factory):
+    experiment_name = "cli-expert-pairwise"
+    output_file = Path("tests/data/cli-expert-pairwise.json")
+    results_file = Path("tests/data/cli-expert-pairwise_results.jsonl")
+
+    _cleanup_files(output_file, results_file)
+
+    result = runner.invoke(
+        app,
+        [
+            "answer-evaluator",
+            "expert-pairwise",
+            "queries.csv",
+            "documents.csv",
+            "answers.csv",
+            "--verbose",
+            "--no-use-progress-bar",
+            "--data-dir",
+            "tests/data/",
+            "--experiment-name",
+            experiment_name,
+            "--output-file",
+            output_file.name,
+            "--expert-in",
+            "Healthcare",
+            "--add-reasoning",
+            "--force",
+        ],
+        env=ENV,
+    )
+    stdout = result.stdout
+
+    assert result.exit_code == 0
+    assert "Loaded 2 queries from" in stdout and QUERIES_PATH in stdout
+    assert "Loaded 4 new documents from" in stdout and DOCUMENTS_PATH in stdout
+    assert "Loaded 4 answers from" in stdout and ANSWERS_PATH in stdout
+    assert "Query ID:" in stdout
+    assert "Agent A:" in stdout
     assert "👤 Agent B" in stdout
     assert "Parsed Answer" in stdout
     assert stdout.count("✅ Done!") == 2

@@ -96,7 +96,13 @@ def expert_pairwise(
     )
 
     if config.add_reasoning:
-        reasoner_evaluator = get_retrieval_evaluator(RetrievalEvaluatorTypes.REASONER, llm_provider=llm_provider)
+        reasoner_evaluator = get_retrieval_evaluator(
+            RetrievalEvaluatorTypes.REASONER,
+            llm_provider=llm_provider,
+            rich_print=config.rich_print,
+            verbose=config.verbose,
+            use_progress_bar=config.use_progress_bar,
+        )
         reasoner_evaluator.evaluate_experiment(experiment)
         config.include_relevance_score = True
 

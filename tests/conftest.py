@@ -84,19 +84,43 @@ def llm_provider_config():
 
 
 def answer_model_factory(input: LLMInputPrompt, response_schema, **kwargs):
-    if response_schema == RetrievalEvaluationAnswer:
-        return LLMResponseType(
-            raw_answer='{"reasoning": "The document is very relevant", "score": 2}',
-            parsed_answer=RetrievalEvaluationAnswer(
-                reasoning="The document is very relevant",
-                score=2,
-            ),
-        )
-    if issubclass(response_schema, PairwiseEvaluationAnswer):
+    # Retrieval answers (base or subclasses like RDNAMEvaluationAnswer)
+    try:
+        if response_schema == RetrievalEvaluationAnswer or (
+            isinstance(response_schema, type) and issubclass(response_schema, RetrievalEvaluationAnswer)
+        ):
+            # Handle specialized RDNAMEvaluationAnswer subclass
+            if isinstance(response_schema, type) and response_schema.__name__ == "RDNAMEvaluationAnswer":
+                raw_answer = (
+                    '{"reasoning": "Doc judged with aspects", "score": 2,'
+                    ' "intent_match": 2.0, "trustworthiness": 2.0}'
+                )
+                return LLMResponseType(
+                    raw_answer=raw_answer,
+                    parsed_answer=response_schema.model_validate_json(raw_answer),  # type: ignore
+                )
+            # RDNAM without aspects
+            if isinstance(response_schema, type) and response_schema.__name__ == "RDNAMNoAspectsAnswer":
+                raw_answer = '{"reasoning": "Doc judged", "score": 1}'
+                return LLMResponseType(
+                    raw_answer=raw_answer,
+                    parsed_answer=response_schema.model_validate_json(raw_answer),  # type: ignore
+                )
+            # Generic retrieval evaluation
+            return LLMResponseType(
+                raw_answer='{"reasoning": "The document is very relevant", "score": 2}',
+                parsed_answer=RetrievalEvaluationAnswer(
+                    reasoning="The document is very relevant",
+                    score=2,
+                ),
+            )
+    except Exception:
+        pass
+    if isinstance(response_schema, type) and issubclass(response_schema, PairwiseEvaluationAnswer):
         raw_answer = '{"answer_a_analysis": "Answer A is good", "answer_b_analysis": "Answer B is bad", "comparison_reasoning": "A is better", "winner": "A"}'
         return LLMResponseType(raw_answer=raw_answer, parsed_answer=response_schema.model_validate_json(raw_answer))
     # Check if it's a subclass of EvaluationAnswer (covers custom answer schemas)
-    if issubclass(response_schema, EvaluationAnswer):
+    if isinstance(response_schema, type) and issubclass(response_schema, EvaluationAnswer):
         # Try to instantiate with generic data
         try:
             raw_answer = '{"reasoning": "Generic", "score": 1}'

@@ -73,6 +73,7 @@ class BaseEvaluator(ABC):
             len(tuples_to_eval),
             self.config.rich_print,
             desc=f"Evaluating {self.evaluable_name}s",
+            disable=not getattr(self.config, "use_progress_bar", True),
         )
 
         awaitables_ended = False
