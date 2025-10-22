@@ -1,11 +1,15 @@
 from pathlib import Path
 
-import pytest
 from typer.testing import CliRunner
 
 from ragelo.cli.cli import app
 
 runner = CliRunner()
+
+ENV = {"OPENAI_API_KEY": "test-key"}
+QUERIES_PATH = str(Path("tests/data/queries.csv").resolve())
+DOCUMENTS_PATH = str(Path("tests/data/documents.csv").resolve())
+ANSWERS_PATH = str(Path("tests/data/answers.csv").resolve())
 
 
 def _cleanup_files(*paths: str | Path):
@@ -15,8 +19,7 @@ def _cleanup_files(*paths: str | Path):
             path.unlink()
 
 
-@pytest.mark.requires_openai
-def test_run_all_cli():
+def test_run_all_cli(mock_llm_provider_factory):
     experiment_name = "cli-run-all"
     output_file = Path("tests/data/cli-run-all.json")
     results_file = Path("tests/data/cli-run-all_results.jsonl")
@@ -39,15 +42,14 @@ def test_run_all_cli():
             output_file.name,
             "--force",
         ],
+        env=ENV,
     )
     stdout = result.stdout
-    # Normalize stdout by removing newlines that Rich may insert for line wrapping
-    stdout_normalized = stdout.replace("\n", " ")
 
     assert result.exit_code == 0
-    assert f"Loaded 2 queries from {Path('tests/data/queries.csv').resolve()}" in stdout_normalized
-    assert f"Loaded 4 new documents from {Path('tests/data/documents.csv').resolve()}" in stdout_normalized
-    assert f"Loaded 4 answers from {Path('tests/data/answers.csv').resolve()}" in stdout_normalized
+    assert "Loaded 2 queries from" in stdout and QUERIES_PATH in stdout
+    assert "Loaded 4 new documents from" in stdout and DOCUMENTS_PATH in stdout
+    assert "Loaded 4 answers from" in stdout and ANSWERS_PATH in stdout
     assert "Evaluating Retrieved documents" in stdout
     assert "Evaluating Agent Answers" in stdout
     assert "🔎 Query ID: 0" in stdout
@@ -67,8 +69,7 @@ def test_run_all_cli():
     _cleanup_files(output_file, results_file)
 
 
-@pytest.mark.requires_openai
-def test_run_reasoner_cli():
+def test_run_reasoner_cli(mock_llm_provider_factory):
     experiment_name = "cli-reasoner"
     output_file = Path("tests/data/cli-reasoner.json")
     results_file = Path("tests/data/cli-reasoner_results.jsonl")
@@ -91,14 +92,13 @@ def test_run_reasoner_cli():
             output_file.name,
             "--force",
         ],
+        env=ENV,
     )
     stdout = result.stdout
-    # Normalize stdout by removing newlines that Rich may insert for line wrapping
-    stdout_normalized = stdout.replace("\n", " ")
 
     assert result.exit_code == 0
-    assert f"Loaded 2 queries from {Path('tests/data/queries.csv').resolve()}" in stdout_normalized
-    assert f"Loaded 4 new documents from {Path('tests/data/documents.csv').resolve()}" in stdout_normalized
+    assert "Loaded 2 queries from" in stdout and QUERIES_PATH in stdout
+    assert "Loaded 4 new documents from" in stdout and DOCUMENTS_PATH in stdout
     assert "Evaluating Retrieved documents" in stdout
     assert "🔎 Query ID: 0" in stdout
     assert "📜 Document ID: 0" in stdout
@@ -113,8 +113,7 @@ def test_run_reasoner_cli():
     _cleanup_files(output_file, results_file)
 
 
-@pytest.mark.requires_openai
-def test_run_answer_cli():
+def test_run_answer_cli(mock_llm_provider_factory):
     experiment_name = "cli-pairwise"
     output_file = Path("tests/data/cli-pairwise.json")
     results_file = Path("tests/data/cli-pairwise_results.jsonl")
@@ -139,15 +138,14 @@ def test_run_answer_cli():
             "--force",
             "--add-reasoning",
         ],
+        env=ENV,
     )
     stdout = result.stdout
-    # Normalize stdout by removing newlines that Rich may insert for line wrapping
-    stdout_normalized = stdout.replace("\n", " ")
 
     assert result.exit_code == 0
-    assert f"Loaded 2 queries from {Path('tests/data/queries.csv').resolve()}" in stdout_normalized
-    assert f"Loaded 4 new documents from {Path('tests/data/documents.csv').resolve()}" in stdout_normalized
-    assert f"Loaded 4 answers from {Path('tests/data/answers.csv').resolve()}" in stdout_normalized
+    assert "Loaded 2 queries from" in stdout and QUERIES_PATH in stdout
+    assert "Loaded 4 new documents from" in stdout and DOCUMENTS_PATH in stdout
+    assert "Loaded 4 answers from" in stdout and ANSWERS_PATH in stdout
     assert "Evaluating Retrieved documents" in stdout
     assert "Evaluating Agent Answers" in stdout
     assert "🔎 Query ID: 0" in stdout

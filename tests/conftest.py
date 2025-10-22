@@ -555,6 +555,16 @@ def llm_provider_mock_retrieval(llm_provider_config):
 
 
 @pytest.fixture
+def mock_llm_provider_factory(monkeypatch):
+    from ragelo.llm_providers.base_llm_provider import LLMProviderFactory
+    from ragelo.types.types import LLMProviderTypes
+
+    monkeypatch.setitem(LLMProviderFactory.registry, LLMProviderTypes.OPENAI, MockLLMProvider)
+    monkeypatch.setitem(LLMProviderFactory.registry, LLMProviderTypes.OLLAMA, MockLLMProvider)
+    monkeypatch.setattr(MockLLMProvider, "api_key_env_var", "OPENAI_API_KEY", raising=False)
+
+
+@pytest.fixture
 def llm_provider_mock_rdnam(llm_provider_config):
     mocked_answer = RDNAMMultipleAnnotatorsAnswer(
         annotator_1=RDNAMEvaluationAnswer(reasoning="Annotator 1", score=1.0, intent_match=2.0, trustworthiness=1.0),
