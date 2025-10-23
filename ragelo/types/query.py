@@ -133,7 +133,6 @@ class Query(BaseModel):
         return self.pairwise_games.get(game_key, None)
 
     def add_pairwise_game(self, agent_a: str, agent_b: str) -> PairwiseGame:
-        logger.info(f"Creating a new pairwise game for agents {agent_a} and {agent_b} in query {self.qid}")
         game = PairwiseGame(
             qid=self.qid,
             agent_a_answer=self.answers[agent_a],
