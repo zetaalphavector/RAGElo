@@ -278,7 +278,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
         # normalize winner_inverse
         if winner_inverse == "A":
             winner_inverse = "B"
-        if winner_inverse == "B":
+        elif winner_inverse == "B":
             winner_inverse = "A"
 
         if winner_inverse == winner:
