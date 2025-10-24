@@ -76,7 +76,7 @@ llm_provider = get_llm_provider("openai", model="gpt-4.1-nano")
 retrieval_evaluator = get_retrieval_evaluator("reasoner", llm_provider, rich_print=True)
 answer_evaluator = get_answer_evaluator("pairwise", llm_provider, rich_print=True)
 
-elo_ranker = get_agent_ranker("elo", verbose=True)
+elo_ranker = get_agent_ranker("elo")
 
 # Evaluate the retrieval results.
 retrieval_evaluator.evaluate_experiment(experiment)
@@ -159,10 +159,10 @@ ragelo run-all \
   --data-dir tests/data/ \
   --experiment-name tutorial \
   --output-file tutorial.json \
-  --verbose
+  --render 
 ```
 
-With `--verbose` enabled you will see outputs such as:
+With rendering enabled you will see outputs such as:
 
 ```
 Loaded 2 queries from .../tests/data/queries.csv
@@ -261,7 +261,7 @@ ragelo retrieval-evaluator reasoner \
   --data-dir tests/data/ \
   --experiment-name experiment \
   --output-file experiment-docs.json \
-  --verbose
+  --render
 ```
 Each run updates the experiment cache and appends evaluation traces to `<experiment>_results.jsonl`. If all documents already have evaluations you will see an informational message unless `--force` is provided.
 
@@ -274,7 +274,7 @@ ragelo retrieval-evaluator domain-expert \
   --expert-in "Chemical Engineering" \
   --company "ChemCorp" \
   --output-file experiment-docs.json \
-  --verbose
+  --render
 ```
 
 RDNAM example:
@@ -284,7 +284,7 @@ ragelo retrieval-evaluator rdnam \
   --data-dir tests/data/ \
   --experiment-name experiment \
   --output-file experiment-docs.json \
-  --verbose
+  --render
 ```
 
 ### 💬 `answer-evaluator`
@@ -298,7 +298,7 @@ ragelo answer-evaluator pairwise \
   --experiment-name experiment \
   --output-file experiment-answers.json \
   --add-reasoning \
-  --verbose
+  --render
 ```
 
 If `--add-reasoning` is supplied the CLI will run the `reasoner` retrieval evaluator first, include the relevance scores in the prompts, and then proceed with pairwise games. Newly created games are tracked inside the experiment and re-used by the Elo ranker.
@@ -312,7 +312,7 @@ ragelo answer-evaluator expert-pairwise \
   --expert-in "Healthcare" \
   --add-reasoning \
   --output-file experiment-answers.json \
-  --verbose
+  --render
 ```
 
 Concurrency and Rich output:
