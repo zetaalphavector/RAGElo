@@ -21,8 +21,8 @@ app.add_typer(answer_evaluator_app, name="answer-evaluator")
 @app.command()
 def run_all(config: CLIConfig = CLIConfig(), **kwargs):
     """Run all the commands."""
-    configure_logging(level="INFO", rich=config.rich_print)
     config = CLIConfig(**kwargs)
+    configure_logging(level="INFO", rich=config.rich_print)
 
     # Parse the LLM provider and remove it from the kwargs
     llm_provider = get_llm_provider(config.llm_provider_name, **kwargs)

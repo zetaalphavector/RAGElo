@@ -29,10 +29,10 @@ def domain_expert(config: CLIDomainExpertEvaluatorConfig = CLIDomainExpertEvalua
     ragelo retrieval_evaluator domain_expert queries.csv documents.csv "Chemical Engineering" --company "ChemCorp Inc."
 
     """
-    configure_logging(level="INFO", rich=config.rich_print)
     kwargs.pop("llm_response_schema", None)
 
     config = CLIDomainExpertEvaluatorConfig(**kwargs)
+    configure_logging(level="INFO", rich=config.rich_print)
     llm_provider = get_llm_provider(config.llm_provider_name, **kwargs)
 
     queries_csv_file = get_path(config.data_dir, config.queries_csv_file)
@@ -66,11 +66,10 @@ def reasoner(
     """
     A document Evaluator that only outputs the reasoning for why a document is relevant.
     """
-    configure_logging(level="INFO", rich=config.rich_print)
-
     kwargs.pop("llm_response_schema", None)
 
     config = CLIReasonerEvaluatorConfig(**kwargs)
+    configure_logging(level="INFO", rich=config.rich_print)
 
     queries_csv_file = get_path(config.data_dir, config.queries_csv_file)
     documents_file = get_path(config.data_dir, config.documents_csv_file)
@@ -101,11 +100,9 @@ def rdnam(config: CLIRDNAMEvaluatorConfig = CLIRDNAMEvaluatorConfig(), **kwargs)
     Evaluator based on the paper by Thomas, Spielman, Craswell and Mitra:
     Large language models can accurately predict searcher preferences.
     """
-    configure_logging(level="INFO", rich=config.rich_print)
-
     kwargs.pop("llm_response_schema", None)
-
     config = CLIRDNAMEvaluatorConfig(**kwargs)
+    configure_logging(level="INFO", rich=config.rich_print)
     queries_csv_file = get_path(config.data_dir, config.queries_csv_file)
     documents_file = get_path(config.data_dir, config.documents_csv_file)
     output_file = get_path(config.data_dir, config.output_file, check_exists=False) if config.output_file else None

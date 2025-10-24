@@ -20,10 +20,10 @@ def pairwise(config: CLIPairwiseEvaluatorConfig = CLIPairwiseEvaluatorConfig(), 
     >> ragelo answer-evaluator pairwise queries.csv answers.csv
 
     """
-    configure_logging(level="INFO", rich=config.rich_print)
     kwargs.pop("llm_response_schema", None)
 
     config = CLIPairwiseEvaluatorConfig(**kwargs)
+    configure_logging(level="INFO", rich=config.rich_print)
     llm_provider = get_llm_provider(config.llm_provider_name, **kwargs)
 
     queries_csv_file = get_path(config.data_dir, config.queries_csv_file)
@@ -71,10 +71,10 @@ def expert_pairwise(
     """
     An evaluator that evaluates RAG-based answers by comparing answers of two agents and impersonating a domain expert.
     """
-    configure_logging(level="INFO", rich=config.rich_print)
     kwargs.pop("llm_response_schema", None)
 
     config = CLIPairwiseDomainExpertEvaluatorConfig(**kwargs)
+    configure_logging(level="INFO", rich=config.rich_print)
 
     llm_provider = get_llm_provider(config.llm_provider_name, **kwargs)
 
