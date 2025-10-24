@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from typing import Callable, Optional
 
 from jinja2 import Template
@@ -9,6 +8,7 @@ from pydantic import Field, field_validator
 from ragelo.types.configurations.base_configs import BaseEvaluatorConfig
 from ragelo.types.evaluables import Document
 from ragelo.types.types import AnswerEvaluatorTypes
+from ragelo.utils import get_placeholders_and_tags
 
 
 class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
@@ -58,8 +58,7 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
 
     @field_validator("user_prompt", mode="after")
     def validate_user_prompt(cls, prompt: Template) -> Template:
-        src = getattr(prompt, "_ragelo_source", None)
-        placeholders = set(m.group(1) for m in re.finditer(r"{{\s*([a-zA-Z_][\w\.]*)\s*}}", src or ""))
+        placeholders = get_placeholders_and_tags(prompt)
         required = {"query.query", "game.agent_a_answer.text", "game.agent_b_answer.text"}
         missing = sorted(required - placeholders)
         if missing:
@@ -100,8 +99,7 @@ class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
 
     @field_validator("user_prompt", mode="after")
     def validate_user_prompt(cls, prompt: Template) -> Template:
-        src = getattr(prompt, "_ragelo_source", None)
-        placeholders = set(m.group(1) for m in re.finditer(r"{{\s*([a-zA-Z_][\w\.]*)\s*}}", src or ""))
+        placeholders = get_placeholders_and_tags(prompt)
         required = {"query.query", "answer.text"}
         missing = sorted(required - placeholders)
         if missing:

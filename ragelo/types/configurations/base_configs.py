@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from typing import Optional
 
 from jinja2 import Template
@@ -8,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ragelo.types.results import EvaluationAnswer
 from ragelo.types.types import AnswerEvaluatorTypes
-from ragelo.utils import string_to_template
+from ragelo.utils import get_placeholders_and_tags, string_to_template
 
 
 class BaseConfig(BaseModel):
@@ -66,8 +65,7 @@ class BaseEvaluatorConfig(BaseConfig):
 
     @field_validator("user_prompt", mode="after")
     def validate_query_and_document_placeholders(cls, prompt: Template) -> Template:
-        src = getattr(prompt, "_ragelo_source", None)
-        placeholders = set(m.group(1) for m in re.finditer(r"{{\s*([a-zA-Z_][\w\.]*)\s*}}", src or ""))
+        placeholders = get_placeholders_and_tags(prompt)
         if "query.query" not in placeholders:
             raise ValueError("The user prompt must contain a {{query.query}} placeholder")
         return prompt

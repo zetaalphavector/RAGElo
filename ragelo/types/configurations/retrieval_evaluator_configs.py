@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from typing import Optional
 
 from jinja2 import Template
@@ -8,7 +7,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from ragelo.types.configurations.base_configs import BaseEvaluatorConfig
 from ragelo.types.types import RetrievalEvaluatorTypes
-from ragelo.utils import string_to_template
+from ragelo.utils import get_placeholders_and_tags, string_to_template
 
 
 class FewShotExample(BaseModel):
@@ -36,8 +35,7 @@ class BaseRetrievalEvaluatorConfig(BaseEvaluatorConfig):
     def validate_user_prompt(cls, prompt: Optional[Template]) -> Optional[Template]:
         if prompt is None:
             return prompt
-        src = getattr(prompt, "_ragelo_source", None)
-        placeholders = set(m.group(1) for m in re.finditer(r"{{\s*([a-zA-Z_][\w\.]*)\s*}}", src or ""))
+        placeholders = get_placeholders_and_tags(prompt)
         if "query.query" not in placeholders:
             raise ValueError("The user prompt must contain a {{ query.query }} placeholder")
         if "document.text" not in placeholders:
@@ -101,8 +99,7 @@ class FewShotEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     def validate_few_shot_assistant_answer(cls, prompt: Template | None) -> Template | None:
         if prompt is None:
             return prompt
-        src = getattr(prompt, "_ragelo_source", None)
-        placeholders = set(m.group(1) for m in re.finditer(r"{{\s*([a-zA-Z_][\w\.]*)\s*}}", src or ""))
+        placeholders = get_placeholders_and_tags(prompt)
         if "relevance" not in placeholders:
             raise ValueError("The few_shot_assistant_answer must contain a {{ relevance }} placeholder")
         return prompt

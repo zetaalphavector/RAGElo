@@ -19,7 +19,7 @@ from ragelo.types import (
 from ragelo.types.configurations import BaseAnswerEvaluatorConfig, PairwiseEvaluatorConfig
 from ragelo.types.evaluables import AgentAnswer, Document, Evaluable, PairwiseGame
 from ragelo.types.types import AnswerEvaluatorTypes
-from ragelo.utils import call_async_fn
+from ragelo.utils import call_async_fn, get_placeholders_and_tags
 
 if TYPE_CHECKING:
     from ragelo.types.experiment import Experiment
@@ -223,7 +223,6 @@ class BaseAnswerEvaluator(BaseEvaluator):
         prompt = self._build_message_pairwise(query, evaluable)
         exc = None
         parsed_answer = None
-        raw_answer = ""
         try:
             llm_response = await self.llm_provider.call_async(
                 input=prompt,
@@ -231,9 +230,8 @@ class BaseAnswerEvaluator(BaseEvaluator):
             )
             llm_response = self._process_answer(llm_response)
             parsed_answer = llm_response.parsed_answer
-            raw_answer = llm_response.raw_answer
         except Exception as e:
-            exc = str(e) + f"\nRaw answer: {raw_answer}"
+            exc = str(e) + f"\nRaw answer: {llm_response.raw_answer}"
             logger.warning(f"Failed to generate answer for qid: {query.qid} and agents: {agent}: {exc}")
             return self.result_type(
                 qid=query.qid,
@@ -386,6 +384,22 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 query.add_pairwise_game(agent_a, agent_b)
 
     def _filter_documents(self, query: Query) -> list[Document]:
+        # Check if we will actually include documents in any prompt
+        if self.system_prompt:
+            system_placeholders = get_placeholders_and_tags(self.system_prompt)
+        if self.user_prompt:
+            user_placeholders = get_placeholders_and_tags(self.user_prompt)
+        all_placeholders = system_placeholders | user_placeholders
+        if "documents" not in all_placeholders:
+            return []
+
+        if not (
+            self.config.include_raw_documents
+            or self.config.include_relevance_score
+            or self.config.include_relevance_reasoning
+        ):
+            return []
+
         documents = []
         for did, d in query.retrieved_docs.items():
             if self.config.document_relevance_threshold is not None:
