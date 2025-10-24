@@ -1,10 +1,9 @@
-import logging
-
 import typer
 
 from ragelo import Experiment, get_llm_provider, get_retrieval_evaluator
 from ragelo.cli.args import get_params_from_function
 from ragelo.cli.utils import get_path
+from ragelo.logger import configure_logging
 from ragelo.types.configurations.cli_configs import (
     CLIDomainExpertEvaluatorConfig,
     CLIRDNAMEvaluatorConfig,
@@ -30,7 +29,7 @@ def domain_expert(config: CLIDomainExpertEvaluatorConfig = CLIDomainExpertEvalua
     ragelo retrieval_evaluator domain_expert queries.csv documents.csv "Chemical Engineering" --company "ChemCorp Inc."
 
     """
-    logging.getLogger("ragelo").setLevel(logging.INFO)
+    configure_logging(level="INFO", rich=config.rich_print)
     kwargs.pop("llm_response_schema", None)
 
     config = CLIDomainExpertEvaluatorConfig(**kwargs)
@@ -45,7 +44,7 @@ def domain_expert(config: CLIDomainExpertEvaluatorConfig = CLIDomainExpertEvalua
         save_path=output_file,
         queries_csv_path=queries_csv_file,
         documents_csv_path=documents_file,
-        verbose=config.verbose,
+        render=config.render,
         clear_evaluations=config.force,
         rich_print=config.rich_print,
     )
@@ -67,7 +66,7 @@ def reasoner(
     """
     A document Evaluator that only outputs the reasoning for why a document is relevant.
     """
-    logging.getLogger("ragelo").setLevel(logging.INFO)
+    configure_logging(level="INFO", rich=config.rich_print)
 
     kwargs.pop("llm_response_schema", None)
 
@@ -82,7 +81,7 @@ def reasoner(
         save_path=output_file,
         queries_csv_path=queries_csv_file,
         documents_csv_path=documents_file,
-        verbose=config.verbose,
+        render=config.render,
         clear_evaluations=config.force,
         rich_print=config.rich_print,
     )
@@ -102,7 +101,7 @@ def rdnam(config: CLIRDNAMEvaluatorConfig = CLIRDNAMEvaluatorConfig(), **kwargs)
     Evaluator based on the paper by Thomas, Spielman, Craswell and Mitra:
     Large language models can accurately predict searcher preferences.
     """
-    logging.getLogger("ragelo").setLevel(logging.INFO)
+    configure_logging(level="INFO", rich=config.rich_print)
 
     kwargs.pop("llm_response_schema", None)
 
@@ -116,7 +115,7 @@ def rdnam(config: CLIRDNAMEvaluatorConfig = CLIRDNAMEvaluatorConfig(), **kwargs)
         save_path=output_file,
         queries_csv_path=queries_csv_file,
         documents_csv_path=documents_file,
-        verbose=config.verbose,
+        render=config.render,
         clear_evaluations=config.force,
         rich_print=config.rich_print,
     )

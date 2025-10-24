@@ -110,10 +110,10 @@ class BaseEvaluator(ABC):
                     evaluation,
                     exist_ok=True,
                     force=self.config.force,
-                    should_print=self.config.verbose,
+                    should_print=self.config.render,
                 )
         pbar.close()
-        if self.config.verbose:
+        if self.config.render:
             render_failed_evaluations(evaluations, failed, self.config.rich_print)
 
     @abstractmethod

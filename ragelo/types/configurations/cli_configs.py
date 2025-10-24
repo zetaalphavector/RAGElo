@@ -28,9 +28,9 @@ class BaseCLIConfig(BaseConfig):
         description="The path to the queries CSV file. The file should contain at least the following columns: "
         "qid, query. Any additional columns will be considered as metadata.",
     )
-    verbose: bool = Field(
+    render: bool = Field(
         default=True,
-        description="Whether or not to be verbose and print all intermediate steps.",
+        description="Whether to render tables and summaries to the console.",
     )
     output_file: str | None = Field(
         default=None,

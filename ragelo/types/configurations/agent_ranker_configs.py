@@ -7,7 +7,6 @@ from ragelo.types.configurations.base_configs import BaseConfig
 
 class AgentRankerConfig(BaseConfig):
     ranker_name: str = Field(default="elo", description="The name of the agent ranker")
-    verbose: bool = Field(default=False, description="Whether to print each game played")
 
 
 class EloAgentRankerConfig(AgentRankerConfig):

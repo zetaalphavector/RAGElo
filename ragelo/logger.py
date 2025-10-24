@@ -2,7 +2,10 @@ import logging
 
 from rich import print as rich_print
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("ragelo")
+
+if not logger.handlers:
+    logger.addHandler(logging.NullHandler())
 
 
 class CLILogHandler(logging.Handler):
@@ -34,3 +37,26 @@ class CLILogHandler(logging.Handler):
                 rich_print(msg)
             else:
                 print(msg)
+
+
+def configure_logging(level: int | str = "WARNING", *, rich: bool = True) -> None:
+    """Configure ragelo logging.
+
+    Args:
+        level: Logging level (int or name). Examples: "INFO", "DEBUG", logging.INFO.
+        rich: If True, use rich-colored output via CLILogHandler; otherwise plain text.
+    """
+    if isinstance(level, str):
+        level = logging.getLevelName(level.upper())
+        if isinstance(level, str):
+            level = logging.WARNING
+
+    lib_logger = logging.getLogger("ragelo")
+    lib_logger.setLevel(level)
+
+    lib_logger.handlers = []
+    lib_logger.propagate = False
+    cli_handler = CLILogHandler(use_rich=rich)
+    formatter = logging.Formatter("%(message)s")
+    cli_handler.setFormatter(formatter)
+    lib_logger.addHandler(cli_handler)

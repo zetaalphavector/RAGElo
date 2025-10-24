@@ -1,5 +1,3 @@
-import logging
-
 import typer
 
 from ragelo import Experiment, get_agent_ranker, get_answer_evaluator, get_llm_provider, get_retrieval_evaluator
@@ -7,6 +5,7 @@ from ragelo.cli.answer_evaluators_cli import app as answer_evaluator_app
 from ragelo.cli.args import get_params_from_function
 from ragelo.cli.retrieval_evaluator_cli import app as retrieval_evaluator_app
 from ragelo.cli.utils import get_path
+from ragelo.logger import configure_logging
 from ragelo.types import CLIConfig
 
 typer.main.get_params_from_function = get_params_from_function  # type: ignore
@@ -22,8 +21,7 @@ app.add_typer(answer_evaluator_app, name="answer-evaluator")
 @app.command()
 def run_all(config: CLIConfig = CLIConfig(), **kwargs):
     """Run all the commands."""
-    # set ragelo's logger to INFO
-    logging.getLogger("ragelo").setLevel(logging.INFO)
+    configure_logging(level="INFO", rich=config.rich_print)
     config = CLIConfig(**kwargs)
 
     # Parse the LLM provider and remove it from the kwargs
@@ -41,7 +39,7 @@ def run_all(config: CLIConfig = CLIConfig(), **kwargs):
         queries_csv_path=queries_csv_file,
         documents_csv_path=documents_file,
         answers_csv_path=answers_file,
-        verbose=config.verbose,
+        render=config.render,
         clear_evaluations=config.force,
         rich_print=config.rich_print,
     )

@@ -16,9 +16,9 @@ class BaseConfig(BaseModel):
         description="Force the execution of the commands and overwrite any existing files.",
     )
     rich_print: bool = Field(default=False, description="Use rich to print colorful outputs.")
-    verbose: bool = Field(
-        default=False,
-        description="Whether or not to be verbose and print all intermediate steps.",
+    render: bool = Field(
+        default=True,
+        description="Whether to render tables and summaries to the console.",
     )
     llm_provider_name: str = Field(default="openai", description="The name of the LLM provider to be used.")
     use_progress_bar: bool = Field(
