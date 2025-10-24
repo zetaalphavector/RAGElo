@@ -275,11 +275,18 @@ class BaseAnswerEvaluator(BaseEvaluator):
         )
 
         winner_inverse = getattr(inv, "winner", None) if inv is not None else None
-        if winner_inverse == "A" and winner == "B":
+        # normalize winner_inverse
+        if winner_inverse == "A":
+            winner_inverse = "B"
+        if winner_inverse == "B":
+            winner_inverse = "A"
+
+        if winner_inverse == winner:
             return answer
-        if winner_inverse == "B" and winner == "C":
+        # if winner or winner_invers is C but the other isn't, select the other.
+        if winner == "C" and winner_inverse != "C":
             return inverse_answer
-        if winner_inverse == "C" and winner == "A":
+        if winner_inverse == "C" and winner != "C":
             return answer
 
         # Assume a tie - merge the analyses from both directions
