@@ -126,7 +126,7 @@ class OpenAIProvider(BaseLLMProvider):
                 raise ValueError("Azure-OpenAI base url (api_base) not found in configuration.")
             return AsyncAzureOpenAI(
                 azure_endpoint=openai_config.api_base,
-                api_key=openai_config.gapi_key.get_secret_value(),
+                api_key=openai_config.api_key.get_secret_value(),
                 api_version=openai_config.api_version,
             )
         elif openai_config.api_type == "open_ai" or openai_config.api_type is None:
