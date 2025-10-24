@@ -66,6 +66,9 @@ class OllamaProvider(BaseLLMProvider):
         if not messages:
             raise ValueError("No input provided")
 
+        if self.config.reasoning_effort:
+            call_kwargs["extra_body"] = {"reasoning_effort": self.config.reasoning_effort}
+
         call_kwargs["messages"] = messages
         if self.config.json_mode:
             # Build a JSON schema from a Pydantic model class when available

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel
 
 
@@ -9,6 +11,7 @@ class LLMProviderConfig(BaseModel):
     max_tokens: int = 2048
     seed: int | None = 42
     json_mode: bool = False
+    reasoning_effort: Literal["minimal", "low", "medium", "high"] | None = None
 
 
 class OpenAIConfiguration(LLMProviderConfig):

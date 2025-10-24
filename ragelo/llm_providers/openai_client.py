@@ -29,6 +29,8 @@ class OpenAIProvider(BaseLLMProvider):
         self.__openai_client = self.__get_openai_client(config)
         if self.config.model.startswith("gpt-5") or self.config.model.startswith("o"):
             self.config.temperature = None
+        elif self.config.reasoning_effort:
+            self.config.reasoning_effort = None
 
     @retry(wait=wait_random_exponential(min=1, max=120), stop=stop_after_attempt(3))
     async def call_async(self, input: LLMInputPrompt, response_schema: type[T_Schema]) -> LLMResponseType[T_Schema]:
@@ -71,15 +73,19 @@ class OpenAIProvider(BaseLLMProvider):
                 llm_input[-1]["content"] += (
                     f"\n\nYour output should be a JSON string that STRICTLY adheres to the following schema:\n{schema}"
                 )
-            answers = await self.__openai_client.responses.create(
-                input=llm_input,  # type: ignore
-                instructions=instructions,
-                model=self.config.model,
-                temperature=self.config.temperature,
-                max_output_tokens=self.config.max_tokens,
-                text=ResponseTextConfigParam(format=ResponseFormatJSONObject(type="json_object")),
-            )
-            raw_answer = answers.output_text
+            try:
+                answer = await self.__openai_client.responses.create(
+                    input=llm_input,  # type: ignore
+                    instructions=instructions,
+                    model=self.config.model,
+                    temperature=self.config.temperature,
+                    max_output_tokens=self.config.max_tokens,
+                    text=ResponseTextConfigParam(format=ResponseFormatJSONObject(type="json_object")),
+                    reasoning={"effort": self.config.reasoning_effort} if self.config.reasoning_effort else None,
+                )
+            except Exception as e:
+                raise ValueError(f"OpenAI request failed: {e}") from e
+            raw_answer = answer.output_text
             try:
                 parsed_answer = response_schema.model_validate_json(raw_answer)
             except ValidationError as e:
@@ -88,21 +94,25 @@ class OpenAIProvider(BaseLLMProvider):
                 ) from e
 
         else:
-            answers = await self.__openai_client.responses.parse(
-                text_format=response_schema,
-                input=llm_input,  # type: ignore
-                instructions=instructions,
-                model=self.config.model,
-                temperature=self.config.temperature,
-                max_output_tokens=self.config.max_tokens,
-            )
-            if not isinstance(answers.output_parsed, response_schema):
+            try:
+                answer = await self.__openai_client.responses.parse(
+                    text_format=response_schema,
+                    input=llm_input,  # type: ignore
+                    instructions=instructions,
+                    model=self.config.model,
+                    temperature=self.config.temperature,
+                    max_output_tokens=self.config.max_tokens,
+                    reasoning={"effort": self.config.reasoning_effort} if self.config.reasoning_effort else None,
+                )
+            except Exception as e:
+                raise ValueError(f"OpenAI request failed: {e}") from e
+            if not isinstance(answer.output_parsed, response_schema):
                 raise ValueError(
                     f"OpenAI failed to parse response into the response schema {response_schema}. "
-                    f"The response was: {answers.output_text}"
+                    f"The response was: {answer.output_text}"
                 )
-            parsed_answer = answers.output_parsed
-            raw_answer = answers.output_text
+            parsed_answer = answer.output_parsed
+            raw_answer = answer.output_text
 
         return LLMResponseType(
             raw_answer=raw_answer,
