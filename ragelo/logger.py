@@ -1,5 +1,7 @@
 import logging
+import os
 
+from rich.console import Console
 from rich.logging import RichHandler
 
 logger = logging.getLogger("ragelo")
@@ -26,7 +28,14 @@ def configure_logging(level: int | str = "WARNING", *, rich: bool = True) -> Non
     lib_logger.handlers = []
     lib_logger.propagate = False
     if rich:
-        handler: logging.Handler = RichHandler(rich_tracebacks=True, show_time=False, show_path=False)
+        # In tests/CI, avoid colors and wrapping for stable output
+        under_pytest = "PYTEST_CURRENT_TEST" in os.environ
+        in_ci = os.environ.get("CI") in {"true", "1", "True"}
+        force_no_color = os.environ.get("RAGELO_RICH_NO_COLOR") in {"1", "true", "True"}
+        no_color = under_pytest or in_ci or force_no_color
+        width = 300 if no_color else None
+        console = Console(no_color=no_color, width=width)
+        handler: logging.Handler = RichHandler(console=console, rich_tracebacks=True, show_time=False, show_path=False)
         formatter = logging.Formatter("%(message)s")
         handler.setFormatter(formatter)
     else:

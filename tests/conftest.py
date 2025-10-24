@@ -327,7 +327,7 @@ def base_experiment_config():
         "documents_csv_path": "tests/data/documents.csv",
         "answers_csv_path": "tests/data/answers.csv",
         "rich_print": True,
-        "verbose": True,
+        "render": True,
     }
     return config
 
@@ -480,7 +480,7 @@ def elo_tournament_result():
 
 @pytest.fixture
 def base_eval_config():
-    return BaseEvaluatorConfig(force=True, verbose=True)
+    return BaseEvaluatorConfig(force=True, render=True)
 
 
 @pytest.fixture
