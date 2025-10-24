@@ -13,7 +13,7 @@ class EvaluationAnswer(BaseModel):
 
 
 class RetrievalEvaluationAnswer(EvaluationAnswer):
-    """LLM-generated evaluation for retrieval tasks."""
+    """Output format for evaluating the relevance of a document to a question."""
 
     reasoning: str = Field(..., description="A concise explanation and reasoning of the relevance of the document.")
     score: float | int = Field(
@@ -24,7 +24,7 @@ class RetrievalEvaluationAnswer(EvaluationAnswer):
 
 
 class AnswerEvaluationAnswer(EvaluationAnswer):
-    """LLM-generated evaluation for answer quality tasks."""
+    """Output format for evaluating the quality of an answer to a question."""
 
     reasoning: str = Field(..., description="A concise explanation and reasoning of the quality of the answer.")
     score: int = Field(
@@ -38,14 +38,20 @@ class AnswerEvaluationAnswer(EvaluationAnswer):
 
 
 class PairwiseEvaluationAnswer(EvaluationAnswer):
-    """LLM-generated evaluation for pairwise comparison tasks."""
+    """Output format for evaluating the quality of answers from two agents to the same question."""
 
-    answer_a_analysis: str = Field(..., description="A string with your analysis of assistant A's answer")
-    answer_b_analysis: str = Field(..., description="A string with your analysis of assistant B's answer")
+    answer_a_analysis: str = Field(..., description="A string with your analysis of the answer from agent A")
+    answer_b_analysis: str = Field(..., description="A string with your analysis of the answer from agent B")
     comparison_reasoning: str = Field(
         ..., description="A string with your comparison between the two answers and their differences"
     )
-    winner: Literal["A", "B", "C"] = Field(..., description="The winner of the pairwise comparison.")
+    winner: Literal["A", "B", "C"] = Field(
+        ...,
+        description=(
+            "The winner of the pairwise comparison. 'A' if the answer from agent A is better, "
+            "'B' if the answer from agent B is better, or 'C' for a tie."
+        ),
+    )
 
 
 class RDNAMEvaluationAnswer(RetrievalEvaluationAnswer):
@@ -66,7 +72,7 @@ class RDNAMEvaluationAnswer(RetrievalEvaluationAnswer):
 
 
 class RDNAMNoAspectsAnswer(RetrievalEvaluationAnswer):
-    """LLM-generated evaluation for RDNAM without aspects."""
+    """Output format for evaluating the relevance of a document to a question."""
 
     reasoning: Annotated[str, SkipJsonSchema] = ""
     score: float = Field(
@@ -76,7 +82,7 @@ class RDNAMNoAspectsAnswer(RetrievalEvaluationAnswer):
 
 
 class RDNAMMultipleAnnotatorsAnswer(RetrievalEvaluationAnswer):
-    """LLM-generated evaluation simulating 5 RDNAM annotators."""
+    """Output format for evaluating the relevance of a document to a question by simulating 5 annotators."""
 
     score: Annotated[float | int, SkipJsonSchema] = 0.0
     reasoning: Annotated[str, SkipJsonSchema] = ""
@@ -88,7 +94,7 @@ class RDNAMMultipleAnnotatorsAnswer(RetrievalEvaluationAnswer):
 
 
 class RDNAMMultipleAnnotatorsNoAspectsAnswer(RetrievalEvaluationAnswer):
-    """LLM-generated evaluation simulating 5 RDNAM annotators without aspects."""
+    """Output format for evaluating the relevance of a document to a question by simulating 5 annotators."""
 
     score: Annotated[float | int, SkipJsonSchema] = 0.0
     reasoning: Annotated[str, SkipJsonSchema] = ""
