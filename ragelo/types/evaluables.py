@@ -189,14 +189,17 @@ class PairwiseGame(Evaluable):
 
     agent_a_answer: AgentAnswer
     agent_b_answer: AgentAnswer
+    reversed: bool = False
 
     @model_validator(mode="before")
     @classmethod
     def ensure_agent_order(cls, values):
-        agent_a_name = values.get("agent_a_answer").agent
-        agent_b_name = values.get("agent_b_answer").agent
-        if agent_a_name > agent_b_name:
-            values["agent_a_answer"], values["agent_b_answer"] = (values["agent_b_answer"], values["agent_a_answer"])
+        agent_a_answer = values.get("agent_a_answer")
+        agent_b_answer = values.get("agent_b_answer")
+        reversed = values.get("reversed", False)
+        agent_answers = sorted([agent_a_answer, agent_b_answer], reverse=reversed, key=lambda x: x.agent)
+        values["agent_a_answer"] = agent_answers[0]
+        values["agent_b_answer"] = agent_answers[1]
         return values
 
     @computed_field

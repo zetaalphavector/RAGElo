@@ -167,7 +167,10 @@ class BaseAnswerEvaluator(BaseEvaluator):
         # Handle Optional types (answer_type might be "SomeType | None")
         if hasattr(answer_type, "__args__"):
             # Get the first non-None type from the union
-            answer_type = next((arg for arg in answer_type.__args__ if arg is not type(None)), answer_type)
+            answer_type = next(
+                (arg for arg in answer_type.__args__ if arg is not type(None)),
+                answer_type,
+            )
 
         prompt = self._build_message(query, evaluable)
         exc = None
@@ -218,7 +221,10 @@ class BaseAnswerEvaluator(BaseEvaluator):
         # Handle Optional types (answer_type might be "SomeType | None")
         if hasattr(answer_type, "__args__"):
             # Get the first non-None type from the union
-            answer_type = next((arg for arg in answer_type.__args__ if arg is not type(None)), answer_type)
+            answer_type = next(
+                (arg for arg in answer_type.__args__ if arg is not type(None)),
+                answer_type,
+            )
 
         prompt = self._build_message_pairwise(query, evaluable)
         exc = None
@@ -343,8 +349,9 @@ class BaseAnswerEvaluator(BaseEvaluator):
         if inverse:
             reverse_game = PairwiseGame(
                 qid=game.qid,
-                agent_a_answer=game.agent_b_answer,
-                agent_b_answer=game.agent_a_answer,
+                agent_a_answer=game.agent_a_answer,
+                agent_b_answer=game.agent_b_answer,
+                reversed=True,
             )
             context = {"query": query, "game": reverse_game, "documents": documents}
         else:
