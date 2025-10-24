@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, TypeVar
 
 from openai import AsyncOpenAI
 from pydantic import BaseModel, ValidationError
-from tenacity import retry, stop_after_attempt, wait_random_exponential
+from tenacity import before_sleep_log, retry, stop_after_attempt, wait_random_exponential
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, LLMProviderFactory
+from ragelo.logger import logger
 from ragelo.types import LLMInputPrompt, LLMResponseType
 from ragelo.types.configurations import OllamaConfiguration
 from ragelo.types.types import LLMProviderTypes
@@ -28,7 +30,11 @@ class OllamaProvider(BaseLLMProvider):
         super().__init__(config)
         self.__ollama_client = self.__get_ollama_client(config)
 
-    @retry(wait=wait_random_exponential(min=1, max=120), stop=stop_after_attempt(1))
+    @retry(
+        wait=wait_random_exponential(min=1, max=120),
+        stop=stop_after_attempt(1),
+        before_sleep=before_sleep_log(logger=logger, logging_level=logging.INFO),
+    )
     async def call_async(self, input: LLMInputPrompt, response_schema: type[BaseModel]) -> LLMResponseType:
         """Calls the Ollama Local API asynchronously.
 

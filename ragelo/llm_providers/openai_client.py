@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import TypeVar
 
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 from openai.types.responses import ResponseTextConfigParam
 from openai.types.shared_params import ResponseFormatJSONObject
 from pydantic import BaseModel, ValidationError
-from tenacity import retry, stop_after_attempt, wait_random_exponential
+from tenacity import before_sleep_log, retry, stop_after_attempt, wait_random_exponential
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, LLMProviderFactory
+from ragelo.logger import logger
 from ragelo.types import LLMInputPrompt, LLMResponseType
 from ragelo.types.configurations import OpenAIConfiguration
 from ragelo.types.types import LLMProviderTypes
@@ -32,7 +34,11 @@ class OpenAIProvider(BaseLLMProvider):
         elif self.config.reasoning_effort:
             self.config.reasoning_effort = None
 
-    @retry(wait=wait_random_exponential(min=1, max=120), stop=stop_after_attempt(3))
+    @retry(
+        wait=wait_random_exponential(min=1, max=120),
+        stop=stop_after_attempt(3),
+        before_sleep=before_sleep_log(logger=logger, logging_level=logging.INFO),
+    )
     async def call_async(self, input: LLMInputPrompt, response_schema: type[T_Schema]) -> LLMResponseType[T_Schema]:
         """Calls the OpenAI API asynchronously.
 
