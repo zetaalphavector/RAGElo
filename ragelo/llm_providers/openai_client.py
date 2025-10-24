@@ -37,7 +37,7 @@ class OpenAIProvider(BaseLLMProvider):
     @retry(
         wait=wait_random_exponential(min=1, max=120),
         stop=stop_after_attempt(3),
-        before_sleep=before_sleep_log(logger=logger, logging_level=logging.INFO),
+        before_sleep=before_sleep_log(logger=logger, log_level=logging.INFO),
     )
     async def call_async(self, input: LLMInputPrompt, response_schema: type[T_Schema]) -> LLMResponseType[T_Schema]:
         """Calls the OpenAI API asynchronously.

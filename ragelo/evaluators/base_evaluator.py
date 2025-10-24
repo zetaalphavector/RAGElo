@@ -101,6 +101,7 @@ class BaseEvaluator(ABC):
                 eval_tuple = future_to_tuple.pop(finished)
                 evaluations += 1
                 pbar.update()
+                pbar.refresh()
                 if evaluation.exception:
                     failed += 1
                     continue

@@ -33,7 +33,7 @@ class OllamaProvider(BaseLLMProvider):
     @retry(
         wait=wait_random_exponential(min=1, max=120),
         stop=stop_after_attempt(1),
-        before_sleep=before_sleep_log(logger=logger, logging_level=logging.INFO),
+        before_sleep=before_sleep_log(logger=logger, log_level=logging.INFO),
     )
     async def call_async(self, input: LLMInputPrompt, response_schema: type[BaseModel]) -> LLMResponseType:
         """Calls the Ollama Local API asynchronously.
