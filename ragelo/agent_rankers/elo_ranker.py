@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+import logging
 import random
 
 import numpy as np
 
 from ragelo.agent_rankers.base_agent_ranker import AgentRanker, AgentRankerFactory
-from ragelo.logger import logger
 from ragelo.types import EloTournamentResult, Experiment
 from ragelo.types.configurations import EloAgentRankerConfig
 from ragelo.types.types import AgentRankerTypes
+
+logger = logging.getLogger(__name__)
 
 
 @AgentRankerFactory.register(AgentRankerTypes.ELO)

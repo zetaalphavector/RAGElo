@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterator
 from typing import Any
 
 from pydantic import BaseModel, field_validator
 from typing_extensions import Self
 
-from ragelo.logger import logger
 from ragelo.types.evaluables import AgentAnswer, Document, Evaluable, PairwiseGame
 from ragelo.types.results import EvaluatorResult, RetrievalEvaluatorResult
+
+logger = logging.getLogger(__name__)
 
 
 class Query(BaseModel):
@@ -107,7 +109,7 @@ class Query(BaseModel):
             doc.add_retrieved_by(agent, score, force, exist_ok)
         if doc.did in self.retrieved_docs and not force:
             if not exist_ok:
-                logger.info(f"Query {self.qid} already have a document {doc.did} retrieved.")
+                logger.debug(f"Query {self.qid} already has document {doc.did} retrieved.")
             return
 
         self.retrieved_docs[doc.did] = doc
@@ -122,7 +124,7 @@ class Query(BaseModel):
         agent = answer.agent
         if answer.agent in self.answers and not force:
             if not exist_ok:
-                logger.info(f"Answer from agent {answer.agent} already exists in query {self.qid}")
+                logger.debug(f"Answer from agent {answer.agent} already exists in query {self.qid}")
             return False
         self.answers[agent] = answer
         return True
@@ -204,7 +206,7 @@ class Query(BaseModel):
                     logger.warning("No valid retrieval evaluator result found.")
                     docs_without_relevance += 1
                     continue
-                logger.info(f"No retrieval evaluator name provided. Using {retrieval_evaluator_name}.")
+                logger.debug(f"No retrieval evaluator name provided. Using {retrieval_evaluator_name}.")
             if retrieval_evaluator_name not in document.evaluations:
                 logger.warning(
                     f"Document {did} in query {self.qid} does not have an evaluation from {retrieval_evaluator_name}."

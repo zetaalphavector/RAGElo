@@ -330,6 +330,33 @@ exp = Experiment(experiment_name="my_exp", save_on_disk=False)
 exp.evaluate_retrieval(metrics=["Precision@10", "nDCG@10"], relevance_threshold=1)
 ```
 
+## 🧭 Logging
+
+RAGElo uses standard Python logging with a single parent logger named `ragelo` and module-level topic loggers (e.g., `ragelo.evaluators`, `ragelo.agent_rankers`). The CLI configures colored console logging via Rich by default.
+
+- Programmatic configuration
+  - Configure once at startup and all `ragelo.*` loggers inherit the setup:
+    ```python
+    from ragelo.logger import configure_logging
+    configure_logging(level="INFO", rich=True)  # use "DEBUG" for more detail
+    ```
+  - You can tune specific areas by setting their levels explicitly:
+    ```python
+    import logging
+    logging.getLogger("ragelo.agent_rankers").setLevel("DEBUG")
+    ```
+
+- Rendering vs. logging
+  - Rendering of tables/summaries is controlled independently from logs:
+    ```python
+    experiment = Experiment(..., render=True, rich_print=True)
+    ```
+  - Progress bars are controlled by `use_progress_bar` in configs, not by log level.
+
+- CLI behavior
+  - The CLI initializes logging at INFO with Rich formatting and respects `--rich-print/--no-rich-print`.
+  - Rendering of tables is controlled by `--render/--no-render` flags.
+
 ## 🙋 Contributing
 
 To install the development dependencies, download the repository and run the following:

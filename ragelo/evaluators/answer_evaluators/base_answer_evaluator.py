@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import itertools
+import logging
 import random
 from typing import TYPE_CHECKING, Any, Callable, get_type_hints
 
@@ -8,7 +9,6 @@ from pydantic import BaseModel
 
 from ragelo.evaluators.base_evaluator import BaseEvaluator
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
-from ragelo.logger import logger
 from ragelo.types import (
     AnswerEvaluatorResult,
     LLMInputPrompt,
@@ -20,6 +20,8 @@ from ragelo.types.configurations import BaseAnswerEvaluatorConfig, PairwiseEvalu
 from ragelo.types.evaluables import AgentAnswer, Document, Evaluable, PairwiseGame
 from ragelo.types.types import AnswerEvaluatorTypes
 from ragelo.utils import call_async_fn, get_placeholders_and_tags
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from ragelo.types.experiment import Experiment

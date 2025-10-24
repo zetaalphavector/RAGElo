@@ -11,11 +11,11 @@ from pydantic import BaseModel, ValidationError
 from tenacity import before_sleep_log, retry, stop_after_attempt, wait_random_exponential
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, LLMProviderFactory
-from ragelo.logger import logger
 from ragelo.types import LLMInputPrompt, LLMResponseType
 from ragelo.types.configurations import OpenAIConfiguration
 from ragelo.types.types import LLMProviderTypes
 
+logger = logging.getLogger(__name__)
 T_Schema = TypeVar("T_Schema", bound=BaseModel)
 
 

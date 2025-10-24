@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from pydantic import BaseModel, computed_field, field_validator, model_validator
 from typing_extensions import Self
 
-from ragelo.logger import logger
 from ragelo.types.results import EvaluatorResult
+
+logger = logging.getLogger(__name__)
 
 
 class ChatMessage(BaseModel):
@@ -79,7 +81,7 @@ class Document(Evaluable):
         """Adds the score of an agent that retrieved the document."""
         if agent in self.retrieved_by and not force:
             if not exist_ok:
-                logger.info(f"Document with did {self.did} already retrieved by agent {agent}")
+                logger.debug(f"Document with did {self.did} already retrieved by agent {agent}")
             return
         if score is None:
             score = 1.0
