@@ -224,6 +224,7 @@ class Experiment:
         if query_id in self.queries and exist_ok:
             return query_id
         self.queries[query_id] = query_obj
+        self.save()
         return query_id
 
     def add_retrieved_docs(
