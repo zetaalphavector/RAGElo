@@ -396,6 +396,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
             games = games[:games_to_add]
             for agent_a, agent_b in games:
                 query.add_pairwise_game(agent_a, agent_b)
+        experiment.save()
 
     def _filter_documents(self, query: Query) -> list[Document]:
         # Check if we will actually include documents in any prompt
