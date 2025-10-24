@@ -117,5 +117,5 @@ class OllamaProvider(BaseLLMProvider):
     def __get_ollama_client(ollama_config: OllamaConfiguration) -> AsyncOpenAI:
         return AsyncOpenAI(
             base_url=ollama_config.api_base,
-            api_key=ollama_config.api_key,
+            api_key=ollama_config.api_key.get_secret_value(),
         )

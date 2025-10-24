@@ -297,8 +297,10 @@ class Experiment:
             force (bool): Whether to overwrite existing answers. Defaults to False.
             exist_ok (bool): Whether to raise an error if the answer already exists. Defaults to False.
         """
-        if query_id is None and not isinstance(answer, AgentAnswer):
-            raise ValueError("Query ID not provided")
+        if query_id is None:
+            if not isinstance(answer, AgentAnswer):
+                raise ValueError("Query ID not provided")
+            query_id = answer.qid
         if isinstance(answer, AgentAnswer):
             if agent and answer.agent != agent:
                 logger.warning(f"Agent mismatch. Using agent from answer object: {answer.agent}")
