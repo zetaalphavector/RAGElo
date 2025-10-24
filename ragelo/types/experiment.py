@@ -284,6 +284,7 @@ class Experiment:
         if query_id not in self.queries:
             raise ValueError(f"Query {query_id} not found in queries")
         self.queries[query_id].add_retrieved_doc(doc, score, agent, force, exist_ok)
+        self.save()
 
     def add_agent_answer(
         self,
@@ -312,6 +313,7 @@ class Experiment:
         if query_id not in self.queries:
             raise ValueError(f"Query {query_id} not found in queries")
         self.queries[query_id].add_agent_answer(answer, force=force, exist_ok=exist_ok)
+        self.save()
 
     def add_evaluation(
         self,
@@ -919,7 +921,13 @@ class Experiment:
                 logger.error(f"Unknown result type {type(result)}. Skipping.")
                 continue
 
-            self.add_evaluation((query, evaluable), result, should_save=False, exist_ok=True, should_print=False)
+            self.add_evaluation(
+                (query, evaluable),
+                result,
+                should_save=False,
+                exist_ok=True,
+                should_print=False,
+            )
 
     def __len__(self):
         return len(self.queries)
