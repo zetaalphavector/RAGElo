@@ -26,11 +26,14 @@ def configure_logging(level: int | str = "WARNING", *, rich: bool = True) -> Non
     lib_logger.setLevel(level)
 
     lib_logger.handlers = []
-    lib_logger.propagate = False
+    # Determine environment to decide propagation behavior
+    under_pytest = "PYTEST_CURRENT_TEST" in os.environ
+    in_ci = os.environ.get("CI") in {"true", "1", "True"}
+    # Allow propagation in tests/CI so pytest caplog can capture records.
+    lib_logger.propagate = under_pytest or in_ci
+
     if rich:
         # In tests/CI, avoid colors and wrapping for stable output
-        under_pytest = "PYTEST_CURRENT_TEST" in os.environ
-        in_ci = os.environ.get("CI") in {"true", "1", "True"}
         force_no_color = os.environ.get("RAGELO_RICH_NO_COLOR") in {"1", "true", "True"}
         no_color = under_pytest or in_ci or force_no_color
         width = 300 if no_color else None
