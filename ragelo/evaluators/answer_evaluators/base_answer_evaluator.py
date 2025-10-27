@@ -45,7 +45,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
         answer_metadata: dict[str, Any] | None = None,
         answer_a_metadata: dict[str, Any] | None = None,
         answer_b_metadata: dict[str, Any] | None = None,
-    ) -> AnswerEvaluatorResult:
+    ) -> AnswerEvaluatorResult | PairwiseGameEvaluatorResult:
         """
         Evaluates a single sample using an answer evaluator.
         Args:
@@ -310,36 +310,11 @@ class BaseAnswerEvaluator(BaseEvaluator):
             exception=exc,
         )
 
-    def _get_tuples_to_evaluate(self, experiment: Experiment) -> list[tuple[Query, Evaluable]]:
-        """
-        Creates the list of pairs (query, evaluable) to evaluate
-        """
-        tuples_to_eval: list[tuple[Query, Evaluable]] = []
-        all_tuples = 0
-        missing_evaluations = 0
-        evaluator_name = str(self.config.evaluator_name)
-        for q in experiment:
-            if self.config.pairwise:
-                for g in q.pairwise_games.values():
-                    all_tuples += 1
-                    tuples_to_eval.append((q, g))
-                    if evaluator_name not in g.evaluations:
-                        missing_evaluations += 1
-
-            else:
-                for a in q.answers.values():
-                    all_tuples += 1
-                    tuples_to_eval.append((q, a))
-                    if evaluator_name not in a.evaluations:
-                        missing_evaluations += 1
-
-        if missing_evaluations == 0 and not self.config.force:
-            logger.info(
-                f"All {all_tuples} answers are already evaluated.\n"
-                "If you want to re-evaluate them, use the --force flag"
-            )
-
-        return tuples_to_eval
+    def _get_all_evaluables(self, query: Query) -> list[Evaluable]:
+        if self.config.pairwise:
+            return list(query.pairwise_games.values())
+        else:
+            return list(query.answers.values())
 
     def _build_message(self, query: Query, answer: AgentAnswer) -> LLMInputPrompt:
         """Builds the message to send to the LLM evaluator"""

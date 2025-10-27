@@ -134,12 +134,18 @@ class Query(BaseModel):
         game_key = f"{sorted_agents[0]}-{sorted_agents[1]}"
         return self.pairwise_games.get(game_key, None)
 
-    def add_pairwise_game(self, agent_a: str, agent_b: str) -> PairwiseGame:
+    def add_pairwise_game(
+        self, agent_a: str, agent_b: str, force: bool = False, exist_ok: bool = False
+    ) -> PairwiseGame:
         game = PairwiseGame(
             qid=self.qid,
             agent_a_answer=self.answers[agent_a],
             agent_b_answer=self.answers[agent_b],
         )
+        if game.game_id in self.pairwise_games and not force:
+            if not exist_ok:
+                logger.warning(f"Pairwise game {game.game_id} already exists in query {self.qid}")
+            return self.pairwise_games[game.game_id]
         self.pairwise_games[game.game_id] = game
         return game
 

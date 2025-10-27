@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, TypeVar
@@ -17,6 +18,7 @@ from ragelo.types.query import Query
 from ragelo.types.results import EvaluatorResult
 from ragelo.utils import call_async_fn, get_pbar
 
+logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from ragelo.types.experiment import Experiment
 
@@ -61,6 +63,64 @@ class BaseEvaluator(ABC):
         """
         n_threads = n_threads or self.config.n_processes
         call_async_fn(self._evaluate_experiment_async, experiment, n_threads)
+
+    def evaluate_all_evaluables(self, query: Query, n_threads: int | None = None):
+        """Evaluate all the evaluables in the query asynchronously.
+        Args:
+            query(Query): The query to evaluate.
+            n_threads(int): The number of threads to use for the evaluation.
+                If None, the number of threads defined in the config will be used.
+        """
+        n_threads = n_threads or self.config.n_processes
+        call_async_fn(self._evaluate_all_evaluables_async, query, n_threads)
+
+    async def evaluate_all_evaluables_async(self, query: Query, n_threads: int):
+        tuples_to_eval = [(query, e) for e in self._get_all_evaluables(query)]
+        pbar = get_pbar(
+            len(tuples_to_eval),
+            self.config.rich_print,
+            desc=f"Evaluating {self.evaluable_name}s for query {query.query_id}",
+            disable=not getattr(self.config, "use_progress_bar", True),
+        )
+        awaitables_ended = False
+        pending: set[asyncio.Future] = set()
+        tuples_iter = iter(tuples_to_eval)
+        future_to_tuple: dict[asyncio.Future, tuple[Query, Evaluable]] = {}
+        failed = 0
+        evaluations = 0
+        while pending or not awaitables_ended:
+            while len(pending) < n_threads and not awaitables_ended:
+                try:
+                    eval_tuple = next(tuples_iter)
+                except StopIteration:
+                    awaitables_ended = True
+                else:
+                    future = asyncio.ensure_future(self.evaluate_async(eval_tuple))
+                    pending.add(future)
+                    future_to_tuple[future] = eval_tuple
+            if not pending:
+                break
+            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+            while done:
+                finished = done.pop()
+                evaluation = await finished
+                eval_tuple = future_to_tuple.pop(finished)
+                evaluations += 1
+                pbar.update()
+                pbar.refresh()
+                if evaluation.exception:
+                    failed += 1
+                    continue
+                query.add_evaluation(
+                    eval_tuple, evaluation, exist_ok=True, force=self.config.force, should_print=self.config.render
+                )
+        pbar.close()
+        if self.config.render:
+            render_failed_evaluations(evaluations, failed, self.config.rich_print)
+
+    @abstractmethod
+    def _get_all_evaluables(self, query: Query) -> list[Evaluable]:
+        raise NotImplementedError
 
     @abstractmethod
     async def evaluate_async(self, eval_sample: tuple[Query, Evaluable]) -> EvaluatorResult:
@@ -116,9 +176,23 @@ class BaseEvaluator(ABC):
         if self.config.render:
             render_failed_evaluations(evaluations, failed, self.config.rich_print)
 
-    @abstractmethod
-    def _get_tuples_to_evaluate(self, queries: Experiment) -> Sequence[tuple[Query, Evaluable]]:
-        raise NotImplementedError
+    def _get_tuples_to_evaluate(self, experiment: Experiment) -> Sequence[tuple[Query, Evaluable]]:
+        tuples_to_eval: list[tuple[Query, Evaluable]] = []
+        all_tuples = 0
+        missing_evaluations = 0
+        evaluator_name = str(self.config.evaluator_name)
+        for q in experiment:
+            for e in self._get_all_evaluables(q):
+                if evaluator_name not in e.evaluations:
+                    missing_evaluations += 1
+                tuples_to_eval.append((q, e))
+                all_tuples += 1
+        if missing_evaluations == 0 and not self.config.force:
+            logger.info(
+                f"All {all_tuples} {self.evaluable_name}s are already evaluated.\n"
+                "If you want to re-evaluate them, use the --force flag"
+            )
+        return tuples_to_eval
 
     def _process_answer(self, llm_response: LLMResponseType[T_Result]) -> LLMResponseType[T_Result]:
         """Processes the raw answer returned by the LLM. Should be implemented by the subclass if needed."""

@@ -5,7 +5,7 @@ and returns a score or a label for each document."""
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Callable, get_type_hints
+from typing import Any, Callable, get_type_hints
 
 from tenacity import RetryError
 
@@ -18,9 +18,6 @@ from ragelo.types.types import RetrievalEvaluatorTypes
 from ragelo.utils import call_async_fn
 
 logger = logging.getLogger(__name__)
-
-if TYPE_CHECKING:
-    from ragelo.types.experiment import Experiment
 
 
 class BaseRetrievalEvaluator(BaseEvaluator):
@@ -117,27 +114,6 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             exception=exc,
         )
 
-    def _get_tuples_to_evaluate(self, experiment: Experiment) -> list[tuple[Query, Evaluable]]:
-        """
-        Creates the list of pairs (query, evaluable) to evaluate
-        """
-        tuples_to_eval = []
-        all_tuples = 0
-        missing_evaluations = 0
-        evaluator_name = str(self.config.evaluator_name)
-        for q in experiment:
-            for d in q.retrieved_docs.values():
-                if evaluator_name not in d.evaluations:
-                    missing_evaluations += 1
-                tuples_to_eval.append((q, d))
-                all_tuples += 1
-        if missing_evaluations == 0 and not self.config.force:
-            logger.info(
-                f"All {all_tuples} documents are already evaluated.\n"
-                "If you want to re-evaluate them, use the --force flag"
-            )
-        return tuples_to_eval
-
     def _build_message(self, query: Query, document: Document) -> LLMInputPrompt:
         context = {"query": query, "document": document}
         user_message = self.user_prompt.render(**context) if self.user_prompt else None
@@ -155,6 +131,9 @@ class BaseRetrievalEvaluator(BaseEvaluator):
     @classmethod
     def get_config_class(cls) -> type[BaseRetrievalEvaluatorConfig]:
         return get_type_hints(cls)["config"]
+
+    def _get_all_evaluables(self, query: Query) -> list[Evaluable]:
+        return list(query.retrieved_docs.values())
 
 
 class RetrievalEvaluatorFactory:
