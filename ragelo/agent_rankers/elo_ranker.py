@@ -41,6 +41,11 @@ class EloRanker(AgentRanker):
         self.games: list[tuple[str, str, str, str]] = []
 
     def add_new_agent(self, agent: str):
+        """Add a new agent to the rankings.
+
+        Args:
+            agent: The name of the agent to add.
+        """
         if agent not in self.agents_scores:
             self.agents_scores[agent] = self.initial_score
             self.games_played[agent] = 0
@@ -50,7 +55,11 @@ class EloRanker(AgentRanker):
             self.std_dev[agent] = 0
 
     def run(self, experiment: Experiment) -> EloTournamentResult:
-        """Compute score for each agent"""
+        """Run an Elo-based tournament with all agents in an experiment.
+
+        Args:
+            experiment: The experiment to run.
+        """
         self.evaluations = self._flatten_evaluations(experiment)
         agent_scores: dict[str, list[float]] = {}
         for _ in range(self.config.tournaments):
@@ -76,13 +85,16 @@ class EloRanker(AgentRanker):
         return result
 
     def get_agents_ratings(self):
+        """Get the ratings of all agents."""
         return self.agents_scores
 
     def get_ranked_agents(self) -> list[tuple[str, float]]:
+        """Get the ranked agents by their ratings."""
         ranking = sorted(self.get_agents_ratings().items(), key=lambda x: x[1], reverse=True)
         return [(agent, rating) for agent, rating in ranking]
 
     def run_tournament(self) -> dict[str, float]:
+        """Run a single tournament."""
         agents_scores: dict[str, float] = {}
         games: list[tuple[str, str, float]] = []
         for agent_a, agent_b, score in self.evaluations:
@@ -122,6 +134,19 @@ class EloRanker(AgentRanker):
         retrieval_evaluator: BaseRetrievalEvaluator | None = None,
         experiment: Experiment | None = None,
     ) -> tuple[float, float]:
+        """Run a single game between two agents and update their rankings according to the Elo algorithm.
+
+        Args:
+            query: The query to run the game on.
+            agent_a: The name of the first agent.
+            agent_b: The name of the second agent.
+            evaluator: The evaluator to use for the game.
+            retrieval_evaluator: The retrieval evaluator to use for the game.
+            experiment: The experiment to save the game to.
+
+        Returns:
+            The ratings of the two agents after the game.
+        """
         assert agent_a in query.answers, f"Agent {agent_a} not found in query"
         assert agent_b in query.answers, f"Agent {agent_b} not found in query"
         game = query.add_pairwise_game(agent_a, agent_b, exist_ok=True)
@@ -154,6 +179,16 @@ class EloRanker(AgentRanker):
         return self.agents_scores[agent_a], self.agents_scores[agent_b]
 
     def update_rankings(self, agent_a: str, agent_b: str, score_val: float) -> tuple[float, float]:
+        """Update the rankings of two agents according to the Elo algorithm.
+
+        Args:
+            agent_a: The name of the first agent.
+            agent_b: The name of the second agent.
+            score_val: The score of the game.
+
+        Returns:
+            The ratings of the two agents after the update.
+        """
         agent_a_rating = self.agents_scores.get(agent_a, self.initial_score)
         agent_b_rating = self.agents_scores.get(agent_b, self.initial_score)
 
