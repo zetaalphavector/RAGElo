@@ -917,8 +917,13 @@ class Experiment:
                     continue
                 evaluable = query.retrieved_docs[result.did]
             elif isinstance(result, PairwiseGameEvaluatorResult):
-                if result.game_id not in query.pairwise_games:
-                    logger.warning(f"Pairwise game {result.game_id} not found in query {result.qid}. Skipping")
+                if result.agent_a in query.answers and result.agent_b in query.answers:
+                    query.add_pairwise_game(result.agent_a, result.agent_b, exist_ok=True)
+                else:
+                    logger.warning(
+                        f"Trying to add pairwise game {result.game_id} but agents {result.agent_a} "
+                        f"and {result.agent_b} not found in query {result.qid}. Skipping"
+                    )
                     continue
                 evaluable = query.pairwise_games[result.game_id]
             elif isinstance(result, AnswerEvaluatorResult):
