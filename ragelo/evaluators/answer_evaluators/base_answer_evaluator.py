@@ -312,7 +312,21 @@ class BaseAnswerEvaluator(BaseEvaluator):
 
     def _get_all_evaluables(self, query: Query) -> list[Evaluable]:
         if self.config.pairwise:
-            return list(query.pairwise_games.values())
+            games_to_evalaute: list[PairwiseGame] = []
+            evaluated_games = {
+                g.game_id for g in query.pairwise_games.values() if self.config.evaluator_name in g.evaluations
+            }
+            # prefer adding games that were already evaluated
+            for game_id in evaluated_games:
+                games_to_evalaute.append(query.pairwise_games[game_id])
+            if len(games_to_evalaute) < self.config.n_games_per_query:
+                for game in query.pairwise_games.values():
+                    if game.game_id not in evaluated_games:
+                        games_to_evalaute.append(game)
+                        if len(games_to_evalaute) > self.config.n_games_per_query:
+                            break
+
+            return games_to_evalaute[: self.config.n_games_per_query]
         else:
             return list(query.answers.values())
 
