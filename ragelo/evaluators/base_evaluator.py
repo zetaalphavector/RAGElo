@@ -72,14 +72,14 @@ class BaseEvaluator(ABC):
                 If None, the number of threads defined in the config will be used.
         """
         n_threads = n_threads or self.config.n_processes
-        call_async_fn(self._evaluate_all_evaluables_async, query, n_threads)
+        call_async_fn(self.evaluate_all_evaluables_async, query, n_threads)
 
     async def evaluate_all_evaluables_async(self, query: Query, n_threads: int):
         tuples_to_eval = [(query, e) for e in self._get_all_evaluables(query)]
         pbar = get_pbar(
             len(tuples_to_eval),
             self.config.rich_print,
-            desc=f"Evaluating {self.evaluable_name}s for query {query.query_id}",
+            desc=f"Evaluating {self.evaluable_name}s for query {query.qid}",
             disable=not getattr(self.config, "use_progress_bar", True),
         )
         awaitables_ended = False
@@ -111,9 +111,7 @@ class BaseEvaluator(ABC):
                 if evaluation.exception:
                     failed += 1
                     continue
-                query.add_evaluation(
-                    eval_tuple, evaluation, exist_ok=True, force=self.config.force, should_print=self.config.render
-                )
+                query.add_evaluation(eval_tuple[1], evaluation, exist_ok=True, force=self.config.force)
         pbar.close()
         if self.config.render:
             render_failed_evaluations(evaluations, failed, self.config.rich_print)

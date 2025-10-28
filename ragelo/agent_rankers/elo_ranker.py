@@ -132,10 +132,11 @@ class EloRanker(AgentRanker):
                 experiment.save()
         evaluation: PairwiseGameEvaluatorResult = await evaluator.evaluate_async((query, game))
         if experiment:
-            experiment.add_evaluation(evaluation, exist_ok=True)
+            experiment.add_evaluation((query, game), evaluation, exist_ok=True)
         winner = evaluation.winner
         score_val = self.score_map[winner]
-
+        agent_a = game.agent_a_answer.agent
+        agent_b = game.agent_b_answer.agent
         if winner == "A":
             self.wins[agent_a] = self.wins.get(agent_a, 0) + 1
             self.losses[agent_b] = self.losses.get(agent_b, 0) + 1

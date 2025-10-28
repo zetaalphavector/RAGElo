@@ -311,7 +311,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
         )
 
     def _get_all_evaluables(self, query: Query) -> list[Evaluable]:
-        if self.config.pairwise:
+        if isinstance(self.config, PairwiseEvaluatorConfig):
             games_to_evalaute: list[PairwiseGame] = []
             evaluated_games = {
                 g.game_id for g in query.pairwise_games.values() if self.config.evaluator_name in g.evaluations
