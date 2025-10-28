@@ -250,7 +250,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 exception=exc,
             )
 
-        winner = getattr(parsed_answer, "winner", None) if parsed_answer else None
+        winner = parsed_answer.winner
         answer = self.result_type(
             qid=query.qid,
             agent_a=evaluable.agent_a_answer.agent,
@@ -266,17 +266,17 @@ class BaseAnswerEvaluator(BaseEvaluator):
             response_schema=answer_type,
         )
         inverse_llm_response = self._process_answer(inverse_llm_response)
-        inv = inverse_llm_response.parsed_answer
+        inverse_parsed_answer = inverse_llm_response.parsed_answer
         inverse_answer = self.result_type(
             qid=query.qid,
             agent_a=evaluable.agent_b_answer.agent,
             agent_b=evaluable.agent_a_answer.agent,
             evaluator_name=str(self.config.evaluator_name),
-            answer=inv,
+            answer=inverse_parsed_answer,
             exception=exc,
         )
 
-        winner_inverse = getattr(inv, "winner", None) if inv is not None else None
+        winner_inverse = inverse_parsed_answer.winner
         # normalize winner_inverse
         if winner_inverse == "A":
             winner_inverse = "B"
@@ -311,24 +311,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
         )
 
     def _get_all_evaluables(self, query: Query) -> list[Evaluable]:
-        if isinstance(self.config, PairwiseEvaluatorConfig):
-            games_to_evalaute: list[PairwiseGame] = []
-            evaluated_games = {
-                g.game_id for g in query.pairwise_games.values() if self.config.evaluator_name in g.evaluations
-            }
-            # prefer adding games that were already evaluated
-            for game_id in evaluated_games:
-                games_to_evalaute.append(query.pairwise_games[game_id])
-            if len(games_to_evalaute) < self.config.n_games_per_query:
-                for game in query.pairwise_games.values():
-                    if game.game_id not in evaluated_games:
-                        games_to_evalaute.append(game)
-                        if len(games_to_evalaute) > self.config.n_games_per_query:
-                            break
-
-            return games_to_evalaute[: self.config.n_games_per_query]
-        else:
-            return list(query.answers.values())
+        return list(query.answers.values())
 
     def _build_message(self, query: Query, answer: AgentAnswer) -> LLMInputPrompt:
         """Builds the message to send to the LLM evaluator"""

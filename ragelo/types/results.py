@@ -174,11 +174,9 @@ class PairwiseGameEvaluatorResult(EvaluatorResult):
         return None
 
     @property
-    def winner(self) -> Literal["A", "B", "C"] | None:
+    def winner(self) -> Literal["A", "B", "C"]:
         """Convenience property to access winner from the nested answer."""
-        if self.answer and hasattr(self.answer, "winner"):
-            return self.answer.winner  # type: ignore
-        return None
+        return self.answer.winner
 
     def strigify_answer(self) -> str:
         if (

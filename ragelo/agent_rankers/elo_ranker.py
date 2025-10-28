@@ -52,7 +52,7 @@ class EloRanker(AgentRanker):
     def run(self, experiment: Experiment) -> EloTournamentResult:
         """Compute score for each agent"""
         self.evaluations = self._flatten_evaluations(experiment)
-        agent_scores: dict[str, list[int]] = {}
+        agent_scores: dict[str, list[float]] = {}
         for _ in range(self.config.tournaments):
             results = self.run_tournament()
             for agent, score in results.items():
@@ -82,8 +82,8 @@ class EloRanker(AgentRanker):
         ranking = sorted(self.get_agents_ratings().items(), key=lambda x: x[1], reverse=True)
         return [(agent, rating) for agent, rating in ranking]
 
-    def run_tournament(self) -> dict[str, int]:
-        agents_scores: dict[str, int] = {}
+    def run_tournament(self) -> dict[str, float]:
+        agents_scores: dict[str, float] = {}
         games: list[tuple[str, str, float]] = []
         for agent_a, agent_b, score in self.evaluations:
             score_val = self.score_map[score]
@@ -104,8 +104,8 @@ class EloRanker(AgentRanker):
             agent_b_rating = agents_scores.get(agent_b, self.initial_score)
 
             expected_score = 1 / (1 + 10 ** ((agent_a_rating - agent_b_rating) / 400))
-            agents_scores[agent_a] = int(agent_a_rating + self.k * (score_val - expected_score))
-            agents_scores[agent_b] = int(agent_b_rating + self.k * ((1 - score_val) - (1 - expected_score)))
+            agents_scores[agent_a] = agent_a_rating + self.k * (score_val - expected_score)
+            agents_scores[agent_b] = agent_b_rating + self.k * ((1 - score_val) - (1 - expected_score))
             self.total_games += 1
             self.games_played[agent_a] = self.games_played.get(agent_a, 0) + 1
             self.games_played[agent_b] = self.games_played.get(agent_b, 0) + 1
@@ -121,7 +121,7 @@ class EloRanker(AgentRanker):
         evaluator: PairwiseAnswerEvaluator,
         retrieval_evaluator: BaseRetrievalEvaluator | None = None,
         experiment: Experiment | None = None,
-    ) -> tuple[int, int]:
+    ) -> tuple[float, float]:
         assert agent_a in query.answers, f"Agent {agent_a} not found in query"
         assert agent_b in query.answers, f"Agent {agent_b} not found in query"
         game = query.add_pairwise_game(agent_a, agent_b, exist_ok=True)
@@ -130,7 +130,10 @@ class EloRanker(AgentRanker):
             retrieval_evaluator.evaluate_all_evaluables(query, n_threads=10)
             if experiment:
                 experiment.save()
-        evaluation: PairwiseGameEvaluatorResult = await evaluator.evaluate_async((query, game))
+        evaluation = await evaluator.evaluate_async((query, game))
+        assert isinstance(
+            evaluation, PairwiseGameEvaluatorResult
+        ), f"Evaluation {evaluation} is not a PairwiseGameEvaluatorResult"
         if experiment:
             experiment.add_evaluation((query, game), evaluation, exist_ok=True)
         winner = evaluation.winner
@@ -150,13 +153,13 @@ class EloRanker(AgentRanker):
         self.update_rankings(agent_a, agent_b, score_val)
         return self.agents_scores[agent_a], self.agents_scores[agent_b]
 
-    def update_rankings(self, agent_a: str, agent_b: str, score_val: float) -> tuple[int, int]:
+    def update_rankings(self, agent_a: str, agent_b: str, score_val: float) -> tuple[float, float]:
         agent_a_rating = self.agents_scores.get(agent_a, self.initial_score)
         agent_b_rating = self.agents_scores.get(agent_b, self.initial_score)
 
         expected_score = 1 / (1 + 10 ** ((agent_a_rating - agent_b_rating) / 400))
-        self.agents_scores[agent_a] = int(agent_a_rating + self.k * (score_val - expected_score))
-        self.agents_scores[agent_b] = int(agent_b_rating + self.k * ((1 - score_val) - (1 - expected_score)))
+        self.agents_scores[agent_a] = agent_a_rating + self.k * (score_val - expected_score)
+        self.agents_scores[agent_b] = agent_b_rating + self.k * ((1 - score_val) - (1 - expected_score))
         self.games_played[agent_a] = self.games_played.get(agent_a, 0) + 1
         self.games_played[agent_b] = self.games_played.get(agent_b, 0) + 1
         return self.agents_scores[agent_a], self.agents_scores[agent_b]

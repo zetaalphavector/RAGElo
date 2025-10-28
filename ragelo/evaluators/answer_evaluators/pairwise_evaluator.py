@@ -1,6 +1,6 @@
 from ragelo.evaluators.answer_evaluators.base_answer_evaluator import AnswerEvaluatorFactory, BaseAnswerEvaluator
 from ragelo.types.configurations import PairwiseEvaluatorConfig
-from ragelo.types.evaluables import PairwiseGame
+from ragelo.types.evaluables import Evaluable, PairwiseGame
 from ragelo.types.formats import LLMInputPrompt
 from ragelo.types.query import Query
 from ragelo.types.results import PairwiseGameEvaluatorResult
@@ -76,6 +76,23 @@ class PairwiseAnswerEvaluator(BaseAnswerEvaluator):
         [The Start of Assistant B's Answer]
             {{ game.agent_b_answer.text }}
         [The End of Assistant B's Answer]""")  # noqa: E501
+
+    def _get_all_evaluables(self, query: Query) -> list[Evaluable]:
+        games_to_evaluate: list[Evaluable] = []
+        evaluated_games = {
+            g.game_id for g in query.pairwise_games.values() if self.config.evaluator_name in g.evaluations
+        }
+        # prefer adding games that were already evaluated
+        for game_id in evaluated_games:
+            games_to_evaluate.append(query.pairwise_games[game_id])
+        if len(games_to_evaluate) < self.config.n_games_per_query:
+            for game in query.pairwise_games.values():
+                if game.game_id not in evaluated_games:
+                    games_to_evaluate.append(game)
+                    if len(games_to_evaluate) > self.config.n_games_per_query:
+                        break
+
+        return games_to_evaluate[: self.config.n_games_per_query]
 
     def _build_message_pairwise(self, query: Query, game: PairwiseGame, inverse: bool = False) -> LLMInputPrompt:
         documents = self._filter_documents(query)
