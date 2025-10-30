@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import random
-from typing import Any, Awaitable, Callable
+from typing import Awaitable, Callable
 
 import numpy as np
 
@@ -11,7 +11,6 @@ from ragelo.evaluators.answer_evaluators.pairwise_evaluator import PairwiseAnswe
 from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import BaseRetrievalEvaluator
 from ragelo.types import (
     AgentAnswer,
-    Document,
     EloAgentRankerConfig,
     EloTournamentResult,
     Experiment,
@@ -258,7 +257,7 @@ class EloRanker(AgentRanker):
         new_agent: str,
         evaluator: PairwiseAnswerEvaluator,
         retrieval_evaluator: BaseRetrievalEvaluator | None = None,
-        agent_callable: Callable[[str, str], Awaitable[tuple[str, list[Any]]]] = None,
+        agent_callable: Callable[[str, str], Awaitable[AgentAnswer]] | None = None,
     ) -> EloTournamentResult:
         """Estimate Elo for a brand-new agent with minimal games.
         Args:
@@ -288,8 +287,6 @@ class EloRanker(AgentRanker):
             existing_agents.remove(new_agent)
         # Edge case: No opponents available
         if len(existing_agents) == 0:
-            if self.config.verbose:
-                logger.info("No existing agents found. Returning initial score for the new agent.")
             return EloTournamentResult(
                 agents=[new_agent],
                 scores={new_agent: float(self.agents_scores.get(new_agent, self.initial_score))},
@@ -379,37 +376,13 @@ class EloRanker(AgentRanker):
                             logger.warning(f"Failed to get answer/docs for new agent on qid={query.qid}")
                             continue
                         try:
-                            answer_text, docs = await agent_callable(query.qid, query.query)
+                            agent_answer = await agent_callable(query.qid, query.query)
                         except Exception as e:
                             logger.warning(f"Failed to get answer/docs for new agent on qid={query.qid}: {e}")
                             continue
-                        # Add retrieved docs (if any)
-                        if docs:
-                            for d in docs:
-                                try:
-                                    if isinstance(d, Document):
-                                        experiment.add_retrieved_doc(d, exist_ok=True, agent=new_agent)
-                                    else:
-                                        # Fallback: attempt to assemble from string
-                                        experiment.add_retrieved_doc(
-                                            str(d),
-                                            query_id=query.qid,
-                                            doc_id=str(d),
-                                            agent=new_agent,
-                                            exist_ok=True,
-                                        )
-                                except Exception as e:
-                                    logger.debug(f"Skipping doc add for qid={query.qid}: {e}")
                         # Add the new agent answer
                         try:
-                            experiment.add_agent_answer(
-                                AgentAnswer(
-                                    qid=query.qid,
-                                    agent=new_agent,
-                                    text=str(answer_text),
-                                ),
-                                exist_ok=True,
-                            )
+                            experiment.add_agent_answer(agent_answer, exist_ok=True)
                         except Exception as e:
                             logger.warning(f"Failed to add new agent answer for qid={query.qid}: {e}")
                             continue
