@@ -38,13 +38,18 @@ def call_async_fn(fn: Callable[..., Coroutine[Any, Any, Any]], *args: Any, **kwa
 
 
 def get_pbar(
-    total: int, use_rich: bool = True, ncols: int = 100, desc: str = "Evaluating", disable: bool = False
+    total: int,
+    use_rich: bool = True,
+    ncols: int = 100,
+    desc: str = "Evaluating",
+    disable: bool = False,
+    leave: bool = True,
 ) -> tqdm | tqdm_rich:
     if use_rich:
         warnings.filterwarnings("ignore", category=TqdmExperimentalWarning)
-        return tqdm_rich(total=total, ncols=ncols, desc=desc, disable=disable)
+        return tqdm_rich(total=total, ncols=ncols, desc=desc, disable=disable, leave=leave)
     else:
-        return tqdm(total=total, ncols=ncols, desc=desc, disable=disable)
+        return tqdm(total=total, ncols=ncols, desc=desc, disable=disable, leave=leave)
 
 
 def string_to_template(src: str) -> Template:
