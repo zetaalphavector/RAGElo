@@ -14,6 +14,7 @@ from ragelo.types import (
     EloAgentRankerConfig,
     EloTournamentResult,
     Experiment,
+    PairwiseGame,
     PairwiseGameEvaluatorResult,
     Query,
 )
@@ -45,7 +46,7 @@ class EloRanker(AgentRanker):
         self.initial_score: int = self.config.initial_score
         self.k: int = self.config.elo_k
         self.std_dev: dict[str, float] = {}
-        self.games: list[tuple[str, str, str, str]] = []
+        self.games: list[PairwiseGame] = []
 
     def add_new_agent(self, agent: str):
         """Add a new agent to the rankings.
@@ -176,21 +177,26 @@ class EloRanker(AgentRanker):
                 exist_ok=True,
                 should_print=self.config.render,
             )
-        winner = evaluation.winner
-        score_val = self.score_map[winner]
-        agent_a = game.agent_a_answer.agent
-        agent_b = game.agent_b_answer.agent
-        if winner == "A":
+        winner = game.get_winner(evaluator.config.evaluator_name)
+        if winner == agent_a:
+            score_val = self.score_map["A"]
+        elif winner == agent_b:
+            score_val = self.score_map["B"]
+        else:
+            score_val = self.score_map["C"]
+        # Agents in the game are always sorted alphabetically, regardless of how they were added initially.
+        if winner == agent_a:
             self.wins[agent_a] = self.wins.get(agent_a, 0) + 1
             self.losses[agent_b] = self.losses.get(agent_b, 0) + 1
-        elif winner == "B":
+        elif winner == agent_b:
             self.wins[agent_b] = self.wins.get(agent_b, 0) + 1
             self.losses[agent_a] = self.losses.get(agent_a, 0) + 1
         else:
             self.ties[agent_a] = self.ties.get(agent_a, 0) + 1
             self.ties[agent_b] = self.ties.get(agent_b, 0) + 1
-        self.games.append((query.qid, agent_a, agent_b, winner))
+        self.games.append(game)
         self.update_rankings(agent_a, agent_b, score_val)
+        # Return in the same order as the agents were passed.
         return self.agents_scores[agent_a], self.agents_scores[agent_b]
 
     def update_rankings(self, agent_a: str, agent_b: str, score_val: float) -> tuple[float, float]:

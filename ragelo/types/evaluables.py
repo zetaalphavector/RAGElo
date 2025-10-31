@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel, computed_field, field_validator, model_validator
 from typing_extensions import Self
 
-from ragelo.types.results import EvaluatorResult
+from ragelo.types.results import EvaluatorResult, PairwiseGameEvaluatorResult
 
 logger = logging.getLogger(__name__)
 
@@ -210,3 +210,21 @@ class PairwiseGame(Evaluable):
         """The ID of the pairwise game."""
         sorted_agents = sorted([self.agent_a_answer.agent, self.agent_b_answer.agent])
         return f"{sorted_agents[0]}-{sorted_agents[1]}"
+
+    def get_winner(self, evaluator_name: str | None = None) -> str | None:
+        """The name of the winner of the game."""
+        if evaluator_name is None and len(self.evaluations) > 0:
+            evaluator_name = next(iter(self.evaluations.keys()))
+        if evaluator_name is None:
+            logger.warning(f"No evaluation found for game {self.game_id}. Returning None.")
+            raise ValueError(f"No evaluation found for game {self.game_id}")
+        if evaluator_name not in self.evaluations:
+            logger.warning(f"Evaluation {evaluator_name} not found for game {self.game_id}. Returning None.")
+            raise ValueError(f"Evaluation {evaluator_name} not found for game {self.game_id}")
+        evaluation = cast(PairwiseGameEvaluatorResult, self.evaluations[evaluator_name])
+        winner = evaluation.winner
+        if winner == "A":
+            return self.agent_a_answer.agent
+        elif winner == "B":
+            return self.agent_b_answer.agent
+        return None
