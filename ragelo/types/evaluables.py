@@ -216,10 +216,10 @@ class PairwiseGame(Evaluable):
         if evaluator_name is None and len(self.evaluations) > 0:
             evaluator_name = next(iter(self.evaluations.keys()))
         if evaluator_name is None:
-            logger.warning(f"No evaluation found for game {self.game_id}. Returning None.")
+            logger.warning(f"No evaluation found for game {self.game_id}")
             raise ValueError(f"No evaluation found for game {self.game_id}")
         if evaluator_name not in self.evaluations:
-            logger.warning(f"Evaluation {evaluator_name} not found for game {self.game_id}. Returning None.")
+            logger.warning(f"Evaluation {evaluator_name} not found for game {self.game_id}")
             raise ValueError(f"Evaluation {evaluator_name} not found for game {self.game_id}")
         evaluation = cast(PairwiseGameEvaluatorResult, self.evaluations[evaluator_name])
         winner = evaluation.winner

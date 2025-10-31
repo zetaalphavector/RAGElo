@@ -160,6 +160,7 @@ class EloRanker(AgentRanker):
         """
         assert agent_a in query.answers, f"Agent {agent_a} not found in query"
         assert agent_b in query.answers, f"Agent {agent_b} not found in query"
+        logger.info(f"Running game between {agent_a} and {agent_b} on query {query.qid}")
         game = query.add_pairwise_game(agent_a, agent_b, exist_ok=True)
 
         if retrieval_evaluator:
@@ -180,20 +181,16 @@ class EloRanker(AgentRanker):
         winner = game.get_winner(evaluator.config.evaluator_name)
         if winner == agent_a:
             score_val = self.score_map["A"]
-        elif winner == agent_b:
-            score_val = self.score_map["B"]
-        else:
-            score_val = self.score_map["C"]
-        # Agents in the game are always sorted alphabetically, regardless of how they were added initially.
-        if winner == agent_a:
             self.wins[agent_a] = self.wins.get(agent_a, 0) + 1
             self.losses[agent_b] = self.losses.get(agent_b, 0) + 1
         elif winner == agent_b:
+            score_val = self.score_map["B"]
             self.wins[agent_b] = self.wins.get(agent_b, 0) + 1
             self.losses[agent_a] = self.losses.get(agent_a, 0) + 1
         else:
             self.ties[agent_a] = self.ties.get(agent_a, 0) + 1
             self.ties[agent_b] = self.ties.get(agent_b, 0) + 1
+            score_val = self.score_map["C"]
         self.games.append(game)
         self.update_rankings(agent_a, agent_b, score_val)
         # Return in the same order as the agents were passed.
@@ -282,15 +279,11 @@ class EloRanker(AgentRanker):
           and opponent games played), and high-entropy questions. Stop early when Wilson CI over
           the new agent's observed score is sufficiently tight or when max game budget is reached.
         """
-        logger.info(f"Adding new agent: {new_agent} to tournament")
+        logger.info(f"Adding new agent: {new_agent} to tournament with {len(self.agents_scores)} opponents")
         if new_agent not in self.agents_scores:
             self.add_new_agent(new_agent)
-        # Discover existing agents from the experiment (excluding the new one)
-        existing_agents: set[str] = set()
-        for q in experiment:
-            existing_agents.update(q.answers.keys())
-        if new_agent in existing_agents:
-            existing_agents.remove(new_agent)
+        existing_agents = list(self.agents_scores.keys())
+        existing_agents.remove(new_agent)
         # Edge case: No opponents available
         if len(existing_agents) == 0:
             return EloTournamentResult(
@@ -305,7 +298,11 @@ class EloRanker(AgentRanker):
                 total_tournaments=0,
             )
         # Prepare evaluations summary to score questions by entropy (if any exist)
-        self.evaluations = self._flatten_evaluations(experiment, evaluator_name=evaluator.config.evaluator_name)
+        self.evaluations = self._flatten_evaluations(
+            experiment,
+            evaluator_name=evaluator.config.evaluator_name,
+            valid_agents=existing_agents,
+        )
         question_entropy = self._question_entropy_scores() if len(self.evaluations) > 0 else {}
 
         # Build per-opponent list of queries they have answered

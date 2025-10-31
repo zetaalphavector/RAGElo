@@ -38,11 +38,17 @@ class AgentRanker:
         return get_type_hints(cls)["config"]
 
     def _flatten_evaluations(
-        self, experiment: Experiment, evaluator_name: str | None = None
+        self,
+        experiment: Experiment,
+        evaluator_name: str | None = None,
+        valid_agents: list[str] | None = None,
     ) -> list[tuple[str, str, str, str]]:
         evaluations = []
         for query in experiment:
             for game in query.pairwise_games.values():
+                if valid_agents:
+                    if game.agent_a_answer.agent not in valid_agents or game.agent_b_answer.agent not in valid_agents:
+                        continue
                 # Get the first available pairwise evaluation
                 if evaluator_name:
                     if evaluator_name not in game.evaluations:
