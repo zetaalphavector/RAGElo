@@ -360,5 +360,5 @@ class TestReadmeExamples:
         assert isinstance(result.answer, ResponseSchema)
         assert result.answer.reasoning == answer_dict["reasoning"]
         assert result.answer.relevance == 0
-        assert call_args[0][0][0].system_prompt == string_to_template(system_prompt).render()
+        assert call_args[0][0][0].system_prompt == system_prompt.render()
         assert call_args[0][0][0].user_message == expected_user_prompt
