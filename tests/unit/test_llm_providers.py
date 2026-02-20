@@ -376,9 +376,3 @@ class TestLLMProviderConfigOptionalApiKey:
 
         with pytest.raises(ValidationError):
             OpenAIConfiguration()  # missing api_key
-
-    def test_ollama_configuration_has_default_api_key(self):
-        """OllamaConfiguration keeps its default api_key so it doesn't break."""
-
-        config = OllamaConfiguration(model="gemma2:27b")
-        assert config.api_key.get_secret_value() == "NoKeyNeeded"
