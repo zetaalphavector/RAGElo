@@ -319,3 +319,83 @@ class TestExternalAdapterProvider:
 
         provider = ExternalAdapterProvider(some_client=object())
         assert provider.config is None
+
+    def test_base_llm_provider_still_accepts_config(self):
+        """BaseLLMProvider.__init__ still works when a config is supplied."""
+        from ragelo.types.configurations import LLMProviderConfig
+
+        class SimpleProvider(BaseLLMProvider):
+            async def call_async(self, input, response_schema): ...
+
+        config = LLMProviderConfig()
+        provider = SimpleProvider(config=config)
+        assert provider.config is config
+
+    def test_get_config_class_resolves_union_annotation(self):
+        """get_config_class() returns the concrete LLMProviderConfig subclass even when
+        the class attribute is annotated as 'LLMProviderConfig | None'."""
+        from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
+        from ragelo.types.configurations import LLMProviderConfig
+
+        assert BaseLLMProvider.get_config_class() is LLMProviderConfig
+
+    def test_external_adapter_call_delegates_to_call_async(self):
+        """External adapter's __call__ method correctly delegates to call_async."""
+        from unittest.mock import AsyncMock
+
+        from ragelo.types.formats import LLMInputPrompt, LLMResponseType
+        from ragelo.types.results import RetrievalEvaluationAnswer
+
+        expected = LLMResponseType(
+            raw_answer='{"reasoning": "ok", "score": 1}',
+            parsed_answer=RetrievalEvaluationAnswer(reasoning="ok", score=1),
+        )
+
+        class ExternalAdapterProvider(BaseLLMProvider):
+            def __init__(self, client):
+                super().__init__()
+                self.client = client
+
+            async def call_async(self, input, response_schema):
+                ...
+
+        provider = ExternalAdapterProvider(client=object())
+        provider.call_async = AsyncMock(return_value=expected)  # type: ignore[method-assign]
+        result = provider(LLMInputPrompt(user_message="test"), RetrievalEvaluationAnswer)
+        assert result == expected
+
+
+class TestLLMProviderConfigOptionalApiKey:
+    """Tests that api_key is optional in the base config but required in OpenAIConfiguration."""
+
+    def test_llm_provider_config_can_be_created_without_api_key(self):
+        """LLMProviderConfig can now be instantiated without providing api_key."""
+        from ragelo.types.configurations import LLMProviderConfig
+
+        config = LLMProviderConfig()
+        assert config.api_key is None
+
+    def test_llm_provider_config_accepts_api_key_when_provided(self):
+        """LLMProviderConfig still accepts api_key when supplied."""
+        from ragelo.types.configurations import LLMProviderConfig
+
+        config = LLMProviderConfig(api_key="my-secret")
+        assert config.api_key is not None
+        assert config.api_key.get_secret_value() == "my-secret"
+
+    def test_openai_configuration_requires_api_key(self):
+        """OpenAIConfiguration.api_key is still required (no default)."""
+        import pytest
+        from pydantic import ValidationError
+
+        from ragelo.types.configurations import OpenAIConfiguration
+
+        with pytest.raises(ValidationError):
+            OpenAIConfiguration()  # missing api_key
+
+    def test_ollama_configuration_has_default_api_key(self):
+        """OllamaConfiguration keeps its default api_key so it doesn't break."""
+        from ragelo.types.configurations import OllamaConfiguration
+
+        config = OllamaConfiguration(model="gemma2:27b")
+        assert config.api_key.get_secret_value() == "NoKeyNeeded"
