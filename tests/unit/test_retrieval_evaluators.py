@@ -174,7 +174,7 @@ class TestCustomPromptEvaluator:
 
     def test_process_with_custom_fields(self, llm_provider_mock_retrieval, custom_prompt_retrieval_eval_config):
         custom_prompt_retrieval_eval_config.user_prompt = string_to_template(
-            "query: {{ query.query }} doc: {{ document.text }} q_metadata: {{ query.metadata.q_metadata }} d_metadata: {{ document.metadata.d_metadata }}"
+            "query: {{ query.query }} doc: {{ document.text }} q_metadata: {{ query.metadata.q_metadata }} d_metadata: {{ document.metadata.d_metadata }}"  # noqa: E501
         )
         evaluator = get_retrieval_evaluator(
             "custom_prompt",
@@ -287,19 +287,25 @@ class TestReadmeExamples:
             ),
         }
 
-        system_prompt = """You are a helpful assistant for evaluating the relevance of a retrieved document to a user query.
-        You should pay extra attention to how **recent** a document is. A document older than 5 years is considered outdated.
+        system_prompt = string_to_template(
+            """
+            You are a helpful assistant for evaluating the relevance of a retrieved document to a user query.
+            You should pay extra attention to how **recent** a document is. A document older than 5 years is considered outdated.
 
-        The answer should be evaluated according to its recency, truthfulness, and relevance to the user query.
-        """
+            The answer should be evaluated according to its recency, truthfulness, and relevance to the user query.
+            """  # noqa: E501
+        )
 
-        user_prompt = """
+        user_prompt = string_to_template(
+            """
             User query: {{ query.query }}
 
             Retrieved document: {{ document.text }}
 
             The document has a date of {{ document.metadata.date }}.
-            Today is {{ query.metadata.today_date }}."""
+            Today is {{ query.metadata.today_date }}.
+            """
+        )
 
         expected_user_prompt = string_to_template(
             """

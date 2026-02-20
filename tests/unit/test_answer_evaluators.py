@@ -29,7 +29,7 @@ def test_get_by_name(llm_provider_mock):
         "custom_pairwise",
         llm_provider=llm_provider_mock,
         system_prompt="system prompt",
-        user_prompt="Query: {{ query.query }} Answer agent a: {{ game.agent_a_answer.text }} Answer agent b: {{ game.agent_b_answer.text }}",
+        user_prompt="Query: {{ query.query }} Answer agent a: {{ game.agent_a_answer.text }} Answer agent b: {{ game.agent_b_answer.text }}",  # noqa: E501
     )
     assert isinstance(custom_pairwise_evaluator, CustomPairwiseEvaluator)
     domain_expert_evaluator = get_answer_evaluator(

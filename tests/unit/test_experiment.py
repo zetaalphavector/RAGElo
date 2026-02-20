@@ -366,7 +366,8 @@ class TestExperiment:
         experiment.add_query("What is the capital of Brazil?", query_id=0)
         experiment.add_query("What is the capital of France?", query_id=1)
 
-        # Add four documents retrieved for these queries. Alternatively, we can load them from a csv file with .add_documents_from_csv()
+        # Add four documents retrieved for these queries.
+        # Alternatively, we can load them from a csv file with .add_documents_from_csv()
         experiment.add_retrieved_doc("Brasília is the capital of Brazil", query_id=0, doc_id=0)
         experiment.add_retrieved_doc("Rio de Janeiro used to be the capital of Brazil.", query_id=0, doc_id=1)
         experiment.add_retrieved_doc("Paris is the capital of France.", query_id=1, doc_id=2)
