@@ -25,5 +25,4 @@ class OpenAIConfiguration(LLMProviderConfig):
 
 class OllamaConfiguration(LLMProviderConfig):
     api_base: str | None = "http://localhost:11434/v1/"
-    api_key: SecretStr = SecretStr("NoKeyNeeded")
     model: str
