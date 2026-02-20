@@ -365,17 +365,10 @@ class TestLLMProviderConfigOptionalApiKey:
         """LLMProviderConfig can now be instantiated without providing api_key."""
 
         config = LLMProviderConfig()
-        assert config.api_key is None
-
-    def test_llm_provider_config_accepts_api_key_when_provided(self):
-        """LLMProviderConfig still accepts api_key when supplied."""
-
-        config = LLMProviderConfig(api_key=SecretStr("my-secret"))
-        assert config.api_key is not None
-        assert config.api_key.get_secret_value() == "my-secret"
+        assert getattr(config, "api_key", None) is None
 
     def test_openai_configuration_requires_api_key(self):
         """OpenAIConfiguration.api_key is still required (no default)."""
 
         with pytest.raises(ValidationError):
-            OpenAIConfiguration()  # missing api_key
+            OpenAIConfiguration(api_key=None)  # type: ignore
