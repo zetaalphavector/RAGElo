@@ -6,7 +6,7 @@ from pydantic import BaseModel, SecretStr
 
 
 class LLMProviderConfig(BaseModel):
-    api_key: SecretStr
+    api_key: SecretStr | None = None
     temperature: float | None = 0.1
     max_tokens: int = 2048
     seed: int | None = 42
@@ -15,6 +15,7 @@ class LLMProviderConfig(BaseModel):
 
 
 class OpenAIConfiguration(LLMProviderConfig):
+    api_key: SecretStr  # required, override base
     org: str | None = None
     api_type: str | None = None
     api_base: str | None = None

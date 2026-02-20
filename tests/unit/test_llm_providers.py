@@ -3,6 +3,7 @@ import json
 import pytest
 from tenacity import RetryError
 
+from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.llm_providers.openai_client import OpenAIProvider
 from ragelo.types.configurations import OpenAIConfiguration
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
@@ -301,3 +302,21 @@ class TestOpenAIProvider:
         )
         provider_regular = OpenAIProvider(config=config_regular)
         assert provider_regular.config.temperature == 0.7
+
+
+class TestExternalAdapterProvider:
+    """Tests for external adapter support (no config required)."""
+
+    def test_external_adapter_can_be_instantiated_without_config(self):
+        """Simulates an external adapter that wraps a pre-configured client."""
+
+        class ExternalAdapterProvider(BaseLLMProvider):
+            def __init__(self, some_client):
+                super().__init__()  # no config needed
+                self.client = some_client
+
+            async def call_async(self, input, response_schema):
+                ...
+
+        provider = ExternalAdapterProvider(some_client=object())
+        assert provider.config is None
