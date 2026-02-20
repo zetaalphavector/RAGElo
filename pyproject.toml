@@ -75,7 +75,7 @@ disable_error_code = ["prop-decorator"]
 
 
 [tool.ruff]
-exclude = ["docs/examples/notebooks"]
+exclude = ["docs/examples/notebooks", "*.ipynb"]
 line-length = 119
 fix = true
 
