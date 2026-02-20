@@ -104,6 +104,8 @@ class OllamaProvider(BaseLLMProvider):
             answers = await self.__ollama_client.chat.completions.parse(**call_kwargs)  # type: ignore
             if not answers.choices or not answers.choices[0].message or not answers.choices[0].message.content:
                 raise ValueError("Ollama did not return any completions.")
+            if answers.choices[0].message.parsed is None:
+                raise ValueError("Ollama did not return a parsed response.")
             parsed_answer = answers.choices[0].message.parsed
             raw_answer = answers.choices[0].message.content
 
