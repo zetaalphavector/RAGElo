@@ -315,8 +315,7 @@ class TestExternalAdapterProvider:
                 super().__init__()  # no config needed
                 self.client = some_client
 
-            async def call_async(self, input, response_schema):
-                ...
+            async def call_async(self, input, response_schema): ...
 
         provider = ExternalAdapterProvider(some_client=object())
         assert provider.config is None

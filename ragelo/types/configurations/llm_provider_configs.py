@@ -15,7 +15,7 @@ class LLMProviderConfig(BaseModel):
 
 
 class OpenAIConfiguration(LLMProviderConfig):
-    api_key: SecretStr  # required, override base
+    api_key: SecretStr
     org: str | None = None
     api_type: str | None = None
     api_base: str | None = None
@@ -26,4 +26,4 @@ class OpenAIConfiguration(LLMProviderConfig):
 class OllamaConfiguration(LLMProviderConfig):
     api_base: str | None = "http://localhost:11434/v1/"
     api_key: SecretStr = SecretStr("NoKeyNeeded")
-    model: str = "gemma2:27b"
+    model: str
