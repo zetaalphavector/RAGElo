@@ -19,7 +19,7 @@ class ReasonerEvaluator(BaseRetrievalEvaluator):
             - Not relevant: The document is not on topic.
             - Somewhat relevant: The document is on topic but does not fully answer the user question.
             - Very relevant: The document is on topic and answers the user question.
-        """)
+        """)  # noqa: E501
 
     user_prompt = string_to_template("""
         [user question]

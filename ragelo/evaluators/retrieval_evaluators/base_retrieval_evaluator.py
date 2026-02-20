@@ -4,21 +4,21 @@ and returns a score or a label for each document."""
 
 from __future__ import annotations
 
-from typing import Any, Callable, Type, get_type_hints
+from typing import TYPE_CHECKING, Any, Callable, get_type_hints
 
 from tenacity import RetryError
 
 from ragelo.evaluators.base_evaluator import BaseEvaluator
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
 from ragelo.logger import logger
+from ragelo.types import LLMInputPrompt, Query, RetrievalEvaluatorResult
 from ragelo.types.configurations import BaseRetrievalEvaluatorConfig
 from ragelo.types.evaluables import Document, Evaluable
-from ragelo.types.experiment import Experiment
-from ragelo.types.formats import LLMInputPrompt, LLMResponseType
-from ragelo.types.query import Query
-from ragelo.types.results import RetrievalEvaluatorResult
 from ragelo.types.types import RetrievalEvaluatorTypes
 from ragelo.utils import call_async_fn
+
+if TYPE_CHECKING:
+    from ragelo.types.experiment import Experiment
 
 
 class BaseRetrievalEvaluator(BaseEvaluator):
@@ -28,6 +28,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
 
     config: BaseRetrievalEvaluatorConfig
     evaluable_name: str = "Retrieved document"
+    result_type: type[RetrievalEvaluatorResult] = RetrievalEvaluatorResult
 
     def __init__(self, config: BaseRetrievalEvaluatorConfig, llm_provider: BaseLLMProvider):
         super().__init__(config, llm_provider)
@@ -52,7 +53,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         document = Document.assemble_document(document, query.qid, doc_metadata)
         result = call_async_fn(self.evaluate_async, (query, document))
 
-        if result.exception or result.raw_answer is None or result.answer is None:
+        if result.exception or result.answer is None:
             raise ValueError(
                 f"Failed to evaluate qid: {query.qid} did: {document.did}",
                 f"Exception: {result.exception}",
@@ -69,44 +70,48 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         if not isinstance(document, Document):
             type_name = type(document).__name__
             raise ValueError(f"can't evaluate a {type_name} in a Retrieval Evaluator")
+
         exc = None
-        if document.evaluation is not None and not self.config.force:
-            return RetrievalEvaluatorResult(
-                did=document.did,
-                qid=query.qid,
-                raw_answer=document.evaluation.raw_answer,
-                answer=document.evaluation.answer,
-                exception=document.evaluation.exception,
-            )
+        evaluator_name = str(self.config.evaluator_name)
+        if evaluator_name in document.evaluations and not self.config.force:
+            cached_eval = document.evaluations[evaluator_name]
+            if isinstance(cached_eval, RetrievalEvaluatorResult):
+                return cached_eval
+
+        # Get the answer schema type from the result_type's 'answer' field
+        answer_field = self.result_type.model_fields.get("answer")
+        if not answer_field or not answer_field.annotation:
+            raise ValueError(f"Result type {self.result_type} does not have an 'answer' field with annotation")
+
+        answer_type = answer_field.annotation
+        # Handle Optional types (answer_type might be "SomeType | None")
+        if hasattr(answer_type, "__args__"):
+            # Get the first non-None type from the union
+            answer_type = next((arg for arg in answer_type.__args__ if arg is not type(None)), answer_type)
+
         llm_input = self._build_message(query, document)
+        parsed_answer = None
+        raw_answer = ""
         try:
             llm_response = await self.llm_provider.call_async(
                 input=llm_input,
-                response_schema=self.config.llm_response_schema,
+                response_schema=answer_type,
             )
             llm_response = self._process_answer(llm_response)
-        except ValueError as e:
-            logger.warning(f"Failed to PARSE answer for qid: {query.qid} did: {document.did}")
-            try:
-                llm_response = LLMResponseType(raw_answer=llm_response.raw_answer, parsed_answer=None)
-            except Exception:
-                llm_response = LLMResponseType(raw_answer="", parsed_answer=None)
-            exc = str(e)
+            parsed_answer = llm_response.parsed_answer
+            raw_answer = llm_response.raw_answer
         except Exception as e:
-            logger.warning(f"Failed to FETCH answers for qid: {query.qid} did: {document.did}")
             if isinstance(e, RetryError):
-                exc = str(e.last_attempt.exception())
-            else:
-                exc = str(e)
-            try:
-                llm_response = LLMResponseType(raw_answer=llm_response.raw_answer, parsed_answer=None)
-            except Exception:
-                llm_response = LLMResponseType(raw_answer="", parsed_answer=None)
-        return RetrievalEvaluatorResult(
+                exc = str(e) + "\nLLM Error: \n" + str(e.last_attempt.exception())
+            elif raw_answer:
+                exc = str(e) + f"\nRaw answer: {raw_answer}"
+            logger.warning(f"Failed to generate answer for qid: {query.qid} and document: {document.did}: {exc}")
+
+        return self.result_type(
             qid=query.qid,
             did=document.did,
-            raw_answer=llm_response.raw_answer,
-            answer=llm_response.parsed_answer,
+            evaluator_name=str(self.config.evaluator_name),
+            answer=parsed_answer,
             exception=exc,
         )
 
@@ -117,9 +122,10 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         tuples_to_eval = []
         all_tuples = 0
         missing_evaluations = 0
+        evaluator_name = str(self.config.evaluator_name)
         for q in experiment:
             for d in q.retrieved_docs.values():
-                if d.evaluation is None:
+                if evaluator_name not in d.evaluations:
                     missing_evaluations += 1
                 tuples_to_eval.append((q, d))
                 all_tuples += 1
@@ -145,24 +151,41 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         return cls(config, llm_provider)
 
     @classmethod
-    def get_config_class(cls) -> Type[BaseRetrievalEvaluatorConfig]:
+    def get_config_class(cls) -> type[BaseRetrievalEvaluatorConfig]:
         return get_type_hints(cls)["config"]
 
 
 class RetrievalEvaluatorFactory:
-    registry: dict[RetrievalEvaluatorTypes, Type[BaseRetrievalEvaluator]] = {}
+    registry: dict[RetrievalEvaluatorTypes, type[BaseRetrievalEvaluator]] = {}
 
     @classmethod
     def register(cls, evaluator_name: RetrievalEvaluatorTypes) -> Callable:
         def inner_wrapper(
-            wrapped_class: Type[BaseRetrievalEvaluator],
-        ) -> Type[BaseRetrievalEvaluator]:
+            wrapped_class: type[BaseRetrievalEvaluator],
+        ) -> type[BaseRetrievalEvaluator]:
             if evaluator_name in cls.registry:
                 logger.debug(f"Overwriting {evaluator_name} in registry")
             cls.registry[evaluator_name] = wrapped_class
             return wrapped_class
 
         return inner_wrapper
+
+    @classmethod
+    def get_evaluator_result_type(cls, evaluator_name: RetrievalEvaluatorTypes) -> type[RetrievalEvaluatorResult]:
+        """Gets the retrieval evaluator result type for a specific evaluator type.
+
+        Args:
+            evaluator_name (RetrievalEvaluatorTypes): The name of the evaluator.
+
+        Returns:
+            type: The retrieval evaluator result type for the evaluator.
+        """
+        if evaluator_name not in cls.registry:
+            raise ValueError(
+                f"Unknown retrieval evaluator {evaluator_name}\nValid options are {list(cls.registry.keys())}"
+            )
+        evaluator_class = cls.registry[evaluator_name]
+        return evaluator_class.result_type
 
     @classmethod
     def create(
@@ -217,3 +240,22 @@ def get_retrieval_evaluator(
         config=config,
         **kwargs,
     )
+
+
+def get_retrieval_evaluator_result_type(
+    evaluator_name: RetrievalEvaluatorTypes | str,
+) -> type[RetrievalEvaluatorResult]:
+    """Gets the retrieval evaluator result type for a specific evaluator type.
+
+    Args:
+        evaluator_name (RetrievalEvaluatorTypes | str): The name of the retrieval evaluator.
+
+    Returns:
+        type: The retrieval evaluator result type for the evaluator.
+    """
+    if isinstance(evaluator_name, str):
+        try:
+            evaluator_name = RetrievalEvaluatorTypes(evaluator_name)
+        except ValueError:
+            raise ValueError(f"Unknown retrieval evaluator {evaluator_name}")
+    return RetrievalEvaluatorFactory.get_evaluator_result_type(evaluator_name)

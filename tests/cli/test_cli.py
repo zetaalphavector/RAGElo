@@ -1,19 +1,31 @@
-import os
+from pathlib import Path
 
-import pytest
 from typer.testing import CliRunner
 
 from ragelo.cli.cli import app
 
 runner = CliRunner()
 
+ENV = {"OPENAI_API_KEY": "test-key"}
+QUERIES_PATH = str(Path("tests/data/queries.csv").resolve())
+DOCUMENTS_PATH = str(Path("tests/data/documents.csv").resolve())
+ANSWERS_PATH = str(Path("tests/data/answers.csv").resolve())
 
-@pytest.mark.requires_openai
-def test_run_all_cli():
-    if os.path.exists("tests/data/output.json"):
-        os.remove("tests/data/output.json")
-    if os.path.exists("tests/data/output_results.jsonl"):
-        os.remove("tests/data/output_results.jsonl")
+
+def _cleanup_files(*paths: str | Path):
+    for path in paths:
+        path = Path(path)
+        if path.exists():
+            path.unlink()
+
+
+def test_run_all_cli(mock_llm_provider_factory):
+    experiment_name = "cli-run-all"
+    output_file = Path("tests/data/cli-run-all.json")
+    results_file = Path("tests/data/cli-run-all_results.jsonl")
+
+    _cleanup_files(output_file, results_file)
+
     result = runner.invoke(
         app,
         [
@@ -25,33 +37,43 @@ def test_run_all_cli():
             "--data-dir",
             "tests/data/",
             "--experiment-name",
-            "test",
+            experiment_name,
             "--output-file",
-            "output.json",
+            output_file.name,
             "--force",
         ],
+        env=ENV,
     )
+    stdout = result.stdout
+
     assert result.exit_code == 0
-    assert "Agents Elo Ratings" in result.stdout
-    assert result.stdout.startswith("Creating a cache file for the experiment's evaluations")
-    assert "🔎 Query ID: 0\n📜 Document ID: 0" in result.stdout
-    assert "🔎 Query ID: 0\n agent1              🆚   agent2\nParsed Answer:" in result.stdout
-    assert "Total evaluations: 4" in result.stdout
-    assert "Total evaluations: 2" in result.stdout
-    assert "Evaluating Retrieved documents" in result.stdout
-    assert "Evaluating Agent Answers" in result.stdout
-    assert len(result.stdout.split("✅ Done!")) == 3
-    assert os.path.exists("tests/data/output.json")
-    assert os.path.exists("tests/data/output_results.jsonl")
-    assert not os.path.exists("ragelo_cache/test.json")
-    os.remove("tests/data/output.json")
-    os.remove("tests/data/output_results.jsonl")
+    assert "Loaded 2 queries from" in stdout and QUERIES_PATH in stdout
+    assert "Loaded 4 new documents from" in stdout and DOCUMENTS_PATH in stdout
+    assert "Loaded 4 answers from" in stdout and ANSWERS_PATH in stdout
+    assert "Evaluating Agent Answers" in stdout
+    assert "🔎 Query ID:" in stdout
+    assert "👤 Agent A" in stdout
+    assert "👤 Agent B" in stdout
+    assert "Parsed Answer" in stdout
+    assert "Agents Elo Ratings" in stdout
+    assert stdout.count("✅ Done!") == 2
+    assert stdout.count("Total evaluations: 4") == 1
+    assert stdout.count("Total evaluations: 2") == 1
+
+    assert output_file.exists()
+    assert results_file.exists()
+    assert not Path(f"ragelo_cache/{experiment_name}.json").exists()
+
+    _cleanup_files(output_file, results_file)
 
 
-@pytest.mark.requires_openai
-def test_run_reasoner_cli():
-    if os.path.exists("tests/data/test-output.json"):
-        os.remove("tests/data/test-output.json")
+def test_run_reasoner_cli(mock_llm_provider_factory):
+    experiment_name = "cli-reasoner"
+    output_file = Path("tests/data/cli-reasoner.json")
+    results_file = Path("tests/data/cli-reasoner_results.jsonl")
+
+    _cleanup_files(output_file, results_file)
+
     result = runner.invoke(
         app,
         [
@@ -63,24 +85,38 @@ def test_run_reasoner_cli():
             "--data-dir",
             "tests/data/",
             "--experiment-name",
-            "test",
+            experiment_name,
             "--output-file",
-            "test-output.json",
-            "--no-save-results",
+            output_file.name,
             "--force",
         ],
+        env=ENV,
     )
+    stdout = result.stdout
+
     assert result.exit_code == 0
-    assert "✅ Done!" in result.stdout
-    assert result.stdout.startswith("Loaded 2 queries from")
-    assert "🔎 Query ID: 0\n📜 Document ID: 0" in result.stdout
-    assert "Total evaluations: 4" in result.stdout
-    assert os.path.exists("tests/data/test-output.json")
-    os.remove("tests/data/test-output.json")
+    assert "Loaded 2 queries from" in stdout and QUERIES_PATH in stdout
+    assert "Loaded 4 new documents from" in stdout and DOCUMENTS_PATH in stdout
+    assert "Query ID:" in stdout
+    assert "📜 Document ID: 0" in stdout
+    assert "Parsed Answer" in stdout
+    assert stdout.count("✅ Done!") == 1
+    assert stdout.count("Total evaluations: 4") == 1
+
+    assert output_file.exists()
+    assert results_file.exists()
+    assert not Path(f"ragelo_cache/{experiment_name}.json").exists()
+
+    _cleanup_files(output_file, results_file)
 
 
-@pytest.mark.requires_openai
-def test_run_answer_cli():
+def test_run_answer_cli(mock_llm_provider_factory):
+    experiment_name = "cli-pairwise"
+    output_file = Path("tests/data/cli-pairwise.json")
+    results_file = Path("tests/data/cli-pairwise_results.jsonl")
+
+    _cleanup_files(output_file, results_file)
+
     result = runner.invoke(
         app,
         [
@@ -93,22 +129,174 @@ def test_run_answer_cli():
             "--data-dir",
             "tests/data/",
             "--experiment-name",
-            "test",
+            experiment_name,
             "--output-file",
-            "test-output.json",
-            "--no-save-results",
+            output_file.name,
             "--force",
-            "--bidirectional",
             "--add-reasoning",
         ],
+        env=ENV,
     )
+    stdout = result.stdout
+
     assert result.exit_code == 0
-    assert len(result.stdout.split("✅ Done!")) == 3
-    assert len(result.stdout.split("Total evaluations: 4")) == 3
-    assert result.stdout.startswith("Loaded 2 queries from")
-    assert "🔎 Query ID: 0\n📜 Document ID: 0" in result.stdout
-    assert "Evaluating Retrieved documents" in result.stdout
-    assert "🔎 Query ID: 0\n agent2              🆚   agent1\nParsed Answer" in result.stdout
-    assert "🔎 Query ID: 1\n agent1              🆚   agent2\nParsed Answer" in result.stdout
-    assert os.path.exists("tests/data/test-output.json")
-    os.remove("tests/data/test-output.json")
+    assert "Loaded 2 queries from" in stdout and QUERIES_PATH in stdout
+    assert "Loaded 4 new documents from" in stdout and DOCUMENTS_PATH in stdout
+    assert "Loaded 4 answers from" in stdout and ANSWERS_PATH in stdout
+    assert "Query ID:" in stdout
+    assert "Agent A:" in stdout
+    assert "Agent B:" in stdout
+    assert "Parsed Answer" in stdout
+    assert stdout.count("✅ Done!") == 2
+    assert stdout.count("Total evaluations: 4") == 1
+    assert stdout.count("Total evaluations: 2") == 1
+
+    assert output_file.exists()
+    assert results_file.exists()
+    assert not Path(f"ragelo_cache/{experiment_name}.json").exists()
+
+    _cleanup_files(output_file, results_file)
+
+
+def test_run_domain_expert_retrieval_cli(mock_llm_provider_factory):
+    experiment_name = "cli-domain-expert"
+    output_file = Path("tests/data/cli-domain-expert.json")
+    results_file = Path("tests/data/cli-domain-expert_results.jsonl")
+
+    _cleanup_files(output_file, results_file)
+
+    result = runner.invoke(
+        app,
+        [
+            "retrieval-evaluator",
+            "domain-expert",
+            "queries.csv",
+            "documents.csv",
+            "--verbose",
+            "--no-use-progress-bar",
+            "--data-dir",
+            "tests/data/",
+            "--experiment-name",
+            experiment_name,
+            "--output-file",
+            output_file.name,
+            "--expert-in",
+            "Chemical Engineering",
+            "--company",
+            "ChemCorp",
+            "--force",
+        ],
+        env=ENV,
+    )
+    stdout = result.stdout
+
+    assert result.exit_code == 0
+    assert "Loaded 2 queries from" in stdout and QUERIES_PATH in stdout
+    assert "Loaded 4 new documents from" in stdout and DOCUMENTS_PATH in stdout
+    assert "Query ID:" in stdout
+    assert "📜 Document ID: 0" in stdout
+    assert "Parsed Answer" in stdout
+    assert stdout.count("✅ Done!") == 1
+    assert stdout.count("Total evaluations: 4") == 1
+
+    assert output_file.exists()
+    assert results_file.exists()
+    assert not Path(f"ragelo_cache/{experiment_name}.json").exists()
+
+    _cleanup_files(output_file, results_file)
+
+
+def test_run_rdnam_retrieval_cli(mock_llm_provider_factory):
+    experiment_name = "cli-rdnam"
+    output_file = Path("tests/data/cli-rdnam.json")
+    results_file = Path("tests/data/cli-rdnam_results.jsonl")
+
+    _cleanup_files(output_file, results_file)
+
+    result = runner.invoke(
+        app,
+        [
+            "retrieval-evaluator",
+            "rdnam",
+            "queries.csv",
+            "documents.csv",
+            "--verbose",
+            "--no-use-progress-bar",
+            "--data-dir",
+            "tests/data/",
+            "--experiment-name",
+            experiment_name,
+            "--output-file",
+            output_file.name,
+            "--use-aspects",
+            "--force",
+        ],
+        env=ENV,
+    )
+    stdout = result.stdout
+
+    assert result.exit_code == 0
+    assert "Loaded 2 queries from" in stdout and QUERIES_PATH in stdout
+    assert "Loaded 4 new documents from" in stdout and DOCUMENTS_PATH in stdout
+    assert "🔎 Query ID: 0" in stdout
+    assert "📜 Document ID: 0" in stdout
+    assert "Parsed Answer" in stdout
+    assert stdout.count("✅ Done!") == 1
+    assert stdout.count("Total evaluations: 4") == 1
+
+    assert output_file.exists()
+    assert results_file.exists()
+    assert not Path(f"ragelo_cache/{experiment_name}.json").exists()
+
+    _cleanup_files(output_file, results_file)
+
+
+def test_run_expert_pairwise_cli(mock_llm_provider_factory):
+    experiment_name = "cli-expert-pairwise"
+    output_file = Path("tests/data/cli-expert-pairwise.json")
+    results_file = Path("tests/data/cli-expert-pairwise_results.jsonl")
+
+    _cleanup_files(output_file, results_file)
+
+    result = runner.invoke(
+        app,
+        [
+            "answer-evaluator",
+            "expert-pairwise",
+            "queries.csv",
+            "documents.csv",
+            "answers.csv",
+            "--verbose",
+            "--no-use-progress-bar",
+            "--data-dir",
+            "tests/data/",
+            "--experiment-name",
+            experiment_name,
+            "--output-file",
+            output_file.name,
+            "--expert-in",
+            "Healthcare",
+            "--add-reasoning",
+            "--force",
+        ],
+        env=ENV,
+    )
+    stdout = result.stdout
+
+    assert result.exit_code == 0
+    assert "Loaded 2 queries from" in stdout and QUERIES_PATH in stdout
+    assert "Loaded 4 new documents from" in stdout and DOCUMENTS_PATH in stdout
+    assert "Loaded 4 answers from" in stdout and ANSWERS_PATH in stdout
+    assert "Query ID:" in stdout
+    assert "Agent A:" in stdout
+    assert "👤 Agent B" in stdout
+    assert "Parsed Answer" in stdout
+    assert stdout.count("✅ Done!") == 2
+    assert stdout.count("Total evaluations: 4") == 1
+    assert stdout.count("Total evaluations: 2") == 1
+
+    assert output_file.exists()
+    assert results_file.exists()
+    assert not Path(f"ragelo_cache/{experiment_name}.json").exists()
+
+    _cleanup_files(output_file, results_file)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any, Type
 from unittest.mock import AsyncMock
 
@@ -10,10 +11,12 @@ from pydantic import BaseModel
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.llm_providers.openai_client import OpenAIConfiguration
 from ragelo.types.answer_formats import (
-    PairWiseAnswerAnswerFormat,
-    RDNAMAnswerEvaluatorFormat,
+    AnswerEvaluationAnswer,
+    EvaluationAnswer,
+    PairwiseEvaluationAnswer,
+    RDNAMEvaluationAnswer,
     RDNAMMultipleAnnotatorsAnswer,
-    RetrievalAnswerEvaluatorFormat,
+    RetrievalEvaluationAnswer,
 )
 from ragelo.types.configurations import (
     BaseAnswerEvaluatorConfig,
@@ -32,7 +35,12 @@ from ragelo.types.configurations.retrieval_evaluator_configs import FewShotExamp
 from ragelo.types.evaluables import ChatMessage
 from ragelo.types.experiment import Experiment
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
-from ragelo.types.results import AnswerEvaluatorResult, EloTournamentResult, RetrievalEvaluatorResult
+from ragelo.types.results import (
+    AnswerEvaluatorResult,
+    EloTournamentResult,
+    PairwiseGameEvaluatorResult,
+    RetrievalEvaluatorResult,
+)
 from ragelo.types.types import AnswerEvaluatorTypes, RetrievalEvaluatorTypes
 from ragelo.utils import string_to_template
 
@@ -76,25 +84,50 @@ def llm_provider_config():
 
 
 def answer_model_factory(input: LLMInputPrompt, response_schema, **kwargs):
-    # Mirror OpenAIProvider behavior: response format is inferred from response_schema
-    if response_schema == RetrievalAnswerEvaluatorFormat:
-        return LLMResponseType(
-            raw_answer='{"reasoning": "The document is very relevant", "score": 2}',
-            parsed_answer=response_schema(
-                reasoning="The document is very relevant",
-                score=2,
-            ),
-        )
-    if response_schema == PairWiseAnswerAnswerFormat:
-        return LLMResponseType(
-            raw_answer='{"answer_a_analysis": "The document is very relevant", "answer_b_analysis": "The document is not relevant", "comparison_reasoning": "The document is more relevant for the user question", "winner": "A"}',
-            parsed_answer=response_schema(
-                answer_a_analysis="Answer A is good",
-                answer_b_analysis="Answer B is bad",
-                comparison_reasoning="Answer A is better than Answer B",
-                winner="A",
-            ),
-        )
+    # Retrieval answers (base or subclasses like RDNAMEvaluationAnswer)
+    try:
+        if response_schema == RetrievalEvaluationAnswer or (
+            isinstance(response_schema, type) and issubclass(response_schema, RetrievalEvaluationAnswer)
+        ):
+            # Handle specialized RDNAMEvaluationAnswer subclass
+            if isinstance(response_schema, type) and response_schema.__name__ == "RDNAMEvaluationAnswer":
+                raw_answer = (
+                    '{"reasoning": "Doc judged with aspects", "score": 2, "intent_match": 2.0, "trustworthiness": 2.0}'
+                )
+                return LLMResponseType(
+                    raw_answer=raw_answer,
+                    parsed_answer=response_schema.model_validate_json(raw_answer),  # type: ignore
+                )
+            # RDNAM without aspects
+            if isinstance(response_schema, type) and response_schema.__name__ == "RDNAMNoAspectsAnswer":
+                raw_answer = '{"reasoning": "Doc judged", "score": 1}'
+                return LLMResponseType(
+                    raw_answer=raw_answer,
+                    parsed_answer=response_schema.model_validate_json(raw_answer),  # type: ignore
+                )
+            # Generic retrieval evaluation
+            return LLMResponseType(
+                raw_answer='{"reasoning": "The document is very relevant", "score": 2}',
+                parsed_answer=RetrievalEvaluationAnswer(
+                    reasoning="The document is very relevant",
+                    score=2,
+                ),
+            )
+    except Exception:
+        pass
+    if isinstance(response_schema, type) and issubclass(response_schema, PairwiseEvaluationAnswer):
+        raw_answer = '{"answer_a_analysis": "Answer A is good", "answer_b_analysis": "Answer B is bad", "comparison_reasoning": "A is better", "winner": "A"}'  # noqa: E501
+        return LLMResponseType(raw_answer=raw_answer, parsed_answer=response_schema.model_validate_json(raw_answer))
+    # Check if it's a subclass of EvaluationAnswer (covers custom answer schemas)
+    if isinstance(response_schema, type) and issubclass(response_schema, EvaluationAnswer):
+        # Try to instantiate with generic data
+        try:
+            raw_answer = '{"reasoning": "Generic", "score": 1}'
+            return LLMResponseType(
+                raw_answer=raw_answer, parsed_answer=response_schema.model_validate_json(raw_answer)
+            )
+        except Exception:
+            pass
     if response_schema == AnswerFormat:
         return LLMResponseType(
             raw_answer='{"keyA": "valueA", "keyB": "valueB"}',
@@ -102,7 +135,7 @@ def answer_model_factory(input: LLMInputPrompt, response_schema, **kwargs):
         )
     if response_schema == AnswerEvaluatorFormat:
         return LLMResponseType(
-            raw_answer='{"quality": 1, "trustworthiness": 0, "originality": 0}',
+            raw_answer='{"quality": 1, "trustworthiness": 0, "originality": 0, "reasoning": "Test", "score": 1}',
             parsed_answer=response_schema(quality=1, trustworthiness=0, originality=0),
         )
     elif isinstance(response_schema, dict):
@@ -202,11 +235,94 @@ def openai_client_mock(mocker, responses_api_mock):
 
 
 @pytest.fixture
+def flexible_openai_client_mock(mocker):
+    """Flexible OpenAI client mock that can work with any answer schema.
+
+    This mock dynamically generates responses based on the schema provided,
+    supporting both json_mode=True (responses.create) and json_mode=False (responses.parse).
+    """
+
+    openai_client = mocker.AsyncMock(AsyncOpenAI)
+    type(openai_client).responses = mocker.AsyncMock()
+
+    def get_sample_data_for_schema(schema_type):
+        """Generate sample data for different answer schemas."""
+        if schema_type == RetrievalEvaluationAnswer or schema_type.__name__ == "RetrievalEvaluationAnswer":
+            return {"reasoning": "The document is highly relevant to the query", "score": 2}
+        elif schema_type == PairwiseEvaluationAnswer or schema_type.__name__ == "PairwiseEvaluationAnswer":
+            return {
+                "answer_a_analysis": "Answer A is comprehensive and accurate",
+                "answer_b_analysis": "Answer B is less detailed",
+                "comparison_reasoning": "Answer A provides more depth",
+                "winner": "A",
+            }
+        else:
+            # Fallback for other schemas
+            return {"score": 1, "reasoning": "Generic response"}
+
+    def create_side_effect(*args, **kwargs):
+        """Mock responses.create (used when json_mode=True)."""
+        resp = mocker.Mock()
+        resp.output_text = '{"reasoning": "The document is highly relevant to the query", "score": 2}'
+        return resp
+
+    def parse_side_effect(*args, **kwargs):
+        """Mock responses.parse (used when json_mode=False)."""
+        text_format = kwargs.get("text_format")
+        resp = mocker.Mock()
+
+        if text_format:
+            sample_data = get_sample_data_for_schema(text_format)
+
+            resp.output_text = json.dumps(sample_data)
+            resp.output_parsed = text_format(**sample_data)
+        else:
+            resp.output_text = "Generic response"
+            resp.output_parsed = None
+
+        return resp
+
+    openai_client.responses.create = mocker.AsyncMock(side_effect=create_side_effect)
+    openai_client.responses.parse = mocker.AsyncMock(side_effect=parse_side_effect)
+
+    return openai_client
+
+
+@pytest.fixture
+def openai_provider_structured(flexible_openai_client_mock, monkeypatch):
+    """OpenAI provider configured for structured mode (json_mode=False) with mocked client."""
+    from ragelo.llm_providers.openai_client import OpenAIProvider
+
+    config = OpenAIConfiguration(
+        api_key="fake_key",
+        model="fake_model",
+        json_mode=False,
+    )
+    provider = OpenAIProvider(config=config)
+    monkeypatch.setattr(provider, "_OpenAIProvider__openai_client", flexible_openai_client_mock)
+    return provider
+
+
+@pytest.fixture
+def openai_provider_json_mode(flexible_openai_client_mock, monkeypatch):
+    """OpenAI provider configured for JSON mode (json_mode=True) with mocked client."""
+    from ragelo.llm_providers.openai_client import OpenAIProvider
+
+    config = OpenAIConfiguration(
+        api_key="fake_key",
+        model="fake_model",
+        json_mode=True,
+    )
+    provider = OpenAIProvider(config=config)
+    monkeypatch.setattr(provider, "_OpenAIProvider__openai_client", flexible_openai_client_mock)
+    return provider
+
+
+@pytest.fixture
 def base_experiment_config():
     config = {
         "experiment_name": "test_experiment",
         "save_on_disk": False,
-        "cache_evaluations": False,
         "queries_csv_path": "tests/data/queries.csv",
         "documents_csv_path": "tests/data/documents.csv",
         "answers_csv_path": "tests/data/answers.csv",
@@ -245,32 +361,45 @@ def experiment_with_conversations_and_reasonings(experiment):
         ChatMessage(sender="user", content="What is the capital of France?"),
         ChatMessage(
             sender="agent2",
-            content="According to [3], Lyon is the second largest city in France. Meanwhile, Paris is its capital [2].",
+            content="According to [3], Lyon is the second largest city in France. Meanwhile, Paris is its capital [2].",  # noqa: E501
         ),
     ]
-    experiment.queries["0"].retrieved_docs["0"].evaluation = RetrievalEvaluatorResult(
+    # Add evaluations to the evaluations dict with evaluator_name as key
+    experiment.queries["0"].retrieved_docs["0"].evaluations["reasoner"] = RetrievalEvaluatorResult(
         qid=experiment.queries["0"].qid,
         did="0",
-        raw_answer="The document is very relevant as it directly answers the user's question about the capital of Brazil",
-        answer="The document is very relevant as it directly answers the user's question about the capital of Brazil",
+        evaluator_name="reasoner",
+        answer=RetrievalEvaluationAnswer(
+            reasoning="The document is very relevant as it directly answers the user's question about the capital of Brazil",  # noqa: E501
+            score=2,
+        ),
     )
-    experiment.queries["0"].retrieved_docs["1"].evaluation = RetrievalEvaluatorResult(
+    experiment.queries["0"].retrieved_docs["1"].evaluations["reasoner"] = RetrievalEvaluatorResult(
         qid=experiment.queries["0"].qid,
         did="1",
-        raw_answer="The document is somewhat relevant as it provides historical information about the capital of Brazil, but it does not provide the current capital.",
-        answer="The document is somewhat relevant as it provides historical information about the capital of Brazil, but it does not provide the current capital.",
+        evaluator_name="reasoner",
+        answer=RetrievalEvaluationAnswer(
+            reasoning="The document is somewhat relevant as it provides historical information about the capital of Brazil, but it does not provide the current capital.",  # noqa: E501
+            score=1,
+        ),
     )
-    experiment.queries["1"].retrieved_docs["2"].evaluation = RetrievalEvaluatorResult(
+    experiment.queries["1"].retrieved_docs["2"].evaluations["reasoner"] = RetrievalEvaluatorResult(
         qid=experiment.queries["1"].qid,
         did="2",
-        raw_answer="The document is very relevant as it directly answers the user's question about the capital of France.",
-        answer="The document is very relevant as it directly answers the user's question about the capital of France.",
+        evaluator_name="reasoner",
+        answer=RetrievalEvaluationAnswer(
+            reasoning="The document is very relevant as it directly answers the user's question about the capital of France.",  # noqa: E501
+            score=2,
+        ),
     )
-    experiment.queries["1"].retrieved_docs["3"].evaluation = RetrievalEvaluatorResult(
+    experiment.queries["1"].retrieved_docs["3"].evaluations["reasoner"] = RetrievalEvaluatorResult(
         qid=experiment.queries["1"].qid,
         did="3",
-        raw_answer="The document is not relevant to the user question as it does not provide information about the capital of France.",
-        answer="The document is not relevant to the user question as it does not provide information about the capital of France.",
+        evaluator_name="reasoner",
+        answer=RetrievalEvaluationAnswer(
+            reasoning="The document is not relevant to the user question as it does not provide information about the capital of France.",  # noqa: E501
+            score=0,
+        ),
     )
     return experiment
 
@@ -302,8 +431,8 @@ def retrieval_evaluation():
     return RetrievalEvaluatorResult(
         qid="0",
         did="0",
-        raw_answer="Document is relevant. Score: 1.0",
-        answer=1,
+        evaluator_name="reasoner",
+        answer=RetrievalEvaluationAnswer(reasoning="The document is relevant", score=1.0),
     )
 
 
@@ -312,21 +441,25 @@ def answer_evaluation():
     return AnswerEvaluatorResult(
         qid="0",
         agent="agent1",
-        pairwise=False,
-        raw_answer="Answer is good. Scores: {'quality': 1.0, 'relevance': 0.8}",
-        answer={"quality": 1.0, "relevance": 0.8},
+        evaluator_name="custom_prompt",
+        answer=AnswerEvaluationAnswer(reasoning="Good quality answer", score=1),
     )
 
 
 @pytest.fixture
 def pairwise_answer_evaluation():
-    return AnswerEvaluatorResult(
+    return PairwiseGameEvaluatorResult(
         qid="0",
         agent_a="agent1",
         agent_b="agent2",
-        pairwise=True,
-        raw_answer="Answer [[A]] is better than [[B]]",
-        answer="A",
+        game_id="agent1_vs_agent2",
+        evaluator_name="pairwise",
+        answer=PairwiseEvaluationAnswer(
+            answer_a_analysis="Answer A is good",
+            answer_b_analysis="Answer B is less good",
+            comparison_reasoning="A is better",
+            winner="A",
+        ),
     )
 
 
@@ -431,7 +564,7 @@ def llm_provider_mock(llm_provider_config):
 
 @pytest.fixture
 def llm_provider_mock_retrieval(llm_provider_config):
-    mocked_answer = RetrievalAnswerEvaluatorFormat(
+    mocked_answer = RetrievalEvaluationAnswer(
         reasoning="The document is very relevant",
         score=2,
     )
@@ -445,16 +578,24 @@ def llm_provider_mock_retrieval(llm_provider_config):
 
 
 @pytest.fixture
+def mock_llm_provider_factory(monkeypatch):
+    from ragelo.llm_providers.base_llm_provider import LLMProviderFactory
+    from ragelo.types.types import LLMProviderTypes
+
+    monkeypatch.setitem(LLMProviderFactory.registry, LLMProviderTypes.OPENAI, MockLLMProvider)
+    monkeypatch.setitem(LLMProviderFactory.registry, LLMProviderTypes.OLLAMA, MockLLMProvider)
+    monkeypatch.setattr(MockLLMProvider, "api_key_env_var", "OPENAI_API_KEY", raising=False)
+
+
+@pytest.fixture
 def llm_provider_mock_rdnam(llm_provider_config):
     mocked_answer = RDNAMMultipleAnnotatorsAnswer(
-        annotator_1=RDNAMAnswerEvaluatorFormat(intent_match=2, trustworthiness=1, overall=1),
-        annotator_2=RDNAMAnswerEvaluatorFormat(intent_match=1, trustworthiness=1, overall=2),
-        annotator_3=RDNAMAnswerEvaluatorFormat(intent_match=1, trustworthiness=1, overall=1),
-        annotator_4=RDNAMAnswerEvaluatorFormat(intent_match=0, trustworthiness=0, overall=0),
-        annotator_5=RDNAMAnswerEvaluatorFormat(intent_match=1, trustworthiness=1, overall=2),
+        annotator_1=RDNAMEvaluationAnswer(reasoning="Annotator 1", score=1.0, intent_match=2.0, trustworthiness=1.0),
+        annotator_2=RDNAMEvaluationAnswer(reasoning="Annotator 2", score=2.0, intent_match=1.0, trustworthiness=1.0),
+        annotator_3=RDNAMEvaluationAnswer(reasoning="Annotator 3", score=1.0, intent_match=1.0, trustworthiness=1.0),
+        annotator_4=RDNAMEvaluationAnswer(reasoning="Annotator 4", score=0.0, intent_match=0.0, trustworthiness=0.0),
+        annotator_5=RDNAMEvaluationAnswer(reasoning="Annotator 5", score=2.0, intent_match=1.0, trustworthiness=1.0),
     )
-    LLM_response = LLMResponseType(raw_answer=mocked_answer.model_dump_json(), parsed_answer=mocked_answer)
-
     LLM_response = LLMResponseType(raw_answer=mocked_answer.model_dump_json(), parsed_answer=mocked_answer)
     provider = MockLLMProvider(llm_provider_config)
 
@@ -470,7 +611,7 @@ def llm_provider_reasoner_mock(llm_provider_config):
     provider = MockLLMProvider(llm_provider_config)
     answer = LLMResponseType(
         raw_answer='{"reasoning": "The document is very relevant", "score": 2}',
-        parsed_answer=RetrievalAnswerEvaluatorFormat(
+        parsed_answer=RetrievalEvaluationAnswer(
             reasoning="The document is very relevant",
             score=2,
         ),
@@ -488,10 +629,13 @@ class AnswerFormat(BaseModel):
     keyB: str
 
 
-class AnswerEvaluatorFormat(BaseModel):
+class AnswerEvaluatorFormat(AnswerEvaluationAnswer):
     quality: int
     trustworthiness: int
     originality: int
+    # Override inherited fields to make them optional
+    reasoning: str = "Test reasoning"
+    score: int = 1
 
 
 @pytest.fixture
@@ -510,6 +654,7 @@ def base_answer_eval_config(base_eval_config, answer_eval_format):
     base_config["system_prompt"] = "This is a system prompt"
     base_config["user_prompt"] = "Query: {{ query.query }}\nAnswer: {{ answer.text }}"
     base_config["llm_response_schema"] = answer_eval_format
+    base_config["evaluator_name"] = "custom_prompt"
     return BaseAnswerEvaluatorConfig(**base_config)
 
 
@@ -527,7 +672,7 @@ def pairwise_answer_eval_config(base_answer_eval_config):
         {{ game.agent_b_answer.text }}
         [The End of Assistant B's Answer]
     """
-    return PairwiseEvaluatorConfig(bidirectional=True, **base_config)
+    return PairwiseEvaluatorConfig(**base_config)
 
 
 @pytest.fixture
@@ -538,7 +683,7 @@ def chat_pairwise_answer_eval_config(base_answer_eval_config):
     base_config["pairwise"] = True
     base_config["evaluator_name"] = AnswerEvaluatorTypes.CHAT_PAIRWISE
 
-    return PairwiseEvaluatorConfig(bidirectional=True, **base_config)
+    return PairwiseEvaluatorConfig(**base_config)
 
 
 @pytest.fixture

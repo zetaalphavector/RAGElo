@@ -1,8 +1,6 @@
 import json
 from unittest.mock import AsyncMock
 
-from pydantic import BaseModel, Field
-
 from ragelo import get_retrieval_evaluator
 from ragelo.evaluators.retrieval_evaluators import (
     BaseRetrievalEvaluator,
@@ -13,7 +11,12 @@ from ragelo.evaluators.retrieval_evaluators import (
     ReasonerEvaluator,
 )
 from ragelo.types import Document, Query
-from ragelo.types.answer_formats import RDNAMAnswerEvaluatorFormat, RDNAMAnswerNoAspects
+from ragelo.types.answer_formats import (
+    EvaluationAnswer,
+    RDNAMEvaluationAnswer,
+    RDNAMNoAspectsAnswer,
+    RetrievalEvaluationAnswer,
+)
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.results import RetrievalEvaluatorResult
 from ragelo.utils import string_to_template
@@ -25,58 +28,65 @@ class RetrievalEvaluator(BaseRetrievalEvaluator):
 
 
 class TestRetrievalEvaluator:
-    def test_evaluate_single_answer(self, llm_provider_mock, experiment, base_retrieval_eval_config):
-        base_retrieval_eval_config.llm_response_schema = {"score": "float"}
-        evaluator = RetrievalEvaluator.from_config(config=base_retrieval_eval_config, llm_provider=llm_provider_mock)
+    def test_evaluate_single_answer(self, llm_provider_mock_retrieval, experiment, base_retrieval_eval_config):
+        evaluator = RetrievalEvaluator.from_config(
+            config=base_retrieval_eval_config, llm_provider=llm_provider_mock_retrieval
+        )
         query = experiment["0"]
         doc = query.retrieved_docs["0"]
         result = evaluator.evaluate(query, doc)
-        assert result.raw_answer == '{"score": 1.0}'
-        assert result.answer == {"score": 1.0}
+        assert isinstance(result.answer, RetrievalEvaluationAnswer)
+        assert result.answer.score == 2
+        assert result.answer.reasoning == "The document is very relevant"
 
         expected_prompt = f"Query: {query.query}\nDocument: {doc.text}"
-        call_args = llm_provider_mock.async_call_mocker.call_args_list
+        call_args = llm_provider_mock_retrieval.async_call_mocker.call_args_list
         assert call_args[0][0][0].user_message == expected_prompt
 
     def test_evaluate_experiment(
         self,
-        llm_provider_mock,
+        llm_provider_mock_retrieval,
         experiment,
         base_retrieval_eval_config,
     ):
-        base_retrieval_eval_config.llm_response_schema = {"score": "float"}
-        evaluator = RetrievalEvaluator.from_config(config=base_retrieval_eval_config, llm_provider=llm_provider_mock)
+        evaluator = RetrievalEvaluator.from_config(
+            config=base_retrieval_eval_config, llm_provider=llm_provider_mock_retrieval
+        )
         evaluator.evaluate_experiment(experiment)
         doc_ids = ["0", "1", "2", "3"]
         qids = ["0", "0", "1", "1"]
+        evaluator_name = str(base_retrieval_eval_config.evaluator_name)
         for query in experiment:
             for doc in query.retrieved_docs_iter():
-                assert isinstance(doc.evaluation, RetrievalEvaluatorResult)
-                assert isinstance(doc.evaluation.raw_answer, str)
-                assert isinstance(doc.evaluation.answer, dict)
+                assert len(doc.evaluations) > 0
+                assert evaluator_name in doc.evaluations
+                evaluation = doc.evaluations[evaluator_name]
+                assert isinstance(evaluation, RetrievalEvaluatorResult)
+                assert isinstance(evaluation.answer, RetrievalEvaluationAnswer)
                 assert doc.did == doc_ids.pop(0)
                 assert doc.qid == qids.pop(0)
 
-    def test_evaluate_with_text(self, llm_provider_mock, base_retrieval_eval_config):
-        base_retrieval_eval_config.llm_response_schema = {"score": "float"}
-        evaluator = RetrievalEvaluator.from_config(config=base_retrieval_eval_config, llm_provider=llm_provider_mock)
+    def test_evaluate_with_text(self, llm_provider_mock_retrieval, base_retrieval_eval_config):
+        evaluator = RetrievalEvaluator.from_config(
+            config=base_retrieval_eval_config, llm_provider=llm_provider_mock_retrieval
+        )
         result = evaluator.evaluate(document="This is a document", query="This is a query")
-        call_args = llm_provider_mock.async_call_mocker.call_args_list
+        call_args = llm_provider_mock_retrieval.async_call_mocker.call_args_list
         assert call_args[0][0][0].user_message == "Query: This is a query\nDocument: This is a document"
-        assert isinstance(result.answer, dict)
-        assert result.answer["score"] == 1.0
+        assert isinstance(result.answer, RetrievalEvaluationAnswer)
+        assert result.answer.score == 2
 
     def test_rich_printing(
         self,
-        llm_provider_mock,
-        base_eval_config,
+        llm_provider_mock_retrieval,
+        base_retrieval_eval_config,
         experiment,
         capsys,
     ):
-        base_eval_config.rich_print = True
+        base_retrieval_eval_config.rich_print = True
         evaluator = RetrievalEvaluator.from_config(
-            config=base_eval_config,
-            llm_provider=llm_provider_mock,
+            config=base_retrieval_eval_config,
+            llm_provider=llm_provider_mock_retrieval,
         )
         evaluator.evaluate_experiment(experiment)
         captured = capsys.readouterr()
@@ -111,13 +121,11 @@ class TestRDNAMEvaluator:
         query = experiment["0"]
         doc = query.retrieved_docs["0"]
         result = evaluator.evaluate(query, doc)
-        assert isinstance(result.answer, RDNAMAnswerEvaluatorFormat)
+
+        assert isinstance(result.answer, RDNAMEvaluationAnswer)
         assert result.answer.intent_match == 1.0
         assert result.answer.trustworthiness == 0.8
-        assert result.answer.overall == 1.2
-        assert result.raw_answer is not None
-        assert "annotator_1" in result.raw_answer
-        assert "annotator_2" in result.raw_answer
+        assert result.answer.score == 1.2
 
         call_args = llm_provider_mock_rdnam.async_call_mocker.call_args_list
         assert call_args[0][0][0].system_prompt.startswith("You are a search quality rater evaluating")
@@ -215,19 +223,19 @@ class TestDomainExpertEvaluator:
 class TestFewShotEvaluator:
     def test_process_single_answer(
         self,
-        llm_provider_mock,
+        llm_provider_mock_retrieval,
         few_shot_retrieval_eval_config,
         experiment,
     ):
         evaluator = FewShotEvaluator.from_config(
             config=few_shot_retrieval_eval_config,
-            llm_provider=llm_provider_mock,
+            llm_provider=llm_provider_mock_retrieval,
         )
         query = experiment["0"]
         doc = query.retrieved_docs["0"]
 
         _ = evaluator.evaluate(query, doc)
-        call_args = llm_provider_mock.async_call_mocker.call_args_list
+        call_args = llm_provider_mock_retrieval.async_call_mocker.call_args_list
 
         # Check that the call was made with the expected structure
         prompt = call_args[0][0][0]
@@ -257,7 +265,7 @@ class TestFewShotEvaluator:
 class TestReadmeExamples:
     def test_rdnam_example(self, llm_provider_mock_rdnam):
         def side_effect(*args, **kwargs):
-            return LLMResponseType(raw_answer='{"overall": 1.0}', parsed_answer=RDNAMAnswerNoAspects(overall=1))
+            return LLMResponseType(raw_answer='{"score": 1.0}', parsed_answer=RDNAMNoAspectsAnswer(score=1.0))
 
         llm_provider_mock_rdnam.async_call_mocker = AsyncMock(side_effect=side_effect)
         evaluator = get_retrieval_evaluator("RDNAM", llm_provider=llm_provider_mock_rdnam, write_output=False)
@@ -265,10 +273,8 @@ class TestReadmeExamples:
             query="What is the capital of France?",
             document="Lyon is the second largest city in France.",
         )
-        assert isinstance(result.answer, RDNAMAnswerEvaluatorFormat)
-        assert result.answer.overall == 1.0
-        assert result.answer == RDNAMAnswerEvaluatorFormat(overall=1.0, intent_match=None, trustworthiness=None)
-        assert result.raw_answer == '{"overall": 1.0}'
+        assert isinstance(result.answer, (RDNAMNoAspectsAnswer, RDNAMEvaluationAnswer))
+        assert result.answer.score == 1.0
 
     def test_custom_prompt_evaluator_example(self, llm_provider_mock):
         answer_dict = {
@@ -288,26 +294,26 @@ class TestReadmeExamples:
         """
 
         user_prompt = """
-        User query: {{ query.query }}
+            User query: {{ query.query }}
 
-        Retrieved document: {{ document.text }}
+            Retrieved document: {{ document.text }}
 
-        The document has a date of {{ document.metadata.date }}.
-        Today is {{ query.metadata.today_date }}.
-        """
+            The document has a date of {{ document.metadata.date }}.
+            Today is {{ query.metadata.today_date }}."""
 
         expected_user_prompt = string_to_template(
             """
-        User query: What is the capital of Brazil?
+            User query: What is the capital of Brazil?
 
-        Retrieved document: Rio de Janeiro is the capital of Brazil.
+            Retrieved document: Rio de Janeiro is the capital of Brazil.
 
-        The document has a date of 04-03-1950.
-        Today is 08-04-2024.
+            The document has a date of 04-03-1950.
+            Today is 08-04-2024.
         """
         ).render()
+        from pydantic import Field
 
-        class ResponseSchema(BaseModel):
+        class ResponseSchema(EvaluationAnswer):
             relevance: int = Field(
                 description="An integer, either 0 or 1. 0 if the document is irrelevant, 1 if it is relevant."
             )
@@ -322,15 +328,16 @@ class TestReadmeExamples:
             )
 
         mocked_answer = LLMResponseType(
-            raw_answer=json.dumps(answer_dict), parsed_answer=ResponseSchema(**answer_dict)
+            raw_answer=json.dumps(answer_dict), parsed_answer=ResponseSchema.model_validate(answer_dict)
         )
         evaluator = get_retrieval_evaluator(
             "custom_prompt",  # name of the retrieval evaluator
             llm_provider=llm_provider_mock,  # Which LLM provider to use
             system_prompt=system_prompt,  # your custom prompt
             user_prompt=user_prompt,  # your custom prompt
-            llm_response_schema=ResponseSchema,  # The response schema for the LLM.
+            result_type=ResponseSchema,
         )
+        assert issubclass(evaluator.result_type, RetrievalEvaluatorResult)
 
         def side_effect(*args, **kwargs):
             return mocked_answer
@@ -344,7 +351,8 @@ class TestReadmeExamples:
             doc_metadata={"date": "04-03-1950"},  # Some metadata for the document
         )
         call_args = llm_provider_mock.async_call_mocker.call_args_list
-        assert result.raw_answer == json.dumps(answer_dict)
-        assert result.answer == ResponseSchema(**answer_dict)
+        assert isinstance(result.answer, ResponseSchema)
+        assert result.answer.reasoning == answer_dict["reasoning"]
+        assert result.answer.relevance == 0
         assert call_args[0][0][0].system_prompt == string_to_template(system_prompt).render()
         assert call_args[0][0][0].user_message == expected_user_prompt

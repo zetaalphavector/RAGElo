@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from typing import Any, Type, get_type_hints
+from typing import Any, cast, get_type_hints
 
 from ragelo.logger import logger
+from ragelo.types import Experiment, PairwiseGameEvaluatorResult
 from ragelo.types.configurations.agent_ranker_configs import AgentRankerConfig
-from ragelo.types.experiment import Experiment
 from ragelo.types.types import AgentRankerTypes
 
 
@@ -31,18 +31,19 @@ class AgentRanker:
         raise NotImplementedError
 
     @classmethod
-    def get_config_class(cls) -> Type[AgentRankerConfig]:
+    def get_config_class(cls) -> type[AgentRankerConfig]:
         return get_type_hints(cls)["config"]
 
     def _flatten_evaluations(self, experiment: Experiment) -> list[tuple[str, str, str]]:
         evaluations = []
         for query in experiment:
-            for game in query.pairwise_games:
-                if game.evaluation is not None:
-                    if isinstance(game.evaluation.answer, dict):
-                        winner = game.evaluation.answer["winner"]
-                    else:
-                        winner = game.evaluation.answer.winner
+            for game in query.pairwise_games.values():
+                # Get the first available pairwise evaluation
+                for evaluation in game.evaluations.values():
+                    cast(PairwiseGameEvaluatorResult, evaluation)
+                    if evaluation.winner is None:
+                        continue
+                    winner = evaluation.winner
                     evaluations.append(
                         (
                             game.agent_a_answer.agent,
@@ -50,15 +51,16 @@ class AgentRanker:
                             winner,
                         )
                     )
+                    break  # Only use the first evaluation found
         return evaluations
 
 
 class AgentRankerFactory:
-    registry: dict[AgentRankerTypes, Type[AgentRanker]] = {}
+    registry: dict[AgentRankerTypes, type[AgentRanker]] = {}
 
     @classmethod
     def register(cls, name: AgentRankerTypes):
-        def inner_wrapper(wrapped_class: Type[AgentRanker]):
+        def inner_wrapper(wrapped_class: type[AgentRanker]):
             if name in cls.registry:
                 logger.warning(f"Overwriting {name} in Answer Evaluator registry")
             cls.registry[name] = wrapped_class

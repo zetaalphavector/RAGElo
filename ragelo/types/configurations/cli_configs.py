@@ -36,10 +36,6 @@ class BaseCLIConfig(BaseConfig):
         default=None,
         description="The path to the output file where the results will be saved.",
     )
-    save_results: bool = Field(
-        default=True,
-        description="Whether or not to save the results to disk.",
-    )
     rich_print: bool = Field(
         default=True,
         description="Use rich to print colorful outputs.",
@@ -105,5 +101,4 @@ class CLIConfig(BaseCLIConfig):
     k: int = Field(default=100, description="Number of pairwise games to generate")
     initial_score: int = Field(default=1000, description="The initial Elo score for each agent")
     elo_k: int = Field(default=32, description="The K factor for the Elo ranking algorithm")
-    bidirectional: bool = Field(default=False, description="Wether or not to run each game in both directions")
     model: str = Field(default="gpt-4.1-mini", description="The model to use for the LLM")

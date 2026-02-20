@@ -22,6 +22,12 @@ For using RAGElo as a Python library or as CLI, install it using pip:
 pip install ragelo
 ```
 
+When working from source we recommend an isolated environment (e.g., `uv venv && uv pip install -e '.[dev]'`). The project's Python lives at `.venv/bin/python`.
+
+Environment variables and providers:
+- OpenAI requires `OPENAI_API_KEY`. Set it in your shell or load it via dotenv before invoking the CLI.
+- Ollama is supported for local models (`--llm-provider-name ollama`).
+
 ## 🚀 Library Quickstart
 
 To use RAGElo as a library, all you need to do is import RAGElo, initialize an `Evaluator` and call either `evaluate()` for evaluating a retrieved document or an LLM answer, or `evaluate_experiment()` to evaluate a full experiment. For example, using the `RDNAM` retrieval evaluator from the [Thomas et al. (2023)](https://arxiv.org/abs/2309.10621) paper on using GPT-4 for annotating retrieval results:
@@ -146,10 +152,24 @@ Note that, in this example, we passed to the `evaluate` method two dictionaries 
 For a comprehensive example of how to use RAGElo, see the [docs/examples/notebooks/rag_eval.ipynb](https://github.com/zetaalphavector/RAGElo/blob/master/docs/examples/notebooks/rag_eval.ipynb) notebook.
 
 ## 🚀 CLI Quickstart
-After installing RAGElo as a CLI app, you can run it with the following command:
+After installing RAGElo as a CLI app (and exporting the appropriate LLM provider credentials, e.g., `OPENAI_API_KEY`), you can run it with the following command:
 ```bash
-ragelo run-all queries.csv documents.csv answers.csv --data-dir tests/data/ --experiment-name experiment --output-file experiment.json
+ragelo run-all \
+  queries.csv documents.csv answers.csv \
+  --data-dir tests/data/ \
+  --experiment-name tutorial \
+  --output-file tutorial.json \
+  --verbose
+```
 
+With `--verbose` enabled you will see outputs such as:
+
+```
+Loaded 2 queries from .../tests/data/queries.csv
+Loaded 4 new documents from .../tests/data/documents.csv
+Loaded 4 answers from .../tests/data/answers.csv
+Evaluating Retrieved documents ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4/4
+✅ Done!
 🔎 Query ID: 0
 📜 Document ID: 0
 Parsed Answer: Very relevant: The document directly answers the user question by stating that Brasília is the capital of Brazil.
@@ -185,13 +205,21 @@ agent1         : 1033.0(±0.0)
 agent2         : 966.0(±0.0)
 ```
 
-In this example, the output file is a JSON file with all the annotations performed by the evaluators and the final Elo ratings. These can also be loaded directly as a new `Experiment` object:
+By default, evaluations are persisted to `ragelo_cache/<experiment>.json` alongside incremental results in `ragelo_cache/<experiment>_results.jsonl`. Passing `--output-file` writes the experiment JSON (without evaluator traces) to a custom location.
+
+In this example, the output file is a JSON file with the experiment definition and tournament summary. It can be loaded directly as a new `Experiment` object:
 
 ```python
 experiment = Experiment.load("experiment", "experiment.json")
 ```
 
 When running as a CLI, RAGElo expects the input files as CSV files. Specifically, it expects a csv file with the user queries, one with the documents retrieved by the retrieval system and one of the answers each agent produced. These files can be passed with the parameters `--queries_csv_file`, `--documents_csv_file` and `--answers_csv_file`, respectively, or directly as positional arguments.
+
+CSV columns and inference:
+- Queries: `qid`, `query` (infers `qid` if missing)
+- Documents: `qid`, `did`, `document` (infers `qid`/`did` if missing)
+- Answers: `qid`, `agent`, `answer`
+Extra columns are captured as metadata and available to prompts.
 
 Here are some examples of their expected formats:
 `queries.csv`:
@@ -222,22 +250,84 @@ qid,agent,answer
 
 
 ## 🧩 Components
-While **RAGElo** can be used as either an end-to-end tool or by calling individual CLI components.
+While **RAGElo** can be used end-to-end (`run-all`), you can also drive individual CLI components.
 
 ### 📜 `retrieval-evaluator`
 The `retrieval-evaluator` tool annotates retrieved documents based on their relevance to the user query. This is done regardless of the answers provided by any Agent. As an example, for calling the `Reasoner` retrieval evaluator (reasoner only outputs the reasoning why a document is relevant or not) we can use:
 
 ```bash
-ragelo retrieval-evaluator reasoner queries.csv documents.csv --data-dir tests/data/ --experiment-name experiment
+ragelo retrieval-evaluator reasoner \
+  queries.csv documents.csv \
+  --data-dir tests/data/ \
+  --experiment-name experiment \
+  --output-file experiment-docs.json \
+  --verbose
 ```
-The output file changes according to the evaluator used. In general it will have one row per document evaluator, with the query_id, document_id, the raw LLM answer and the parsed answer. An example of the output for the reasoner is found here: [tests/data/reasonings.csv](https://github.com/zetaalphavector/RAGElo/blob/master/tests/data/reasonings.csv).
+Each run updates the experiment cache and appends evaluation traces to `<experiment>_results.jsonl`. If all documents already have evaluations you will see an informational message unless `--force` is provided.
 
-### 💬 `answers-annotator`
+Domain expert example:
+```bash
+ragelo retrieval-evaluator domain-expert \
+  queries.csv documents.csv \
+  --data-dir tests/data/ \
+  --experiment-name experiment \
+  --expert-in "Chemical Engineering" \
+  --company "ChemCorp" \
+  --output-file experiment-docs.json \
+  --verbose
+```
 
-The `answers-annotator` tool annotates the answers generated by the Agents, taking the quality of the documents retrieved by the retrieval pipeline. By default, it uses the `Pairwise` annotator, which generates `k` random pairs of answers for each query and chooses the best answer based on the relevant documents cited in the answer. If the experiment already exists with annotations for the documents, it will try to load these and inject into the prompts for a better context for the LLM. Otherwise, you can pass the `--add-reasoning` flag to run the `Reasoner` retrieval evaluator first.
+RDNAM example:
+```bash
+ragelo retrieval-evaluator rdnam \
+  queries.csv documents.csv \
+  --data-dir tests/data/ \
+  --experiment-name experiment \
+  --output-file experiment-docs.json \
+  --verbose
+```
+
+### 💬 `answer-evaluator`
+
+The `answer-evaluator` subcommands annotate agent answers. The default `pairwise` mode compares answers two at a time and can optionally inject reasoning annotations:
 
 ```bash
-ragelo answer-evaluator pairwise queries.csv documents.csv answers.csv --data-dir tests/data/ --experiment-name experiment --add-reasoning
+ragelo answer-evaluator pairwise \
+  queries.csv documents.csv answers.csv \
+  --data-dir tests/data/ \
+  --experiment-name experiment \
+  --output-file experiment-answers.json \
+  --add-reasoning \
+  --verbose
+```
+
+If `--add-reasoning` is supplied the CLI will run the `reasoner` retrieval evaluator first, include the relevance scores in the prompts, and then proceed with pairwise games. Newly created games are tracked inside the experiment and re-used by the Elo ranker.
+
+Domain expert pairwise example:
+```bash
+ragelo answer-evaluator expert-pairwise \
+  queries.csv documents.csv answers.csv \
+  --data-dir tests/data/ \
+  --experiment-name experiment \
+  --expert-in "Healthcare" \
+  --add-reasoning \
+  --output-file experiment-answers.json \
+  --verbose
+```
+
+Concurrency and Rich output:
+- Use `--n-processes` to control parallel LLM calls.
+- Use `--no-rich-print` in CI to avoid live display issues.
+
+Reproducibility tips:
+- Pairwise sampling (`n_games_per_query`) is randomized; persist experiment JSON/JSONL to stabilize comparisons.
+
+Evaluating retrieval metrics (optional):
+```python
+from ragelo import Experiment
+exp = Experiment(experiment_name="my_exp", save_on_disk=False)
+# load queries/docs/answers and evaluations...
+exp.evaluate_retrieval(metrics=["Precision@10", "nDCG@10"], relevance_threshold=1)
 ```
 
 ## 🙋 Contributing
@@ -246,7 +336,7 @@ To install the development dependencies, download the repository and run the fol
 
 ```bash
 git clone https://github.com/zeta-alpha/ragelo && cd ragelo
-pip install -e '.[dev]'
+uv pip install -e '.[dev]'
 ```
 
 This will install the requirement dependencies in an editable mode (i.e., any changes to the code don't need to be rebuilt.)

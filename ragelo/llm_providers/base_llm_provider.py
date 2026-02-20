@@ -2,14 +2,16 @@ from __future__ import annotations
 
 import os
 from abc import ABC, abstractmethod
-from typing import Any, Type, get_type_hints
+from typing import TypeVar, get_type_hints
 
 from pydantic import BaseModel
 
+from ragelo.types import LLMInputPrompt, LLMResponseType
 from ragelo.types.configurations import LLMProviderConfig
-from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.types import LLMProviderTypes
 from ragelo.utils import call_async_fn
+
+T_Schema = TypeVar("T_Schema", bound=BaseModel)
 
 
 class BaseLLMProvider(ABC):
@@ -22,8 +24,8 @@ class BaseLLMProvider(ABC):
     def __call__(
         self,
         input: LLMInputPrompt,
-        response_schema: Type[BaseModel] | dict[str, Any] | None = None,
-    ) -> LLMResponseType:
+        response_schema: type[T_Schema],
+    ) -> LLMResponseType[T_Schema]:
         """Submits a single query-document pair to the LLM and returns the answer."""
         return call_async_fn(self.call_async, input, response_schema)
 
@@ -31,8 +33,8 @@ class BaseLLMProvider(ABC):
     async def call_async(
         self,
         input: LLMInputPrompt,
-        response_schema: Type[BaseModel] | dict[str, Any] | None = None,
-    ) -> LLMResponseType:
+        response_schema: type[T_Schema],
+    ) -> LLMResponseType[T_Schema]:
         """Submits a single query-document pair to the LLM and returns the answer."""
         raise NotImplementedError
 
@@ -45,20 +47,20 @@ class BaseLLMProvider(ABC):
         return cls(config)
 
     @classmethod
-    def get_config_class(cls) -> Type[LLMProviderConfig]:
+    def get_config_class(cls) -> type[LLMProviderConfig]:
         return get_type_hints(cls)["config"]
 
 
 class LLMProviderFactory:
-    registry: dict[LLMProviderTypes, Type[BaseLLMProvider]] = {}
+    registry: dict[LLMProviderTypes, type[BaseLLMProvider]] = {}
 
     @classmethod
     def register(cls, name: LLMProviderTypes):
         """Registers a new LLM provider"""
 
         def inner_wrapper(
-            wrapped_class: Type[BaseLLMProvider],
-        ) -> Type[BaseLLMProvider]:
+            wrapped_class: type[BaseLLMProvider],
+        ) -> type[BaseLLMProvider]:
             cls.registry[name] = wrapped_class
             return wrapped_class
 

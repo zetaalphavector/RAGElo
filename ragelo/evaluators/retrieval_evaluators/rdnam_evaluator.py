@@ -4,7 +4,6 @@ https://arxiv.org/abs/2309.10621
 """
 
 import numpy as np
-from pydantic import BaseModel
 
 from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     BaseRetrievalEvaluator,
@@ -12,15 +11,22 @@ from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
 )
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.types.answer_formats import (
-    RDNAMAnswerEvaluatorFormat,
-    RDNAMAnswerNoAspects,
+    RDNAMEvaluationAnswer,
     RDNAMMultipleAnnotatorsAnswer,
-    RDNAMMultipleAnnotatorsAnswerNoAspects,
+    RDNAMMultipleAnnotatorsNoAspectsAnswer,
+    RDNAMNoAspectsAnswer,
 )
 from ragelo.types.configurations import RDNAMEvaluatorConfig
 from ragelo.types.evaluables import Document
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.query import Query
+from ragelo.types.results import (
+    RDNAMEvaluatorResult,
+    RDNAMMultipleAnnotatorsNoAspectsResult,
+    RDNAMMUltipleAnnotatorsResult,
+    RDNAMNoAspectsResult,
+    T_Result,
+)
 from ragelo.types.types import RetrievalEvaluatorTypes
 from ragelo.utils import string_to_template
 
@@ -34,7 +40,7 @@ class RDNAMEvaluator(BaseRetrievalEvaluator):
         1 = relevant, may be partly helpful but might contain other irrelevant content
         0 = not relevant, should never be shown for this query
         Assume that you are writing a report on the subject of the topic. If you would use any of the information contained in the document in such a report, mark it 1. If the document is primarily about the topic, or contains vital information about the topic, mark it 2. Otherwise, mark it 0.
-        """)
+        """)  # noqa: E501
     user_prompt = string_to_template("""
         # Query
         A person has typed {{ query.query }} into a search engine.
@@ -61,19 +67,25 @@ class RDNAMEvaluator(BaseRetrievalEvaluator):
         We asked five search engine raters to evaluate the relevance of the web page for the query.
         Each rater used their own independent judgement.
         {%- endif %}""")
+    result_type: (
+        type[RDNAMEvaluatorResult]
+        | type[RDNAMMUltipleAnnotatorsResult]
+        | type[RDNAMMultipleAnnotatorsNoAspectsResult]
+        | type[RDNAMNoAspectsResult]
+    ) = RDNAMEvaluatorResult
 
     def __init__(self, config: RDNAMEvaluatorConfig, llm_provider: BaseLLMProvider):
         """Initializes an evaluator based on RDNAM framework."""
         super().__init__(config, llm_provider)
         self._role = self.config.annotator_role if self.config.annotator_role else ""
         if self.config.use_aspects and self.config.use_multiple_annotators:
-            self.config.llm_response_schema = RDNAMMultipleAnnotatorsAnswer
+            self.result_type = RDNAMMUltipleAnnotatorsResult
         elif self.config.use_aspects:
-            self.config.llm_response_schema = RDNAMAnswerEvaluatorFormat
+            self.result_type = RDNAMEvaluatorResult
         elif self.config.use_multiple_annotators:
-            self.config.llm_response_schema = RDNAMMultipleAnnotatorsAnswerNoAspects
+            self.result_type = RDNAMMultipleAnnotatorsNoAspectsResult
         else:
-            self.config.llm_response_schema = RDNAMAnswerNoAspects
+            self.result_type = RDNAMNoAspectsResult
 
     def _build_message(self, query: Query, document: Document) -> LLMInputPrompt:
         context = {
@@ -88,62 +100,74 @@ class RDNAMEvaluator(BaseRetrievalEvaluator):
             user_message=self.user_prompt.render(**context),
         )
 
-    def _process_answer(self, llm_response: LLMResponseType) -> LLMResponseType:
+    def _process_answer(self, llm_response: LLMResponseType[T_Result]) -> LLMResponseType[T_Result]:
         parsed = llm_response.parsed_answer
-        assert isinstance(self.config.llm_response_schema, type(BaseModel))
-        assert isinstance(parsed, self.config.llm_response_schema)
+        if parsed is None:
+            return llm_response
 
         if self.config.use_multiple_annotators:
-            assert isinstance(parsed, RDNAMMultipleAnnotatorsAnswer)
-            overall = float(
-                np.mean(
-                    [
-                        parsed.annotator_1.overall,
-                        parsed.annotator_2.overall,
-                        parsed.annotator_3.overall,
-                        parsed.annotator_4.overall,
-                        parsed.annotator_5.overall,
-                    ]
-                )
-            )
+            # parsed is RDNAMMultipleAnnotatorsAnswer or RDNAMMultipleAnnotatorsNoAspectsAnswer
             if self.config.use_aspects:
-                trustworthiness = [
+                assert isinstance(parsed, RDNAMMultipleAnnotatorsAnswer)
+                score = float(
+                    np.mean(
+                        [
+                            parsed.annotator_1.score,
+                            parsed.annotator_2.score,
+                            parsed.annotator_3.score,
+                            parsed.annotator_4.score,
+                            parsed.annotator_5.score,
+                        ]
+                    )
+                )
+                trustworthiness_vals = [
                     parsed.annotator_1.trustworthiness,
                     parsed.annotator_2.trustworthiness,
                     parsed.annotator_3.trustworthiness,
                     parsed.annotator_4.trustworthiness,
                     parsed.annotator_5.trustworthiness,
                 ]
-                intent_match = [
+                intent_match_vals = [
                     parsed.annotator_1.intent_match,
                     parsed.annotator_2.intent_match,
                     parsed.annotator_3.intent_match,
                     parsed.annotator_4.intent_match,
                     parsed.annotator_5.intent_match,
                 ]
-                intent_match = float(np.mean(intent_match))  # type: ignore
-                trustworthiness = float(np.mean(trustworthiness))  # type: ignore
-            else:
-                intent_match = None
-                trustworthiness = None
-        else:
-            assert isinstance(parsed, RDNAMAnswerEvaluatorFormat) or isinstance(parsed, RDNAMAnswerNoAspects)
-            overall = parsed.overall
-            if self.config.use_aspects:
-                assert isinstance(parsed, RDNAMAnswerEvaluatorFormat)
-                intent_match = parsed.intent_match  # type: ignore
-                trustworthiness = parsed.trustworthiness  # type: ignore
-            else:
-                intent_match = None
-                trustworthiness = None
+                intent_match: float | None = float(np.mean(intent_match_vals))  # type: ignore
+                trustworthiness: float | None = float(np.mean(trustworthiness_vals))  # type: ignore
 
-        response = RDNAMAnswerEvaluatorFormat(
-            overall=overall,
-            intent_match=intent_match,
-            trustworthiness=trustworthiness,
-        )
+                # Create aggregated answer
+                response = RDNAMEvaluationAnswer(
+                    score=score,
+                    reasoning="Aggregated from 5 annotators",
+                    intent_match=intent_match,
+                    trustworthiness=trustworthiness,
+                )
+                self.result_type = RDNAMEvaluatorResult
+            else:
+                assert isinstance(parsed, RDNAMMultipleAnnotatorsNoAspectsAnswer)
+                score = float(
+                    np.mean(
+                        [
+                            parsed.annotator_1.score,
+                            parsed.annotator_2.score,
+                            parsed.annotator_3.score,
+                            parsed.annotator_4.score,
+                            parsed.annotator_5.score,
+                        ]
+                    )
+                )
+                # Create aggregated answer without aspects
+                response = RDNAMNoAspectsAnswer(
+                    score=score,
+                )
+                self.result_type = RDNAMNoAspectsResult
+        else:
+            # parsed is already RDNAMEvaluationAnswer or RDNAMNoAspectsAnswer
+            response = parsed  # type: ignore
 
         return LLMResponseType(
             raw_answer=llm_response.raw_answer,
-            parsed_answer=response,
+            parsed_answer=response,  # type: ignore
         )

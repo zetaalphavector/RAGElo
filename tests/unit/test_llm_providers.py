@@ -1,79 +1,303 @@
+import json
+
 import pytest
-from pydantic import BaseModel
+from tenacity import RetryError
 
 from ragelo.llm_providers.openai_client import OpenAIProvider
+from ragelo.types.configurations import OpenAIConfiguration
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
-
-
-class AnswerModel(BaseModel):
-    keyA: str
-    keyB: str
+from ragelo.types.results import PairwiseEvaluationAnswer, RetrievalEvaluationAnswer
 
 
 class TestOpenAIProvider:
-    @pytest.mark.parametrize(
-        "response_schema,raw_answer,parsed_answer",
-        [
-            (None, "fake response", "fake response"),
-            (
-                {"keyA": "Value of key a", "KeyB": "Value of key b"},
-                '{"keyA": "valueA", "keyB": "valueB"}',
-                {"keyA": "valueA", "keyB": "valueB"},
-            ),
-            (
-                AnswerModel,
-                '{"keyA": "valueA", "keyB": "valueB"}',
-                AnswerModel(keyA="valueA", keyB="valueB"),
-            ),
-        ],
-    )
-    def test_response(
-        self,
-        response_schema,
-        raw_answer,
-        parsed_answer,
-        openai_client_mock,
-        openai_client_config,
-        monkeypatch,
-    ):
-        openai_client = OpenAIProvider(config=openai_client_config)
-        monkeypatch.setattr(openai_client, "_OpenAIProvider__openai_client", openai_client_mock)
+    """Tests for OpenAIProvider with real-world answer schemas.
 
-        # Test with just user prompt
-        user_prompt = "hello world"
-        result = openai_client(
+    These tests cover:
+    - Both json_mode=True and json_mode=False configurations
+    - Real answer schemas (RetrievalEvaluationAnswer, PairwiseEvaluationAnswer)
+    - Different input formats (user message only, system + user, messages list)
+    - Error handling scenarios
+    """
+
+    def test_retrieval_evaluation_structured_mode(self, openai_provider_structured, flexible_openai_client_mock):
+        """Test retrieval evaluation with json_mode=False (structured output via responses.parse)."""
+        # Execute
+        user_prompt = "Evaluate the relevance of this document to the query."
+        result = openai_provider_structured(
             LLMInputPrompt(user_message=user_prompt),
-            response_schema=response_schema,
+            response_schema=RetrievalEvaluationAnswer,
         )
+
+        # Assert - verify correct response type
         assert isinstance(result, LLMResponseType)
-        assert result.raw_answer == raw_answer
-        is_structured = isinstance(response_schema, type) and issubclass(response_schema, BaseModel)
-        if is_structured:
-            assert isinstance(result.parsed_answer, BaseModel)
-            assert AnswerModel(**result.parsed_answer.model_dump()) == parsed_answer
-        else:
-            assert result.parsed_answer == parsed_answer
-
-        # Test with system and user prompts
-        system_prompt = "hello system"
-        user_prompt_2 = "hello openai"
-        result = openai_client(
-            LLMInputPrompt(user_message=user_prompt_2, system_prompt=system_prompt),
-            response_schema=response_schema,
+        assert isinstance(result.parsed_answer, RetrievalEvaluationAnswer)
+        assert result.parsed_answer.reasoning == "The document is highly relevant to the query"
+        assert result.parsed_answer.score == 2
+        assert result.raw_answer == json.dumps(
+            {"reasoning": "The document is highly relevant to the query", "score": 2}
         )
 
-        # Verify the correct API methods were called
-        if is_structured:
-            assert openai_client_mock.responses.parse.called
-            call_args = openai_client_mock.responses.parse.call_args_list
-            assert call_args[0][1]["model"] == "fake model"
-            assert call_args[0][1]["input"] == user_prompt
-            assert call_args[1][1]["input"] == user_prompt_2
-            assert call_args[1][1]["instructions"] == system_prompt
-        else:
-            assert openai_client_mock.responses.create.called
-            call_args = openai_client_mock.responses.create.call_args_list
-            assert call_args[0][1]["model"] == "fake model"
-            assert call_args[0][1]["input"] == user_prompt
-            assert call_args[1][1]["input"] == user_prompt_2
-            assert call_args[1][1]["instructions"] == system_prompt
+        # Assert - verify responses.parse was called (not responses.create)
+        assert flexible_openai_client_mock.responses.parse.called
+        assert not flexible_openai_client_mock.responses.create.called
+
+        # Assert - verify correct parameters were passed
+        call_args = flexible_openai_client_mock.responses.parse.call_args
+        assert call_args[1]["model"] == "fake_model"
+        assert call_args[1]["input"] == user_prompt
+        assert call_args[1]["text_format"] == RetrievalEvaluationAnswer
+        assert call_args[1]["instructions"] is None
+
+    def test_retrieval_evaluation_json_mode(self, openai_provider_json_mode, flexible_openai_client_mock):
+        """Test retrieval evaluation with json_mode=True (JSON string via responses.create)."""
+        # Execute
+        user_prompt = "Evaluate the relevance of this document to the query."
+        result = openai_provider_json_mode(
+            LLMInputPrompt(user_message=user_prompt),
+            response_schema=RetrievalEvaluationAnswer,
+        )
+
+        # Assert - verify correct response type
+        assert isinstance(result, LLMResponseType)
+        assert isinstance(result.parsed_answer, RetrievalEvaluationAnswer)
+        assert result.parsed_answer.reasoning == "The document is highly relevant to the query"
+        assert result.parsed_answer.score == 2
+
+        # Assert - verify responses.create was called (not responses.parse)
+        assert flexible_openai_client_mock.responses.create.called
+        assert not flexible_openai_client_mock.responses.parse.called
+
+        # Assert - verify schema was appended to the user prompt
+        call_args = flexible_openai_client_mock.responses.create.call_args
+        assert call_args[1]["model"] == "fake_model"
+
+        # Verify the schema is appended to the input
+        input_arg = call_args[1]["input"]
+        assert user_prompt in input_arg
+        assert "schema" in input_arg.lower()  # Schema description should be in the prompt
+
+        # Verify JSON mode response format is set
+        assert "text" in call_args[1]
+        assert call_args[1]["text"]["format"]["type"] == "json_object"
+
+    def test_retrieval_evaluation_with_system_prompt_structured(
+        self, openai_provider_structured, flexible_openai_client_mock
+    ):
+        """Test retrieval evaluation with both system and user prompts in structured mode."""
+        # Execute
+        system_prompt = "You are a relevance evaluation expert."
+        user_prompt = "Evaluate this document."
+        result = openai_provider_structured(
+            LLMInputPrompt(system_prompt=system_prompt, user_message=user_prompt),
+            response_schema=RetrievalEvaluationAnswer,
+        )
+
+        # Assert
+        assert isinstance(result, LLMResponseType)
+        assert isinstance(result.parsed_answer, RetrievalEvaluationAnswer)
+
+        # Verify system prompt was passed correctly
+        call_args = flexible_openai_client_mock.responses.parse.call_args
+        assert call_args[1]["instructions"] == system_prompt
+        assert call_args[1]["input"] == user_prompt
+
+    def test_retrieval_evaluation_with_system_prompt_json_mode(
+        self, openai_provider_json_mode, flexible_openai_client_mock
+    ):
+        """Test retrieval evaluation with both system and user prompts in JSON mode."""
+        # Execute
+        system_prompt = "You are a relevance evaluation expert."
+        user_prompt = "Evaluate this document."
+        result = openai_provider_json_mode(
+            LLMInputPrompt(system_prompt=system_prompt, user_message=user_prompt),
+            response_schema=RetrievalEvaluationAnswer,
+        )
+
+        # Assert
+        assert isinstance(result, LLMResponseType)
+
+        # Verify system prompt and user prompt were passed correctly
+        call_args = flexible_openai_client_mock.responses.create.call_args
+        assert call_args[1]["instructions"] == system_prompt
+
+        # Verify the schema was appended to user message
+        input_arg = call_args[1]["input"]
+        assert user_prompt in input_arg
+        assert "schema" in input_arg.lower()
+
+    def test_pairwise_evaluation_structured_mode(self, openai_provider_structured, flexible_openai_client_mock):
+        """Test pairwise evaluation with structured output."""
+        # Execute
+        user_prompt = "Compare these two answers and determine which is better."
+        result = openai_provider_structured(
+            LLMInputPrompt(user_message=user_prompt),
+            response_schema=PairwiseEvaluationAnswer,
+        )
+
+        # Assert
+        assert isinstance(result, LLMResponseType)
+        assert isinstance(result.parsed_answer, PairwiseEvaluationAnswer)
+        assert result.parsed_answer.answer_a_analysis == "Answer A is comprehensive and accurate"
+        assert result.parsed_answer.answer_b_analysis == "Answer B is less detailed"
+        assert result.parsed_answer.comparison_reasoning == "Answer A provides more depth"
+        assert result.parsed_answer.winner == "A"
+
+        # Verify responses.parse was called
+        assert flexible_openai_client_mock.responses.parse.called
+        call_args = flexible_openai_client_mock.responses.parse.call_args
+        assert call_args[1]["text_format"] == PairwiseEvaluationAnswer
+
+    def test_pairwise_evaluation_json_mode(self, openai_provider_json_mode, flexible_openai_client_mock):
+        """Test pairwise evaluation with JSON mode."""
+
+        # Update mock to return pairwise data for json_mode
+        def create_side_effect_pairwise(*args, **kwargs):
+            resp = flexible_openai_client_mock.responses.create.return_value
+            resp.output_text = json.dumps(
+                {
+                    "answer_a_analysis": "Answer A is comprehensive and accurate",
+                    "answer_b_analysis": "Answer B is less detailed",
+                    "comparison_reasoning": "Answer A provides more depth",
+                    "winner": "A",
+                }
+            )
+            return resp
+
+        flexible_openai_client_mock.responses.create.side_effect = create_side_effect_pairwise
+
+        # Execute
+        user_prompt = "Compare these two answers."
+        result = openai_provider_json_mode(
+            LLMInputPrompt(user_message=user_prompt),
+            response_schema=PairwiseEvaluationAnswer,
+        )
+
+        # Assert
+        assert isinstance(result, LLMResponseType)
+        assert isinstance(result.parsed_answer, PairwiseEvaluationAnswer)
+        assert result.parsed_answer.winner == "A"
+
+        # Verify responses.create was called
+        assert flexible_openai_client_mock.responses.create.called
+
+    def test_messages_list_input(self, openai_provider_structured, flexible_openai_client_mock):
+        """Test provider with messages list input format."""
+        # Execute
+        messages = [
+            {"role": "system", "content": "You are an evaluator."},
+            {"role": "user", "content": "Evaluate this."},
+        ]
+        result = openai_provider_structured(
+            LLMInputPrompt(messages=messages),
+            response_schema=RetrievalEvaluationAnswer,
+        )
+
+        # Assert
+        assert isinstance(result, LLMResponseType)
+
+        # Verify messages were passed correctly
+        call_args = flexible_openai_client_mock.responses.parse.call_args
+        assert call_args[1]["input"] == messages
+
+    def test_invalid_json_in_json_mode_raises_error(self, openai_provider_json_mode, flexible_openai_client_mock):
+        """Test that invalid JSON in json_mode raises a RetryError (wrapping ValueError)."""
+
+        # Mock to return invalid JSON
+        def create_invalid_json(*args, **kwargs):
+            resp = flexible_openai_client_mock.responses.create.return_value
+            resp.output_text = "This is not valid JSON"
+            return resp
+
+        flexible_openai_client_mock.responses.create.side_effect = create_invalid_json
+
+        # Execute & Assert - the retry decorator wraps ValueError in RetryError
+        with pytest.raises(RetryError) as exc_info:
+            openai_provider_json_mode(
+                LLMInputPrompt(user_message="Test"),
+                response_schema=RetrievalEvaluationAnswer,
+            )
+
+        # Check that the underlying exception was a ValueError about JSON parsing
+        assert exc_info.value.last_attempt.exception() is not None
+        underlying_error = str(exc_info.value.last_attempt.exception())
+        assert "Failed to parse raw JSON answer" in underlying_error
+
+    def test_missing_required_field_in_json_mode_raises_error(
+        self, openai_provider_json_mode, flexible_openai_client_mock
+    ):
+        """Test that JSON missing required fields raises a RetryError (wrapping ValueError)."""
+
+        # Mock to return JSON missing required fields
+        def create_incomplete_json(*args, **kwargs):
+            resp = flexible_openai_client_mock.responses.create.return_value
+            resp.output_text = json.dumps({"reasoning": "Only reasoning, no score"})
+            return resp
+
+        flexible_openai_client_mock.responses.create.side_effect = create_incomplete_json
+
+        # Execute & Assert - the retry decorator wraps ValueError in RetryError
+        with pytest.raises(RetryError) as exc_info:
+            openai_provider_json_mode(
+                LLMInputPrompt(user_message="Test"),
+                response_schema=RetrievalEvaluationAnswer,
+            )
+
+        # Check that the underlying exception was a ValueError about missing field
+        assert exc_info.value.last_attempt.exception() is not None
+        underlying_error = str(exc_info.value.last_attempt.exception())
+        assert "Failed to parse raw JSON answer" in underlying_error
+
+    def test_wrong_type_from_structured_mode_raises_error(
+        self, openai_provider_structured, flexible_openai_client_mock
+    ):
+        """Test that wrong type from structured mode raises a RetryError (wrapping ValueError)."""
+
+        # Mock to return wrong type
+        def parse_wrong_type(*args, **kwargs):
+            resp = flexible_openai_client_mock.responses.parse.return_value
+            resp.output_text = '{"wrong": "type"}'
+            resp.output_parsed = "Not the right type"  # String instead of RetrievalEvaluationAnswer
+            return resp
+
+        flexible_openai_client_mock.responses.parse.side_effect = parse_wrong_type
+
+        # Execute & Assert - the retry decorator wraps ValueError in RetryError
+        with pytest.raises(RetryError) as exc_info:
+            openai_provider_structured(
+                LLMInputPrompt(user_message="Test"),
+                response_schema=RetrievalEvaluationAnswer,
+            )
+
+        # Check that the underlying exception was a ValueError about type mismatch
+        assert exc_info.value.last_attempt.exception() is not None
+        underlying_error = str(exc_info.value.last_attempt.exception())
+        assert "OpenAI failed to parse response" in underlying_error
+
+    def test_temperature_set_to_none_for_reasoning_models(self, monkeypatch):
+        """Test that temperature is set to None for reasoning models (gpt-5, o-series)."""
+        # Test with gpt-5 model
+        config_gpt5 = OpenAIConfiguration(
+            api_key="fake_key",
+            model="gpt-5-preview",
+            temperature=0.7,
+        )
+        provider_gpt5 = OpenAIProvider(config=config_gpt5)
+        assert provider_gpt5.config.temperature is None
+
+        # Test with o-series model
+        config_o = OpenAIConfiguration(
+            api_key="fake_key",
+            model="o1-preview",
+            temperature=0.7,
+        )
+        provider_o = OpenAIProvider(config=config_o)
+        assert provider_o.config.temperature is None
+
+        # Test with regular model keeps temperature
+        config_regular = OpenAIConfiguration(
+            api_key="fake_key",
+            model="gpt-4o-mini",
+            temperature=0.7,
+        )
+        provider_regular = OpenAIProvider(config=config_regular)
+        assert provider_regular.config.temperature == 0.7

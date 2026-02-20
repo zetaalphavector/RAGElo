@@ -44,7 +44,6 @@ def run_all(config: CLIConfig = CLIConfig(), **kwargs):
         verbose=config.verbose,
         clear_evaluations=config.force,
         rich_print=config.rich_print,
-        cache_evaluations=config.save_results,
     )
 
     kwargs = config.model_dump()

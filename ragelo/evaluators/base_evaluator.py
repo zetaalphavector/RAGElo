@@ -3,19 +3,24 @@ from __future__ import annotations
 import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from typing import Optional
+from typing import TYPE_CHECKING, TypeVar
 
-import rich
 from jinja2 import Template
+from pydantic import create_model
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
+from ragelo.presenters import render_failed_evaluations
 from ragelo.types.configurations import BaseEvaluatorConfig
 from ragelo.types.evaluables import Evaluable
-from ragelo.types.experiment import Experiment
 from ragelo.types.formats import LLMResponseType
 from ragelo.types.query import Query
 from ragelo.types.results import EvaluatorResult
 from ragelo.utils import call_async_fn, get_pbar
+
+if TYPE_CHECKING:
+    from ragelo.types.experiment import Experiment
+
+T_Result = TypeVar("T_Result", bound=EvaluatorResult)
 
 
 class BaseEvaluator(ABC):
@@ -24,12 +29,19 @@ class BaseEvaluator(ABC):
     """
 
     config: BaseEvaluatorConfig
-    system_prompt: Optional[Template] = None
+    system_prompt: Template | None = None
     user_prompt: Template
     evaluable_name: str = "Evaluable"
+    result_type: type[EvaluatorResult]
 
     def __init__(self, config: BaseEvaluatorConfig, llm_provider: BaseLLMProvider):
         self.config = config
+        if config.result_type:
+            self.result_type = create_model(
+                config.result_type.__name__, answer=(config.result_type, ...), __base__=self.result_type
+            )
+        elif not hasattr(self, "result_type"):
+            raise ValueError(f"Result format not set for evaluator {self.config.evaluator_name}")
         self.llm_provider = llm_provider
         if config.system_prompt:
             self.system_prompt = config.system_prompt
@@ -61,33 +73,40 @@ class BaseEvaluator(ABC):
             len(tuples_to_eval),
             self.config.rich_print,
             desc=f"Evaluating {self.evaluable_name}s",
+            disable=not getattr(self.config, "use_progress_bar", True),
         )
 
         awaitables_ended = False
         pending: set[asyncio.Future] = set()
-        aws = map(self.evaluate_async, tuples_to_eval)
-        aws = iter(aws)
+        tuples_iter = iter(tuples_to_eval)
+        future_to_tuple: dict[asyncio.Future, tuple[Query, Evaluable]] = {}
         failed = 0
         evaluations = 0
         while pending or not awaitables_ended:
             while len(pending) < n_threads and not awaitables_ended:
                 try:
-                    aw = next(aws)
+                    eval_tuple = next(tuples_iter)
                 except StopIteration:
                     awaitables_ended = True
                 else:
-                    pending.add(asyncio.ensure_future(aw))
+                    future = asyncio.ensure_future(self.evaluate_async(eval_tuple))
+                    pending.add(future)
+                    future_to_tuple[future] = eval_tuple
             if not pending:
                 break
             done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
             while done:
-                evaluation = await done.pop()
+                finished = done.pop()
+                evaluation = await finished
+                eval_tuple = future_to_tuple.pop(finished)
                 evaluations += 1
                 pbar.update()
+                pbar.refresh()
                 if evaluation.exception:
                     failed += 1
                     continue
                 experiment.add_evaluation(
+                    eval_tuple,
                     evaluation,
                     exist_ok=True,
                     force=self.config.force,
@@ -95,25 +114,12 @@ class BaseEvaluator(ABC):
                 )
         pbar.close()
         if self.config.verbose:
-            self._print_failed_evaluations(evaluations, failed)
-        experiment.save()
+            render_failed_evaluations(evaluations, failed, self.config.rich_print)
 
     @abstractmethod
     def _get_tuples_to_evaluate(self, queries: Experiment) -> Sequence[tuple[Query, Evaluable]]:
         raise NotImplementedError
 
-    def _process_answer(self, llm_response: LLMResponseType) -> LLMResponseType:
+    def _process_answer(self, llm_response: LLMResponseType[T_Result]) -> LLMResponseType[T_Result]:
         """Processes the raw answer returned by the LLM. Should be implemented by the subclass if needed."""
         return llm_response
-
-    def _print_failed_evaluations(self, total_evaluations: int, failed_evaluations: int):
-        if self.config.rich_print:
-            rich.print("✅ Done!")
-            if failed_evaluations > 0:
-                rich.print(f"[bold red]Failed evaluations: {failed_evaluations}[/bold red]")
-            rich.print(f"[bold green]Total evaluations: {total_evaluations}[/bold green]")
-            return
-        print("✅ Done!")
-        if failed_evaluations > 0:
-            print(f"Failed evaluations: {failed_evaluations}")
-        print(f"Total evaluations: {total_evaluations}")

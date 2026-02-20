@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Generic, TypeVar
 
 from pydantic import BaseModel, model_validator
 
 from ragelo.logger import logger
+
+T_Schema = TypeVar("T_Schema", bound=BaseModel)
 
 
 class LLMInputPrompt(BaseModel):
@@ -26,6 +28,6 @@ class LLMInputPrompt(BaseModel):
         return self
 
 
-class LLMResponseType(BaseModel):
+class LLMResponseType(BaseModel, Generic[T_Schema]):
     raw_answer: str
-    parsed_answer: float | str | dict[str, Any] | BaseModel | None
+    parsed_answer: T_Schema

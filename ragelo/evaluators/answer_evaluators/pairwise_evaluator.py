@@ -3,6 +3,7 @@ from ragelo.types.configurations import PairwiseEvaluatorConfig
 from ragelo.types.evaluables import PairwiseGame
 from ragelo.types.formats import LLMInputPrompt
 from ragelo.types.query import Query
+from ragelo.types.results import PairwiseGameEvaluatorResult
 from ragelo.types.types import AnswerEvaluatorTypes
 from ragelo.utils import string_to_template
 
@@ -12,6 +13,7 @@ class PairwiseAnswerEvaluator(BaseAnswerEvaluator):
     """An evaluator that evaluates RAG-based answers pairwise, with document reasoning and citations."""
 
     config: PairwiseEvaluatorConfig
+    result_type = PairwiseGameEvaluatorResult
     user_prompt_document = "[{did}] {doc}"
     user_prompt_annotation = "[{did}] {annotation}"
     user_prompt_document_and_annotation = "[{{ d.did }}] Content: {{ d.text }}\n Evaluation: {{ d.evaluation.answer }}"
@@ -46,7 +48,7 @@ class PairwiseAnswerEvaluator(BaseAnswerEvaluator):
         ## Workflow
         First, you should analyze each of the two answers, explaining whether or not each of them correctly answers the user's question, based on the relevant documents retrieved. 
         Then, you should compare the two responses and provide a short explanation on their differences, explaining in which aspects each answer is better or worst than the other. 
-        After providing your explanation, output your final verdict by strictly following his format: "A" if assistant A is better, "B" if assistant B is better, or "C" for a tie.""")
+        After providing your explanation, output your final verdict by strictly following his format: "A" if assistant A is better, "B" if assistant B is better, or "C" for a tie.""")  # noqa: E501
 
     user_prompt = string_to_template("""
         [User Question]
@@ -73,10 +75,17 @@ class PairwiseAnswerEvaluator(BaseAnswerEvaluator):
 
         [The Start of Assistant B's Answer]
             {{ game.agent_b_answer.text }}
-        [The End of Assistant B's Answer]""")
+        [The End of Assistant B's Answer]""")  # noqa: E501
 
-    def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> LLMInputPrompt:
+    def _build_message_pairwise(self, query: Query, game: PairwiseGame, inverse: bool = False) -> LLMInputPrompt:
         documents = self._filter_documents(query)
+        if inverse:
+            game = PairwiseGame(
+                qid=game.qid,
+                agent_a_answer=game.agent_b_answer,
+                agent_b_answer=game.agent_a_answer,
+                reversed=True,
+            )
         context = {
             "factors": self.config.factors,
             "query": query,

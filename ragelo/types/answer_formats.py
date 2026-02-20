@@ -1,29 +1,64 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
+from pydantic.json_schema import SkipJsonSchema
 
 
-class PairWiseAnswerAnswerFormat(BaseModel):
-    answer_a_analysis: str = Field(..., description="A string with your analysis of assistant A's answer")
-    answer_b_analysis: str = Field(..., description="A string with your analysis of assistant B's answer")
+class EvaluationAnswer(BaseModel):
+    """Base class for LLM-generated evaluation content (without metadata)."""
+
+    pass
+
+
+class RetrievalEvaluationAnswer(EvaluationAnswer):
+    """Output format for evaluating the relevance of a document to a question."""
+
+    reasoning: str = Field(..., description="A concise explanation and reasoning of the relevance of the document.")
+    score: float | int = Field(
+        ...,
+        description="Your relevance score for the document. 0 for non-relevant, 1 for somewhat relevant "
+        "and 2 for highly relevant.",
+    )
+
+
+class AnswerEvaluationAnswer(EvaluationAnswer):
+    """Output format for evaluating the quality of an answer to a question."""
+
+    reasoning: str = Field(..., description="A concise explanation and reasoning of the quality of the answer.")
+    score: int = Field(
+        ...,
+        description=(
+            "Your score for the quality of the answer. 0 if the answer does not answer the question, "
+            "1 if the answer answers the question but is not very helpful and 2 if the answer answers the question "
+            "and is very helpful."
+        ),
+    )
+
+
+class PairwiseEvaluationAnswer(EvaluationAnswer):
+    """Output format for evaluating the quality of answers from two agents to the same question."""
+
+    answer_a_analysis: str = Field(..., description="A string with your analysis of the answer from agent A")
+    answer_b_analysis: str = Field(..., description="A string with your analysis of the answer from agent B")
     comparison_reasoning: str = Field(
         ..., description="A string with your comparison between the two answers and their differences"
     )
-    winner: Literal["A", "B", "C"] = Field(..., description="The winner of the pairwise comparison.")
-
-
-class RetrievalAnswerEvaluatorFormat(BaseModel):
-    reasoning: str = Field(..., description="A concise explanation and reasoning of the relevance of the document.")
-    score: int = Field(
+    winner: Literal["A", "B", "C"] = Field(
         ...,
-        description="Your relevance score for the document. 0 for non-relevant, 1 for somewhat relevant and 2 for highly relevant.",
+        description=(
+            "The winner of the pairwise comparison. 'A' if the answer from agent A is better, "
+            "'B' if the answer from agent B is better, or 'C' for a tie."
+        ),
     )
 
 
-class RDNAMAnswerEvaluatorFormat(BaseModel):
-    overall: float = Field(
+class RDNAMEvaluationAnswer(RetrievalEvaluationAnswer):
+    """LLM-generated evaluation for RDNAM retrieval tasks."""
+
+    reasoning: Annotated[str, SkipJsonSchema] = ""
+    score: float = Field(
         ...,
         description="An number between 0 and 2 representing the score of the document.",
     )
@@ -36,24 +71,35 @@ class RDNAMAnswerEvaluatorFormat(BaseModel):
     )
 
 
-class RDNAMAnswerNoAspects(BaseModel):
-    overall: float = Field(
+class RDNAMNoAspectsAnswer(RetrievalEvaluationAnswer):
+    """Output format for evaluating the relevance of a document to a question."""
+
+    reasoning: Annotated[str, SkipJsonSchema] = ""
+    score: float = Field(
         ...,
-        description="An number between 0 and 2 representing the score of the document.",
+        description="An number between 0 and 2 representing the overall score of the document.",
     )
 
 
-class RDNAMMultipleAnnotatorsAnswer(BaseModel):
-    annotator_1: RDNAMAnswerEvaluatorFormat
-    annotator_2: RDNAMAnswerEvaluatorFormat
-    annotator_3: RDNAMAnswerEvaluatorFormat
-    annotator_4: RDNAMAnswerEvaluatorFormat
-    annotator_5: RDNAMAnswerEvaluatorFormat
+class RDNAMMultipleAnnotatorsAnswer(RetrievalEvaluationAnswer):
+    """Output format for evaluating the relevance of a document to a question by simulating 5 annotators."""
+
+    score: Annotated[float | int, SkipJsonSchema] = 0.0
+    reasoning: Annotated[str, SkipJsonSchema] = ""
+    annotator_1: RDNAMEvaluationAnswer
+    annotator_2: RDNAMEvaluationAnswer
+    annotator_3: RDNAMEvaluationAnswer
+    annotator_4: RDNAMEvaluationAnswer
+    annotator_5: RDNAMEvaluationAnswer
 
 
-class RDNAMMultipleAnnotatorsAnswerNoAspects(BaseModel):
-    annotator_1: RDNAMAnswerNoAspects
-    annotator_2: RDNAMAnswerNoAspects
-    annotator_3: RDNAMAnswerNoAspects
-    annotator_4: RDNAMAnswerNoAspects
-    annotator_5: RDNAMAnswerNoAspects
+class RDNAMMultipleAnnotatorsNoAspectsAnswer(RetrievalEvaluationAnswer):
+    """Output format for evaluating the relevance of a document to a question by simulating 5 annotators."""
+
+    score: Annotated[float | int, SkipJsonSchema] = 0.0
+    reasoning: Annotated[str, SkipJsonSchema] = ""
+    annotator_1: RDNAMNoAspectsAnswer
+    annotator_2: RDNAMNoAspectsAnswer
+    annotator_3: RDNAMNoAspectsAnswer
+    annotator_4: RDNAMNoAspectsAnswer
+    annotator_5: RDNAMNoAspectsAnswer

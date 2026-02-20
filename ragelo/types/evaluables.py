@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, computed_field, field_validator, model_validator
 from typing_extensions import Self
 
 from ragelo.logger import logger
@@ -25,8 +25,8 @@ class Evaluable(BaseModel):
     """
 
     qid: str
-    evaluation: EvaluatorResult | None = None
     metadata: dict[str, Any] | None = None
+    evaluations: dict[str, EvaluatorResult] = {}
 
     @field_validator("qid", mode="before")
     def qid_into_string(cls, v):
@@ -111,6 +111,13 @@ class Document(Evaluable):
         document.add_metadata(metadata)
         return document
 
+    @property
+    def evaluation(self):
+        """Returns the first available evaluation for backwards compatibility with templates."""
+        if not self.evaluations:
+            return None
+        return next(iter(self.evaluations.values()))
+
     @staticmethod
     def assemble_documents(
         documents: list,
@@ -182,3 +189,22 @@ class PairwiseGame(Evaluable):
 
     agent_a_answer: AgentAnswer
     agent_b_answer: AgentAnswer
+    reversed: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def ensure_agent_order(cls, values):
+        agent_a_answer = values.get("agent_a_answer")
+        agent_b_answer = values.get("agent_b_answer")
+        reversed = values.get("reversed", False)
+        agent_answers = sorted([agent_a_answer, agent_b_answer], reverse=reversed, key=lambda x: x.agent)
+        values["agent_a_answer"] = agent_answers[0]
+        values["agent_b_answer"] = agent_answers[1]
+        return values
+
+    @computed_field
+    @property
+    def game_id(self) -> str:
+        """The ID of the pairwise game."""
+        sorted_agents = sorted([self.agent_a_answer.agent, self.agent_b_answer.agent])
+        return f"{sorted_agents[0]}-{sorted_agents[1]}"

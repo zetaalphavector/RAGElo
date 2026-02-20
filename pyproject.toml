@@ -10,7 +10,7 @@ authors = [
 ]
 description = "RAGElo: A Tool for Evaluating Retrieval-Augmented Generation Models"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
 dynamic = ["version"]
 classifiers = [
@@ -71,12 +71,16 @@ check_untyped_defs = true
 implicit_reexport = true
 ignore_missing_imports = true
 exclude = ["build/", "dist/", "venv/"]
+disable_error_code = ["prop-decorator"]
 
 
 [tool.ruff]
 exclude = ["docs/examples/notebooks"]
 line-length = 119
 fix = true
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
 
 [tool.ruff.lint.isort]
 combine-as-imports = true
@@ -90,4 +94,3 @@ markers = [
     "requires_openai: marks tests as requiring a valid OpenAI api key (deselect with '-m \"not requires_openai\"')",
     "serial",
 ]
-
