@@ -2,12 +2,12 @@ import json
 from unittest.mock import AsyncMock
 
 import pytest
-from pydantic import ValidationError
+from pydantic import SecretStr, ValidationError
 from tenacity import RetryError
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.llm_providers.openai_client import OpenAIProvider
-from ragelo.types.configurations import LLMProviderConfig, OllamaConfiguration, OpenAIConfiguration
+from ragelo.types.configurations import LLMProviderConfig, OpenAIConfiguration
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.results import PairwiseEvaluationAnswer, RetrievalEvaluationAnswer
 
@@ -280,29 +280,32 @@ class TestOpenAIProvider:
         """Test that temperature is set to None for reasoning models (gpt-5, o-series)."""
         # Test with gpt-5 model
         config_gpt5 = OpenAIConfiguration(
-            api_key="fake_key",
+            api_key=SecretStr("fake_key"),
             model="gpt-5-preview",
             temperature=0.7,
         )
         provider_gpt5 = OpenAIProvider(config=config_gpt5)
+        assert provider_gpt5.config is not None
         assert provider_gpt5.config.temperature is None
 
         # Test with o-series model
         config_o = OpenAIConfiguration(
-            api_key="fake_key",
+            api_key=SecretStr("fake_key"),
             model="o1-preview",
             temperature=0.7,
         )
         provider_o = OpenAIProvider(config=config_o)
+        assert provider_o.config is not None
         assert provider_o.config.temperature is None
 
         # Test with regular model keeps temperature
         config_regular = OpenAIConfiguration(
-            api_key="fake_key",
+            api_key=SecretStr("fake_key"),
             model="gpt-4o-mini",
             temperature=0.7,
         )
         provider_regular = OpenAIProvider(config=config_regular)
+        assert provider_regular.config
         assert provider_regular.config.temperature == 0.7
 
 
@@ -367,7 +370,7 @@ class TestLLMProviderConfigOptionalApiKey:
     def test_llm_provider_config_accepts_api_key_when_provided(self):
         """LLMProviderConfig still accepts api_key when supplied."""
 
-        config = LLMProviderConfig(api_key="my-secret")
+        config = LLMProviderConfig(api_key=SecretStr("my-secret"))
         assert config.api_key is not None
         assert config.api_key.get_secret_value() == "my-secret"
 
