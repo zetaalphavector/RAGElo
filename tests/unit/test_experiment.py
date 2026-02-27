@@ -354,7 +354,7 @@ class TestExperiment:
         assert len(empty_experiment["1"].answers) == 2
 
     @pytest.mark.requires_openai
-    def test_readme_example(self, capsys):
+    def test_readme_example(self):
         """Test the README example"""
         if os.path.exists("ragelo_cache/A_really_cool_RAGElo_experiment.json"):
             os.remove("ragelo_cache/A_really_cool_RAGElo_experiment.json")
@@ -401,11 +401,14 @@ class TestExperiment:
 
         # With the retrieved documents evaluated, evaluate the quality of the answers. using the pairwise evaluator
         answer_evaluator.evaluate_experiment(experiment)
-        elo_ranker.run(experiment)
-        captured = capsys.readouterr()
-        assert "Agents Elo Ratings" in captured.out
-        assert "agent1" in captured.out
-        assert "agent2" in captured.out
+        result = elo_ranker.run(experiment)
+
+        # Verify the Elo tournament produced valid results for both agents
+        assert "agent1" in result.scores
+        assert "agent2" in result.scores
+        assert result.total_games > 0
+        assert result.total_tournaments > 0
+
         assert os.path.exists("ragelo_cache/A_really_cool_RAGElo_experiment.json")
         assert os.path.exists("ragelo_cache/A_really_cool_RAGElo_experiment_results.jsonl")
         os.remove("ragelo_cache/A_really_cool_RAGElo_experiment.json")

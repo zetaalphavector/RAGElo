@@ -91,6 +91,7 @@ split-on-trailing-comma = false
 enabled = true
 
 [tool.pytest.ini_options]
+testpaths = ["tests"]
 markers = [
     "requires_openai: marks tests as requiring a valid OpenAI api key (deselect with '-m \"not requires_openai\"')",
     "serial",
