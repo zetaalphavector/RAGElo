@@ -43,7 +43,7 @@ class BaseEvaluator(ABC):
         elif not hasattr(self, "result_type"):
             raise ValueError(f"Result format not set for evaluator {self.config.evaluator_name}")
         self.llm_provider = llm_provider
-        if config.system_prompt:
+        if isinstance(config.system_prompt, Template):
             self.system_prompt = config.system_prompt
         if config.user_prompt:
             self.user_prompt = config.user_prompt

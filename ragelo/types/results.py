@@ -220,7 +220,7 @@ class EloTournamentResult(BaseModel):
 class RDNAMEvaluatorResult(RetrievalEvaluatorResult):
     """Specialized retrieval result for RDNAM (answer is typically RDNAMEvaluationAnswer)."""
 
-    answer: RDNAMEvaluationAnswer
+    answer: RDNAMEvaluationAnswer = Field(...)
 
     @model_validator(mode="before")
     @classmethod
