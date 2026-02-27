@@ -95,3 +95,6 @@ markers = [
     "requires_openai: marks tests as requiring a valid OpenAI api key (deselect with '-m \"not requires_openai\"')",
     "serial",
 ]
+
+[tool.ty.src]
+exclude = ["*.ipynb"]
