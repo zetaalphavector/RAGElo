@@ -5,6 +5,12 @@ repos:
   hooks:
   # Run the linter.
   - id: ruff
-    args: [ check, --select, I, --fix ]
+    args: [ check, --fix ]
   # Run the formatter.
   - id: ruff-format
+- repo: https://github.com/pre-commit/mirrors-mypy
+  rev: v1.14.1
+  hooks:
+  - id: mypy
+    additional_dependencies: [pydantic]
+    args: [--ignore-missing-imports]
