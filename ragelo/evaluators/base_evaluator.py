@@ -47,8 +47,10 @@ class BaseEvaluator(ABC):
             self.system_prompt = config.system_prompt
         elif isinstance(config.system_prompt, str):
             self.system_prompt = string_to_template(config.system_prompt)
-        if config.user_prompt:
+        if isinstance(config.user_prompt, Template):
             self.user_prompt = config.user_prompt
+        if isinstance(config.user_prompt, str):
+            self.user_prompt = string_to_template(config.user_prompt)
 
     def evaluate_experiment(self, experiment: Experiment, n_threads: int | None = None):
         """
