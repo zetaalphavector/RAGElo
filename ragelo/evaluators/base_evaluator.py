@@ -15,7 +15,7 @@ from ragelo.types.evaluables import Evaluable
 from ragelo.types.formats import LLMResponseType
 from ragelo.types.query import Query
 from ragelo.types.results import EvaluatorResult
-from ragelo.utils import call_async_fn, get_pbar
+from ragelo.utils import call_async_fn, get_pbar, string_to_template
 
 if TYPE_CHECKING:
     from ragelo.types.experiment import Experiment
@@ -45,6 +45,8 @@ class BaseEvaluator(ABC):
         self.llm_provider = llm_provider
         if isinstance(config.system_prompt, Template):
             self.system_prompt = config.system_prompt
+        elif isinstance(config.system_prompt, str):
+            self.system_prompt = string_to_template(config.system_prompt)
         if config.user_prompt:
             self.user_prompt = config.user_prompt
 
