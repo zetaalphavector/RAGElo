@@ -38,11 +38,11 @@ from ragelo import get_retrieval_evaluator
 evaluator = get_retrieval_evaluator("RDNAM", llm_provider="openai")
 result = evaluator.evaluate(query="What is the capital of France?", document='Lyon is the second largest city in France.')
 print(result.answer)
-# Output: RDNAMAnswerEvaluatorFormat(overall=1.0, intent_match=None, trustworthiness=None)
-print(result.answer.overall)
+# Output: RDNAMEvaluationAnswer(reasoning='...', score=1.0, intent_match=None, trustworthiness=None)
+print(result.answer.score)
 # Output: 1.0
-print(result.raw_answer)
-# Output: '{"overall": 1.0"}'
+print(result.answer.model_dump_json())
+# Output: '{"reasoning": "...", "score": 1.0, "intent_match": null, "trustworthiness": null}'
 ```
 
 In most cases `result.answer` contains a `BaseModel` from Pydantic with the parsed judge response. For more details, check the [answer_formats.py](https://github.com/zetaalphavector/RAGElo/blob/master/ragelo/types/answer_formats.py) file. 
@@ -128,7 +128,7 @@ evaluator = get_retrieval_evaluator(
     llm_provider="openai", # Which LLM provider to use
     system_prompt=system_prompt, # your custom prompt
     user_prompt=user_prompt, # your custom prompt
-    llm_response_schema=ResponseSchema, # The response schema for the LLM. 
+    result_type=ResponseSchema, # The response schema for the LLM. 
 )
 
 result = evaluator.evaluate(
