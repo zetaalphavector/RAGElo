@@ -20,12 +20,13 @@ class FewShotEvaluator(BaseRetrievalEvaluator):
 
     def __init__(self, config: FewShotEvaluatorConfig, llm_provider: BaseLLMProvider):
         super().__init__(config, llm_provider)
-        if config.user_prompt:
-            self.user_prompt = config.user_prompt
         if config.few_shot_assistant_answer:
             self.few_shot_assistant_answer = config.few_shot_assistant_answer
         if config.system_prompt:
-            self.system_prompt = config.system_prompt
+            if isinstance(config.system_prompt, str):
+                self.system_prompt = string_to_template(config.system_prompt)
+            else:
+                self.system_prompt = config.system_prompt
         self.few_shots = config.few_shots
 
     def _build_message(self, query: Query, document: Document) -> LLMInputPrompt:

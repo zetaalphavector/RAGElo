@@ -117,7 +117,7 @@ class BaseEvaluator(ABC):
             render_failed_evaluations(evaluations, failed, self.config.rich_print)
 
     @abstractmethod
-    def _get_tuples_to_evaluate(self, queries: Experiment) -> Sequence[tuple[Query, Evaluable]]:
+    def _get_tuples_to_evaluate(self, experiment: Experiment) -> Sequence[tuple[Query, Evaluable]]:
         raise NotImplementedError
 
     def _process_answer(self, llm_response: LLMResponseType[T_Result]) -> LLMResponseType[T_Result]:

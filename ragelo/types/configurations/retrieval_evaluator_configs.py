@@ -26,8 +26,8 @@ class FewShotExample(BaseModel):
 
 
 class BaseRetrievalEvaluatorConfig(BaseEvaluatorConfig):
-    user_prompt: Optional[Template | str] = Field(
-        default=...,
+    user_prompt: Optional[Template] = Field(
+        default=None,
         description="The user prompt to use for the evaluator. Should contain at least a {{ query.query }} and a {{ document.text }} placeholder for the query and the document text.",  # noqa: E501
     )
 
@@ -70,7 +70,7 @@ class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
 
 class CustomPromptEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.CUSTOM_PROMPT
-    user_prompt: Optional[Template | str] = Field(
+    user_prompt: Optional[Template] = Field(
         default=...,
         description=(
             "The user prompt to be used to evaluate the documents. "

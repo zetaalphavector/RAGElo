@@ -563,6 +563,9 @@ class TestExperimentSerialization:
             loaded_result = RetrievalEvaluatorResult.model_validate(loaded_data)
 
         # Verify convenience properties work (backward compatibility)
+        assert loaded_result.answer is not None
+        assert hasattr(loaded_result.answer, "score")
+        assert hasattr(loaded_result.answer, "reasoning")
         assert loaded_result.score == loaded_result.answer.score
         assert loaded_result.reasoning == loaded_result.answer.reasoning
         assert loaded_result.score == 1.0
