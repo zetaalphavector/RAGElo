@@ -340,7 +340,7 @@ class TestExternalAdapterProvider:
     def test_external_adapter_call_delegates_to_call_async(self):
         """External adapter's __call__ method correctly delegates to call_async."""
 
-        expected = LLMResponseType(
+        expected: LLMResponseType[RetrievalEvaluationAnswer] = LLMResponseType(
             raw_answer='{"reasoning": "ok", "score": 1}',
             parsed_answer=RetrievalEvaluationAnswer(reasoning="ok", score=1),
         )
@@ -372,3 +372,35 @@ class TestLLMProviderConfigOptionalApiKey:
 
         with pytest.raises(ValidationError):
             OpenAIConfiguration(api_key=None)  # type: ignore
+
+
+class TestOllamaConfiguration:
+    """Tests for OllamaConfiguration validation."""
+
+    def test_ollama_configuration_requires_model(self):
+        """OllamaConfiguration without model= raises ValidationError."""
+        from ragelo.types.configurations import OllamaConfiguration
+
+        with pytest.raises(ValidationError):
+            OllamaConfiguration()  # type: ignore[call-arg]
+
+    def test_ollama_configuration_accepts_model(self):
+        """OllamaConfiguration with model= succeeds."""
+        from ragelo.types.configurations import OllamaConfiguration
+
+        config = OllamaConfiguration(model="test-model")
+        assert config.model == "test-model"
+
+
+class TestOllamaProviderFactory:
+    """Tests for creating OllamaProvider through the factory."""
+
+    def test_get_llm_provider_ollama_without_api_key_env(self, monkeypatch):
+        """get_llm_provider('ollama', model=...) works even when OPENAI_API_KEY is not set."""
+        from ragelo.llm_providers import get_llm_provider
+        from ragelo.llm_providers.ollama_client import OllamaProvider
+
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        provider = get_llm_provider("ollama", model="test-model")
+        assert isinstance(provider, OllamaProvider)
+        assert provider.config.model == "test-model"

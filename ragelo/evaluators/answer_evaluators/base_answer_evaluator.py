@@ -401,11 +401,13 @@ class BaseAnswerEvaluator(BaseEvaluator):
 
     def _filter_documents(self, query: Query) -> list[Document]:
         # Check if we will actually include documents in any prompt
+        system_placeholders: set[str] = set()
+        user_placeholders: set[str] = set()
         if self.system_prompt:
             system_placeholders = get_placeholders_and_tags(self.system_prompt)
         if self.user_prompt:
             user_placeholders = get_placeholders_and_tags(self.user_prompt)
-        all_placeholders = system_placeholders or set() | user_placeholders or set()
+        all_placeholders = system_placeholders | user_placeholders
         if "documents" not in all_placeholders:
             return []
 

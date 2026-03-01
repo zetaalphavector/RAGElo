@@ -150,6 +150,7 @@ class TestPairwiseAnswerEvaluator:
         assert isinstance(llm_call_args[0][0][0], LLMInputPrompt)
         # Make sure that no games with the same agent were called
         prompt = llm_call_args[0][0][0]
+        assert prompt.user_message is not None
         agent_a_answer = (
             prompt.user_message.split("[The Start of Assistant A's Answer]")[1]
             .split("[The End of Assistant A's Answer]")[0]
@@ -253,6 +254,7 @@ class TestDomainExpertEvaluator:
         assert isinstance(result.answer, PairwiseEvaluationAnswer)
         prompt = llm_provider_mock.async_call_mocker.call_args_list[0][0][0]
         assert isinstance(prompt, LLMInputPrompt)
+        assert prompt.system_prompt is not None
         assert "You work for" not in prompt.system_prompt
 
     def test_evaluate_single_answer_with_company(
@@ -272,6 +274,7 @@ class TestDomainExpertEvaluator:
         assert isinstance(result, PairwiseGameEvaluatorResult)
         assert isinstance(result.answer, PairwiseEvaluationAnswer)
         prompt = llm_provider_mock.async_call_mocker.call_args_list[0][0][0]
+        assert prompt.system_prompt is not None
         assert "You work for" in prompt.system_prompt
 
     def test_evaluate_single_answer_no_documents(
@@ -288,4 +291,52 @@ class TestDomainExpertEvaluator:
         assert isinstance(result, PairwiseGameEvaluatorResult)
         assert isinstance(result.answer, PairwiseEvaluationAnswer)
         prompt = llm_provider_mock.async_call_mocker.call_args_list[0][0][0]
+        assert prompt.system_prompt is not None
         assert "You work for" not in prompt.system_prompt
+
+
+class TestFilterDocuments:
+    """Tests for _filter_documents operator precedence and unbound variable fixes."""
+
+    def test_documents_in_user_prompt_only(self, llm_provider_mock, experiment, pairwise_answer_eval_config):
+        """When only user_prompt contains {{ documents }}, _filter_documents should still return documents."""
+        pairwise_answer_eval_config.system_prompt = "System prompt without documents tag"
+        pairwise_answer_eval_config.user_prompt = (
+            "Query: {{ query.query }} {% for d in documents %}{{ d.text }}{% endfor %} "
+            "{{ game.agent_a_answer.text }} {{ game.agent_b_answer.text }}"
+        )
+        pairwise_answer_eval_config.include_raw_documents = True
+        evaluator = PairwiseAnswerEvaluator.from_config(
+            config=pairwise_answer_eval_config, llm_provider=llm_provider_mock
+        )
+        query = experiment["0"]
+        docs = evaluator._filter_documents(query)
+        assert len(docs) > 0
+
+    def test_documents_in_neither_prompt(self, llm_provider_mock, experiment, pairwise_answer_eval_config):
+        """When neither prompt contains {{ documents }}, _filter_documents should return []."""
+        pairwise_answer_eval_config.system_prompt = "System prompt"
+        pairwise_answer_eval_config.user_prompt = (
+            "Query: {{ query.query }} {{ game.agent_a_answer.text }} {{ game.agent_b_answer.text }}"
+        )
+        evaluator = PairwiseAnswerEvaluator.from_config(
+            config=pairwise_answer_eval_config, llm_provider=llm_provider_mock
+        )
+        query = experiment["0"]
+        docs = evaluator._filter_documents(query)
+        assert docs == []
+
+    def test_no_system_prompt(self, llm_provider_mock, experiment, pairwise_answer_eval_config):
+        """When system_prompt is None, _filter_documents should not raise UnboundLocalError."""
+        pairwise_answer_eval_config.system_prompt = None
+        pairwise_answer_eval_config.user_prompt = (
+            "Query: {{ query.query }} {% for d in documents %}{{ d.text }}{% endfor %} "
+            "{{ game.agent_a_answer.text }} {{ game.agent_b_answer.text }}"
+        )
+        pairwise_answer_eval_config.include_raw_documents = True
+        evaluator = PairwiseAnswerEvaluator.from_config(
+            config=pairwise_answer_eval_config, llm_provider=llm_provider_mock
+        )
+        query = experiment["0"]
+        docs = evaluator._filter_documents(query)
+        assert len(docs) > 0
