@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import itertools
 import random
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, Callable, get_type_hints
 
 from pydantic import BaseModel
@@ -308,7 +309,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
             exception=exc,
         )
 
-    def _get_tuples_to_evaluate(self, experiment: Experiment) -> list[tuple[Query, Evaluable]]:
+    def _get_tuples_to_evaluate(self, experiment: Experiment) -> Sequence[tuple[Query, Evaluable]]:
         """
         Creates the list of pairs (query, evaluable) to evaluate
         """
@@ -400,6 +401,8 @@ class BaseAnswerEvaluator(BaseEvaluator):
 
     def _filter_documents(self, query: Query) -> list[Document]:
         # Check if we will actually include documents in any prompt
+        system_placeholders: set[str] = set()
+        user_placeholders: set[str] = set()
         if self.system_prompt:
             system_placeholders = get_placeholders_and_tags(self.system_prompt)
         if self.user_prompt:

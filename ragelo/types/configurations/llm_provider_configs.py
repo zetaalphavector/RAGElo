@@ -6,7 +6,6 @@ from pydantic import BaseModel, SecretStr
 
 
 class LLMProviderConfig(BaseModel):
-    api_key: SecretStr
     temperature: float | None = 0.1
     max_tokens: int = 2048
     seed: int | None = 42
@@ -15,6 +14,7 @@ class LLMProviderConfig(BaseModel):
 
 
 class OpenAIConfiguration(LLMProviderConfig):
+    api_key: SecretStr
     org: str | None = None
     api_type: str | None = None
     api_base: str | None = None
@@ -24,5 +24,4 @@ class OpenAIConfiguration(LLMProviderConfig):
 
 class OllamaConfiguration(LLMProviderConfig):
     api_base: str | None = "http://localhost:11434/v1/"
-    api_key: SecretStr = SecretStr("NoKeyNeeded")
-    model: str = "gemma2:27b"
+    model: str

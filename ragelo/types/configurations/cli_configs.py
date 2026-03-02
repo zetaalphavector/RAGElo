@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from jinja2 import Template
 from pydantic import Field
 
 from ragelo.types.configurations.answer_evaluator_configs import (
@@ -59,14 +60,15 @@ class CLIEvaluatorConfig(BaseCLIConfig):
 
 class CLIDomainExpertEvaluatorConfig(CLIEvaluatorConfig, DomainExpertEvaluatorConfig):
     expert_in: str = " "
+    user_prompt: Template | None = None
 
 
 class CLIReasonerEvaluatorConfig(CLIEvaluatorConfig, ReasonerEvaluatorConfig):
-    pass
+    user_prompt: Template | None = None
 
 
 class CLIRDNAMEvaluatorConfig(CLIEvaluatorConfig, RDNAMEvaluatorConfig):
-    pass
+    user_prompt: Template | None = None
 
 
 class CLIPairwiseDomainExpertEvaluatorConfig(CLIEvaluatorConfig, PairwiseDomainExpertEvaluatorConfig):

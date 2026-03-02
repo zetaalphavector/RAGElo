@@ -3,6 +3,8 @@ Bhaskar Mitra. Large language models can accurately predict searcher preferences
 https://arxiv.org/abs/2309.10621
 """
 
+from typing import cast
+
 import numpy as np
 
 from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
@@ -165,9 +167,12 @@ class RDNAMEvaluator(BaseRetrievalEvaluator):
                 self.result_type = RDNAMNoAspectsResult
         else:
             # parsed is already RDNAMEvaluationAnswer or RDNAMNoAspectsAnswer
-            response = parsed  # type: ignore
+            response = parsed
 
-        return LLMResponseType(
-            raw_answer=llm_response.raw_answer,
-            parsed_answer=response,  # type: ignore
+        return cast(
+            LLMResponseType[T_Result],
+            LLMResponseType(
+                raw_answer=llm_response.raw_answer,
+                parsed_answer=response,
+            ),
         )

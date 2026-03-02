@@ -15,10 +15,10 @@ T_Schema = TypeVar("T_Schema", bound=BaseModel)
 
 
 class BaseLLMProvider(ABC):
-    config: LLMProviderConfig
+    config: LLMProviderConfig | None
     api_key_env_var: str = "OPENAI_API_KEY"
 
-    def __init__(self, config: LLMProviderConfig):
+    def __init__(self, config: LLMProviderConfig | None = None):
         self.config = config
 
     def __call__(
@@ -48,7 +48,12 @@ class BaseLLMProvider(ABC):
 
     @classmethod
     def get_config_class(cls) -> type[LLMProviderConfig]:
-        return get_type_hints(cls)["config"]
+        hint = get_type_hints(cls)["config"]
+        if hasattr(hint, "__args__"):
+            for arg in hint.__args__:
+                if isinstance(arg, type) and issubclass(arg, LLMProviderConfig):
+                    return arg
+        return hint
 
 
 class LLMProviderFactory:
@@ -80,7 +85,7 @@ class LLMProviderFactory:
             class_ = cls.registry[name]
             type_config = class_.get_config_class()
             valid_keys = [field for field in type_config.model_fields]
-            if "api_key" not in kwargs:
+            if "api_key" not in kwargs and "api_key" in type_config.model_fields:
                 api_key = os.environ.get(class_.api_key_env_var)
                 if not api_key:
                     # Check if the key is actually required

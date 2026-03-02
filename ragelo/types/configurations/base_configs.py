@@ -38,7 +38,7 @@ class BaseEvaluatorConfig(BaseConfig):
         description="The name of the evaluator to use.",
     )
 
-    system_prompt: Optional[Template] = Field(
+    system_prompt: Optional[Template | str] = Field(
         default=None,
         description="The system prompt to use for the evaluator.",
     )

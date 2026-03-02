@@ -15,7 +15,7 @@ from ragelo.types.evaluables import Evaluable
 from ragelo.types.formats import LLMResponseType
 from ragelo.types.query import Query
 from ragelo.types.results import EvaluatorResult
-from ragelo.utils import call_async_fn, get_pbar
+from ragelo.utils import call_async_fn, get_pbar, string_to_template
 
 if TYPE_CHECKING:
     from ragelo.types.experiment import Experiment
@@ -43,10 +43,14 @@ class BaseEvaluator(ABC):
         elif not hasattr(self, "result_type"):
             raise ValueError(f"Result format not set for evaluator {self.config.evaluator_name}")
         self.llm_provider = llm_provider
-        if config.system_prompt:
+        if isinstance(config.system_prompt, Template):
             self.system_prompt = config.system_prompt
-        if config.user_prompt:
+        elif isinstance(config.system_prompt, str):
+            self.system_prompt = string_to_template(config.system_prompt)
+        if isinstance(config.user_prompt, Template):
             self.user_prompt = config.user_prompt
+        if isinstance(config.user_prompt, str):
+            self.user_prompt = string_to_template(config.user_prompt)
 
     def evaluate_experiment(self, experiment: Experiment, n_threads: int | None = None):
         """
@@ -117,7 +121,7 @@ class BaseEvaluator(ABC):
             render_failed_evaluations(evaluations, failed, self.config.rich_print)
 
     @abstractmethod
-    def _get_tuples_to_evaluate(self, queries: Experiment) -> Sequence[tuple[Query, Evaluable]]:
+    def _get_tuples_to_evaluate(self, experiment: Experiment) -> Sequence[tuple[Query, Evaluable]]:
         raise NotImplementedError
 
     def _process_answer(self, llm_response: LLMResponseType[T_Result]) -> LLMResponseType[T_Result]:

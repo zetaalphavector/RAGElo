@@ -55,7 +55,7 @@ class RetrievalEvaluatorResult(EvaluatorResult):
     """
 
     did: Annotated[str, SkipJsonSchema] = Field(description="The document ID to which the result corresponds.")
-    answer: RetrievalEvaluationAnswer
+    answer: RetrievalEvaluationAnswer | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -96,7 +96,7 @@ class AnswerEvaluatorResult(EvaluatorResult):
     """
 
     agent: Annotated[str, SkipJsonSchema] = Field(description="The agent that provided the answer.")
-    answer: AnswerEvaluationAnswer
+    answer: AnswerEvaluationAnswer | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -139,7 +139,7 @@ class PairwiseGameEvaluatorResult(EvaluatorResult):
 
     agent_a: Annotated[str, SkipJsonSchema]
     agent_b: Annotated[str, SkipJsonSchema]
-    answer: PairwiseEvaluationAnswer
+    answer: PairwiseEvaluationAnswer | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -220,7 +220,7 @@ class EloTournamentResult(BaseModel):
 class RDNAMEvaluatorResult(RetrievalEvaluatorResult):
     """Specialized retrieval result for RDNAM (answer is typically RDNAMEvaluationAnswer)."""
 
-    answer: RDNAMEvaluationAnswer
+    answer: RDNAMEvaluationAnswer = Field(...)
 
     @model_validator(mode="before")
     @classmethod

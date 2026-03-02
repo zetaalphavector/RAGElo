@@ -1,10 +1,13 @@
 import json
+from unittest.mock import AsyncMock
 
 import pytest
+from pydantic import SecretStr, ValidationError
 from tenacity import RetryError
 
+from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.llm_providers.openai_client import OpenAIProvider
-from ragelo.types.configurations import OpenAIConfiguration
+from ragelo.types.configurations import LLMProviderConfig, OpenAIConfiguration
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.results import PairwiseEvaluationAnswer, RetrievalEvaluationAnswer
 
@@ -277,27 +280,127 @@ class TestOpenAIProvider:
         """Test that temperature is set to None for reasoning models (gpt-5, o-series)."""
         # Test with gpt-5 model
         config_gpt5 = OpenAIConfiguration(
-            api_key="fake_key",
+            api_key=SecretStr("fake_key"),
             model="gpt-5-preview",
             temperature=0.7,
         )
         provider_gpt5 = OpenAIProvider(config=config_gpt5)
+        assert provider_gpt5.config is not None
         assert provider_gpt5.config.temperature is None
 
         # Test with o-series model
         config_o = OpenAIConfiguration(
-            api_key="fake_key",
+            api_key=SecretStr("fake_key"),
             model="o1-preview",
             temperature=0.7,
         )
         provider_o = OpenAIProvider(config=config_o)
+        assert provider_o.config is not None
         assert provider_o.config.temperature is None
 
         # Test with regular model keeps temperature
         config_regular = OpenAIConfiguration(
-            api_key="fake_key",
+            api_key=SecretStr("fake_key"),
             model="gpt-4o-mini",
             temperature=0.7,
         )
         provider_regular = OpenAIProvider(config=config_regular)
+        assert provider_regular.config
         assert provider_regular.config.temperature == 0.7
+
+
+class TestExternalAdapterProvider:
+    def test_external_adapter_can_be_instantiated_without_config(self):
+        """Simulates an external adapter that wraps a pre-configured client."""
+
+        class ExternalAdapterProvider(BaseLLMProvider):
+            def __init__(self, some_client):
+                super().__init__()
+                self.client = some_client
+
+            async def call_async(self, input, response_schema): ...
+
+        provider = ExternalAdapterProvider(some_client=object())
+        assert provider.config is None
+
+    def test_base_llm_provider_still_accepts_config(self):
+        class SimpleProvider(BaseLLMProvider):
+            async def call_async(self, input, response_schema): ...
+
+        config = LLMProviderConfig()
+        provider = SimpleProvider(config=config)
+        assert provider.config is config
+
+    def test_get_config_class_resolves_union_annotation(self):
+        """get_config_class() returns the concrete LLMProviderConfig subclass even when
+        the class attribute is annotated as 'LLMProviderConfig | None'."""
+
+        assert BaseLLMProvider.get_config_class() is LLMProviderConfig
+
+    def test_external_adapter_call_delegates_to_call_async(self):
+        """External adapter's __call__ method correctly delegates to call_async."""
+
+        expected: LLMResponseType[RetrievalEvaluationAnswer] = LLMResponseType(
+            raw_answer='{"reasoning": "ok", "score": 1}',
+            parsed_answer=RetrievalEvaluationAnswer(reasoning="ok", score=1),
+        )
+
+        class ExternalAdapterProvider(BaseLLMProvider):
+            def __init__(self, client):
+                super().__init__()
+                self.client = client
+
+            async def call_async(self, input, response_schema): ...
+
+        provider = ExternalAdapterProvider(client=object())
+        provider.call_async = AsyncMock(return_value=expected)  # type: ignore[method-assign]
+        result = provider(LLMInputPrompt(user_message="test"), RetrievalEvaluationAnswer)
+        assert result == expected
+
+
+class TestLLMProviderConfigOptionalApiKey:
+    """Tests that api_key is optional in the base config but required in OpenAIConfiguration."""
+
+    def test_llm_provider_config_can_be_created_without_api_key(self):
+        """LLMProviderConfig can now be instantiated without providing api_key."""
+
+        config = LLMProviderConfig()
+        assert getattr(config, "api_key", None) is None
+
+    def test_openai_configuration_requires_api_key(self):
+        """OpenAIConfiguration.api_key is still required (no default)."""
+
+        with pytest.raises(ValidationError):
+            OpenAIConfiguration(api_key=None)  # type: ignore
+
+
+class TestOllamaConfiguration:
+    """Tests for OllamaConfiguration validation."""
+
+    def test_ollama_configuration_requires_model(self):
+        """OllamaConfiguration without model= raises ValidationError."""
+        from ragelo.types.configurations import OllamaConfiguration
+
+        with pytest.raises(ValidationError):
+            OllamaConfiguration()  # type: ignore[call-arg]
+
+    def test_ollama_configuration_accepts_model(self):
+        """OllamaConfiguration with model= succeeds."""
+        from ragelo.types.configurations import OllamaConfiguration
+
+        config = OllamaConfiguration(model="test-model")
+        assert config.model == "test-model"
+
+
+class TestOllamaProviderFactory:
+    """Tests for creating OllamaProvider through the factory."""
+
+    def test_get_llm_provider_ollama_without_api_key_env(self, monkeypatch):
+        """get_llm_provider('ollama', model=...) works even when OPENAI_API_KEY is not set."""
+        from ragelo.llm_providers import get_llm_provider
+        from ragelo.llm_providers.ollama_client import OllamaProvider
+
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        provider = get_llm_provider("ollama", model="test-model")
+        assert isinstance(provider, OllamaProvider)
+        assert provider.config.model == "test-model"

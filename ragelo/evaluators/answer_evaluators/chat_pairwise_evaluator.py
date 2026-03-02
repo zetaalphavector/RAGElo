@@ -103,6 +103,6 @@ class ChatPairwiseEvaluator(PairwiseAnswerEvaluator):
             "reasoning": self.config.include_relevance_reasoning,
         }
         return LLMInputPrompt(
-            system_message=self.system_prompt.render(**context),
+            system_prompt=self.system_prompt.render(**context),
             user_message=self.user_prompt.render(**context),
         )

@@ -35,6 +35,8 @@ class BaseRetrievalEvaluatorConfig(BaseEvaluatorConfig):
     def validate_user_prompt(cls, prompt: Optional[Template]) -> Optional[Template]:
         if prompt is None:
             return prompt
+        if isinstance(prompt, str):
+            prompt = string_to_template(prompt)
         placeholders = get_placeholders_and_tags(prompt)
         if "query.query" not in placeholders:
             raise ValueError("The user prompt must contain a {{ query.query }} placeholder")
@@ -68,7 +70,8 @@ class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
 
 class CustomPromptEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.CUSTOM_PROMPT
-    user_prompt: Template = Field(
+    user_prompt: Optional[Template] = Field(
+        default=...,
         description=(
             "The user prompt to be used to evaluate the documents. "
             "It should contain at least a {{query.query}} and a {{document.text}} placeholder"

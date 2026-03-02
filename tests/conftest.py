@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from openai import AsyncOpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, SecretStr
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.llm_providers.openai_client import OpenAIConfiguration
@@ -67,7 +67,7 @@ def pytest_collection_modifyitems(config, items):
 @pytest.fixture
 def openai_client_config():
     return OpenAIConfiguration(
-        api_key="fake key",
+        api_key=SecretStr("fake key"),
         org="fake org",
         api_type="open_ai",
         api_base=None,
@@ -78,9 +78,7 @@ def openai_client_config():
 
 @pytest.fixture
 def llm_provider_config():
-    return LLMProviderConfig(
-        api_key="fake key",
-    )
+    return LLMProviderConfig()
 
 
 def answer_model_factory(input: LLMInputPrompt, response_schema, **kwargs):
@@ -131,22 +129,17 @@ def answer_model_factory(input: LLMInputPrompt, response_schema, **kwargs):
     if response_schema == AnswerFormat:
         return LLMResponseType(
             raw_answer='{"keyA": "valueA", "keyB": "valueB"}',
-            parsed_answer=response_schema(keyA="valueA", keyB="valueB"),
+            parsed_answer=AnswerFormat(keyA="valueA", keyB="valueB"),
         )
     if response_schema == AnswerEvaluatorFormat:
         return LLMResponseType(
             raw_answer='{"quality": 1, "trustworthiness": 0, "originality": 0, "reasoning": "Test", "score": 1}',
-            parsed_answer=response_schema(quality=1, trustworthiness=0, originality=0),
-        )
-    elif isinstance(response_schema, dict):
-        return LLMResponseType(
-            raw_answer='{"score": 1.0}',
-            parsed_answer={"score": 1.0},
+            parsed_answer=AnswerEvaluatorFormat(quality=1, trustworthiness=0, originality=0),
         )
     else:
         return LLMResponseType(
             raw_answer='{"keyA": "valueA", "keyB": "valueB"}',
-            parsed_answer='{"keyA": "valueA", "keyB": "valueB"}',
+            parsed_answer=AnswerFormat(keyA="valueA", keyB="valueB"),
         )
 
 
@@ -294,7 +287,7 @@ def openai_provider_structured(flexible_openai_client_mock, monkeypatch):
     from ragelo.llm_providers.openai_client import OpenAIProvider
 
     config = OpenAIConfiguration(
-        api_key="fake_key",
+        api_key=SecretStr("fake_key"),
         model="fake_model",
         json_mode=False,
     )
@@ -309,7 +302,7 @@ def openai_provider_json_mode(flexible_openai_client_mock, monkeypatch):
     from ragelo.llm_providers.openai_client import OpenAIProvider
 
     config = OpenAIConfiguration(
-        api_key="fake_key",
+        api_key=SecretStr("fake_key"),
         model="fake_model",
         json_mode=True,
     )
@@ -452,7 +445,6 @@ def pairwise_answer_evaluation():
         qid="0",
         agent_a="agent1",
         agent_b="agent2",
-        game_id="agent1_vs_agent2",
         evaluator_name="pairwise",
         answer=PairwiseEvaluationAnswer(
             answer_a_analysis="Answer A is good",
@@ -497,7 +489,7 @@ def custom_answer_eval_config(base_eval_config, answer_eval_format):
     base_config = base_eval_config.model_dump(exclude_unset=True)
     base_config["evaluator_name"] = AnswerEvaluatorTypes.CUSTOM_PROMPT
     config = CustomPromptAnswerEvaluatorConfig(
-        llm_response_schema=answer_eval_format,
+        result_type=answer_eval_format,
         user_prompt=string_to_template(
             """ 
 You are an useful assistant for evaluating the quality of the answers generated \
