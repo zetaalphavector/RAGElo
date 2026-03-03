@@ -100,7 +100,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
                 input=llm_input,
                 response_schema=answer_type,
             )
-            llm_response = self._process_answer(llm_response)
+            llm_response = self._process_answer(llm_response, query)
             parsed_answer = llm_response.parsed_answer
             raw_answer = llm_response.raw_answer
         except Exception as e:

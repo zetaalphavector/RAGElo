@@ -102,7 +102,7 @@ class RDNAMEvaluator(BaseRetrievalEvaluator):
             user_message=self.user_prompt.render(**context),
         )
 
-    def _process_answer(self, llm_response: LLMResponseType[T_Result]) -> LLMResponseType[T_Result]:
+    def _process_answer(self, llm_response: LLMResponseType[T_Result], query: Query) -> LLMResponseType[T_Result]:
         parsed = llm_response.parsed_answer
         if parsed is None:
             return llm_response

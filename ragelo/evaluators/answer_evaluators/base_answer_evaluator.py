@@ -184,7 +184,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 input=prompt,
                 response_schema=answer_type,
             )
-            llm_response = self._process_answer(llm_response)
+            llm_response = self._process_answer(llm_response, query)
             parsed_answer = llm_response.parsed_answer
             raw_answer = llm_response.raw_answer
         except Exception as e:
@@ -237,7 +237,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
                 input=prompt,
                 response_schema=answer_type,
             )
-            llm_response = self._process_answer(llm_response)
+            llm_response = self._process_answer(llm_response, query)
             parsed_answer = llm_response.parsed_answer
         except Exception as e:
             exc = str(e) + f"\nRaw answer: {llm_response.raw_answer}"
@@ -266,7 +266,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
             input=inverse_prompt,
             response_schema=answer_type,
         )
-        inverse_llm_response = self._process_answer(inverse_llm_response)
+        inverse_llm_response = self._process_answer(inverse_llm_response, query)
         inv = inverse_llm_response.parsed_answer
         inverse_answer = self.result_type(
             qid=query.qid,
