@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import logging
 from typing import Generic, TypeVar
 
 from pydantic import BaseModel, model_validator
 
-from ragelo.logger import logger
+logger = logging.getLogger(__name__)
 
 T_Schema = TypeVar("T_Schema", bound=BaseModel)
 

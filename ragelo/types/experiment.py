@@ -15,7 +15,6 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Literal
 
-from ragelo.logger import CLILogHandler, logger
 from ragelo.presenters import render_evaluation, render_retrieval_summary
 from ragelo.types.evaluables import AgentAnswer, ChatMessage, Document, Evaluable
 from ragelo.types.query import Query
@@ -26,6 +25,8 @@ from ragelo.types.results import (
     PairwiseGameEvaluatorResult,
     RetrievalEvaluatorResult,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class Experiment:
@@ -71,7 +72,7 @@ class Experiment:
         save_path: str | None = None,
         evaluations_cache_path: str | None = None,
         save_on_disk: bool = True,
-        verbose: bool = False,
+        show_results: bool = False,
         rich_print: bool = True,
         clear_evaluations: bool = False,
         queries_csv_path: str | None = None,
@@ -95,8 +96,8 @@ class Experiment:
             evaluations_cache_path (Optional[str]): A JSON Lines file path to persist the evaluators result on disk,
                 to avoid re-computing evaluations. If not set, will create one based on experiment_name.
             save_on_disk (bool, defaults to True): Whether to save the experiment to disk using the experiment_name.
-            verbose (bool, defaults to False): Whether to print information about the experiment.
-            rich_print (bool, defaults to True): Whether to print information about the experiment using rich.
+            show_results (bool, defaults to False): Whether to render evaluation result tables and summaries.
+            rich_print (bool, defaults to True): Whether to use rich for colored/pretty output when rendering.
             clear_evaluations (bool, defaults to False): If set to True, will clear all existing evaluations and
                 re-compute as needed.
             queries_csv_path (Optional[str]): An optional path to a CSV file with the queries to be used.
@@ -130,16 +131,7 @@ class Experiment:
         self.save_on_disk = save_on_disk
         self.save_path = Path(save_path) if save_path else None
         self.evaluations_cache_path = Path(evaluations_cache_path) if evaluations_cache_path else None
-        self.verbose = verbose
-
-        if self.verbose:
-            logger.setLevel(logging.INFO)
-            if len(logger.handlers) == 0:
-                logger.addHandler(CLILogHandler(use_rich=rich_print))
-        elif len(logger.handlers) > 0:
-            logger.setLevel(logging.WARNING)
-            logger.handlers = []
-            logger.addHandler(CLILogHandler(use_rich=rich_print))
+        self.show_results = show_results
 
         self.queries = {}
         if self.save_on_disk:
@@ -345,8 +337,8 @@ class Experiment:
                 If None, the evaluation is an EloTournamentResult.
             evaluation (EvaluatorResult | EloTournamentResult): The evaluation result to be added.
             should_save (bool): Whether to save the result to disk. Defaults to True.
-            should_print (bool | None): Whether to print the evaluation. Defaults to None.
-                If None, will use the verbose attribute.
+            should_print (bool | None): Whether to render the evaluation. Defaults to None.
+                If None, will use the show_results attribute.
             force (bool): Whether to overwrite an existing evaluation. Defaults to False.
             exist_ok (bool): Whether to warn if an evaluation already exists. Defaults to False.
         """
@@ -365,7 +357,8 @@ class Experiment:
             return
         if should_save:
             self.save_result(evaluation)
-        should_print = should_print or self.verbose
+        if should_print is None:
+            should_print = self.show_results
         if should_print:
             render_evaluation(evaluation, self.rich_print)
 

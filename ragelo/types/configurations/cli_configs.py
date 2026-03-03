@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from jinja2 import Template
-from pydantic import Field
+from pydantic import AliasChoices, Field
 
 from ragelo.types.configurations.answer_evaluator_configs import (
     PairwiseDomainExpertEvaluatorConfig,
@@ -29,9 +29,10 @@ class BaseCLIConfig(BaseConfig):
         description="The path to the queries CSV file. The file should contain at least the following columns: "
         "qid, query. Any additional columns will be considered as metadata.",
     )
-    verbose: bool = Field(
+    show_results: bool = Field(
         default=True,
-        description="Whether or not to be verbose and print all intermediate steps.",
+        description="Whether to render evaluation result tables and summaries to the console.",
+        validation_alias=AliasChoices("show_results", "verbose"),
     )
     output_file: str | None = Field(
         default=None,

@@ -320,7 +320,7 @@ def base_experiment_config():
         "documents_csv_path": "tests/data/documents.csv",
         "answers_csv_path": "tests/data/answers.csv",
         "rich_print": True,
-        "verbose": True,
+        "show_results": True,
     }
     return config
 
@@ -472,7 +472,7 @@ def elo_tournament_result():
 
 @pytest.fixture
 def base_eval_config():
-    return BaseEvaluatorConfig(force=True, verbose=True)
+    return BaseEvaluatorConfig(force=True, show_results=True)
 
 
 @pytest.fixture
@@ -560,7 +560,7 @@ def llm_provider_mock_retrieval(llm_provider_config):
         reasoning="The document is very relevant",
         score=2,
     )
-    LLM_response = LLMResponseType(
+    LLM_response: LLMResponseType[RetrievalEvaluationAnswer] = LLMResponseType(
         raw_answer=mocked_answer.model_dump_json(),
         parsed_answer=mocked_answer,
     )
@@ -588,7 +588,9 @@ def llm_provider_mock_rdnam(llm_provider_config):
         annotator_4=RDNAMEvaluationAnswer(reasoning="Annotator 4", score=0.0, intent_match=0.0, trustworthiness=0.0),
         annotator_5=RDNAMEvaluationAnswer(reasoning="Annotator 5", score=2.0, intent_match=1.0, trustworthiness=1.0),
     )
-    LLM_response = LLMResponseType(raw_answer=mocked_answer.model_dump_json(), parsed_answer=mocked_answer)
+    LLM_response: LLMResponseType[RDNAMMultipleAnnotatorsAnswer] = LLMResponseType(
+        raw_answer=mocked_answer.model_dump_json(), parsed_answer=mocked_answer
+    )
     provider = MockLLMProvider(llm_provider_config)
 
     def side_effect(*args, **kwargs):
@@ -601,7 +603,7 @@ def llm_provider_mock_rdnam(llm_provider_config):
 @pytest.fixture
 def llm_provider_reasoner_mock(llm_provider_config):
     provider = MockLLMProvider(llm_provider_config)
-    answer = LLMResponseType(
+    answer: LLMResponseType[RetrievalEvaluationAnswer] = LLMResponseType(
         raw_answer='{"reasoning": "The document is very relevant", "score": 2}',
         parsed_answer=RetrievalEvaluationAnswer(
             reasoning="The document is very relevant",
@@ -722,7 +724,7 @@ def few_shot_retrieval_eval_config(base_eval_config):
 @pytest.fixture
 def llm_provider_answer_mock(llm_provider_config, answer_eval_format):
     provider = MockLLMProvider(llm_provider_config)
-    mocked_answer = LLMResponseType(
+    mocked_answer: LLMResponseType[BaseModel] = LLMResponseType(
         raw_answer='{"quality": 1, "trustworthiness": 0, "originality": 0}',
         parsed_answer=answer_eval_format(quality=1, trustworthiness=0, originality=0),
     )

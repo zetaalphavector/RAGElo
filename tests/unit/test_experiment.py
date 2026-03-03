@@ -394,7 +394,7 @@ class TestExperiment:
         retrieval_evaluator = get_retrieval_evaluator("reasoner", llm_provider=llm_provider, rich_print=True)
         answer_evaluator = get_answer_evaluator("pairwise", llm_provider=llm_provider, rich_print=True)
 
-        elo_ranker = get_agent_ranker("elo", verbose=True)
+        elo_ranker = get_agent_ranker("elo", show_results=True)
 
         # Evaluate the retrieval results.
         retrieval_evaluator.evaluate_experiment(experiment)
