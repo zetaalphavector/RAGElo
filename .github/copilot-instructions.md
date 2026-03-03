@@ -158,6 +158,117 @@ If you can't find an existing pattern, that's a signal to ask before inventing o
 - Never test private methods directly.
 - Avoid monkeypatching — the codebase uses dependency injection (configs, LLM providers as constructor parameters). If you need to patch, the design may need refactoring.
 
+## Adding a New Evaluator
+
+Every evaluator follows the same 5-step pattern. The system is designed so that once these steps are done, the evaluator is automatically available via the factory function and CLI — no wiring code needed.
+
+### Step 1: Register the type enum
+
+Add the evaluator name to the corresponding `StrEnum` in `ragelo/types/types.py`:
+
+```python
+class RetrievalEvaluatorTypes(StrEnum):
+    # ... existing ...
+    MY_EVALUATOR = "my_evaluator"
+```
+
+### Step 2: Create a config class
+
+Add a config in the appropriate file under `ragelo/types/configurations/` (`retrieval_evaluator_configs.py` or `answer_evaluator_configs.py`). Inherit from the correct base:
+
+```python
+class MyEvaluatorConfig(BaseRetrievalEvaluatorConfig):
+    evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.MY_EVALUATOR
+    custom_param: str = Field(description="Describe for CLI auto-generation")
+```
+
+Config hierarchy:
+```
+BaseConfig
+└── BaseEvaluatorConfig
+    ├── BaseRetrievalEvaluatorConfig  → for retrieval evaluators
+    └── BaseAnswerEvaluatorConfig     → for answer evaluators
+```
+
+Every `Field(description=...)` becomes a CLI parameter automatically — keep descriptions user-facing and clear.
+
+### Step 3: Define an answer format (if needed)
+
+If the evaluator needs a custom LLM response schema beyond the defaults (`RetrievalEvaluationAnswer`, `AnswerEvaluationAnswer`, `PairwiseEvaluationAnswer`), add a Pydantic model in `ragelo/types/answer_formats.py`:
+
+```python
+class MyEvaluationAnswer(EvaluationAnswer):
+    reasoning: str
+    score: float
+    custom_field: str
+```
+
+If a custom answer format is defined, a matching result type may also be needed in `ragelo/types/results.py`.
+
+### Step 4: Implement the evaluator
+
+Create a new file in the evaluator's subsystem directory (e.g., `ragelo/evaluators/retrieval_evaluators/my_evaluator.py`). Use the `@register` decorator:
+
+```python
+@RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.MY_EVALUATOR)
+class MyEvaluator(BaseRetrievalEvaluator):
+    config: MyEvaluatorConfig
+    system_prompt = string_to_template("You are ...")
+    user_prompt = string_to_template("Query: {{ query.query }}\nDocument: {{ document.text }}")
+```
+
+**What to override (and what not to):**
+
+| Method | Override when... |
+|---|---|
+| `system_prompt` / `user_prompt` | Always — defines the evaluator's behavior |
+| `_build_message()` | You need to inject extra context into templates (e.g., config fields) |
+| `_process_answer()` | You need post-processing of LLM output (e.g., aggregation, score normalization) |
+| `result_type` | You use a custom answer format |
+| `evaluate_async()` | Almost never — the base class handles LLM calls, caching, and error handling |
+
+For answer evaluators, the equivalent pairwise method is `_build_message_pairwise()`.
+
+**Minimal evaluator** (prompts only — everything else inherited):
+```python
+@RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.MY_EVALUATOR)
+class MyEvaluator(BaseRetrievalEvaluator):
+    config: MyEvaluatorConfig
+    system_prompt = string_to_template("...")
+    user_prompt = string_to_template("{{ query.query }} ... {{ document.text }}")
+```
+
+**Evaluator with custom context** (override `_build_message`):
+```python
+@RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.MY_EVALUATOR)
+class MyEvaluator(BaseRetrievalEvaluator):
+    config: MyEvaluatorConfig
+    system_prompt = string_to_template("You are an expert in {{ domain }}...")
+    user_prompt = string_to_template("{{ query.query }}\n{{ document.text }}")
+
+    def _build_message(self, query: Query, document: Document) -> LLMInputPrompt:
+        context = {"query": query, "document": document, "domain": self.config.custom_param}
+        return LLMInputPrompt(
+            system_prompt=self.system_prompt.render(**context),
+            user_message=self.user_prompt.render(**context),
+        )
+```
+
+### Step 5: Export in `__init__.py`
+
+Add the import and `__all__` entry in the subsystem's `__init__.py` (e.g., `ragelo/evaluators/retrieval_evaluators/__init__.py`):
+
+```python
+from ragelo.evaluators.retrieval_evaluators.my_evaluator import MyEvaluator
+
+__all__ = [..., "MyEvaluator"]
+```
+
+The evaluator is now usable:
+```python
+evaluator = get_retrieval_evaluator("my_evaluator", llm_provider=provider, custom_param="value")
+```
+
 ## Self-Improvement
 
 When you complete a task and realize you made a mistake that could have been avoided with better instructions in this file, **append a concise note** to the "Lessons Learned" section below. Keep entries specific and actionable.
