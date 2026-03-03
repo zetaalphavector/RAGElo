@@ -1,36 +1,32 @@
 import logging
 
-from rich import print as rich_print
+from rich.console import Console
+from rich.logging import RichHandler
 
-logger = logging.getLogger(__name__)
+logging.getLogger("ragelo").addHandler(logging.NullHandler())
 
 
-class CLILogHandler(logging.Handler):
-    """A logging handler for the CLI use case"""
+def configure_logging(level: int | str = "WARNING", *, rich: bool = True) -> None:
+    """Configure the ``ragelo`` logger.
 
-    def __init__(self, use_rich: bool = True, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.use_rich = use_rich
+    Args:
+        level: Logging level (int or name). Examples: ``"INFO"``, ``"DEBUG"``, ``logging.INFO``.
+        rich: If True, use RichHandler for colored output; otherwise plain StreamHandler.
+    """
+    if isinstance(level, str):
+        numeric_level = logging.getLevelName(level.upper())
+        level = numeric_level if isinstance(numeric_level, int) else logging.WARNING
 
-    def emit(self, record):
-        msg = self.format(record)
-        if record.levelno == logging.WARNING:
-            if self.use_rich:
-                rich_print(f"[yellow]{msg}[/yellow]")
-            else:
-                print("[WARNING] " + msg)
-        elif record.levelno == logging.DEBUG:
-            if self.use_rich:
-                rich_print(f"[blue bold]{msg}[/blue bold]")
-            else:
-                print("[DEBUG] " + msg)
-        elif record.levelno == logging.ERROR:
-            if self.use_rich:
-                rich_print(f"[bold red]{msg}[/bold red]")
-            else:
-                print("[ERROR] " + msg)
-        else:
-            if self.use_rich:
-                rich_print(msg)
-            else:
-                print(msg)
+    lib_logger = logging.getLogger("ragelo")
+    lib_logger.setLevel(level)
+
+    lib_logger.handlers = [h for h in lib_logger.handlers if isinstance(h, logging.NullHandler)]
+
+    if rich:
+        console = Console()
+        handler: logging.Handler = RichHandler(console=console, rich_tracebacks=True, show_time=False, show_path=False)
+        handler.setFormatter(logging.Formatter("%(message)s"))
+    else:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
+    lib_logger.addHandler(handler)

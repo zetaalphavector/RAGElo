@@ -88,7 +88,7 @@ def render_retrieval_summary(
     results: dict[str, dict[str, float]],
     metrics: list[str],
     relevance_threshold: int = 0,
-    rich_print_enabled: bool = True,
+    rich_print: bool = True,
 ):
     if not results:
         return
@@ -96,7 +96,7 @@ def render_retrieval_summary(
     max_agent_len = max([len(agent) for agent in results.keys()]) + 3
     max_metric_len = max([len(metric) for metric in metrics])
     sorted_agents = sorted(results.items(), key=lambda x: x[1][key_metric], reverse=True)
-    if rich_print_enabled:
+    if rich_print:
         rich.print("---[bold cyan] Retrieval Scores [/bold cyan] ---")
         if relevance_threshold > 0:
             rich.print(f"[bold yellow]Relevance threshold: {relevance_threshold}[/bold yellow]")

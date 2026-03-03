@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterator
 from typing import Any
 
 from pydantic import BaseModel, field_validator
 from typing_extensions import Self
 
-from ragelo.logger import logger
 from ragelo.types.evaluables import AgentAnswer, Document, Evaluable, PairwiseGame
 from ragelo.types.results import EvaluatorResult, RetrievalEvaluatorResult
+
+logger = logging.getLogger(__name__)
 
 
 class Query(BaseModel):

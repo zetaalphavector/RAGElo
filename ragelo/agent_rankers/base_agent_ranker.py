@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, cast, get_type_hints
 
-from ragelo.logger import logger
 from ragelo.types import Experiment, PairwiseGameEvaluatorResult
 from ragelo.types.configurations.agent_ranker_configs import AgentRankerConfig
 from ragelo.types.types import AgentRankerTypes
+
+logger = logging.getLogger(__name__)
 
 
 class AgentRanker:

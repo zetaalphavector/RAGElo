@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from pydantic import BaseModel, computed_field, field_validator, model_validator
 from typing_extensions import Self
 
-from ragelo.logger import logger
 from ragelo.types.results import EvaluatorResult
+
+logger = logging.getLogger(__name__)
 
 
 class ChatMessage(BaseModel):

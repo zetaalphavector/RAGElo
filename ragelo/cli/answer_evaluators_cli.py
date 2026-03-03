@@ -1,10 +1,9 @@
-import logging
-
 import typer
 
 from ragelo import Experiment, get_answer_evaluator, get_llm_provider, get_retrieval_evaluator
 from ragelo.cli.args import get_params_from_function
 from ragelo.cli.utils import get_path
+from ragelo.logger import configure_logging
 from ragelo.types import AnswerEvaluatorTypes
 from ragelo.types.configurations.cli_configs import CLIPairwiseDomainExpertEvaluatorConfig, CLIPairwiseEvaluatorConfig
 from ragelo.types.types import RetrievalEvaluatorTypes
@@ -21,10 +20,10 @@ def pairwise(config: CLIPairwiseEvaluatorConfig = CLIPairwiseEvaluatorConfig(), 
     >> ragelo answer-evaluator pairwise queries.csv answers.csv
 
     """
-    logging.getLogger("ragelo").setLevel(logging.INFO)
     kwargs.pop("llm_response_schema", None)
 
     config = CLIPairwiseEvaluatorConfig(**kwargs)
+    configure_logging(level="INFO", rich=config.rich_print)
     llm_provider = get_llm_provider(config.llm_provider_name, **kwargs)
 
     queries_csv_file = get_path(config.data_dir, config.queries_csv_file)
@@ -38,7 +37,7 @@ def pairwise(config: CLIPairwiseEvaluatorConfig = CLIPairwiseEvaluatorConfig(), 
         queries_csv_path=queries_csv_file,
         documents_csv_path=documents_file,
         answers_csv_path=answers_file,
-        verbose=config.verbose,
+        show_results=config.show_results,
         clear_evaluations=config.force,
         rich_print=config.rich_print,
     )
@@ -50,7 +49,7 @@ def pairwise(config: CLIPairwiseEvaluatorConfig = CLIPairwiseEvaluatorConfig(), 
             RetrievalEvaluatorTypes.REASONER,
             llm_provider=llm_provider,
             rich_print=config.rich_print,
-            verbose=config.verbose,
+            show_results=config.show_results,
         )
         reasoner_evaluator.evaluate_experiment(experiment)
         config.include_relevance_score = True
@@ -72,10 +71,10 @@ def expert_pairwise(
     """
     An evaluator that evaluates RAG-based answers by comparing answers of two agents and impersonating a domain expert.
     """
-    logging.getLogger("ragelo").setLevel(logging.INFO)
     kwargs.pop("llm_response_schema", None)
 
     config = CLIPairwiseDomainExpertEvaluatorConfig(**kwargs)
+    configure_logging(level="INFO", rich=config.rich_print)
 
     llm_provider = get_llm_provider(config.llm_provider_name, **kwargs)
 
@@ -90,7 +89,7 @@ def expert_pairwise(
         queries_csv_path=queries_csv_file,
         documents_csv_path=documents_file,
         answers_csv_path=answers_file,
-        verbose=config.verbose,
+        show_results=config.show_results,
         clear_evaluations=config.force,
         rich_print=config.rich_print,
     )
@@ -100,7 +99,7 @@ def expert_pairwise(
             RetrievalEvaluatorTypes.REASONER,
             llm_provider=llm_provider,
             rich_print=config.rich_print,
-            verbose=config.verbose,
+            show_results=config.show_results,
             use_progress_bar=config.use_progress_bar,
         )
         reasoner_evaluator.evaluate_experiment(experiment)

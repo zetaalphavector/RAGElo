@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Optional
 
 from jinja2 import Template
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 from ragelo.types.results import EvaluationAnswer
 from ragelo.types.types import AnswerEvaluatorTypes
@@ -11,14 +11,17 @@ from ragelo.utils import get_placeholders_and_tags, string_to_template
 
 
 class BaseConfig(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     force: bool = Field(
         default=False,
         description="Force the execution of the commands and overwrite any existing files.",
     )
     rich_print: bool = Field(default=False, description="Use rich to print colorful outputs.")
-    verbose: bool = Field(
+    show_results: bool = Field(
         default=False,
-        description="Whether or not to be verbose and print all intermediate steps.",
+        description="Whether to render evaluation result tables and summaries to the console.",
+        validation_alias=AliasChoices("show_results", "verbose"),
     )
     llm_provider_name: str = Field(default="openai", description="The name of the LLM provider to be used.")
     use_progress_bar: bool = Field(
@@ -32,7 +35,7 @@ class BaseConfig(BaseModel):
 
 
 class BaseEvaluatorConfig(BaseConfig):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    model_config = ConfigDict(arbitrary_types_allowed=True, populate_by_name=True)
     evaluator_name: Optional[str | AnswerEvaluatorTypes] = Field(
         default=None,
         description="The name of the evaluator to use.",
