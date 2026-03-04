@@ -140,6 +140,8 @@ class PairwiseGameEvaluatorResult(EvaluatorResult):
     agent_a: Annotated[str, SkipJsonSchema]
     agent_b: Annotated[str, SkipJsonSchema]
     answer: PairwiseEvaluationAnswer | None = None
+    a_vs_b_result: PairwiseGameEvaluatorResult | None = None
+    b_vs_a_result: PairwiseGameEvaluatorResult | None = None
 
     @model_validator(mode="before")
     @classmethod
