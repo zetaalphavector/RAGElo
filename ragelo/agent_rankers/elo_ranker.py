@@ -72,7 +72,7 @@ class EloRanker(AgentRanker):
     def run_tournament(self) -> dict[str, int]:
         agents_scores: dict[str, int] = {}
         games: list[tuple[str, str, float]] = []
-        for agent_a, agent_b, score in self.evaluations:
+        for _, agent_a, agent_b, score in self.evaluations:
             score_val = self.score_map[score]
             games.append((agent_a, agent_b, score_val))
         random.shuffle(games)

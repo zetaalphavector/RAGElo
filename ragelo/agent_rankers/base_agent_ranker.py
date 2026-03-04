@@ -36,7 +36,7 @@ class AgentRanker:
     def get_config_class(cls) -> type[AgentRankerConfig]:
         return get_type_hints(cls)["config"]
 
-    def _flatten_evaluations(self, experiment: Experiment) -> list[tuple[str, str, str]]:
+    def _flatten_evaluations(self, experiment: Experiment) -> list[tuple[str, str, str, str]]:
         evaluations = []
         for query in experiment:
             for game in query.pairwise_games.values():
@@ -48,6 +48,7 @@ class AgentRanker:
                     winner = evaluation.winner
                     evaluations.append(
                         (
+                            query.qid,
                             game.agent_a_answer.agent,
                             game.agent_b_answer.agent,
                             winner,
