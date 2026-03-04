@@ -72,7 +72,18 @@ class TestExperiment:
         with pytest.raises(ValueError):
             empty_experiment.add_retrieved_doc("Test", "invalid_qid", "doc3")
 
-    def test_add_agent_answer(self, empty_experiment):
+    def test_add_retrieved_doc_preserves_retrieved_by(self, empty_experiment):
+        """Test that re-adding a document merges retrieved_by info."""
+        qid = empty_experiment.add_query("Test query", query_id="test1")
+        empty_experiment.add_retrieved_doc("Test doc", query_id=qid, doc_id="doc1", score=1.0, agent="agent1")
+        assert empty_experiment[qid].retrieved_docs["doc1"].retrieved_by == {"agent1": 1.0}
+
+        # Re-add same doc with a different agent — retrieved_by should merge
+        doc = Document(qid=qid, did="doc1", text="Test doc")
+        doc.retrieved_by = {"agent2": 0.5}
+        empty_experiment[qid].add_retrieved_doc(doc, agent="agent2")
+        assert "agent1" in empty_experiment[qid].retrieved_docs["doc1"].retrieved_by
+        assert "agent2" in empty_experiment[qid].retrieved_docs["doc1"].retrieved_by
         """Test adding agent answers manually"""
         qid = empty_experiment.add_query("Test query", query_id="test1")
 
@@ -113,6 +124,8 @@ class TestExperiment:
             assert loaded_experiment[qid].query == experiment[qid].query
             assert len(loaded_experiment[qid].retrieved_docs) == len(experiment[qid].retrieved_docs)
             assert len(loaded_experiment[qid].answers) == len(experiment[qid].answers)
+            for did, doc in experiment[qid].retrieved_docs.items():
+                assert loaded_experiment[qid].retrieved_docs[did].retrieved_by == doc.retrieved_by
 
     def test_get_qrels(self, tmp_path, experiment):
         """Test getting relevance judgments"""
