@@ -14,6 +14,7 @@ from ragelo.types.answer_formats import (
     RDNAMMultipleAnnotatorsNoAspectsAnswer,
     RDNAMNoAspectsAnswer,
     RetrievalEvaluationAnswer,
+    RubricAnswerFormat,
 )
 
 
@@ -139,7 +140,7 @@ class PairwiseGameEvaluatorResult(EvaluatorResult):
 
     agent_a: Annotated[str, SkipJsonSchema]
     agent_b: Annotated[str, SkipJsonSchema]
-    answer: PairwiseEvaluationAnswer | None = None
+    answer: PairwiseEvaluationAnswer | RubricAnswerFormat | None = None
     a_vs_b_result: PairwiseGameEvaluatorResult | None = None
     b_vs_a_result: PairwiseGameEvaluatorResult | None = None
 
@@ -150,8 +151,13 @@ class PairwiseGameEvaluatorResult(EvaluatorResult):
         if isinstance(data, dict) and "answer" in data and data["answer"] is not None:
             answer_data = data["answer"]
             if isinstance(answer_data, dict) and not isinstance(answer_data, BaseModel):
-                # Deserialize as PairwiseEvaluationAnswer by default
-                data["answer"] = PairwiseEvaluationAnswer.model_validate(answer_data)
+                try:
+                    data["answer"] = PairwiseEvaluationAnswer.model_validate(answer_data)
+                except Exception:
+                    try:
+                        data["answer"] = RubricAnswerFormat.model_validate(answer_data)
+                    except Exception:
+                        pass
         return data
 
     @property
