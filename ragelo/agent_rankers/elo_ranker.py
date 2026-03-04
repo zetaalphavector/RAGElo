@@ -2,13 +2,21 @@ from __future__ import annotations
 
 import logging
 import random
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from ragelo.agent_rankers.base_agent_ranker import AgentRanker, AgentRankerFactory
 from ragelo.types import EloTournamentResult, Experiment
 from ragelo.types.configurations import EloAgentRankerConfig
+from ragelo.types.evaluables import PairwiseGame
+from ragelo.types.query import Query
+from ragelo.types.results import PairwiseGameEvaluatorResult
 from ragelo.types.types import AgentRankerTypes
+
+if TYPE_CHECKING:
+    from ragelo.evaluators.answer_evaluators import BaseAnswerEvaluator
+    from ragelo.evaluators.retrieval_evaluators import BaseRetrievalEvaluator
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +43,8 @@ class EloRanker(AgentRanker):
         self.initial_score: int = self.config.initial_score
         self.k: int = self.config.elo_k
         self.std_dev: dict[str, float] = {}
+        self.games: list[tuple[str, str, str, str]] = []
+        self.evaluations: list[tuple[str, str, str, str]] = []
 
     def run(self, experiment: Experiment) -> EloTournamentResult:
         """Compute score for each agent"""
@@ -77,7 +87,8 @@ class EloRanker(AgentRanker):
             games.append((agent_a, agent_b, score_val))
         random.shuffle(games)
         for agent_a, agent_b, score_val in games:
-            logger.debug(f"Game: {agent_a} vs {agent_b} -> {score_val}")
+            if self.config.verbose:
+                logger.info(f"Game: {agent_a} vs {agent_b} -> {score_val}")
             if score_val == 1:
                 self.wins[agent_a] = self.wins.get(agent_a, 0) + 1
                 self.losses[agent_b] = self.losses.get(agent_b, 0) + 1
@@ -99,3 +110,80 @@ class EloRanker(AgentRanker):
 
         self.computed = True
         return agents_scores
+
+    def get_agent_losses(self, agent: str) -> list[tuple[str, str]]:
+        """For a given agent, returns a list of (qid, opponent) tuples where the agent lost."""
+        lost_games = []
+        for qid, agent_a, agent_b, winner in self.games:
+            if agent_b == agent and winner == "A":
+                lost_games.append((qid, agent_a))
+            elif agent_a == agent and winner == "B":
+                lost_games.append((qid, agent_b))
+        return lost_games
+
+    async def run_single_game(
+        self,
+        query: Query,
+        agent_a: str,
+        agent_b: str,
+        answer_evaluator: BaseAnswerEvaluator,
+        retrieval_evaluator: BaseRetrievalEvaluator | None = None,
+        experiment: Experiment | None = None,
+    ) -> PairwiseGameEvaluatorResult:
+        """Run a single pairwise game between two agents on a query."""
+        assert answer_evaluator.config.pairwise, "Answer evaluator must be pairwise"
+        assert agent_a in query.answers, f"Agent {agent_a} not found in query"
+        assert agent_b in query.answers, f"Agent {agent_b} not found in query"
+
+        answer_a = query.answers[agent_a]
+        answer_b = query.answers[agent_b]
+
+        if retrieval_evaluator:
+            retrieval_evaluator.evaluate_all_evaluables(query, n_threads=10)
+            if experiment:
+                experiment.save()
+
+        game = PairwiseGame(
+            qid=query.qid,
+            agent_a_answer=answer_a,
+            agent_b_answer=answer_b,
+        )
+        evaluation = await answer_evaluator.evaluate_async((query, game))
+        assert isinstance(evaluation, PairwiseGameEvaluatorResult)
+        winner = evaluation.winner
+        assert winner is not None
+        score_val = self.score_map[winner]
+
+        if winner == "A":
+            self.wins[agent_a] = self.wins.get(agent_a, 0) + 1
+            self.losses[agent_b] = self.losses.get(agent_b, 0) + 1
+        elif winner == "B":
+            self.wins[agent_b] = self.wins.get(agent_b, 0) + 1
+            self.losses[agent_a] = self.losses.get(agent_a, 0) + 1
+        else:
+            self.ties[agent_a] = self.ties.get(agent_a, 0) + 1
+            self.ties[agent_b] = self.ties.get(agent_b, 0) + 1
+        self.games.append((query.qid, agent_a, agent_b, winner))
+        self.update_rankings(agent_a, agent_b, score_val)
+        return evaluation
+
+    def update_rankings(self, agent_a: str, agent_b: str, score_val: float) -> tuple[float, float]:
+        """Apply ELO formula to update agent ratings after a game."""
+        agent_a_rating = self.agents_scores.get(agent_a, self.initial_score)
+        agent_b_rating = self.agents_scores.get(agent_b, self.initial_score)
+
+        expected_score = 1 / (1 + 10 ** ((agent_a_rating - agent_b_rating) / 400))
+        self.agents_scores[agent_a] = int(agent_a_rating + self.k * (score_val - expected_score))
+        self.agents_scores[agent_b] = int(agent_b_rating + self.k * ((1 - score_val) - (1 - expected_score)))
+        self.games_played[agent_a] = self.games_played.get(agent_a, 0) + 1
+        self.games_played[agent_b] = self.games_played.get(agent_b, 0) + 1
+        return self.agents_scores[agent_a], self.agents_scores[agent_b]
+
+    def add_new_agent(self, agent: str):
+        """Initialize scores and counters for a new agent."""
+        self.agents_scores[agent] = self.initial_score
+        self.games_played[agent] = 0
+        self.wins[agent] = 0
+        self.losses[agent] = 0
+        self.ties[agent] = 0
+        return self.agents_scores[agent]
