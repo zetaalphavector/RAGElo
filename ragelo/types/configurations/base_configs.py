@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 from jinja2 import Template
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
@@ -58,6 +58,11 @@ class BaseEvaluatorConfig(BaseConfig):
         description=(
             "Override the result type that the Evaluator will return. Most evaluators have a default result type."
         ),
+    )
+
+    llm_response_schema: Optional[type[BaseModel] | dict[str, Any]] = Field(
+        default=None,
+        description="The response schema for the LLM. Overrides the default schema derived from result_type.",
     )
 
     @field_validator("system_prompt", "user_prompt", mode="before")

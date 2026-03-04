@@ -1,4 +1,5 @@
 import warnings
+from unittest.mock import AsyncMock
 
 from ragelo import get_answer_evaluator
 from ragelo.evaluators.answer_evaluators import (
@@ -9,10 +10,11 @@ from ragelo.evaluators.answer_evaluators import (
     PairwiseAnswerEvaluator,
     PairwiseDomainExpertEvaluator,
 )
+from ragelo.types.answer_formats import PairwiseEvaluationAnswer
 from ragelo.types.evaluables import AgentAnswer
-from ragelo.types.formats import LLMInputPrompt
+from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.query import Query
-from ragelo.types.results import AnswerEvaluatorResult, PairwiseEvaluationAnswer, PairwiseGameEvaluatorResult
+from ragelo.types.results import AnswerEvaluatorResult, PairwiseGameEvaluatorResult
 
 
 def test_get_by_name(llm_provider_mock):
@@ -355,3 +357,87 @@ class TestFilterDocuments:
         query = experiment["0"]
         docs = evaluator._filter_documents(query)
         assert len(docs) > 0
+
+
+class TestBidirectionalPairwise:
+    """Tests for bidirectional pairwise evaluation and winner reconciliation."""
+
+    def _make_pairwise_response(self, winner: str) -> LLMResponseType[PairwiseEvaluationAnswer]:
+        answer = PairwiseEvaluationAnswer(
+            answer_a_analysis="Analysis A",
+            answer_b_analysis="Analysis B",
+            comparison_reasoning="Comparison",
+            winner=winner,
+        )
+        return LLMResponseType(raw_answer=answer.model_dump_json(), parsed_answer=answer)
+
+    def test_both_directions_agree_a(self, llm_provider_mock, experiment, pairwise_answer_eval_config):
+        """When both directions say A wins (normal=A, reversed=B meaning original A), final winner is A."""
+        responses = [self._make_pairwise_response("A"), self._make_pairwise_response("B")]
+        llm_provider_mock.async_call_mocker = AsyncMock(side_effect=responses)
+        evaluator = PairwiseAnswerEvaluator.from_config(
+            config=pairwise_answer_eval_config, llm_provider=llm_provider_mock
+        )
+        query = experiment["0"]
+        result = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
+        assert isinstance(result, PairwiseGameEvaluatorResult)
+        assert result.answer is not None
+        assert result.answer.winner == "A"
+        assert result.a_vs_b_result is not None
+        assert result.b_vs_a_result is not None
+
+    def test_both_directions_agree_b(self, llm_provider_mock, experiment, pairwise_answer_eval_config):
+        """When both directions say B wins (normal=B, reversed=A meaning original B), final winner is B."""
+        responses = [self._make_pairwise_response("B"), self._make_pairwise_response("A")]
+        llm_provider_mock.async_call_mocker = AsyncMock(side_effect=responses)
+        evaluator = PairwiseAnswerEvaluator.from_config(
+            config=pairwise_answer_eval_config, llm_provider=llm_provider_mock
+        )
+        query = experiment["0"]
+        result = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
+        assert isinstance(result, PairwiseGameEvaluatorResult)
+        assert result.answer is not None
+        assert result.answer.winner == "B"
+
+    def test_disagreement_results_in_tie(self, llm_provider_mock, experiment, pairwise_answer_eval_config):
+        """When directions disagree (both say A in their own frame), result is a tie."""
+        responses = [self._make_pairwise_response("A"), self._make_pairwise_response("A")]
+        llm_provider_mock.async_call_mocker = AsyncMock(side_effect=responses)
+        evaluator = PairwiseAnswerEvaluator.from_config(
+            config=pairwise_answer_eval_config, llm_provider=llm_provider_mock
+        )
+        query = experiment["0"]
+        result = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
+        assert isinstance(result, PairwiseGameEvaluatorResult)
+        assert result.answer is not None
+        assert result.answer.winner == "C"
+
+    def test_sub_results_are_stored(self, llm_provider_mock, experiment, pairwise_answer_eval_config):
+        """Both directional sub-results should be stored on the parent result."""
+        responses = [self._make_pairwise_response("A"), self._make_pairwise_response("B")]
+        llm_provider_mock.async_call_mocker = AsyncMock(side_effect=responses)
+        evaluator = PairwiseAnswerEvaluator.from_config(
+            config=pairwise_answer_eval_config, llm_provider=llm_provider_mock
+        )
+        query = experiment["0"]
+        result = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
+        assert result.a_vs_b_result is not None
+        assert result.b_vs_a_result is not None
+        assert result.a_vs_b_result.answer is not None
+        assert result.b_vs_a_result.answer is not None
+        assert result.a_vs_b_result.answer.winner == "A"
+        assert result.b_vs_a_result.answer.winner == "B"
+
+    def test_llm_response_schema_from_config(
+        self, llm_provider_answer_mock, experiment, base_answer_eval_config, answer_eval_format
+    ):
+        """When llm_response_schema is set on config, it should be used as the response schema."""
+        evaluator = BaseAnswerEvaluator.from_config(
+            config=base_answer_eval_config, llm_provider=llm_provider_answer_mock
+        )
+        query = experiment["0"]
+        answer = query.answers["agent1"]
+        result = evaluator.evaluate(query, answer)
+        call_args = llm_provider_answer_mock.async_call_mocker.call_args_list
+        assert call_args[0].kwargs.get("response_schema") or call_args[0][0][1] == answer_eval_format
+        assert isinstance(result.answer, answer_eval_format)

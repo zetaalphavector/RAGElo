@@ -80,16 +80,8 @@ class ChatPairwiseEvaluator(PairwiseAnswerEvaluator):
         {% endfor %}
         [The End of Conversation with Assistant B]""")  # noqa: E501
 
-    def _build_message_pairwise(self, query: Query, game: PairwiseGame, inverse: bool = False) -> LLMInputPrompt:
+    def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> LLMInputPrompt:
         documents = self._filter_documents(query)
-
-        if inverse:
-            reverse_game = PairwiseGame(
-                qid=game.qid,
-                agent_a_answer=game.agent_b_answer,
-                agent_b_answer=game.agent_a_answer,
-            )
-            game = reverse_game
         if not game.agent_a_answer.conversation or not game.agent_b_answer.conversation:
             raise ValueError("The conversation of the agents cannot be empty for the chat_pairwise evaluator")
 
