@@ -134,9 +134,12 @@ class EloRanker(AgentRanker):
         experiment: Experiment | None = None,
     ) -> PairwiseGameEvaluatorResult:
         """Run a single pairwise game between two agents on a query."""
-        assert answer_evaluator.config.pairwise, "Answer evaluator must be pairwise"
-        assert agent_a in query.answers, f"Agent {agent_a} not found in query"
-        assert agent_b in query.answers, f"Agent {agent_b} not found in query"
+        if not answer_evaluator.config.pairwise:
+            raise ValueError("Answer evaluator must be pairwise")
+        if agent_a not in query.answers:
+            raise ValueError(f"Agent {agent_a} not found in query")
+        if agent_b not in query.answers:
+            raise ValueError(f"Agent {agent_b} not found in query")
 
         answer_a = query.answers[agent_a]
         answer_b = query.answers[agent_b]
@@ -242,7 +245,8 @@ class EloRanker(AgentRanker):
         - Pick up to 3 informative opponents and high-entropy questions.
         - Stop early when Wilson CI is sufficiently tight or max budget reached.
         """
-        assert answer_evaluator.config.pairwise, "Answer evaluator must be pairwise"
+        if not answer_evaluator.config.pairwise:
+            raise ValueError("Answer evaluator must be pairwise")
 
         if new_agent not in self.agents_scores:
             self.add_new_agent(new_agent)

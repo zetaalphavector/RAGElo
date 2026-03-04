@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal, TypeVar
 
-from pydantic import BaseModel, Field, computed_field, field_serializer, model_validator
+from pydantic import BaseModel, Field, ValidationError, computed_field, field_serializer, model_validator
 from pydantic.json_schema import SkipJsonSchema
 
 from ragelo.types.answer_formats import (
@@ -153,10 +153,10 @@ class PairwiseGameEvaluatorResult(EvaluatorResult):
             if isinstance(answer_data, dict) and not isinstance(answer_data, BaseModel):
                 try:
                     data["answer"] = PairwiseEvaluationAnswer.model_validate(answer_data)
-                except Exception:
+                except ValidationError:
                     try:
                         data["answer"] = RubricAnswerFormat.model_validate(answer_data)
-                    except Exception:
+                    except ValidationError:
                         pass
         return data
 

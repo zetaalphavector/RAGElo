@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Literal, Type
 
 from pydantic import BaseModel, Field, create_model

@@ -5,17 +5,13 @@ from typing import Type
 from pydantic import BaseModel, Field, create_model
 
 from ragelo.evaluators.answer_evaluators.base_answer_evaluator import AnswerEvaluatorFactory, BaseAnswerEvaluator
-from ragelo.types.answer_formats import Criterion, CriterionEvaluationPointwise, RubricPointwiseAnswerFormat
+from ragelo.types.answer_formats import CriterionEvaluationPointwise, RubricPointwiseAnswerFormat, RubricSchema
 from ragelo.types.configurations import RubricPointwiseEvaluatorConfig
 from ragelo.types.evaluables import AgentAnswer, Document
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.query import Query
 from ragelo.types.types import AnswerEvaluatorTypes
 from ragelo.utils import call_async_fn, string_to_template
-
-
-class RubricSchema(BaseModel):
-    criteria: list[Criterion] = Field(description="The criteria to be used to evaluate the quality of the responses.")
 
 
 @AnswerEvaluatorFactory.register(AnswerEvaluatorTypes.RUBRIC_POINTWISE)
@@ -74,8 +70,13 @@ class RubricPointwiseEvaluator(BaseAnswerEvaluator):
             {{ answer.text }}
         """)
 
-    criteria_cache: dict[str, RubricSchema] = {}
-    answer_schema_cache: dict[str, Type[BaseModel]] = {}
+    criteria_cache: dict[str, RubricSchema]
+    answer_schema_cache: dict[str, Type[BaseModel]]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.criteria_cache = {}
+        self.answer_schema_cache = {}
 
     async def _build_criteria(self, query: Query, documents: list[Document]) -> RubricSchema:
         documents = self._filter_documents(query)
@@ -117,12 +118,15 @@ class RubricPointwiseEvaluator(BaseAnswerEvaluator):
                 self._build_criteria, query, list(query.retrieved_docs.values())
             )
         criteria = self.criteria_cache[query.qid]
-        self.config.llm_response_schema = self.answer_schema_cache[query.qid]
         system_prompt = self.system_prompt.render(
             expert_in=self.config.expert_in, criteria=criteria, company=self.config.company
         )
         user_prompt = self.user_prompt.render(query=query, answer=answer)
-        return LLMInputPrompt(system_prompt=system_prompt, user_message=user_prompt)
+        return LLMInputPrompt(
+            system_prompt=system_prompt,
+            user_message=user_prompt,
+            llm_response_schema=self.answer_schema_cache[query.qid],
+        )
 
     def _process_answer(self, llm_response: LLMResponseType, query: Query) -> LLMResponseType:
         response_dict = llm_response.parsed_answer.model_dump()
