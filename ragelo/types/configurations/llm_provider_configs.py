@@ -7,7 +7,7 @@ from pydantic import BaseModel, SecretStr
 
 class LLMProviderConfig(BaseModel):
     temperature: float | None = 0.1
-    max_tokens: int = 2048
+    max_tokens: int = 4096
     seed: int | None = 42
     json_mode: bool = False
     reasoning_effort: Literal["low", "medium", "high"] | None = None

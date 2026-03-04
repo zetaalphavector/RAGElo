@@ -72,7 +72,18 @@ class TestExperiment:
         with pytest.raises(ValueError):
             empty_experiment.add_retrieved_doc("Test", "invalid_qid", "doc3")
 
-    def test_add_agent_answer(self, empty_experiment):
+    def test_add_retrieved_doc_preserves_retrieved_by(self, empty_experiment):
+        """Test that re-adding a document merges retrieved_by info."""
+        qid = empty_experiment.add_query("Test query", query_id="test1")
+        empty_experiment.add_retrieved_doc("Test doc", query_id=qid, doc_id="doc1", score=1.0, agent="agent1")
+        assert empty_experiment[qid].retrieved_docs["doc1"].retrieved_by == {"agent1": 1.0}
+
+        # Re-add same doc with a different agent — retrieved_by should merge
+        doc = Document(qid=qid, did="doc1", text="Test doc")
+        doc.retrieved_by = {"agent2": 0.5}
+        empty_experiment[qid].add_retrieved_doc(doc, agent="agent2")
+        assert "agent1" in empty_experiment[qid].retrieved_docs["doc1"].retrieved_by
+        assert "agent2" in empty_experiment[qid].retrieved_docs["doc1"].retrieved_by
         """Test adding agent answers manually"""
         qid = empty_experiment.add_query("Test query", query_id="test1")
 
@@ -113,6 +124,8 @@ class TestExperiment:
             assert loaded_experiment[qid].query == experiment[qid].query
             assert len(loaded_experiment[qid].retrieved_docs) == len(experiment[qid].retrieved_docs)
             assert len(loaded_experiment[qid].answers) == len(experiment[qid].answers)
+            for did, doc in experiment[qid].retrieved_docs.items():
+                assert loaded_experiment[qid].retrieved_docs[did].retrieved_by == doc.retrieved_by
 
     def test_get_qrels(self, tmp_path, experiment):
         """Test getting relevance judgments"""
@@ -217,6 +230,89 @@ class TestExperiment:
         assert evaluation.answer.comparison_reasoning == "A is better"
         assert evaluation.agent_a == "agent1"
         assert evaluation.agent_b == "agent2"
+
+    def test_pairwise_nested_results_round_trip(self, tmp_path, base_experiment_config):
+        """Test that nested a_vs_b_result and b_vs_a_result survive save/load."""
+        save_path = tmp_path / "test_experiment.json"
+        results_path = tmp_path / "nested_results.jsonl"
+        base_experiment_config["save_on_disk"] = True
+        base_experiment_config["save_path"] = str(save_path)
+        base_experiment_config["evaluations_cache_path"] = str(results_path)
+        experiment = Experiment(**base_experiment_config)
+
+        query = experiment["0"]
+        game = query.add_pairwise_game("agent1", "agent2")
+
+        sub_a = PairwiseGameEvaluatorResult(
+            qid="0",
+            evaluator_name="pairwise",
+            agent_a="agent1",
+            agent_b="agent2",
+            answer=PairwiseEvaluationAnswer(
+                answer_a_analysis="A is good",
+                answer_b_analysis="B is ok",
+                comparison_reasoning="A wins",
+                winner="A",
+            ),
+        )
+        sub_b = PairwiseGameEvaluatorResult(
+            qid="0",
+            evaluator_name="pairwise",
+            agent_a="agent1",
+            agent_b="agent2",
+            answer=PairwiseEvaluationAnswer(
+                answer_a_analysis="B is good",
+                answer_b_analysis="A is ok",
+                comparison_reasoning="B wins",
+                winner="B",
+            ),
+        )
+        parent = PairwiseGameEvaluatorResult(
+            qid="0",
+            evaluator_name="pairwise",
+            agent_a="agent1",
+            agent_b="agent2",
+            answer=PairwiseEvaluationAnswer(
+                answer_a_analysis="Combined A",
+                answer_b_analysis="Combined B",
+                comparison_reasoning="Overall A",
+                winner="A",
+            ),
+            a_vs_b_result=sub_a,
+            b_vs_a_result=sub_b,
+        )
+        experiment.add_evaluation((query, game), parent, should_save=True)
+        experiment.save()
+
+        # Reload from saved experiment
+        loaded = Experiment(
+            experiment_name="test_experiment",
+            save_path=str(save_path),
+            save_on_disk=True,
+            evaluations_cache_path=str(results_path),
+        )
+        loaded_query = loaded["0"]
+        loaded_game = loaded_query.pairwise_games[game.game_id]
+        loaded_eval = loaded_game.evaluations["pairwise"]
+        assert isinstance(loaded_eval, PairwiseGameEvaluatorResult)
+
+        assert loaded_eval.a_vs_b_result is not None
+        assert loaded_eval.b_vs_a_result is not None
+        assert loaded_eval.a_vs_b_result.winner == "A"
+        assert loaded_eval.b_vs_a_result.winner == "B"
+        assert loaded_eval.winner == "A"
+
+    def test_pairwise_without_nested_results(self, experiment, pairwise_answer_evaluation):
+        """Test that pairwise results without nested sub-results still work."""
+        query = experiment["0"]
+        game = query.add_pairwise_game("agent1", "agent2")
+        experiment.add_evaluation((query, game), pairwise_answer_evaluation, should_save=False)
+
+        evaluation = game.evaluations["pairwise"]
+        assert isinstance(evaluation, PairwiseGameEvaluatorResult)
+        assert evaluation.a_vs_b_result is None
+        assert evaluation.b_vs_a_result is None
+        assert evaluation.winner == "A"
 
     def test_add_elo_tournament(self, experiment, elo_tournament_result):
         """Test adding Elo tournament results"""

@@ -5,8 +5,7 @@ import logging
 from typing import TypeVar
 
 from openai import AsyncAzureOpenAI, AsyncOpenAI
-from openai.types.responses import ResponseTextConfigParam
-from openai.types.shared_params import ResponseFormatJSONObject
+from openai.types.responses import ResponseFormatTextJSONSchemaConfigParam, ResponseTextConfigParam
 from pydantic import BaseModel, ValidationError
 from tenacity import before_sleep_log, retry, stop_after_attempt, wait_random_exponential
 
@@ -87,7 +86,13 @@ class OpenAIProvider(BaseLLMProvider):
                     model=self.config.model,
                     temperature=self.config.temperature,
                     max_output_tokens=self.config.max_tokens,
-                    text=ResponseTextConfigParam(format=ResponseFormatJSONObject(type="json_object")),
+                    text=ResponseTextConfigParam(
+                        format=ResponseFormatTextJSONSchemaConfigParam(
+                            name=schema_dict.get("title", "response"),
+                            schema=schema_dict,
+                            type="json_schema",
+                        )
+                    ),
                     reasoning={"effort": self.config.reasoning_effort} if self.config.reasoning_effort else None,
                 )
             except Exception as e:

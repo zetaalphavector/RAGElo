@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal, TypeVar
 
-from pydantic import BaseModel, Field, computed_field, field_serializer, model_validator
+from pydantic import BaseModel, Field, ValidationError, computed_field, field_serializer, model_validator
 from pydantic.json_schema import SkipJsonSchema
 
 from ragelo.types.answer_formats import (
@@ -14,6 +14,7 @@ from ragelo.types.answer_formats import (
     RDNAMMultipleAnnotatorsNoAspectsAnswer,
     RDNAMNoAspectsAnswer,
     RetrievalEvaluationAnswer,
+    RubricAnswerFormat,
 )
 
 
@@ -139,7 +140,9 @@ class PairwiseGameEvaluatorResult(EvaluatorResult):
 
     agent_a: Annotated[str, SkipJsonSchema]
     agent_b: Annotated[str, SkipJsonSchema]
-    answer: PairwiseEvaluationAnswer | None = None
+    answer: PairwiseEvaluationAnswer | RubricAnswerFormat | None = None
+    a_vs_b_result: PairwiseGameEvaluatorResult | None = None
+    b_vs_a_result: PairwiseGameEvaluatorResult | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -148,8 +151,13 @@ class PairwiseGameEvaluatorResult(EvaluatorResult):
         if isinstance(data, dict) and "answer" in data and data["answer"] is not None:
             answer_data = data["answer"]
             if isinstance(answer_data, dict) and not isinstance(answer_data, BaseModel):
-                # Deserialize as PairwiseEvaluationAnswer by default
-                data["answer"] = PairwiseEvaluationAnswer.model_validate(answer_data)
+                try:
+                    data["answer"] = PairwiseEvaluationAnswer.model_validate(answer_data)
+                except ValidationError:
+                    try:
+                        data["answer"] = RubricAnswerFormat.model_validate(answer_data)
+                    except ValidationError:
+                        pass
         return data
 
     @property

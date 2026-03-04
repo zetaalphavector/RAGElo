@@ -5,6 +5,8 @@ from ragelo.types.configurations.answer_evaluator_configs import (
     CustomPromptAnswerEvaluatorConfig,
     PairwiseDomainExpertEvaluatorConfig,
     PairwiseEvaluatorConfig,
+    RubricPairwiseEvaluatorConfig,
+    RubricPointwiseEvaluatorConfig,
 )
 from ragelo.types.configurations.base_configs import BaseConfig, BaseEvaluatorConfig
 from ragelo.types.configurations.cli_configs import CLIConfig
@@ -42,4 +44,6 @@ __all__ = [
     "ReasonerEvaluatorConfig",
     "CustomPromptEvaluatorConfig",
     "DomainExpertEvaluatorConfig",
+    "RubricPairwiseEvaluatorConfig",
+    "RubricPointwiseEvaluatorConfig",
 ]

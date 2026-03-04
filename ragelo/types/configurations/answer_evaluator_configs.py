@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from typing import Callable, Optional
+from typing import Any, Callable, Optional, Type
 
 from jinja2 import Template
-from pydantic import Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 
+from ragelo.types.answer_formats import Criterion, RubricAnswerFormat, RubricPointwiseAnswerFormat
 from ragelo.types.configurations.base_configs import BaseEvaluatorConfig
 from ragelo.types.evaluables import Document
 from ragelo.types.types import AnswerEvaluatorTypes
@@ -116,3 +117,30 @@ class PairwiseDomainExpertEvaluatorConfig(PairwiseEvaluatorConfig):
         "submitted the query works for. that the domain belongs to. "
         "(e.g.: ChemCorp, CS Inc.)",
     )
+
+
+class RubricPairwiseEvaluatorConfig(PairwiseDomainExpertEvaluatorConfig):
+    evaluator_name: AnswerEvaluatorTypes = AnswerEvaluatorTypes.RUBRIC_PAIRWISE
+    llm_response_schema: Optional[Type[BaseModel] | dict[str, Any]] = Field(
+        default=RubricAnswerFormat,
+        description="The response schema for the LLM.",
+    )
+    n_criteria: int = Field(default=5, description="The number of criteria to use for the evaluator.")
+    rubrics: Optional[dict[str, list[Criterion]]] = Field(
+        default=None,
+        description=(
+            "The cache of criteria for the evaluator. Maps a query_id to a list of Criterion objects. "
+            "If provided, the evaluator will skip creating the rubric based on the retrieved documents "
+            "and use this instead."
+        ),
+    )
+
+
+class RubricPointwiseEvaluatorConfig(PairwiseDomainExpertEvaluatorConfig):
+    evaluator_name: AnswerEvaluatorTypes = AnswerEvaluatorTypes.RUBRIC_POINTWISE
+    llm_response_schema: Optional[Type[BaseModel] | dict[str, Any]] = Field(
+        default=RubricPointwiseAnswerFormat,
+        description="The response schema for the LLM.",
+    )
+    pairwise: bool = False
+    n_criteria: int = Field(default=5, description="The number of criteria to use for the evaluator.")

@@ -114,6 +114,18 @@ class TestRetrievalEvaluator:
         )
         assert isinstance(custom_evaluator, BaseRetrievalEvaluator)
 
+    def test_evaluate_all_evaluables(self, llm_provider_mock_retrieval, experiment, base_retrieval_eval_config):
+        evaluator = RetrievalEvaluator.from_config(
+            config=base_retrieval_eval_config, llm_provider=llm_provider_mock_retrieval
+        )
+        query = experiment["0"]
+        evaluator.evaluate_all_evaluables(query)
+        evaluator_name = str(base_retrieval_eval_config.evaluator_name)
+        for doc in query.retrieved_docs.values():
+            assert evaluator_name in doc.evaluations
+            evaluation = doc.evaluations[evaluator_name]
+            assert isinstance(evaluation, RetrievalEvaluatorResult)
+
 
 class TestRDNAMEvaluator:
     def test_process_single_answer(self, llm_provider_mock_rdnam, rdnam_config, experiment):
@@ -333,7 +345,7 @@ class TestReadmeExamples:
                 description="A short explanation of why you think the document is relevant or irrelevant."
             )
 
-        mocked_answer = LLMResponseType(
+        mocked_answer: LLMResponseType[ResponseSchema] = LLMResponseType(
             raw_answer=json.dumps(answer_dict), parsed_answer=ResponseSchema.model_validate(answer_dict)
         )
         evaluator = get_retrieval_evaluator(

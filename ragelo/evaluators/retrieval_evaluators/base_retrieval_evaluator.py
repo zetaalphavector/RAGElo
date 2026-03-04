@@ -100,7 +100,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
                 input=llm_input,
                 response_schema=answer_type,
             )
-            llm_response = self._process_answer(llm_response)
+            llm_response = self._process_answer(llm_response, query)
             parsed_answer = llm_response.parsed_answer
             raw_answer = llm_response.raw_answer
         except Exception as e:
@@ -117,6 +117,9 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             answer=parsed_answer,
             exception=exc,
         )
+
+    def _get_all_evaluables(self, query: Query) -> list[Evaluable]:
+        return list(query.retrieved_docs.values())
 
     def _get_tuples_to_evaluate(self, experiment: Experiment) -> Sequence[tuple[Query, Evaluable]]:
         """

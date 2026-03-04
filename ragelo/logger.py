@@ -23,7 +23,7 @@ def configure_logging(level: int | str = "WARNING", *, rich: bool = True) -> Non
     lib_logger.handlers = [h for h in lib_logger.handlers if isinstance(h, logging.NullHandler)]
 
     if rich:
-        console = Console()
+        console = Console(soft_wrap=True, width=10_000)
         handler: logging.Handler = RichHandler(console=console, rich_tracebacks=True, show_time=False, show_path=False)
         handler.setFormatter(logging.Formatter("%(message)s"))
     else:

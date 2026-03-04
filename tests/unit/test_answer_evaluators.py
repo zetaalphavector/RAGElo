@@ -1,4 +1,7 @@
 import warnings
+from unittest.mock import AsyncMock
+
+from pydantic import BaseModel, Field, create_model
 
 from ragelo import get_answer_evaluator
 from ragelo.evaluators.answer_evaluators import (
@@ -8,11 +11,20 @@ from ragelo.evaluators.answer_evaluators import (
     CustomPromptEvaluator,
     PairwiseAnswerEvaluator,
     PairwiseDomainExpertEvaluator,
+    RubricPairwiseEvaluator,
+    RubricPointwiseEvaluator,
+)
+from ragelo.types.answer_formats import (
+    Criterion,
+    PairwiseEvaluationAnswer,
+    RubricAnswerFormat,
+    RubricPointwiseAnswerFormat,
+    RubricSchema,
 )
 from ragelo.types.evaluables import AgentAnswer
-from ragelo.types.formats import LLMInputPrompt
+from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.query import Query
-from ragelo.types.results import AnswerEvaluatorResult, PairwiseEvaluationAnswer, PairwiseGameEvaluatorResult
+from ragelo.types.results import AnswerEvaluatorResult, PairwiseGameEvaluatorResult
 
 
 def test_get_by_name(llm_provider_mock):
@@ -126,6 +138,21 @@ class TestAnswerEvaluator:
                 assert evaluation.qid == query.qid
                 assert evaluation.agent_a == game.agent_a_answer.agent
                 assert evaluation.agent_b == game.agent_b_answer.agent
+
+    def test_evaluate_all_evaluables_pointwise(
+        self, llm_provider_answer_mock, experiment, base_answer_eval_config, answer_eval_format
+    ):
+        evaluator = BaseAnswerEvaluator.from_config(
+            config=base_answer_eval_config, llm_provider=llm_provider_answer_mock
+        )
+        query = experiment["0"]
+        evaluator.evaluate_all_evaluables(query)
+        evaluator_name = str(base_answer_eval_config.evaluator_name)
+        for answer in query.answers.values():
+            assert evaluator_name in answer.evaluations
+            evaluation = answer.evaluations[evaluator_name]
+            assert isinstance(evaluation, AnswerEvaluatorResult)
+            assert isinstance(evaluation.answer, answer_eval_format)
 
 
 class TestPairwiseAnswerEvaluator:
@@ -340,3 +367,263 @@ class TestFilterDocuments:
         query = experiment["0"]
         docs = evaluator._filter_documents(query)
         assert len(docs) > 0
+
+
+class TestBidirectionalPairwise:
+    """Tests for bidirectional pairwise evaluation and winner reconciliation."""
+
+    def _make_pairwise_response(self, winner: str) -> LLMResponseType[PairwiseEvaluationAnswer]:
+        answer = PairwiseEvaluationAnswer(
+            answer_a_analysis="Analysis A",
+            answer_b_analysis="Analysis B",
+            comparison_reasoning="Comparison",
+            winner=winner,
+        )
+        return LLMResponseType(raw_answer=answer.model_dump_json(), parsed_answer=answer)
+
+    def test_both_directions_agree_a(self, llm_provider_mock, experiment, pairwise_answer_eval_config):
+        """When both directions say A wins (normal=A, reversed=B meaning original A), final winner is A."""
+        responses = [self._make_pairwise_response("A"), self._make_pairwise_response("B")]
+        llm_provider_mock.async_call_mocker = AsyncMock(side_effect=responses)
+        evaluator = PairwiseAnswerEvaluator.from_config(
+            config=pairwise_answer_eval_config, llm_provider=llm_provider_mock
+        )
+        query = experiment["0"]
+        result = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
+        assert isinstance(result, PairwiseGameEvaluatorResult)
+        assert result.answer is not None
+        assert result.answer.winner == "A"
+        assert result.a_vs_b_result is not None
+        assert result.b_vs_a_result is not None
+
+    def test_both_directions_agree_b(self, llm_provider_mock, experiment, pairwise_answer_eval_config):
+        """When both directions say B wins (normal=B, reversed=A meaning original B), final winner is B."""
+        responses = [self._make_pairwise_response("B"), self._make_pairwise_response("A")]
+        llm_provider_mock.async_call_mocker = AsyncMock(side_effect=responses)
+        evaluator = PairwiseAnswerEvaluator.from_config(
+            config=pairwise_answer_eval_config, llm_provider=llm_provider_mock
+        )
+        query = experiment["0"]
+        result = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
+        assert isinstance(result, PairwiseGameEvaluatorResult)
+        assert result.answer is not None
+        assert result.answer.winner == "B"
+
+    def test_disagreement_results_in_tie(self, llm_provider_mock, experiment, pairwise_answer_eval_config):
+        """When directions disagree (both say A in their own frame), result is a tie."""
+        responses = [self._make_pairwise_response("A"), self._make_pairwise_response("A")]
+        llm_provider_mock.async_call_mocker = AsyncMock(side_effect=responses)
+        evaluator = PairwiseAnswerEvaluator.from_config(
+            config=pairwise_answer_eval_config, llm_provider=llm_provider_mock
+        )
+        query = experiment["0"]
+        result = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
+        assert isinstance(result, PairwiseGameEvaluatorResult)
+        assert result.answer is not None
+        assert result.answer.winner == "C"
+
+    def test_sub_results_are_stored(self, llm_provider_mock, experiment, pairwise_answer_eval_config):
+        """Both directional sub-results should be stored on the parent result."""
+        responses = [self._make_pairwise_response("A"), self._make_pairwise_response("B")]
+        llm_provider_mock.async_call_mocker = AsyncMock(side_effect=responses)
+        evaluator = PairwiseAnswerEvaluator.from_config(
+            config=pairwise_answer_eval_config, llm_provider=llm_provider_mock
+        )
+        query = experiment["0"]
+        result = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
+        assert result.a_vs_b_result is not None
+        assert result.b_vs_a_result is not None
+        assert result.a_vs_b_result.answer is not None
+        assert result.b_vs_a_result.answer is not None
+        assert result.a_vs_b_result.answer.winner == "A"
+        assert result.b_vs_a_result.answer.winner == "B"
+
+    def test_llm_response_schema_from_config(
+        self, llm_provider_answer_mock, experiment, base_answer_eval_config, answer_eval_format
+    ):
+        """When llm_response_schema is set on config, it should be used as the response schema."""
+        evaluator = BaseAnswerEvaluator.from_config(
+            config=base_answer_eval_config, llm_provider=llm_provider_answer_mock
+        )
+        query = experiment["0"]
+        answer = query.answers["agent1"]
+        result = evaluator.evaluate(query, answer)
+        call_args = llm_provider_answer_mock.async_call_mocker.call_args_list
+        assert call_args[0].kwargs.get("response_schema") or call_args[0][0][1] == answer_eval_format
+        assert isinstance(result.answer, answer_eval_format)
+
+
+class TestRubricPairwiseEvaluator:
+    """Tests for RubricPairwiseEvaluator."""
+
+    def _make_criteria(self):
+        return [
+            Criterion(criterion_name="accuracy", evidence=["doc1"], short_question="Is the answer accurate?"),
+            Criterion(criterion_name="completeness", evidence=["doc2"], short_question="Is the answer complete?"),
+            Criterion(criterion_name="clarity", evidence=[], short_question="Is the answer clear?"),
+        ]
+
+    def _make_rubric_schema(self):
+        return RubricSchema(criteria=self._make_criteria())
+
+    def _make_evaluation_response(self, winners: list[str]):
+        criteria = self._make_criteria()
+        EvalSchema = create_model(
+            "EvaluationSchema",
+            **{
+                c.criterion_name: create_model(
+                    c.criterion_name,
+                    reasoning=(str, Field(description="reasoning")),
+                    winner=(str, Field(description="winner")),
+                )
+                for c in criteria
+            },
+        )  # type: ignore[call-overload]
+        data = {}
+        for c, w in zip(criteria, winners):
+            SubModel = EvalSchema.model_fields[c.criterion_name].annotation
+            data[c.criterion_name] = SubModel(reasoning=f"{c.criterion_name} reasoning", winner=w)
+        return EvalSchema(**data)
+
+    def test_rubric_pairwise_with_presupplied_rubrics(self, llm_provider_mock, experiment):
+        """When rubrics are pre-supplied, the evaluator skips rubric generation and only calls LLM for evaluation."""
+        from ragelo.types.configurations import RubricPairwiseEvaluatorConfig
+
+        rubrics = {"0": self._make_criteria(), "1": self._make_criteria()}
+        config = RubricPairwiseEvaluatorConfig(
+            expert_in="AI research",
+            rubrics=rubrics,
+            force=True,
+        )
+        eval_response = self._make_evaluation_response(["A", "B", "A"])
+
+        responses: list[LLMResponseType] = [
+            # For bidirectional: normal direction
+            LLMResponseType(raw_answer="eval", parsed_answer=eval_response),
+            # reversed direction
+            LLMResponseType(raw_answer="eval", parsed_answer=eval_response),
+        ]
+        llm_provider_mock.async_call_mocker = AsyncMock(side_effect=responses)
+
+        evaluator = RubricPairwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
+        assert "0" in evaluator.criteria_cache
+        assert "1" in evaluator.criteria_cache
+
+        query = experiment["0"]
+        result = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
+        assert isinstance(result, PairwiseGameEvaluatorResult)
+        assert result.answer is not None
+        assert isinstance(result.answer, RubricAnswerFormat)
+        assert result.answer.agent_a_wins == 2
+        assert result.answer.agent_b_wins == 1
+
+    def test_rubric_pairwise_process_answer_tallies(self, llm_provider_mock, experiment):
+        """Test that _process_answer correctly tallies per-criterion winners."""
+        from ragelo.types.configurations import RubricPairwiseEvaluatorConfig
+
+        rubrics = {"0": self._make_criteria()}
+        config = RubricPairwiseEvaluatorConfig(expert_in="AI", rubrics=rubrics, force=True)
+        evaluator = RubricPairwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
+
+        eval_response = self._make_evaluation_response(["A", "A", "B"])
+        llm_response: LLMResponseType = LLMResponseType(raw_answer="test", parsed_answer=eval_response)
+        query = experiment["0"]
+        processed = evaluator._process_answer(llm_response, query)
+        answer = processed.parsed_answer
+        assert isinstance(answer, RubricAnswerFormat)
+        assert answer.agent_a_wins == 2
+        assert answer.agent_b_wins == 1
+        assert answer.winner == "A"
+
+    def test_rubric_pairwise_d_counted_as_equally_bad(self, llm_provider_mock, experiment):
+        """Winner 'D' should be normalized to 'C' and counted as equally_bad in tally."""
+        from ragelo.types.configurations import RubricPairwiseEvaluatorConfig
+
+        rubrics = {"0": self._make_criteria()}
+        config = RubricPairwiseEvaluatorConfig(expert_in="AI", rubrics=rubrics, force=True)
+        evaluator = RubricPairwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
+
+        eval_response = self._make_evaluation_response(["D", "C", "A"])
+        llm_response: LLMResponseType = LLMResponseType(raw_answer="test", parsed_answer=eval_response)
+        query = experiment["0"]
+        processed = evaluator._process_answer(llm_response, query)
+        answer = processed.parsed_answer
+        assert isinstance(answer, RubricAnswerFormat)
+        # D is converted to C, then "C" goes into equally_good
+        # After D→C normalization: winners are [C, C, A]
+        assert answer.agent_a_wins == 1
+        assert answer.equally_good == 2
+        assert answer.winner == "A"
+
+    def test_build_evaluation_schema(self, llm_provider_mock):
+        """_build_evaluation_schema should create a valid Pydantic model with per-criterion fields."""
+        from ragelo.types.configurations import RubricPairwiseEvaluatorConfig
+
+        config = RubricPairwiseEvaluatorConfig(expert_in="AI", force=True)
+        evaluator = RubricPairwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
+        schema = self._make_rubric_schema()
+        model = evaluator._build_evaluation_schema(schema)
+        assert issubclass(model, BaseModel)
+        assert "accuracy" in model.model_fields
+        assert "completeness" in model.model_fields
+        assert "clarity" in model.model_fields
+
+
+class TestRubricPointwiseEvaluator:
+    """Tests for RubricPointwiseEvaluator."""
+
+    def _make_criteria(self):
+        return [
+            Criterion(criterion_name="accuracy", evidence=["doc1"], short_question="Is the answer accurate?"),
+            Criterion(criterion_name="completeness", evidence=["doc2"], short_question="Is the answer complete?"),
+        ]
+
+    def _make_rubric_schema(self):
+        return RubricSchema(criteria=self._make_criteria())
+
+    def test_rubric_pointwise_process_answer(self, llm_provider_mock, experiment):
+        """Test that _process_answer computes average score correctly."""
+        from ragelo.types.configurations import RubricPointwiseEvaluatorConfig
+
+        config = RubricPointwiseEvaluatorConfig(expert_in="AI", force=True)
+        evaluator = RubricPointwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
+
+        # Manually populate criteria cache
+        criteria = self._make_criteria()
+        rubric = RubricSchema(criteria=criteria)
+        evaluator.criteria_cache["0"] = rubric
+
+        EvalSchema = create_model(
+            "EvaluationSchema",
+            **{
+                c.criterion_name: create_model(
+                    c.criterion_name,
+                    reasoning=(str, Field(description="reasoning")),
+                    fulfillment=(bool, Field(description="fulfillment")),
+                )
+                for c in criteria
+            },
+        )  # type: ignore[call-overload]
+        SubAccuracy = EvalSchema.model_fields["accuracy"].annotation
+        SubCompleteness = EvalSchema.model_fields["completeness"].annotation
+        eval_response = EvalSchema(
+            accuracy=SubAccuracy(reasoning="acc reason", fulfillment=True),
+            completeness=SubCompleteness(reasoning="comp reason", fulfillment=False),
+        )
+        llm_response: LLMResponseType = LLMResponseType(raw_answer="test", parsed_answer=eval_response)
+        query = experiment["0"]
+        processed = evaluator._process_answer(llm_response, query)
+        answer = processed.parsed_answer
+        assert isinstance(answer, RubricPointwiseAnswerFormat)
+        assert len(answer.criteria) == 2
+        assert answer.average_score == 0.5
+
+    def test_rubric_pointwise_get_by_name(self, llm_provider_mock):
+        """Rubric pointwise evaluator should be accessible via factory."""
+        evaluator = get_answer_evaluator("rubric_pointwise", llm_provider_mock, expert_in="AI")
+        assert isinstance(evaluator, RubricPointwiseEvaluator)
+
+    def test_rubric_pairwise_get_by_name(self, llm_provider_mock):
+        """Rubric pairwise evaluator should be accessible via factory."""
+        evaluator = get_answer_evaluator("rubric_pairwise", llm_provider_mock, expert_in="AI")
+        assert isinstance(evaluator, RubricPairwiseEvaluator)

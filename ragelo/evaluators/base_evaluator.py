@@ -66,6 +66,60 @@ class BaseEvaluator(ABC):
         n_threads = n_threads or self.config.n_processes
         call_async_fn(self._evaluate_experiment_async, experiment, n_threads)
 
+    def evaluate_all_evaluables(self, query: Query, n_threads: int | None = None):
+        """Evaluate all evaluables for a single query, useful for incremental workflows.
+        Args:
+            query: The query whose evaluables should be evaluated.
+            n_threads: Maximum concurrent LLM calls. Defaults to ``config.n_processes``.
+        """
+        n_threads = n_threads or self.config.n_processes
+        call_async_fn(self._evaluate_all_evaluables_async, query, n_threads)
+
+    async def _evaluate_all_evaluables_async(self, query: Query, n_threads: int):
+        tuples_to_eval = [(query, e) for e in self._get_all_evaluables(query)]
+        pbar = get_pbar(
+            len(tuples_to_eval),
+            self.config.rich_print,
+            desc=f"Evaluating {self.evaluable_name}s for query {query.qid}",
+        )
+        awaitables_ended = False
+        pending: set[asyncio.Future] = set()
+        tuples_iter = iter(tuples_to_eval)
+        future_to_tuple: dict[asyncio.Future, tuple[Query, Evaluable]] = {}
+        failed = 0
+        evaluations = 0
+        while pending or not awaitables_ended:
+            while len(pending) < n_threads and not awaitables_ended:
+                try:
+                    eval_tuple = next(tuples_iter)
+                except StopIteration:
+                    awaitables_ended = True
+                else:
+                    future = asyncio.ensure_future(self.evaluate_async(eval_tuple))
+                    pending.add(future)
+                    future_to_tuple[future] = eval_tuple
+            if not pending:
+                break
+            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+            while done:
+                finished = done.pop()
+                evaluation = await finished
+                eval_tuple = future_to_tuple.pop(finished)
+                evaluations += 1
+                pbar.update()
+                if evaluation.exception:
+                    failed += 1
+                    continue
+                query.add_evaluation(eval_tuple[1], evaluation, exist_ok=True)
+        pbar.close()
+        if self.config.show_results:
+            render_failed_evaluations(evaluations, failed, self.config.rich_print)
+
+    @abstractmethod
+    def _get_all_evaluables(self, query: Query) -> list[Evaluable]:
+        """Returns all evaluables for a given query"""
+        raise NotImplementedError
+
     @abstractmethod
     async def evaluate_async(self, eval_sample: tuple[Query, Evaluable]) -> EvaluatorResult:
         """Evaluate a single query and evaluable asynchronously."""
@@ -124,6 +178,6 @@ class BaseEvaluator(ABC):
     def _get_tuples_to_evaluate(self, experiment: Experiment) -> Sequence[tuple[Query, Evaluable]]:
         raise NotImplementedError
 
-    def _process_answer(self, llm_response: LLMResponseType[T_Result]) -> LLMResponseType[T_Result]:
+    def _process_answer(self, llm_response: LLMResponseType[T_Result], query: Query) -> LLMResponseType[T_Result]:
         """Processes the raw answer returned by the LLM. Should be implemented by the subclass if needed."""
         return llm_response

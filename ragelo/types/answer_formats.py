@@ -103,3 +103,48 @@ class RDNAMMultipleAnnotatorsNoAspectsAnswer(RetrievalEvaluationAnswer):
     annotator_3: RDNAMNoAspectsAnswer
     annotator_4: RDNAMNoAspectsAnswer
     annotator_5: RDNAMNoAspectsAnswer
+
+
+class Criterion(BaseModel):
+    criterion_name: str = Field(
+        description="The name of the criterion to be used to evaluate the quality of the responses."
+    )
+    evidence: list[str] = Field(
+        description="The list of documents IDs or snippets that support the criterion. "
+        "If no documents support the criterion, leave this list empty."
+    )
+    short_question: str = Field(
+        description="A short, yes/no question that can be used to evaluate the quality of the responses."
+    )
+
+
+class CriterionEvaluation(BaseModel):
+    criterion: Criterion = Field(..., description="The criterion used for evaluating the answer quality")
+    reasoning: str = Field(..., description="The LLM reasoning for the winner of the criteria")
+    winner: Literal["A", "B", "C"] = Field(..., description="The winner of the criteria")
+
+
+class RubricAnswerFormat(EvaluationAnswer):
+    criteria: list[CriterionEvaluation] = Field(..., description="The criteria used for evaluating the answer quality")
+    agent_a_wins: int = Field(..., description="The number of criteria that agent A wins")
+    agent_b_wins: int = Field(..., description="The number of criteria that agent B wins")
+    equally_good: int = Field(..., description="The number of criteria that agent A and agent B are equally good")
+    equally_bad: int = Field(..., description="The number of criteria that agent A and agent B are equally bad")
+    winner: Literal["A", "B", "C"] = Field(..., description="The winner of the pairwise comparison")
+
+
+class CriterionEvaluationPointwise(BaseModel):
+    criterion: Criterion = Field(..., description="The criterion used for evaluating the answer quality")
+    reasoning: str = Field(..., description="The LLM reasoning for the score of the criterion")
+    fulfillment: bool = Field(..., description="Whether the criterion is fully fulfilled by the answer")
+
+
+class RubricPointwiseAnswerFormat(EvaluationAnswer):
+    criteria: list[CriterionEvaluationPointwise] = Field(
+        ..., description="The criteria used for evaluating the answer quality"
+    )
+    average_score: float = Field(..., description="The average score of the criteria")
+
+
+class RubricSchema(BaseModel):
+    criteria: list[Criterion] = Field(description="The criteria to be used to evaluate the quality of the responses.")
