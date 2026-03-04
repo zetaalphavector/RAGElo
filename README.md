@@ -47,6 +47,29 @@ print(result.answer.model_dump_json())
 
 In most cases `result.answer` contains a `BaseModel` from Pydantic with the parsed judge response. For more details, check the [answer_formats.py](https://github.com/zetaalphavector/RAGElo/blob/master/ragelo/types/answer_formats.py) file. 
 
+### 🔄 Evaluating a single query incrementally
+
+If queries arrive one at a time (e.g., in an online or streaming workflow), you can evaluate all evaluables for a single query without constructing a full experiment:
+
+```python
+from ragelo import get_retrieval_evaluator, get_answer_evaluator
+from ragelo.types.query import Query
+from ragelo.types.evaluables import Document, AgentAnswer
+
+query = Query(qid="q0", query="What is the capital of Brazil?")
+query.add_retrieved_doc(Document(qid="q0", did="d0", text="Brasília is the capital of Brazil."))
+query.add_agent_answer(AgentAnswer(qid="q0", agent="agent1", text="Brasília."))
+
+retrieval_evaluator = get_retrieval_evaluator("reasoner", llm_provider="openai")
+retrieval_evaluator.evaluate_all_evaluables(query)
+
+# Each document now has an evaluation attached
+for doc in query.retrieved_docs.values():
+    print(doc.did, doc.evaluations)
+```
+
+This calls the same evaluation logic as `evaluate_experiment` but scoped to one query, making it suitable for incremental pipelines.
+
 ### 📜 Evaluating multiple documents or answers
 
 RAGElo supports `Experiments` to keep track of which documents and answers were already evaluated and to compute overall scores for each Agent:

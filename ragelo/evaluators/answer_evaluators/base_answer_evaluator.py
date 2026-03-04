@@ -311,6 +311,11 @@ class BaseAnswerEvaluator(BaseEvaluator):
             exception=exc,
         )
 
+    def _get_all_evaluables(self, query: Query) -> list[Evaluable]:
+        if self.config.pairwise:
+            return list(query.pairwise_games.values())
+        return list(query.answers.values())
+
     def _get_tuples_to_evaluate(self, experiment: Experiment) -> Sequence[tuple[Query, Evaluable]]:
         """
         Creates the list of pairs (query, evaluable) to evaluate

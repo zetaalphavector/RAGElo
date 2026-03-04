@@ -127,6 +127,21 @@ class TestAnswerEvaluator:
                 assert evaluation.agent_a == game.agent_a_answer.agent
                 assert evaluation.agent_b == game.agent_b_answer.agent
 
+    def test_evaluate_all_evaluables_pointwise(
+        self, llm_provider_answer_mock, experiment, base_answer_eval_config, answer_eval_format
+    ):
+        evaluator = BaseAnswerEvaluator.from_config(
+            config=base_answer_eval_config, llm_provider=llm_provider_answer_mock
+        )
+        query = experiment["0"]
+        evaluator.evaluate_all_evaluables(query)
+        evaluator_name = str(base_answer_eval_config.evaluator_name)
+        for answer in query.answers.values():
+            assert evaluator_name in answer.evaluations
+            evaluation = answer.evaluations[evaluator_name]
+            assert isinstance(evaluation, AnswerEvaluatorResult)
+            assert isinstance(evaluation.answer, answer_eval_format)
+
 
 class TestPairwiseAnswerEvaluator:
     def test_evaluate_single_game(

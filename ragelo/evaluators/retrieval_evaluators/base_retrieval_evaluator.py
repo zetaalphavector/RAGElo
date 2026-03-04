@@ -118,6 +118,9 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             exception=exc,
         )
 
+    def _get_all_evaluables(self, query: Query) -> list[Evaluable]:
+        return list(query.retrieved_docs.values())
+
     def _get_tuples_to_evaluate(self, experiment: Experiment) -> Sequence[tuple[Query, Evaluable]]:
         """
         Creates the list of pairs (query, evaluable) to evaluate
