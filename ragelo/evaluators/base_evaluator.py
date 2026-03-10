@@ -3,10 +3,10 @@ from __future__ import annotations
 import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING, Generic, TypeVar
 
 from jinja2 import Template
-from pydantic import create_model
+from pydantic import BaseModel, create_model
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.presenters import render_failed_evaluations
@@ -20,21 +20,22 @@ from ragelo.utils import call_async_fn, get_pbar, string_to_template
 if TYPE_CHECKING:
     from ragelo.types.experiment import Experiment
 
+T_Config = TypeVar("T_Config", bound=BaseEvaluatorConfig)
 T_Result = TypeVar("T_Result", bound=EvaluatorResult)
 
 
-class BaseEvaluator(ABC):
+class BaseEvaluator(ABC, Generic[T_Config, T_Result]):
     """
     An abstract class for all evaluators. An evaluator is responsible for evaluating a query and an evaluable
     """
 
-    config: BaseEvaluatorConfig
+    config: T_Config
     system_prompt: Template
     user_prompt: Template
     evaluable_name: str = "Evaluable"
-    result_type: type[EvaluatorResult]
+    result_type: type[T_Result]
 
-    def __init__(self, config: BaseEvaluatorConfig, llm_provider: BaseLLMProvider):
+    def __init__(self, config: T_Config, llm_provider: BaseLLMProvider):
         self.config = config
         if config.result_type:
             self.result_type = create_model(
@@ -178,6 +179,6 @@ class BaseEvaluator(ABC):
     def _get_tuples_to_evaluate(self, experiment: Experiment) -> Sequence[tuple[Query, Evaluable]]:
         raise NotImplementedError
 
-    def _process_answer(self, llm_response: LLMResponseType[T_Result], query: Query) -> LLMResponseType[T_Result]:
+    def _process_answer(self, llm_response: LLMResponseType[BaseModel], query: Query) -> LLMResponseType[BaseModel]:
         """Processes the raw answer returned by the LLM. Should be implemented by the subclass if needed."""
         return llm_response

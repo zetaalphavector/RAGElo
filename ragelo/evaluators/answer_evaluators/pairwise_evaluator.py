@@ -9,7 +9,7 @@ from ragelo.utils import string_to_template
 
 
 @AnswerEvaluatorFactory.register(AnswerEvaluatorTypes.PAIRWISE)
-class PairwiseAnswerEvaluator(BaseAnswerEvaluator):
+class PairwiseAnswerEvaluator(BaseAnswerEvaluator[PairwiseEvaluatorConfig, PairwiseGameEvaluatorResult]):
     """An evaluator that evaluates RAG-based answers pairwise, with document reasoning and citations."""
 
     config: PairwiseEvaluatorConfig

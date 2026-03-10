@@ -4,11 +4,11 @@ import itertools
 import logging
 import random
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any, Callable, get_type_hints
+from typing import TYPE_CHECKING, Any, Callable, TypeVar, get_type_hints
 
 from pydantic import BaseModel
 
-from ragelo.evaluators.base_evaluator import BaseEvaluator
+from ragelo.evaluators.base_evaluator import BaseEvaluator, T_Result
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
 from ragelo.types import AnswerEvaluatorResult, LLMInputPrompt, PairwiseGameEvaluatorResult, Query
 from ragelo.types.configurations import BaseAnswerEvaluatorConfig, PairwiseEvaluatorConfig
@@ -18,15 +18,17 @@ from ragelo.utils import call_async_fn, get_placeholders_and_tags
 
 logger = logging.getLogger(__name__)
 
+T_AnswerConfig = TypeVar("T_AnswerConfig", bound=BaseAnswerEvaluatorConfig)
+
 if TYPE_CHECKING:
     from ragelo.types.experiment import Experiment
 
 
-class BaseAnswerEvaluator(BaseEvaluator):
-    config: BaseAnswerEvaluatorConfig
+class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
+    config: T_AnswerConfig
     evaluable_name: str = "Agent Answer"
     _warned_queries: set[str] = set()
-    result_type: type[AnswerEvaluatorResult] | type[PairwiseGameEvaluatorResult] = AnswerEvaluatorResult
+    result_type: type[T_Result] = AnswerEvaluatorResult  # type: ignore[assignment]
 
     def evaluate(
         self,
@@ -148,7 +150,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
         raw_answer = ""
         try:
             llm_response = await self.llm_provider.call_async(input=prompt, response_schema=response_schema)  # type: ignore[arg-type]
-            llm_response = self._process_answer(llm_response, query)  # type: ignore[arg-type,type-var]
+            llm_response = self._process_answer(llm_response, query)
             parsed_answer = llm_response.parsed_answer
             raw_answer = llm_response.raw_answer
         except Exception as e:
@@ -174,7 +176,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
         raw_answer = ""
         try:
             llm_response = await self.llm_provider.call_async(input=prompt, response_schema=response_schema)  # type: ignore[arg-type]
-            llm_response = self._process_answer(llm_response, query)  # type: ignore[arg-type,type-var]
+            llm_response = self._process_answer(llm_response, query)
             parsed_answer = llm_response.parsed_answer
             raw_answer = llm_response.raw_answer
         except Exception as e:
@@ -328,7 +330,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
         )
 
     @classmethod
-    def from_config(cls, config: BaseAnswerEvaluatorConfig, llm_provider: BaseLLMProvider):
+    def from_config(cls, config: T_AnswerConfig, llm_provider: BaseLLMProvider):
         return cls(config, llm_provider)
 
     @classmethod

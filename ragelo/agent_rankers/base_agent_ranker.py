@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, cast, get_type_hints
+from typing import Any, Generic, TypeVar, cast, get_type_hints
 
 from ragelo.types import Experiment, PairwiseGameEvaluatorResult
 from ragelo.types.configurations.agent_ranker_configs import AgentRankerConfig
@@ -9,13 +9,15 @@ from ragelo.types.types import AgentRankerTypes
 
 logger = logging.getLogger(__name__)
 
+T_RankerConfig = TypeVar("T_RankerConfig", bound=AgentRankerConfig)
 
-class AgentRanker:
-    config: AgentRankerConfig
+
+class AgentRanker(Generic[T_RankerConfig]):
+    config: T_RankerConfig
 
     def __init__(
         self,
-        config: AgentRankerConfig,
+        config: T_RankerConfig,
     ):
         self.config = config
         self.name = self.config.ranker_name
@@ -25,7 +27,7 @@ class AgentRanker:
         raise NotImplementedError
 
     @classmethod
-    def from_config(cls, config: AgentRankerConfig):
+    def from_config(cls, config: T_RankerConfig):
         return cls(config)
 
     def get_agents_ratings(self) -> dict[str, float]:

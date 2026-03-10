@@ -5,7 +5,7 @@ from ragelo.utils import string_to_template
 
 
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.REASONER)
-class ReasonerEvaluator(BaseRetrievalEvaluator):
+class ReasonerEvaluator(BaseRetrievalEvaluator[ReasonerEvaluatorConfig]):
     """
     A document Evaluator that explicitly asks for the reasoning for why a document is relevant.
     """

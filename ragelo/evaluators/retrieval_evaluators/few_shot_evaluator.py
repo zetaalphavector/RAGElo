@@ -11,7 +11,7 @@ from ragelo.utils import string_to_template
 
 
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.FEW_SHOT)
-class FewShotEvaluator(BaseRetrievalEvaluator):
+class FewShotEvaluator(BaseRetrievalEvaluator[FewShotEvaluatorConfig]):
     config: FewShotEvaluatorConfig
     user_prompt = string_to_template("""
         Query: {{ query.query }}

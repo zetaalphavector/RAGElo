@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, Callable, get_type_hints
 
 from tenacity import RetryError
 
-from ragelo.evaluators.base_evaluator import BaseEvaluator
+from ragelo.evaluators.base_evaluator import BaseEvaluator, T_Config
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
 from ragelo.types import LLMInputPrompt, Query, RetrievalEvaluatorResult
 from ragelo.types.configurations import BaseRetrievalEvaluatorConfig
@@ -24,16 +24,16 @@ if TYPE_CHECKING:
     from ragelo.types.experiment import Experiment
 
 
-class BaseRetrievalEvaluator(BaseEvaluator):
+class BaseRetrievalEvaluator(BaseEvaluator[T_Config, RetrievalEvaluatorResult]):
     """
     A base class for retrieval evaluators.
     """
 
-    config: BaseRetrievalEvaluatorConfig
+    config: T_Config
     evaluable_name: str = "Retrieved document"
     result_type: type[RetrievalEvaluatorResult] = RetrievalEvaluatorResult
 
-    def __init__(self, config: BaseRetrievalEvaluatorConfig, llm_provider: BaseLLMProvider):
+    def __init__(self, config: T_Config, llm_provider: BaseLLMProvider):
         super().__init__(config, llm_provider)
 
     def evaluate(
@@ -114,7 +114,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             qid=query.qid,
             did=document.did,
             evaluator_name=str(self.config.evaluator_name),
-            answer=parsed_answer,
+            answer=parsed_answer,  # type: ignore[arg-type]
             exception=exc,
         )
 
@@ -153,7 +153,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         )
 
     @classmethod
-    def from_config(cls, config: BaseRetrievalEvaluatorConfig, llm_provider: BaseLLMProvider):
+    def from_config(cls, config: T_Config, llm_provider: BaseLLMProvider):
         return cls(config, llm_provider)
 
     @classmethod

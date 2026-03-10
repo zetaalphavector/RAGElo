@@ -10,13 +10,15 @@ from ragelo.types.configurations import RubricPointwiseEvaluatorConfig
 from ragelo.types.evaluables import AgentAnswer, Document
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.query import Query
+from ragelo.types.results import AnswerEvaluatorResult
 from ragelo.types.types import AnswerEvaluatorTypes
 from ragelo.utils import call_async_fn, string_to_template
 
 
 @AnswerEvaluatorFactory.register(AnswerEvaluatorTypes.RUBRIC_POINTWISE)
-class RubricPointwiseEvaluator(BaseAnswerEvaluator):
+class RubricPointwiseEvaluator(BaseAnswerEvaluator[RubricPointwiseEvaluatorConfig, AnswerEvaluatorResult]):
     config: RubricPointwiseEvaluatorConfig
+    result_type = AnswerEvaluatorResult
 
     criteria_prompt = string_to_template(
         """

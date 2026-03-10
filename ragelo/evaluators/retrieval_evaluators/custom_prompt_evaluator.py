@@ -7,5 +7,5 @@ from ragelo.types.types import RetrievalEvaluatorTypes
 
 
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.CUSTOM_PROMPT)
-class CustomPromptEvaluator(BaseRetrievalEvaluator):
+class CustomPromptEvaluator(BaseRetrievalEvaluator[CustomPromptEvaluatorConfig]):
     config: CustomPromptEvaluatorConfig
