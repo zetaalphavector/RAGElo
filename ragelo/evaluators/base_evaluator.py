@@ -29,7 +29,7 @@ class BaseEvaluator(ABC):
     """
 
     config: BaseEvaluatorConfig
-    system_prompt: Template | None = None
+    system_prompt: Template
     user_prompt: Template
     evaluable_name: str = "Evaluable"
     result_type: type[EvaluatorResult]

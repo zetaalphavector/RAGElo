@@ -145,7 +145,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
     def _build_message(self, query: Query, document: Document) -> LLMInputPrompt:
         context = {"query": query, "document": document}
         user_message = self.user_prompt.render(**context) if self.user_prompt else None
-        system_prompt = self.system_prompt.render(**context) if self.system_prompt else None
+        system_prompt = self.system_prompt.render(**context)
 
         return LLMInputPrompt(
             system_prompt=system_prompt,
