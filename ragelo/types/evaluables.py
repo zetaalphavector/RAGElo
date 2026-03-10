@@ -98,6 +98,7 @@ class Document(Evaluable):
         document: Self | str,
         qid: str | None = None,
         did: str | None = None,
+        retrieved_by: dict[str, float] = {},
         metadata: dict[str, Any] | None = None,
     ) -> Self:
         """Assembles a Document object from a string or a Document object."""
@@ -110,7 +111,7 @@ class Document(Evaluable):
                 if valid_id_fields:
                     did = metadata[valid_id_fields[0]]
             did = did or "<no_did>"
-            document = cls(qid=qid, did=did, text=document)
+            document = cls(qid=qid, did=did, text=document, retrieved_by=retrieved_by)
         document.add_metadata(metadata)
         return document
 
