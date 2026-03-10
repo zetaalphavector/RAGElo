@@ -52,8 +52,8 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             query_metadata (dict[str, Any] | None): The metadata for the query.
             doc_metadata (dict[str, Any] | None): The metadata for the document.
         """
-        query = Query.assemble_query(query, query_metadata)
-        document = Document.assemble_document(document, query.qid, doc_metadata)
+        query = Query.build(query, query_metadata)
+        document = Document.build(document, query.qid, metadata=doc_metadata)
         result = call_async_fn(self.evaluate_async, (query, document))
 
         if result.exception or result.answer is None:

@@ -63,7 +63,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
         Returns:
             AnswerEvaluatorResult: The result of the evaluation.
         """
-        query = Query.assemble_query(query, query_metadata)
+        query = Query.build(query, query_metadata)
 
         if isinstance(retrieved_documents, str):
             retrieved_documents = [retrieved_documents]

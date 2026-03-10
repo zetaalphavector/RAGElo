@@ -258,7 +258,7 @@ class Query(BaseModel):
         return iter(self.retrieved_docs.values())
 
     @classmethod
-    def assemble_query(cls, query: Self | str, metadata: dict[str, Any] | None = None) -> Self:
+    def build(cls, query: Self | str, metadata: dict[str, Any] | None = None) -> Self:
         """Assembles a Query object from a Query object or a query text.
         Args:
             query Query | str: The query object or the query text.

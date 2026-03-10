@@ -93,22 +93,23 @@ class Document(Evaluable):
         return f"{self.did}: {self.text}"
 
     @classmethod
-    def assemble_document(
+    def build(
         cls,
         document: Self | str,
         qid: str | None = None,
+        did: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> Self:
         """Assembles a Document object from a string or a Document object."""
         if isinstance(document, str):
             if qid is None:
                 raise ValueError("qid must be provided if document is a string")
-            did = "<no_did>"
             if metadata:
                 valid_id_fields = ["did", "doc_id", "document_id", "id", "_id"]
                 valid_id_fields = [f for f in valid_id_fields if f in metadata]
                 if valid_id_fields:
                     did = metadata[valid_id_fields[0]]
+            did = did or "<no_did>"
             document = cls(qid=qid, did=did, text=document)
         document.add_metadata(metadata)
         return document
@@ -134,7 +135,7 @@ class Document(Evaluable):
             metadata = [None] * len(documents)
 
         for idx, (doc, m) in enumerate(zip(documents, metadata)):
-            doc_obj = Document.assemble_document(doc, qid, m)
+            doc_obj = Document.build(doc, qid, metadata=m)
             if doc_obj.did == "<no_did>":
                 doc_obj.did = f"doc_{idx}"
             assembled_docs[doc_obj.did] = doc_obj
