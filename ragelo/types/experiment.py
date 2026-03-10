@@ -13,7 +13,7 @@ import os
 import warnings
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, Sequence
 
 from ragelo.presenters import render_evaluation, render_retrieval_summary
 from ragelo.types.evaluables import AgentAnswer, ChatMessage, Document, Evaluable
@@ -221,7 +221,7 @@ class Experiment:
 
     def add_retrieved_docs(
         self,
-        docs: list[Document | str],
+        docs: Sequence[Document | str],
         force: bool = False,
         exist_ok: bool = False,
     ):
