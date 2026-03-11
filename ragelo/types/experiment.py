@@ -234,7 +234,9 @@ class Experiment:
                 Defaults to False.
         """
         for doc in docs:
-            self.add_retrieved_doc(doc, force=force, exist_ok=exist_ok)
+            self.add_retrieved_doc(doc, force=force, exist_ok=exist_ok, should_save=False)
+        if docs:
+            self.save()
 
     def add_retrieved_doc(
         self,
@@ -245,6 +247,7 @@ class Experiment:
         agent: str | None = None,
         force: bool = False,
         exist_ok: bool = False,
+        should_save: bool = True,
     ):
         """
         Adds a retrieved document to a query.
@@ -257,6 +260,8 @@ class Experiment:
             force (bool): Whether to overwrite the document if it already exists. Defaults to False.
             exist_ok (bool): If True, will not raise an error if the document already exists.
                 Defaults to False.
+            should_save (bool): Whether to persist the experiment state after adding the document.
+                Defaults to True.
         """
         if isinstance(doc, Document):
             if doc.qid != query_id and query_id is not None:
@@ -276,7 +281,8 @@ class Experiment:
         if query_id not in self.queries:
             raise ValueError(f"Query {query_id} not found in queries")
         self.queries[query_id].add_retrieved_doc(doc, score, agent, force, exist_ok)
-        self.save()
+        if should_save:
+            self.save()
 
     def add_agent_answer(
         self,
@@ -654,9 +660,10 @@ class Experiment:
                 documents_read += 1
             if agent is not None:
                 doc_obj.add_retrieved_by(agent, exist_ok=exist_ok)
-            self.add_retrieved_doc(doc_obj, exist_ok=exist_ok)
+            self.add_retrieved_doc(doc_obj, exist_ok=exist_ok, should_save=False)
         if documents_read > 0:
             logger.info(f"Loaded {documents_read} new documents from {file_path}")
+            self.save()
 
     def add_retrieved_docs_from_runfile(
         self,
@@ -706,11 +713,13 @@ class Experiment:
             if qid not in docs_per_query:
                 docs_per_query[qid] = 0
             if docs_per_query[qid] < top_k:
-                self.add_retrieved_doc(doc, qid, score=float(score), agent=agent)
+                self.add_retrieved_doc(doc, qid, score=float(score), agent=agent, should_save=False)
                 docs_per_query[qid] += 1
                 documents_read.add(did)
         if len(missing_docs) > 0:
             logger.warning(f"Loaded {len(documents_read)} documents. {len(missing_docs)} missing docs")
+        if documents_read:
+            self.save()
 
     def add_agent_answers_from_csv(
         self,

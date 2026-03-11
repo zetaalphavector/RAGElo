@@ -84,6 +84,17 @@ class TestExperiment:
         empty_experiment[qid].add_retrieved_doc(doc, agent="agent2")
         assert "agent1" in empty_experiment[qid].retrieved_docs["doc1"].retrieved_by
         assert "agent2" in empty_experiment[qid].retrieved_docs["doc1"].retrieved_by
+
+    def test_add_retrieved_docs_saves_once(self, empty_experiment, mocker):
+        qid = empty_experiment.add_query("Test query", query_id="test1")
+        docs = [Document(qid=qid, did=f"doc{idx}", text=f"Test document {idx}") for idx in range(5)]
+
+        save_spy = mocker.spy(empty_experiment, "save")
+
+        empty_experiment.add_retrieved_docs(docs)
+
+        assert save_spy.call_count == 1
+        assert len(empty_experiment[qid].retrieved_docs) == 5
         """Test adding agent answers manually"""
         qid = empty_experiment.add_query("Test query", query_id="test1")
 
