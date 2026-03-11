@@ -379,6 +379,7 @@ class EloRanker(AgentRanker[EloAgentRankerConfig]):
                     progressed = True
 
                     if should_stop() or observed_games >= max_games_budget:
+                        pbar.close()
                         return self._build_tournament_result()
 
                 if per_opp_indices[opp] >= len(qids):
@@ -386,7 +387,7 @@ class EloRanker(AgentRanker[EloAgentRankerConfig]):
 
             if not progressed:
                 break
-
+        pbar.close()
         return self._build_tournament_result()
 
     def _build_tournament_result(self) -> EloTournamentResult:
