@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 @AgentRankerFactory.register(AgentRankerTypes.ELO)
-class EloRanker(AgentRanker):
+class EloRanker(AgentRanker[EloAgentRankerConfig]):
     name: str = "Elo Agent Ranker"
     config: EloAgentRankerConfig
 
