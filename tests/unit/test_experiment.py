@@ -95,6 +95,34 @@ class TestExperiment:
 
         assert save_spy.call_count == 1
         assert len(empty_experiment[qid].retrieved_docs) == 5
+
+    def test_add_agent_answers_from_csv_saves_once(self, empty_experiment, mocker, tmp_path):
+        qid = empty_experiment.add_query("Test query", query_id="test1")
+        answers_csv = tmp_path / "answers.csv"
+        answers_csv.write_text(
+            f"qid,agent,answer\n{qid},agent1,Answer one\n{qid},agent2,Answer two\n",
+        )
+
+        save_spy = mocker.spy(empty_experiment, "save")
+
+        empty_experiment.add_agent_answers_from_csv(str(answers_csv))
+
+        assert save_spy.call_count == 1
+        assert set(empty_experiment[qid].answers) == {"agent1", "agent2"}
+
+    def test_add_answers_from_multiple_csv_saves_once(self, empty_experiment, mocker, tmp_path):
+        answers_a = tmp_path / "agent_a.csv"
+        answers_b = tmp_path / "agent_b.csv"
+        answers_a.write_text("qid,query,answer\nq1,Question one,Answer one\nq2,Question two,Answer two\n")
+        answers_b.write_text("qid,query,answer\nq1,Question one,Alt answer one\nq2,Question two,Alt answer two\n")
+
+        save_spy = mocker.spy(empty_experiment, "save")
+
+        empty_experiment.add_answers_from_multiple_csv([str(answers_a), str(answers_b)])
+
+        assert save_spy.call_count == 1
+        assert set(empty_experiment.keys()) == {"q1", "q2"}
+        assert set(empty_experiment["q1"].answers) == {"agent_a", "agent_b"}
         """Test adding agent answers manually"""
         qid = empty_experiment.add_query("Test query", query_id="test1")
 
