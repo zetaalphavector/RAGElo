@@ -193,7 +193,6 @@ class PairwiseGame(Evaluable[PairwiseGameEvaluatorResult]):
 
     agent_a_answer: AgentAnswer
     agent_b_answer: AgentAnswer
-    reversed: bool = False
 
     @model_validator(mode="before")
     @classmethod
