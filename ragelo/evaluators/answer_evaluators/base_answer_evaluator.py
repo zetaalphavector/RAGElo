@@ -4,7 +4,7 @@ import itertools
 import logging
 import random
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any, Callable, TypeVar, get_type_hints
+from typing import TYPE_CHECKING, Any, Callable, Literal, TypeVar, get_type_hints
 
 from pydantic import BaseModel
 
@@ -19,6 +19,7 @@ from ragelo.utils import call_async_fn, get_placeholders_and_tags
 logger = logging.getLogger(__name__)
 
 T_AnswerConfig = TypeVar("T_AnswerConfig", bound=BaseAnswerEvaluatorConfig)
+PairwiseWinner = Literal["A", "B", "C"]
 
 if TYPE_CHECKING:
     from ragelo.types.experiment import Experiment
@@ -224,15 +225,23 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
 
         # Normalize reversed winner back to original agent perspective
         if winner_reversed == "A":
-            normalized_reversed: str | None = "B"
+            normalized_reversed: PairwiseWinner | None = "B"
         elif winner_reversed == "B":
             normalized_reversed = "A"
         else:
             normalized_reversed = winner_reversed  # None or "C"
 
         if winner_normal is not None and winner_normal == normalized_reversed:
+            # Both directions agree on the same winner
             final_winner = winner_normal
+        elif winner_normal in ("A", "B") and normalized_reversed in ("C", None):
+            # One win + one tie → count the win
+            final_winner = winner_normal
+        elif normalized_reversed in ("A", "B") and winner_normal in ("C", None):
+            # One tie + one win → count the win
+            final_winner = normalized_reversed
         else:
+            # Full disagreement (A wins one way, B wins the other) → tie
             final_winner = "C"
 
         # Build parent result with reconciled winner

@@ -1,6 +1,7 @@
 import warnings
 from unittest.mock import AsyncMock
 
+import pytest
 from pydantic import BaseModel, Field, create_model
 
 from ragelo import get_answer_evaluator
@@ -408,6 +409,47 @@ class TestBidirectionalPairwise:
         assert isinstance(result, PairwiseGameEvaluatorResult)
         assert result.answer is not None
         assert result.answer.winner == "B"
+
+    @pytest.mark.parametrize(
+        ("forward_winner", "reversed_winner", "expected_winner"),
+        [
+            ("A", "B", "A"),
+            ("A", "C", "A"),
+            ("C", "B", "A"),
+            ("A", "A", "C"),
+            ("C", "C", "C"),
+        ],
+    )
+    def test_reconciles_bidirectional_winners(
+        self,
+        llm_provider_mock,
+        experiment,
+        pairwise_answer_eval_config,
+        forward_winner,
+        reversed_winner,
+        expected_winner,
+    ):
+        responses = [
+            self._make_pairwise_response(forward_winner),
+            self._make_pairwise_response(reversed_winner),
+        ]
+        llm_provider_mock.async_call_mocker = AsyncMock(side_effect=responses)
+        evaluator = PairwiseAnswerEvaluator.from_config(
+            config=pairwise_answer_eval_config, llm_provider=llm_provider_mock
+        )
+        query = experiment["0"]
+
+        result = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
+
+        assert isinstance(result, PairwiseGameEvaluatorResult)
+        assert result.answer is not None
+        assert result.answer.winner == expected_winner
+        assert result.a_vs_b_result is not None
+        assert result.b_vs_a_result is not None
+        assert result.a_vs_b_result.answer is not None
+        assert result.b_vs_a_result.answer is not None
+        assert result.a_vs_b_result.answer.winner == forward_winner
+        assert result.b_vs_a_result.answer.winner == reversed_winner
 
     def test_disagreement_results_in_tie(self, llm_provider_mock, experiment, pairwise_answer_eval_config):
         """When directions disagree (both say A in their own frame), result is a tie."""
