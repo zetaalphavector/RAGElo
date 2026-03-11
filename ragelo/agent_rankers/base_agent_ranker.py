@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Generic, TypeVar, cast, get_type_hints
+from typing import Any, Callable, Generic, TypeVar, cast, get_type_hints
 
 from ragelo.types import Experiment, PairwiseGameEvaluatorResult
 from ragelo.types.configurations.agent_ranker_configs import AgentRankerConfig
@@ -10,6 +10,7 @@ from ragelo.types.types import AgentRankerTypes
 logger = logging.getLogger(__name__)
 
 T_RankerConfig = TypeVar("T_RankerConfig", bound=AgentRankerConfig)
+T_Ranker = TypeVar("T_Ranker", bound="AgentRanker[Any]")
 
 
 class AgentRanker(Generic[T_RankerConfig]):
@@ -61,11 +62,11 @@ class AgentRanker(Generic[T_RankerConfig]):
 
 
 class AgentRankerFactory:
-    registry: dict[AgentRankerTypes, type[AgentRanker]] = {}
+    registry: dict[AgentRankerTypes, type[AgentRanker[Any]]] = {}
 
     @classmethod
-    def register(cls, name: AgentRankerTypes):
-        def inner_wrapper(wrapped_class: type[AgentRanker]):
+    def register(cls, name: AgentRankerTypes) -> Callable[[type[T_Ranker]], type[T_Ranker]]:
+        def inner_wrapper(wrapped_class: type[T_Ranker]) -> type[T_Ranker]:
             if name in cls.registry:
                 logger.warning(f"Overwriting {name} in Answer Evaluator registry")
             cls.registry[name] = wrapped_class
@@ -79,7 +80,7 @@ class AgentRankerFactory:
         ranker_name: AgentRankerTypes,
         config: AgentRankerConfig | None = None,
         **kwargs,
-    ) -> AgentRanker:
+    ) -> AgentRanker[Any]:
         if ranker_name not in cls.registry:
             raise ValueError(f"Unknown Agent Ranker {ranker_name}")
         if config is None:
@@ -95,7 +96,7 @@ def get_agent_ranker(
     ranker_name: AgentRankerTypes | str | None = None,
     config: AgentRankerConfig | None = None,
     **kwargs,
-) -> AgentRanker:
+) -> AgentRanker[Any]:
     if ranker_name is None:
         if config is None:
             raise ValueError("Either ranker_name or config should be provided")
