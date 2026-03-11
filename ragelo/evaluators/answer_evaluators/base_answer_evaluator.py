@@ -161,7 +161,7 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
             qid=query.qid,
             agent=answer.agent,
             evaluator_name=evaluator_name,
-            answer=parsed_answer,
+            answer=parsed_answer,  # type: ignore[arg-type]
             exception=exc,
         )
 
@@ -191,7 +191,7 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
             agent_a=game.agent_a_answer.agent,
             agent_b=game.agent_b_answer.agent,
             evaluator_name=evaluator_name,
-            answer=parsed_answer,
+            answer=parsed_answer,  # type: ignore[arg-type]
             exception=exc,
         )
 
@@ -446,7 +446,7 @@ class AnswerEvaluatorFactory:
                 f"Unknown answer evaluator {evaluator_name}\nValid options are {list(cls.registry.keys())}"
             )
         evaluator_class = cls.registry[evaluator_name]
-        return evaluator_class.result_type
+        return evaluator_class.result_type  # type: ignore
 
     @classmethod
     def create(
