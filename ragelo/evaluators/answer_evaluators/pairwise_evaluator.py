@@ -46,9 +46,18 @@ class PairwiseAnswerEvaluator(BaseAnswerEvaluator[PairwiseEvaluatorConfig, Pairw
         - Be as objective as possible.
 
         ## Workflow
-        First, you should analyze each of the two answers, explaining whether or not each of them correctly answers the user's question, based on the relevant documents retrieved. 
-        Then, you should compare the two responses and provide a short explanation on their differences, explaining in which aspects each answer is better or worst than the other. 
-        After providing your explanation, output your final verdict by strictly following his format: "A" if assistant A is better, "B" if assistant B is better, or "C" for a tie.""")  # noqa: E501
+        First, you should analyze each of the two answers, explaining whether or not each of them correctly answers the user's question, based on the relevant documents retrieved.
+        Then, you should compare the two responses and provide a short explanation on their differences, explaining in which aspects each answer is better or worse than the other.
+
+        ## Output Constraints
+        - In any free-text field, refer to the assistants only as [[A]] and [[B]].
+        - Do not use phrases such as first answer, second answer, former, latter, this answer, or that answer.
+        - Keep answer_a_analysis focused only on [[A]].
+        - Keep answer_b_analysis focused only on [[B]].
+        - Put side-specific evidence into the structured strengths and weaknesses fields.
+        - Keep winner_reasoning concise and focused on the deciding factor.
+
+        After providing your explanation, output your final verdict by strictly following this format: "A" if assistant A is better, "B" if assistant B is better, or "C" for a tie.""")  # noqa: E501
 
     user_prompt = string_to_template("""
         [User Question]

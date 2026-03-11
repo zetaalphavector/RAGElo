@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from ragelo.evaluators.base_evaluator import BaseEvaluator, T_Result
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
 from ragelo.types import AnswerEvaluatorResult, LLMInputPrompt, PairwiseGameEvaluatorResult, Query
+from ragelo.types.answer_formats import PairwiseEvaluationAnswer, RubricAnswerFormat
 from ragelo.types.configurations import BaseAnswerEvaluatorConfig, PairwiseEvaluatorConfig
 from ragelo.types.evaluables import AgentAnswer, Document, Evaluable, PairwiseGame
 from ragelo.types.types import AnswerEvaluatorTypes
@@ -213,7 +214,6 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
             qid=game.qid,
             agent_a_answer=game.agent_a_answer,
             agent_b_answer=game.agent_b_answer,
-            reversed=True,
         )
 
         a_vs_b_result = await self.__evaluate_single_game(query, normal_game)
@@ -234,20 +234,24 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
         if winner_normal is not None and winner_normal == normalized_reversed:
             # Both directions agree on the same winner
             final_winner = winner_normal
+            answer_source = a_vs_b_result.answer
         elif winner_normal in ("A", "B") and normalized_reversed in ("C", None):
             # One win + one tie → count the win
             final_winner = winner_normal
+            answer_source = a_vs_b_result.answer
         elif normalized_reversed in ("A", "B") and winner_normal in ("C", None):
             # One tie + one win → count the win
             final_winner = normalized_reversed
+            answer_source = self._canonicalize_pairwise_answer(b_vs_a_result.answer)
         else:
             # Full disagreement (A wins one way, B wins the other) → tie
             final_winner = "C"
+            answer_source = a_vs_b_result.answer
 
         # Build parent result with reconciled winner
         parent_answer = None
-        if a_vs_b_result.answer is not None:
-            parent_answer = a_vs_b_result.answer.model_copy(update={"winner": final_winner})
+        if answer_source is not None:
+            parent_answer = answer_source.model_copy(update={"winner": final_winner})
 
         exc = a_vs_b_result.exception or b_vs_a_result.exception
 
@@ -261,6 +265,14 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
             a_vs_b_result=a_vs_b_result,
             b_vs_a_result=b_vs_a_result,
         )
+
+    def _canonicalize_pairwise_answer(
+        self,
+        answer: PairwiseEvaluationAnswer | RubricAnswerFormat | None,
+    ) -> PairwiseEvaluationAnswer | RubricAnswerFormat | None:
+        if answer is None:
+            return None
+        return answer.swap_perspective()
 
     def _resolve_response_schema(self, prompt: LLMInputPrompt) -> type[BaseModel] | None:
         schema = prompt.llm_response_schema or self.config.llm_response_schema

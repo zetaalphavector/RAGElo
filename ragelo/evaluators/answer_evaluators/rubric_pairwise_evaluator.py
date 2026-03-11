@@ -57,6 +57,11 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
 
         You should think carefully about the criteria and the answers, and assign the winner accordingly.
 
+        ## Output Constraints
+        - In any free-text field, refer to the reports only as [[A]] and [[B]].
+        - Do not use phrases such as first answer, second answer, former, latter, this answer, or that answer.
+        - For each criterion, provide a side-specific assessment for [[A]], a side-specific assessment for [[B]], and a brief winner_reasoning.
+
         ## Criteria
         {% for criteria in criteria.criteria %}
         Criterion: {{criteria.criterion_name}}
@@ -95,6 +100,9 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
         for criterion in criteria.criteria:
             criteria_models[criterion.criterion_name] = create_model(
                 criterion.criterion_name,
+                agent_a_assessment=(str, Field(description="How well [[A]] satisfies the criterion.")),
+                agent_b_assessment=(str, Field(description="How well [[B]] satisfies the criterion.")),
+                winner_reasoning=(str, Field(description="A brief explanation of why the winner was chosen.")),
                 reasoning=(
                     str,
                     Field(description="A brief explanation about your judgement, and why you chose the winner"),
@@ -152,9 +160,15 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
                 response["winner"] = response["winner"][-1]
             if response["winner"] == "D":
                 response["winner"] = "C"
+            agent_a_assessment = response.get("agent_a_assessment", "")
+            agent_b_assessment = response.get("agent_b_assessment", "")
+            winner_reasoning = response.get("winner_reasoning", response.get("reasoning", ""))
             criterion = CriterionEvaluation(
                 criterion=crit_obj,
-                reasoning=response["reasoning"],
+                agent_a_assessment=agent_a_assessment,
+                agent_b_assessment=agent_b_assessment,
+                winner_reasoning=winner_reasoning,
+                reasoning=response.get("reasoning", winner_reasoning),
                 winner=response["winner"],
             )
             criteria.append(criterion)

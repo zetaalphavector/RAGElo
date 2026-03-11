@@ -17,6 +17,7 @@ from ragelo.evaluators.answer_evaluators import (
 )
 from ragelo.types.answer_formats import (
     Criterion,
+    CriterionEvaluation,
     PairwiseEvaluationAnswer,
     RubricAnswerFormat,
     RubricPointwiseAnswerFormat,
@@ -373,11 +374,27 @@ class TestFilterDocuments:
 class TestBidirectionalPairwise:
     """Tests for bidirectional pairwise evaluation and winner reconciliation."""
 
-    def _make_pairwise_response(self, winner: str) -> LLMResponseType[PairwiseEvaluationAnswer]:
+    def _make_pairwise_response(
+        self,
+        winner: str,
+        answer_a_analysis: str = "Analysis A",
+        answer_b_analysis: str = "Analysis B",
+        comparison_reasoning: str = "Comparison",
+        answer_a_strengths: list[str] | None = None,
+        answer_a_weaknesses: list[str] | None = None,
+        answer_b_strengths: list[str] | None = None,
+        answer_b_weaknesses: list[str] | None = None,
+        winner_reasoning: str = "",
+    ) -> LLMResponseType[PairwiseEvaluationAnswer]:
         answer = PairwiseEvaluationAnswer(
-            answer_a_analysis="Analysis A",
-            answer_b_analysis="Analysis B",
-            comparison_reasoning="Comparison",
+            answer_a_strengths=answer_a_strengths or [],
+            answer_a_weaknesses=answer_a_weaknesses or [],
+            answer_b_strengths=answer_b_strengths or [],
+            answer_b_weaknesses=answer_b_weaknesses or [],
+            answer_a_analysis=answer_a_analysis,
+            answer_b_analysis=answer_b_analysis,
+            comparison_reasoning=comparison_reasoning,
+            winner_reasoning=winner_reasoning,
             winner=winner,
         )
         return LLMResponseType(raw_answer=answer.model_dump_json(), parsed_answer=answer)
@@ -480,6 +497,101 @@ class TestBidirectionalPairwise:
         assert result.a_vs_b_result.answer.winner == "A"
         assert result.b_vs_a_result.answer.winner == "B"
 
+    def test_uses_canonicalized_reversed_answer_when_reversed_direction_wins(
+        self, llm_provider_mock, experiment, pairwise_answer_eval_config
+    ):
+        responses = [
+            self._make_pairwise_response("C", comparison_reasoning="Forward tie"),
+            self._make_pairwise_response(
+                "B",
+                answer_a_strengths=["[[A]] cites more relevant sources than [[B]]"],
+                answer_a_weaknesses=["[[A]] omits one key fact covered by [[B]]"],
+                answer_b_strengths=["[[B]] answers the question more directly than [[A]]"],
+                answer_b_weaknesses=["[[B]] provides less evidence than [[A]]"],
+                answer_a_analysis="Assistant A is weaker than Assistant B",
+                answer_b_analysis="Assistant B is stronger than Assistant A",
+                comparison_reasoning="Assistant B is better than Assistant A",
+                winner_reasoning="[[B]] answers the question more directly than [[A]]",
+            ),
+        ]
+        llm_provider_mock.async_call_mocker = AsyncMock(side_effect=responses)
+        evaluator = PairwiseAnswerEvaluator.from_config(
+            config=pairwise_answer_eval_config, llm_provider=llm_provider_mock
+        )
+
+        result = evaluator.evaluate(
+            experiment["0"],
+            answer_a=experiment["0"].answers["agent1"],
+            answer_b=experiment["0"].answers["agent2"],
+        )
+
+        assert result.answer is not None
+        assert result.answer.winner == "A"
+        assert result.answer.answer_a_strengths == ["[[A]] answers the question more directly than [[B]]"]
+        assert result.answer.answer_b_strengths == ["[[B]] cites more relevant sources than [[A]]"]
+        assert result.answer.answer_a_analysis == "Assistant A is stronger than Assistant B"
+        assert result.answer.answer_b_analysis == "Assistant B is weaker than Assistant A"
+        assert result.answer.comparison_reasoning == "Assistant A is better than Assistant B"
+        assert result.answer.winner_reasoning == "[[A]] answers the question more directly than [[B]]"
+
+
+class TestPairwiseAnswerCanonicalization:
+    def test_pairwise_answer_swap_perspective(self):
+        answer = PairwiseEvaluationAnswer(
+            answer_a_strengths=["[[A]] is more precise than [[B]]"],
+            answer_a_weaknesses=["[[A]] lacks one example that [[B]] includes"],
+            answer_b_strengths=["[[B]] includes one useful example for [[A]] to match"],
+            answer_b_weaknesses=["[[B]] is less precise than [[A]]"],
+            answer_a_analysis="Assistant A is better than Assistant B",
+            answer_b_analysis="Assistant B is weaker than Assistant A",
+            comparison_reasoning="Agent A is more accurate than agent B",
+            winner_reasoning="[[A]] is more accurate than [[B]]",
+            winner="A",
+        )
+
+        swapped = answer.swap_perspective()
+
+        assert swapped.answer_a_strengths == ["[[A]] includes one useful example for [[B]] to match"]
+        assert swapped.answer_a_weaknesses == ["[[A]] is less precise than [[B]]"]
+        assert swapped.answer_b_strengths == ["[[B]] is more precise than [[A]]"]
+        assert swapped.answer_b_weaknesses == ["[[B]] lacks one example that [[A]] includes"]
+        assert swapped.answer_a_analysis == "Assistant A is weaker than Assistant B"
+        assert swapped.answer_b_analysis == "Assistant B is better than Assistant A"
+        assert swapped.comparison_reasoning == "Agent B is more accurate than agent A"
+        assert swapped.winner_reasoning == "[[B]] is more accurate than [[A]]"
+        assert swapped.winner == "B"
+
+    def test_rubric_answer_swap_perspective(self):
+        criterion = Criterion(criterion_name="accuracy", evidence=["doc1"], short_question="Is it accurate?")
+        answer = RubricAnswerFormat(
+            criteria=[
+                CriterionEvaluation(
+                    criterion=criterion,
+                    agent_a_assessment="[[A]] addresses the core fact",
+                    agent_b_assessment="[[B]] misses the core fact",
+                    winner_reasoning="[[A]] is more accurate than [[B]]",
+                    reasoning="Assistant A is more accurate than Assistant B",
+                    winner="A",
+                )
+            ],
+            agent_a_wins=1,
+            agent_b_wins=0,
+            equally_good=0,
+            equally_bad=0,
+            winner="A",
+        )
+
+        swapped = answer.swap_perspective()
+
+        assert swapped.criteria[0].agent_a_assessment == "[[A]] misses the core fact"
+        assert swapped.criteria[0].agent_b_assessment == "[[B]] addresses the core fact"
+        assert swapped.criteria[0].winner_reasoning == "[[B]] is more accurate than [[A]]"
+        assert swapped.criteria[0].reasoning == "Assistant B is more accurate than Assistant A"
+        assert swapped.criteria[0].winner == "B"
+        assert swapped.agent_a_wins == 0
+        assert swapped.agent_b_wins == 1
+        assert swapped.winner == "B"
+
     def test_llm_response_schema_from_config(
         self, llm_provider_answer_mock, experiment, base_answer_eval_config, answer_eval_format
     ):
@@ -515,6 +627,9 @@ class TestRubricPairwiseEvaluator:
             **{
                 c.criterion_name: create_model(
                     c.criterion_name,
+                    agent_a_assessment=(str, Field(description="agent_a_assessment")),
+                    agent_b_assessment=(str, Field(description="agent_b_assessment")),
+                    winner_reasoning=(str, Field(description="winner_reasoning")),
                     reasoning=(str, Field(description="reasoning")),
                     winner=(str, Field(description="winner")),
                 )
@@ -524,7 +639,13 @@ class TestRubricPairwiseEvaluator:
         data = {}
         for c, w in zip(criteria, winners):
             SubModel = EvalSchema.model_fields[c.criterion_name].annotation
-            data[c.criterion_name] = SubModel(reasoning=f"{c.criterion_name} reasoning", winner=w)
+            data[c.criterion_name] = SubModel(
+                agent_a_assessment=f"[[A]] assessment for {c.criterion_name}",
+                agent_b_assessment=f"[[B]] assessment for {c.criterion_name}",
+                winner_reasoning=f"[[A]] vs [[B]] on {c.criterion_name}",
+                reasoning=f"{c.criterion_name} reasoning",
+                winner=w,
+            )
         return EvalSchema(**data)
 
     def test_rubric_pairwise_with_presupplied_rubrics(self, llm_provider_mock, experiment):
@@ -576,6 +697,9 @@ class TestRubricPairwiseEvaluator:
         assert answer.agent_a_wins == 2
         assert answer.agent_b_wins == 1
         assert answer.winner == "A"
+        assert answer.criteria[0].agent_a_assessment == "[[A]] assessment for accuracy"
+        assert answer.criteria[0].agent_b_assessment == "[[B]] assessment for accuracy"
+        assert answer.criteria[0].winner_reasoning == "[[A]] vs [[B]] on accuracy"
 
     def test_rubric_pairwise_d_counted_as_equally_bad(self, llm_provider_mock, experiment):
         """Winner 'D' should be normalized to 'C' and counted as equally_bad in tally."""
