@@ -2,9 +2,6 @@ from enum import Enum
 
 
 class StrEnum(str, Enum):
-    # Implementing __str__ to allow for easy conversion to string
-    # e.g. str(RetrievalEvaluatorTypes.CUSTOM_PROMPT) -> "custom_prompt"
-    # otherwise, it's "RetrievalEvaluatorTypes.CUSTOM_PROMPT"
     def __str__(self):
         return self.value
 
