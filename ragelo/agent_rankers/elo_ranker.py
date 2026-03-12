@@ -104,7 +104,7 @@ class EloRanker(AgentRanker[EloAgentRankerConfig]):
             agent_a_rating = agents_scores.get(agent_a, self.initial_score)
             agent_b_rating = agents_scores.get(agent_b, self.initial_score)
 
-            expected_score = 1 / (1 + 10 ** ((agent_a_rating - agent_b_rating) / 400))
+            expected_score = 1 / (1 + 10 ** ((agent_b_rating - agent_a_rating) / 400))
             agents_scores[agent_a] = int(agent_a_rating + self.k * (score_val - expected_score))
             agents_scores[agent_b] = int(agent_b_rating + self.k * ((1 - score_val) - (1 - expected_score)))
             self.total_games += 1
@@ -178,7 +178,7 @@ class EloRanker(AgentRanker[EloAgentRankerConfig]):
         agent_a_rating = self.agents_scores.get(agent_a, self.initial_score)
         agent_b_rating = self.agents_scores.get(agent_b, self.initial_score)
 
-        expected_score = 1 / (1 + 10 ** ((agent_a_rating - agent_b_rating) / 400))
+        expected_score = 1 / (1 + 10 ** ((agent_b_rating - agent_a_rating) / 400))
         self.agents_scores[agent_a] = int(agent_a_rating + self.k * (score_val - expected_score))
         self.agents_scores[agent_b] = int(agent_b_rating + self.k * ((1 - score_val) - (1 - expected_score)))
         self.games_played[agent_a] = self.games_played.get(agent_a, 0) + 1
