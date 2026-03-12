@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import json
 import logging
 from typing import TypeVar
@@ -141,7 +139,7 @@ class OpenAIProvider(BaseLLMProvider):
                 api_key=openai_config.api_key.get_secret_value(),
                 api_version=openai_config.api_version,
             )
-        elif openai_config.api_type == "open_ai" or openai_config.api_type is None:
+        elif openai_config.api_type == "openai" or openai_config.api_type is None:
             return AsyncOpenAI(
                 base_url=openai_config.api_base,
                 api_key=openai_config.api_key.get_secret_value(),

@@ -1,5 +1,5 @@
 import json
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from pydantic import SecretStr, ValidationError
@@ -404,3 +404,142 @@ class TestOllamaProviderFactory:
         provider = get_llm_provider("ollama", model="test-model")
         assert isinstance(provider, OllamaProvider)
         assert provider.config.model == "test-model"
+
+
+class TestInstructorProvider:
+    """Tests for InstructorProvider with instructor-patched clients.
+
+    These tests cover:
+    - Both chat.completions.create (OpenAI/Mistral/Cohere) and messages.create (Anthropic) paths
+    - Real answer schemas (RetrievalEvaluationAnswer, PairwiseEvaluationAnswer)
+    - Different input formats (user message only, system + user, messages list)
+    - Error handling
+    """
+
+    def test_retrieval_evaluation(self, instructor_provider, instructor_client_mock):
+        """Test retrieval evaluation returns correct LLMResponseType."""
+        pytest.importorskip("instructor")
+        user_prompt = "Evaluate the relevance of this document to the query."
+        result = instructor_provider(
+            LLMInputPrompt(user_message=user_prompt),
+            response_schema=RetrievalEvaluationAnswer,
+        )
+
+        assert isinstance(result, LLMResponseType)
+        assert isinstance(result.parsed_answer, RetrievalEvaluationAnswer)
+        assert result.parsed_answer.reasoning == "The document is highly relevant to the query"
+        assert result.parsed_answer.score == 2
+        assert instructor_client_mock.create.called
+        call_args = instructor_client_mock.create.call_args
+        assert call_args[1]["response_model"] == RetrievalEvaluationAnswer
+
+    def test_pairwise_evaluation(self, instructor_provider, instructor_client_mock):
+        """Test pairwise evaluation with PairwiseEvaluationAnswer schema."""
+        pytest.importorskip("instructor")
+        pairwise_answer = PairwiseEvaluationAnswer(
+            answer_a_analysis="Answer A is comprehensive and accurate",
+            answer_b_analysis="Answer B is less detailed",
+            comparison_reasoning="Answer A provides more depth",
+            winner="A",
+        )
+        instructor_client_mock.create.return_value = pairwise_answer
+
+        result = instructor_provider(
+            LLMInputPrompt(user_message="Compare these two answers."),
+            response_schema=PairwiseEvaluationAnswer,
+        )
+
+        assert isinstance(result, LLMResponseType)
+        assert isinstance(result.parsed_answer, PairwiseEvaluationAnswer)
+        assert result.parsed_answer.winner == "A"
+        call_args = instructor_client_mock.create.call_args
+        assert call_args[1]["response_model"] == PairwiseEvaluationAnswer
+
+    def test_system_and_user_prompt(self, instructor_provider, instructor_client_mock):
+        """Test that system and user prompts are built into the messages list correctly."""
+        pytest.importorskip("instructor")
+        instructor_provider(
+            LLMInputPrompt(system_prompt="You are an evaluator.", user_message="Evaluate this."),
+            response_schema=RetrievalEvaluationAnswer,
+        )
+
+        call_args = instructor_client_mock.create.call_args
+        messages = call_args[1]["messages"]
+        assert messages[0] == {"role": "system", "content": "You are an evaluator."}
+        assert messages[1] == {"role": "user", "content": "Evaluate this."}
+
+    def test_messages_list_input(self, instructor_provider, instructor_client_mock):
+        """Test that a pre-built messages list is passed through unchanged."""
+        pytest.importorskip("instructor")
+        messages = [
+            {"role": "system", "content": "You are an evaluator."},
+            {"role": "user", "content": "Evaluate this."},
+        ]
+        instructor_provider(
+            LLMInputPrompt(messages=messages),
+            response_schema=RetrievalEvaluationAnswer,
+        )
+
+        call_args = instructor_client_mock.create.call_args
+        assert call_args[1]["messages"] == messages
+
+    def test_api_error_raises_retry_error(self, instructor_provider, instructor_client_mock):
+        """Test that an API failure raises RetryError wrapping ValueError."""
+        pytest.importorskip("instructor")
+        instructor_client_mock.create.side_effect = RuntimeError("Connection refused")
+
+        with pytest.raises(RetryError) as exc_info:
+            instructor_provider(
+                LLMInputPrompt(user_message="Test"),
+                response_schema=RetrievalEvaluationAnswer,
+            )
+
+        underlying = str(exc_info.value.last_attempt.exception())
+        assert "Instructor request failed" in underlying
+        assert "Connection refused" in underlying
+
+    def test_unknown_provider_raises_value_error(self):
+        """Test that an unrecognized provider/model string raises ValueError at instantiation."""
+        pytest.importorskip("instructor")
+        from ragelo.llm_providers.instructor_client import InstructorProvider
+        from ragelo.types.configurations.llm_provider_configs import InstructorConfiguration
+
+        config = InstructorConfiguration(model="unsupported_xyz/some-model")
+        with pytest.raises(ValueError, match="Failed to initialize instructor client"):
+            InstructorProvider(config=config)
+
+    def test_get_llm_provider_instructor_via_factory(self, monkeypatch):
+        """Test that get_llm_provider('instructor', ...) returns InstructorProvider."""
+        pytest.importorskip("instructor")
+        import instructor
+
+        from ragelo.llm_providers import get_llm_provider
+        from ragelo.llm_providers.instructor_client import InstructorProvider
+
+        mock_client = MagicMock()
+        mock_client.create = AsyncMock(return_value=RetrievalEvaluationAnswer(reasoning="ok", score=1))
+        monkeypatch.setattr(instructor, "from_provider", lambda *args, **kwargs: mock_client)
+        provider = get_llm_provider("instructor", model="openai/fake-model")
+        assert isinstance(provider, InstructorProvider)
+        assert provider.config.model == "openai/fake-model"
+
+    @pytest.mark.requires_anthropic
+    def test_anthropic_integration(self):
+        """Integration test: real Anthropic call via InstructorProvider.
+
+        Requires: ``pip install anthropic`` and ANTHROPIC_API_KEY env var.
+        Run with: pytest --runanthropic
+        """
+        pytest.importorskip("anthropic")
+        from ragelo.llm_providers import get_llm_provider
+
+        provider = get_llm_provider("instructor", model="anthropic/claude-3-5-haiku-20241022")
+        result = provider(
+            LLMInputPrompt(
+                user_message=("Is Paris the capital of France? Provide a short reasoning and score 2 if yes, 0 if no.")
+            ),
+            response_schema=RetrievalEvaluationAnswer,
+        )
+        assert isinstance(result, LLMResponseType)
+        assert isinstance(result.parsed_answer, RetrievalEvaluationAnswer)
+        assert result.parsed_answer.score == 2
