@@ -60,13 +60,15 @@ class InstructorProvider(BaseLLMProvider):
             raise ValueError("No input provided")
 
         call_kwargs: dict[str, Any] = self.config.model_kwargs
+        if self.config.temperature is not None:
+            call_kwargs["temperature"] = self.config.temperature
+        if self.config.max_tokens is not None:
+            call_kwargs["max_tokens"] = self.config.max_tokens
         try:
             parsed_answer = await self.__instructor_client.create(
                 response_model=response_schema,
                 messages=messages,  # type: ignore
-                temperature=self.config.temperature,
                 max_retries=self.config.max_retries,
-                max_tokens=self.config.max_tokens,
                 **call_kwargs,
             )
         except Exception as e:

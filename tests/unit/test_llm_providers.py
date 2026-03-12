@@ -1,4 +1,5 @@
 import json
+import os
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -533,7 +534,9 @@ class TestInstructorProvider:
         pytest.importorskip("anthropic")
         from ragelo.llm_providers import get_llm_provider
 
-        provider = get_llm_provider("instructor", model="anthropic/claude-3-5-haiku-20241022")
+        provider = get_llm_provider(
+            "instructor", model="anthropic/claude-haiku-4-5", api_key=os.environ.get("ANTHROPIC_API_KEY")
+        )
         result = provider(
             LLMInputPrompt(
                 user_message=("Is Paris the capital of France? Provide a short reasoning and score 2 if yes, 0 if no.")
