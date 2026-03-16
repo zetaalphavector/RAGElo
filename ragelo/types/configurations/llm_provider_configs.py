@@ -4,7 +4,7 @@ from pydantic import BaseModel, SecretStr
 
 
 class LLMProviderConfig(BaseModel):
-    temperature: float | None = None
+    temperature: float | None = 0.1
     max_tokens: int = 4096
     seed: int | None = 42
     json_mode: bool = False

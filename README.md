@@ -104,7 +104,7 @@ experiment.add_agent_answer("According to [3], Lyon is the second largest city i
 llm_provider = get_llm_provider("openai", model="gpt-4.1-nano")
 
 # Or use the Instructor provider to run evaluations against Anthropic Claude (requires pip install 'ragelo[instructor]' anthropic):
-# llm_provider = get_llm_provider("instructor", provider="anthropic", model="claude-sonnet-4-20250514")
+# llm_provider = get_llm_provider("instructor", model="anthropic/claude-sonnet-4-20250514")
 
 retrieval_evaluator = get_retrieval_evaluator("reasoner", llm_provider, rich_print=True)
 answer_evaluator = get_answer_evaluator("pairwise", llm_provider, rich_print=True)

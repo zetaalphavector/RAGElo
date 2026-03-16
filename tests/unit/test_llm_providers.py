@@ -524,6 +524,25 @@ class TestInstructorProvider:
         assert isinstance(provider, InstructorProvider)
         assert provider.config.model == "openai/fake-model"
 
+    def test_api_key_forwarded_to_from_provider(self, monkeypatch):
+        """Test that an explicit api_key is forwarded to instructor.from_provider."""
+        pytest.importorskip("instructor")
+        import instructor
+
+        from ragelo.llm_providers import get_llm_provider
+
+        captured_kwargs: dict = {}
+
+        def spy_from_provider(*args, **kwargs):
+            captured_kwargs.update(kwargs)
+            mock_client = MagicMock()
+            mock_client.create = AsyncMock(return_value=RetrievalEvaluationAnswer(reasoning="ok", score=1))
+            return mock_client
+
+        monkeypatch.setattr(instructor, "from_provider", spy_from_provider)
+        get_llm_provider("instructor", model="anthropic/fake-model", api_key="test-secret-key")
+        assert captured_kwargs.get("api_key") == "test-secret-key"
+
     @pytest.mark.requires_anthropic
     def test_anthropic_integration(self):
         """Integration test: real Anthropic call via InstructorProvider.

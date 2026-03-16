@@ -88,8 +88,11 @@ class InstructorProvider(BaseLLMProvider):
     def __get_instructor_client(config: InstructorConfiguration) -> AsyncInstructor:
         try:
             cache = AutoCache(config.cache_size) if config.use_cache else None
+            provider_kwargs: dict[str, Any] = {**config.model_kwargs}
+            if config.api_key is not None:
+                provider_kwargs["api_key"] = config.api_key.get_secret_value()
             instructor_client = instructor.from_provider(
-                config.model, async_client=True, cache=cache, **config.model_kwargs
+                config.model, async_client=True, cache=cache, **provider_kwargs
             )
         except ConfigurationError as e:
             raise ValueError(f"Failed to initialize instructor client for model '{config.model}': {e}") from e
