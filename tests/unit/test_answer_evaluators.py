@@ -789,6 +789,49 @@ class TestRubricPointwiseEvaluator:
         evaluator = get_answer_evaluator("rubric_pointwise", llm_provider_mock, expert_in="AI")
         assert isinstance(evaluator, RubricPointwiseEvaluator)
 
+    def test_rubric_pointwise_with_presupplied_rubrics(self, llm_provider_mock, experiment):
+        """When rubrics are pre-supplied, the evaluator skips rubric generation and only calls LLM for evaluation."""
+        from ragelo.types.configurations import RubricPointwiseEvaluatorConfig
+
+        criteria = self._make_criteria()
+        rubrics = {"0": criteria, "1": criteria}
+        config = RubricPointwiseEvaluatorConfig(expert_in="AI", rubrics=rubrics, force=True)
+
+        EvalSchema = create_model(
+            "EvaluationSchema",
+            **{
+                c.criterion_name: create_model(
+                    c.criterion_name,
+                    reasoning=(str, Field(description="reasoning")),
+                    fulfillment=(bool, Field(description="fulfillment")),
+                )
+                for c in criteria
+            },
+        )  # type: ignore[call-overload]
+        SubAccuracy = EvalSchema.model_fields["accuracy"].annotation
+        SubCompleteness = EvalSchema.model_fields["completeness"].annotation
+        eval_response = EvalSchema(
+            accuracy=SubAccuracy(reasoning="acc reason", fulfillment=True),
+            completeness=SubCompleteness(reasoning="comp reason", fulfillment=False),
+        )
+        llm_provider_mock.async_call_mocker = AsyncMock(
+            side_effect=[LLMResponseType(raw_answer="eval", parsed_answer=eval_response)]
+        )
+
+        evaluator = RubricPointwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
+        assert "0" in evaluator.criteria_cache
+        assert "1" in evaluator.criteria_cache
+
+        query = experiment["0"]
+        answer = query.answers["agent1"]
+        result = evaluator.evaluate(query, answer)
+        assert isinstance(result, AnswerEvaluatorResult)
+        assert isinstance(result.answer, RubricPointwiseAnswerFormat)
+        assert result.answer.average_score == 0.5
+        assert len(result.answer.criteria) == 2
+        # Only 1 LLM call (evaluation), no rubric generation call
+        assert llm_provider_mock.async_call_mocker.call_count == 1
+
     def test_rubric_pairwise_get_by_name(self, llm_provider_mock):
         """Rubric pairwise evaluator should be accessible via factory."""
         evaluator = get_answer_evaluator("rubric_pairwise", llm_provider_mock, expert_in="AI")

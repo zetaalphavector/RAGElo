@@ -144,3 +144,11 @@ class RubricPointwiseEvaluatorConfig(PairwiseDomainExpertEvaluatorConfig):
     )
     pairwise: bool = False
     n_criteria: int = Field(default=5, description="The number of criteria to use for the evaluator.")
+    rubrics: Optional[dict[str, list[Criterion]]] = Field(
+        default=None,
+        description=(
+            "The cache of criteria for the evaluator. Maps a query_id to a list of Criterion objects. "
+            "If provided, the evaluator will skip creating the rubric based on the retrieved documents "
+            "and use this instead."
+        ),
+    )

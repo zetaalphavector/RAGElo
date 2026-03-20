@@ -15,6 +15,7 @@ from ragelo.types.answer_formats import (
     RDNAMNoAspectsAnswer,
     RetrievalEvaluationAnswer,
     RubricAnswerFormat,
+    RubricPointwiseAnswerFormat,
 )
 
 
@@ -97,7 +98,7 @@ class AnswerEvaluatorResult(EvaluatorResult):
     """
 
     agent: Annotated[str, SkipJsonSchema] = Field(description="The agent that provided the answer.")
-    answer: AnswerEvaluationAnswer | None = None
+    answer: AnswerEvaluationAnswer | RubricPointwiseAnswerFormat | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -106,8 +107,13 @@ class AnswerEvaluatorResult(EvaluatorResult):
         if isinstance(data, dict) and "answer" in data and data["answer"] is not None:
             answer_data = data["answer"]
             if isinstance(answer_data, dict) and not isinstance(answer_data, BaseModel):
-                # Deserialize as AnswerEvaluationAnswer by default
-                data["answer"] = AnswerEvaluationAnswer.model_validate(answer_data)
+                try:
+                    data["answer"] = AnswerEvaluationAnswer.model_validate(answer_data)
+                except ValidationError:
+                    try:
+                        data["answer"] = RubricPointwiseAnswerFormat.model_validate(answer_data)
+                    except ValidationError:
+                        pass
         return data
 
     @property

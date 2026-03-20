@@ -77,26 +77,17 @@ class RubricPointwiseEvaluator(BaseAnswerEvaluator[RubricPointwiseEvaluatorConfi
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.criteria_cache = {}
+        if self.config.rubrics:
+            self.criteria_cache = {qid: RubricSchema(criteria=rubrics) for qid, rubrics in self.config.rubrics.items()}
+        else:
+            self.criteria_cache = {}
         self.answer_schema_cache = {}
 
-    async def _build_criteria(self, query: Query, documents: list[Document]) -> RubricSchema:
-        documents = self._filter_documents(query)
-        context = {
-            "expert_in": self.config.expert_in,
-            "company": self.config.company,
-            "documents": documents,
-            "query": query,
-            "n_criteria": self.config.n_criteria,
-        }
-        criteria_prompt = self.criteria_prompt.render(context)
-        user_prompt = self.criteria_user_prompt.render(context)
-        llm_input = LLMInputPrompt(system_prompt=criteria_prompt, user_message=user_prompt)
-        llm_response = await self.llm_provider.call_async(llm_input, response_schema=RubricSchema)
+    def _build_evaluation_schema(self, criteria: RubricSchema) -> Type[BaseModel]:
         criteria_models = {}
-        for criteria in llm_response.parsed_answer.criteria:
-            criteria_models[criteria.criterion_name] = create_model(
-                criteria.criterion_name,
+        for criterion in criteria.criteria:
+            criteria_models[criterion.criterion_name] = create_model(
+                criterion.criterion_name,
                 reasoning=(
                     str,
                     Field(
@@ -109,13 +100,31 @@ class RubricPointwiseEvaluator(BaseAnswerEvaluator[RubricPointwiseEvaluatorConfi
                     Field(description="Whether the report fulfills the criterion or not"),
                 ),
             )
+        return create_model("EvaluationSchema", **criteria_models)  # type: ignore[call-overload]
 
-        evaluation_schema = create_model("EvaluationSchema", **criteria_models)  # type: ignore[call-overload]
-        self.answer_schema_cache[query.qid] = evaluation_schema
-        return llm_response.parsed_answer
+    async def _build_criteria(self, query: Query, documents: list[Document]) -> RubricSchema:
+        if query.qid in self.criteria_cache:
+            criteria = self.criteria_cache[query.qid]
+        else:
+            documents = self._filter_documents(query)
+            context = {
+                "expert_in": self.config.expert_in,
+                "company": self.config.company,
+                "documents": documents,
+                "query": query,
+                "n_criteria": self.config.n_criteria,
+            }
+            criteria_prompt = self.criteria_prompt.render(context)
+            user_prompt = self.criteria_user_prompt.render(context)
+            llm_input = LLMInputPrompt(system_prompt=criteria_prompt, user_message=user_prompt)
+            llm_response = await self.llm_provider.call_async(llm_input, response_schema=RubricSchema)
+            criteria = llm_response.parsed_answer
+            self.criteria_cache[query.qid] = criteria
+        self.answer_schema_cache[query.qid] = self._build_evaluation_schema(criteria)
+        return criteria
 
     def _build_message(self, query: Query, answer: AgentAnswer) -> LLMInputPrompt:
-        if query.qid not in self.criteria_cache:
+        if query.qid not in self.answer_schema_cache:
             self.criteria_cache[query.qid] = call_async_fn(
                 self._build_criteria, query, list(query.retrieved_docs.values())
             )
