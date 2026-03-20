@@ -84,9 +84,8 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
             {{ game.agent_b_answer.text }}
         [The End of Agent B's Answer]""")
 
-    criteria_cache: dict[str, RubricSchema] = {}
-
-    answer_schema_cache: dict[str, Type[BaseModel]] = {}
+    criteria_cache: dict[str, RubricSchema]
+    answer_schema_cache: dict[str, Type[BaseModel]]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -94,6 +93,7 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
             self.criteria_cache = {qid: RubricSchema(criteria=rubrics) for qid, rubrics in self.config.rubrics.items()}
         else:
             self.criteria_cache = {}
+        self.answer_schema_cache = {}
 
     def _build_evaluation_schema(self, criteria: RubricSchema) -> Type[BaseModel]:
         criteria_models = {}
@@ -111,7 +111,7 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
             )
         return create_model("EvaluationSchema", **criteria_models)  # type: ignore[call-overload]
 
-    async def _build_criteria(self, query: Query, documents: list[Document]) -> Type[BaseModel]:
+    async def _build_criteria(self, query: Query, documents: list[Document]) -> RubricSchema:
         if query.qid in self.criteria_cache:
             criteria = self.criteria_cache[query.qid]
         else:
@@ -129,11 +129,12 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
             llm_response = await self.llm_provider.call_async(llm_input, response_schema=RubricSchema)
             criteria = llm_response.parsed_answer
             self.criteria_cache[query.qid] = criteria
-        evaluation_schema = self._build_evaluation_schema(criteria)
-        return evaluation_schema
+        self.answer_schema_cache[query.qid] = self._build_evaluation_schema(criteria)
+        return criteria
 
     def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> LLMInputPrompt:
-        llm_response_schema = call_async_fn(self._build_criteria, query, list(query.retrieved_docs.values()))
+        if query.qid not in self.answer_schema_cache:
+            call_async_fn(self._build_criteria, query, list(query.retrieved_docs.values()))
         criteria = self.criteria_cache[query.qid]
         system_prompt = self.system_prompt.render(
             expert_in=self.config.expert_in, criteria=criteria, company=self.config.company
@@ -143,7 +144,9 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
             game=game,
         )
         return LLMInputPrompt(
-            system_prompt=system_prompt, user_message=user_prompt, llm_response_schema=llm_response_schema
+            system_prompt=system_prompt,
+            user_message=user_prompt,
+            llm_response_schema=self.answer_schema_cache[query.qid],
         )
 
     def _process_answer(self, llm_response: LLMResponseType, query: Query) -> LLMResponseType:
