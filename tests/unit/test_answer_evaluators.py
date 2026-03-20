@@ -734,6 +734,34 @@ class TestRubricPairwiseEvaluator:
         assert "completeness" in model.model_fields
         assert "clarity" in model.model_fields
 
+    def test_rubric_pairwise_weighted_scoring(self, llm_provider_mock, experiment):
+        """A single high-weight A-win should outweigh multiple low-weight B-wins."""
+        from ragelo.types.configurations import RubricPairwiseEvaluatorConfig
+
+        criteria = [
+            Criterion(criterion_name="accuracy", evidence=["doc1"], short_question="Accurate?", weight=5.0),
+            Criterion(criterion_name="completeness", evidence=["doc2"], short_question="Complete?", weight=1.0),
+            Criterion(criterion_name="clarity", evidence=[], short_question="Clear?", weight=1.0),
+        ]
+        rubrics = {"0": criteria}
+        config = RubricPairwiseEvaluatorConfig(expert_in="AI", rubrics=rubrics, force=True)
+        evaluator = RubricPairwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
+
+        # A wins accuracy (weight=5), B wins completeness and clarity (weight=1 each)
+        eval_response = self._make_evaluation_response(["A", "B", "B"])
+        # Patch criteria cache with weighted criteria
+        evaluator.criteria_cache["0"] = RubricSchema(criteria=criteria)
+        evaluator.answer_schema_cache["0"] = evaluator._build_evaluation_schema(RubricSchema(criteria=criteria))
+
+        llm_response: LLMResponseType = LLMResponseType(raw_answer="test", parsed_answer=eval_response)
+        query = experiment["0"]
+        processed = evaluator._process_answer(llm_response, query)
+        answer = processed.parsed_answer
+        assert isinstance(answer, RubricAnswerFormat)
+        assert answer.agent_a_wins == 5.0
+        assert answer.agent_b_wins == 2.0
+        assert answer.winner == "A"
+
 
 class TestRubricPointwiseEvaluator:
     """Tests for RubricPointwiseEvaluator."""
@@ -836,3 +864,44 @@ class TestRubricPointwiseEvaluator:
         """Rubric pairwise evaluator should be accessible via factory."""
         evaluator = get_answer_evaluator("rubric_pairwise", llm_provider_mock, expert_in="AI")
         assert isinstance(evaluator, RubricPairwiseEvaluator)
+
+    def test_rubric_pointwise_weighted_average(self, llm_provider_mock, experiment):
+        """Weighted average should give more importance to high-weight criteria."""
+        from ragelo.types.configurations import RubricPointwiseEvaluatorConfig
+
+        criteria = [
+            Criterion(criterion_name="accuracy", evidence=["doc1"], short_question="Accurate?", weight=3.0),
+            Criterion(criterion_name="completeness", evidence=["doc2"], short_question="Complete?", weight=1.0),
+        ]
+        config = RubricPointwiseEvaluatorConfig(expert_in="AI", force=True)
+        evaluator = RubricPointwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
+
+        rubric = RubricSchema(criteria=criteria)
+        evaluator.criteria_cache["0"] = rubric
+        evaluator.answer_schema_cache["0"] = evaluator._build_evaluation_schema(rubric)
+
+        EvalSchema = create_model(
+            "EvaluationSchema",
+            **{
+                c.criterion_name: create_model(
+                    c.criterion_name,
+                    reasoning=(str, Field(description="reasoning")),
+                    fulfillment=(bool, Field(description="fulfillment")),
+                )
+                for c in criteria
+            },
+        )  # type: ignore[call-overload]
+        SubAccuracy = EvalSchema.model_fields["accuracy"].annotation
+        SubCompleteness = EvalSchema.model_fields["completeness"].annotation
+        # accuracy (weight=3) fulfilled, completeness (weight=1) not fulfilled
+        # weighted avg = (3*1 + 1*0) / (3+1) = 0.75
+        eval_response = EvalSchema(
+            accuracy=SubAccuracy(reasoning="acc reason", fulfillment=True),
+            completeness=SubCompleteness(reasoning="comp reason", fulfillment=False),
+        )
+        llm_response: LLMResponseType = LLMResponseType(raw_answer="test", parsed_answer=eval_response)
+        query = experiment["0"]
+        processed = evaluator._process_answer(llm_response, query)
+        answer = processed.parsed_answer
+        assert isinstance(answer, RubricPointwiseAnswerFormat)
+        assert answer.average_score == 0.75

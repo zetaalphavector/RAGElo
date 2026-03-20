@@ -26,6 +26,7 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
         Each criterion should be a short yes/no question that can be used to evaluate the quality of the responses. 
         You should write {{ n_criteria }} criteria.
         If a criterion is supported by a document, you should include the document ID in the supporting_documents list for that criterion.
+        You may optionally assign a weight (a positive number) to each criterion to indicate its relative importance. More important criteria should have higher weights. If no weight is provided, all criteria are weighted equally.
         """  # noqa: E501
     )
 
@@ -47,7 +48,7 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
         The reports are written based on a set of documents retrieved by the two agents, and should thoroughly answer the user's question based on the relevant documents retrieved by the agents.
 
         To properly evaluate the quality of the reports, you will be provided with a list of criteria to evaluate the quality of the responses. 
-        Each criterion includes a short question and a list of documents that support the inclusion of the criterion in the report.
+        Each criterion includes a short question, an optional weight indicating its relative importance, and a list of documents that support the inclusion of the criterion in the report.
         For each criterion, you should think carefully about which of two answers better answers the criterion, and assign, for each criterion, one of the following values:
 
         - A if the report written by Agent A clearly answers the criterion better than the report written by     B
@@ -65,7 +66,8 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
         ## Criteria
         {% for criteria in criteria.criteria %}
         Criterion: {{criteria.criterion_name}}
-        Supporting Documents: {{criteria.supporting_documents}}
+        {% if criteria.weight is not none %}Weight: {{criteria.weight}}
+        {% endif %}Supporting Documents: {{criteria.supporting_documents}}
         Short Question: {{criteria.short_question}}
         --------------------------------
         {% endfor %}
@@ -151,14 +153,15 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
 
     def _process_answer(self, llm_response: LLMResponseType, query: Query) -> LLMResponseType:
         response_dict = llm_response.parsed_answer.model_dump()
-        agent_a_wins = 0
-        agent_b_wins = 0
-        equally_good = 0
-        equally_bad = 0
+        agent_a_wins = 0.0
+        agent_b_wins = 0.0
+        equally_good = 0.0
+        equally_bad = 0.0
         criteria: list[CriterionEvaluation] = []
 
         for crit, response in response_dict.items():
             crit_obj = [x for x in self.criteria_cache[query.qid].criteria if x.criterion_name == crit][0]
+            weight = crit_obj.weight if crit_obj.weight is not None else 1.0
             if len(response["winner"]) > 1:
                 response["winner"] = response["winner"][-1]
             if response["winner"] == "D":
@@ -176,13 +179,13 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
             )
             criteria.append(criterion)
             if response["winner"] == "A":
-                agent_a_wins += 1
+                agent_a_wins += weight
             elif response["winner"] == "B":
-                agent_b_wins += 1
+                agent_b_wins += weight
             elif response["winner"] == "C":
-                equally_good += 1
+                equally_good += weight
             else:
-                equally_bad += 1
+                equally_bad += weight
         winner = "A" if agent_a_wins > agent_b_wins else "B" if agent_a_wins < agent_b_wins else "C"
         parsed_answer = RubricAnswerFormat(
             criteria=criteria,

@@ -197,6 +197,11 @@ class Criterion(BaseModel):
     short_question: str = Field(
         description="A short, yes/no question that can be used to evaluate the quality of the responses."
     )
+    weight: float | None = Field(
+        default=None,
+        description="The relative importance of this criterion. "
+        "Higher values give more weight in the final score. If not provided, all criteria are weighted equally.",
+    )
 
 
 class CriterionEvaluation(BaseModel):
@@ -230,10 +235,14 @@ class CriterionEvaluation(BaseModel):
 
 class RubricAnswerFormat(EvaluationAnswer):
     criteria: list[CriterionEvaluation] = Field(..., description="The criteria used for evaluating the answer quality")
-    agent_a_wins: int = Field(..., description="The number of criteria that agent A wins")
-    agent_b_wins: int = Field(..., description="The number of criteria that agent B wins")
-    equally_good: int = Field(..., description="The number of criteria that agent A and agent B are equally good")
-    equally_bad: int = Field(..., description="The number of criteria that agent A and agent B are equally bad")
+    agent_a_wins: float = Field(..., description="The weighted score of criteria that agent A wins")
+    agent_b_wins: float = Field(..., description="The weighted score of criteria that agent B wins")
+    equally_good: float = Field(
+        ..., description="The weighted score of criteria that agent A and agent B are equally good"
+    )
+    equally_bad: float = Field(
+        ..., description="The weighted score of criteria that agent A and agent B are equally bad"
+    )
     winner: PairwiseWinner = Field(..., description="The winner of the pairwise comparison")
 
     def swap_perspective(self) -> Self:
