@@ -5,7 +5,15 @@ from ragelo.evaluators.answer_evaluators import AnswerEvaluatorFactory, get_answ
 from ragelo.evaluators.retrieval_evaluators import RetrievalEvaluatorFactory, get_retrieval_evaluator
 from ragelo.llm_providers.base_llm_provider import get_llm_provider
 from ragelo.logger import configure_logging
-from ragelo.types import AgentAnswer, Document, Experiment, Query
+from ragelo.types import (
+    AgentAnswer,
+    Document,
+    Experiment,
+    FileStorageBackend,
+    NullStorageBackend,
+    Query,
+    StorageBackend,
+)
 
 __all__ = [
     "get_agent_ranker",
@@ -19,6 +27,9 @@ __all__ = [
     "Document",
     "Query",
     "Experiment",
+    "StorageBackend",
+    "FileStorageBackend",
+    "NullStorageBackend",
 ]
 
 __version__ = "0.1.0"

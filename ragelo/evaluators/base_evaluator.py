@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
+from collections.abc import AsyncGenerator, Callable, Sequence
 from typing import TYPE_CHECKING, TypeVar
 
 from jinja2 import Template
@@ -64,7 +64,81 @@ class BaseEvaluator(ABC):
                 If None, the number of threads defined in the config will be used.
         """
         n_threads = n_threads or self.config.n_processes
-        call_async_fn(self._evaluate_experiment_async, experiment, n_threads)
+
+        async def _consume():
+            async for _ in self.evaluate_experiment_async(experiment, n_threads):
+                pass
+
+        call_async_fn(_consume)
+
+    async def evaluate_experiment_async(
+        self,
+        experiment: Experiment,
+        n_threads: int | None = None,
+        on_result: Callable[[tuple[Query, Evaluable], EvaluatorResult], None] | None = None,
+    ) -> AsyncGenerator[tuple[tuple[Query, Evaluable], EvaluatorResult], None]:
+        """Evaluate all evaluables in the experiment, yielding results as they complete.
+
+        Args:
+            experiment: The experiment to evaluate.
+            n_threads: Maximum concurrent LLM calls. Defaults to ``config.n_processes``.
+            on_result: Optional callback invoked after each successful evaluation is added
+                to the experiment. Receives ``(eval_tuple, evaluation)``.
+
+        Yields:
+            Tuples of ``(eval_tuple, evaluation)`` for each completed evaluation.
+        """
+        n_threads = n_threads or self.config.n_processes
+        tuples_to_eval = self._get_tuples_to_evaluate(experiment)
+        pbar = get_pbar(
+            len(tuples_to_eval),
+            self.config.rich_print,
+            desc=f"Evaluating {self.evaluable_name}s",
+            disable=not getattr(self.config, "use_progress_bar", True),
+        )
+
+        awaitables_ended = False
+        pending: set[asyncio.Future] = set()
+        tuples_iter = iter(tuples_to_eval)
+        future_to_tuple: dict[asyncio.Future, tuple[Query, Evaluable]] = {}
+        failed = 0
+        evaluations = 0
+        while pending or not awaitables_ended:
+            while len(pending) < n_threads and not awaitables_ended:
+                try:
+                    eval_tuple = next(tuples_iter)
+                except StopIteration:
+                    awaitables_ended = True
+                else:
+                    future = asyncio.ensure_future(self.evaluate_async(eval_tuple))
+                    pending.add(future)
+                    future_to_tuple[future] = eval_tuple
+            if not pending:
+                break
+            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+            while done:
+                finished = done.pop()
+                evaluation = await finished
+                eval_tuple = future_to_tuple.pop(finished)
+                evaluations += 1
+                pbar.update()
+                pbar.refresh()
+                if evaluation.exception:
+                    failed += 1
+                    continue
+                experiment.add_evaluation(
+                    eval_tuple,
+                    evaluation,
+                    exist_ok=True,
+                    force=self.config.force,
+                    should_print=self.config.show_results,
+                )
+                if on_result is not None:
+                    on_result(eval_tuple, evaluation)
+                yield eval_tuple, evaluation
+        pbar.close()
+        if self.config.show_results:
+            render_failed_evaluations(evaluations, failed, self.config.rich_print)
 
     def evaluate_all_evaluables(self, query: Query, n_threads: int | None = None):
         """Evaluate all evaluables for a single query, useful for incremental workflows.
@@ -124,55 +198,6 @@ class BaseEvaluator(ABC):
     async def evaluate_async(self, eval_sample: tuple[Query, Evaluable]) -> EvaluatorResult:
         """Evaluate a single query and evaluable asynchronously."""
         raise NotImplementedError
-
-    async def _evaluate_experiment_async(self, experiment: Experiment, n_threads: int = 1):
-        tuples_to_eval = self._get_tuples_to_evaluate(experiment)
-        pbar = get_pbar(
-            len(tuples_to_eval),
-            self.config.rich_print,
-            desc=f"Evaluating {self.evaluable_name}s",
-            disable=not getattr(self.config, "use_progress_bar", True),
-        )
-
-        awaitables_ended = False
-        pending: set[asyncio.Future] = set()
-        tuples_iter = iter(tuples_to_eval)
-        future_to_tuple: dict[asyncio.Future, tuple[Query, Evaluable]] = {}
-        failed = 0
-        evaluations = 0
-        while pending or not awaitables_ended:
-            while len(pending) < n_threads and not awaitables_ended:
-                try:
-                    eval_tuple = next(tuples_iter)
-                except StopIteration:
-                    awaitables_ended = True
-                else:
-                    future = asyncio.ensure_future(self.evaluate_async(eval_tuple))
-                    pending.add(future)
-                    future_to_tuple[future] = eval_tuple
-            if not pending:
-                break
-            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
-            while done:
-                finished = done.pop()
-                evaluation = await finished
-                eval_tuple = future_to_tuple.pop(finished)
-                evaluations += 1
-                pbar.update()
-                pbar.refresh()
-                if evaluation.exception:
-                    failed += 1
-                    continue
-                experiment.add_evaluation(
-                    eval_tuple,
-                    evaluation,
-                    exist_ok=True,
-                    force=self.config.force,
-                    should_print=self.config.show_results,
-                )
-        pbar.close()
-        if self.config.show_results:
-            render_failed_evaluations(evaluations, failed, self.config.rich_print)
 
     @abstractmethod
     def _get_tuples_to_evaluate(self, experiment: Experiment) -> Sequence[tuple[Query, Evaluable]]:
