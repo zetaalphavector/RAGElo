@@ -233,6 +233,49 @@ class CriterionEvaluation(BaseModel):
         )
 
 
+class EvidenceSnippetEvaluation(BaseModel):
+    snippet: str = Field(..., description="The evidence snippet being checked")
+    present: bool = Field(..., description="Whether the snippet is present in the answer")
+    reasoning: str = Field(..., description="Brief explanation of the presence assessment")
+
+
+class EvidenceRecallResult(BaseModel):
+    snippet_evaluations: list[EvidenceSnippetEvaluation] = Field(..., description="Per-snippet presence evaluations")
+    snippets_found: int = Field(..., description="Number of evidence snippets found in the answer")
+    total_snippets: int = Field(..., description="Total number of evidence snippets checked")
+    recall: float = Field(..., description="Recall ratio (snippets_found / total_snippets)")
+
+
+class ClaimEvaluation(BaseModel):
+    claim: str = Field(..., description="A claim extracted from the answer")
+    has_citation: bool = Field(..., description="Whether the claim is supported by a citation")
+
+
+class CitationExcerptEvaluation(BaseModel):
+    citation: str = Field(..., description="A citation found in the answer")
+    has_relevant_excerpt: bool = Field(
+        ..., description="Whether the citation includes a relevant excerpt from the source"
+    )
+
+
+class CitationQualityResult(BaseModel):
+    claim_evaluations: list[ClaimEvaluation] = Field(..., description="Per-claim citation evaluations")
+    citation_evaluations: list[CitationExcerptEvaluation] = Field(..., description="Per-citation excerpt evaluations")
+    claims_with_citations_ratio: float = Field(..., description="Proportion of claims that have citations")
+    citations_with_excerpts_ratio: float = Field(
+        ..., description="Proportion of citations that include relevant excerpts"
+    )
+
+
+class EvidenceRecallSchema(BaseModel):
+    evaluations: list[EvidenceSnippetEvaluation] = Field(..., description="Per-snippet presence evaluations")
+
+
+class CitationQualitySchema(BaseModel):
+    claims: list[ClaimEvaluation] = Field(..., description="Claims extracted from the answer")
+    citations: list[CitationExcerptEvaluation] = Field(..., description="Citations found in the answer")
+
+
 class RubricAnswerFormat(EvaluationAnswer):
     criteria: list[CriterionEvaluation] = Field(..., description="The criteria used for evaluating the answer quality")
     agent_a_wins: float = Field(..., description="The weighted score of criteria that agent A wins")
@@ -244,6 +287,18 @@ class RubricAnswerFormat(EvaluationAnswer):
         ..., description="The weighted score of criteria that agent A and agent B are equally bad"
     )
     winner: PairwiseWinner = Field(..., description="The winner of the pairwise comparison")
+    evidence_recall_a: EvidenceRecallResult | None = Field(
+        default=None, description="Evidence recall result for agent A"
+    )
+    evidence_recall_b: EvidenceRecallResult | None = Field(
+        default=None, description="Evidence recall result for agent B"
+    )
+    citation_quality_a: CitationQualityResult | None = Field(
+        default=None, description="Citation quality result for agent A"
+    )
+    citation_quality_b: CitationQualityResult | None = Field(
+        default=None, description="Citation quality result for agent B"
+    )
 
     def swap_perspective(self) -> Self:
         return self.model_copy(
@@ -252,6 +307,10 @@ class RubricAnswerFormat(EvaluationAnswer):
                 "agent_a_wins": self.agent_b_wins,
                 "agent_b_wins": self.agent_a_wins,
                 "winner": swap_pairwise_winner(self.winner),
+                "evidence_recall_a": self.evidence_recall_b,
+                "evidence_recall_b": self.evidence_recall_a,
+                "citation_quality_a": self.citation_quality_b,
+                "citation_quality_b": self.citation_quality_a,
             }
         )
 
@@ -267,6 +326,10 @@ class RubricPointwiseAnswerFormat(EvaluationAnswer):
         ..., description="The criteria used for evaluating the answer quality"
     )
     average_score: float = Field(..., description="The average score of the criteria")
+    evidence_recall: EvidenceRecallResult | None = Field(default=None, description="Evidence recall evaluation result")
+    citation_quality: CitationQualityResult | None = Field(
+        default=None, description="Citation quality evaluation result"
+    )
 
 
 class RubricSchema(BaseModel):

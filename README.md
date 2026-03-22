@@ -102,6 +102,60 @@ pairwise = get_answer_evaluator(
 pairwise.evaluate_experiment(experiment)
 ```
 
+#### Criteria weights
+
+When the LLM generates criteria it may optionally assign a **weight** (a positive float) to each criterion. Weights are normalized at scoring time so their absolute scale does not matter. If no weight is generated, all criteria are weighted equally.
+
+#### Graduated scoring (pointwise only)
+
+By default the pointwise evaluator uses binary answers to each criterion (yes/no). However, it also supports **graduated scoring** with the `graduated_scoring` flag in the evaluator configuration:
+
+```python
+pointwise = get_answer_evaluator(
+    "rubric_pointwise",
+    llm_provider="openai",
+    graduated_scoring=True,  # enable graduated scoring
+    max_score=5,             # score range 0–5 (default)
+)
+```
+
+Scores are normalized to `[0, 1]` via `score / max_score` before computing the weighted average.
+
+#### Built-in criteria: evidence recall & citation quality
+
+We also include two built-in criteria to evaluate `evidence_recall` (how many relevant snippets were included in the answer) and `citation_quality` (wether the answer is well supported with proper citations). They can be added to the rubric with the `evidence_recall` and `citation_quality` flags.
+
+**Evidence recall** — checks how many expected evidence snippets appear in the answer:
+
+```python
+pointwise = get_answer_evaluator(
+    "rubric_pointwise",
+    llm_provider="openai",
+    evidence_recall=True,
+    evidence_recall_weight=1.5,  # relative importance (default 1.0)
+    evidence_snippets={          # optional per-query snippets
+        "q0": ["Brasília is the capital", "since 1960"],
+    },
+)
+```
+
+Evidence snippets are resolved in priority order: `evidence_snippets` config → `Criterion.evidence` fields from the generated rubric → text of relevant documents in the query.
+
+**Citation quality** — evaluates whether the answer supports claims with citations and includes relevant excerpts:
+
+```python
+pointwise = get_answer_evaluator(
+    "rubric_pointwise",
+    llm_provider="openai",
+    citation_quality=True,
+    citation_quality_weight=2.0,  # relative importance (default 1.0)
+)
+```
+
+The LLM identifies claims and citations; ratios (claims with citations, citations with excerpts) are computed programmatically. The final citation quality score is the average of both ratios.
+
+Both built-in criteria work with the pairwise evaluator as well — each agent is evaluated independently and the scores are compared to determine the winner.
+
 ### 📜 Evaluating multiple documents or answers
 
 RAGElo supports `Experiments` to keep track of which documents and answers were already evaluated and to compute overall scores for each Agent:

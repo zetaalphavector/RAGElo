@@ -5,12 +5,17 @@ from typing import Type
 from pydantic import BaseModel, Field, create_model
 
 from ragelo.evaluators.answer_evaluators.base_answer_evaluator import AnswerEvaluatorFactory, BaseAnswerEvaluator
+from ragelo.evaluators.answer_evaluators.builtin_criteria import (
+    evaluate_citation_quality,
+    evaluate_evidence_recall,
+    get_evidence_snippets,
+)
 from ragelo.types.answer_formats import CriterionEvaluationPointwise, RubricPointwiseAnswerFormat, RubricSchema
 from ragelo.types.configurations import RubricPointwiseEvaluatorConfig
-from ragelo.types.evaluables import AgentAnswer, Document
+from ragelo.types.evaluables import AgentAnswer, Document, Evaluable
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.query import Query
-from ragelo.types.results import AnswerEvaluatorResult
+from ragelo.types.results import AnswerEvaluatorResult, PairwiseGameEvaluatorResult
 from ragelo.types.types import AnswerEvaluatorTypes
 from ragelo.utils import call_async_fn, string_to_template
 
@@ -219,3 +224,55 @@ class RubricPointwiseEvaluator(BaseAnswerEvaluator[RubricPointwiseEvaluatorConfi
                 average_score=weighted_sum / total_weight if total_weight > 0 else 0.0,
             ),
         )
+
+    async def evaluate_async(
+        self, eval_sample: tuple[Query, Evaluable]
+    ) -> AnswerEvaluatorResult | PairwiseGameEvaluatorResult:
+        result = await super().evaluate_async(eval_sample)
+        if not isinstance(result, AnswerEvaluatorResult) or result.answer is None or result.exception:
+            return result
+
+        query, evaluable = eval_sample
+        if not isinstance(evaluable, AgentAnswer) or not evaluable.text:
+            return result
+
+        answer_format = result.answer
+        if not isinstance(answer_format, RubricPointwiseAnswerFormat):
+            return result
+
+        weighted_sum = answer_format.average_score * sum(
+            (c.criterion.weight if c.criterion.weight is not None else 1.0) for c in answer_format.criteria
+        )
+        total_weight = sum(
+            (c.criterion.weight if c.criterion.weight is not None else 1.0) for c in answer_format.criteria
+        )
+
+        evidence_recall_result = None
+        citation_quality_result = None
+
+        if self.config.evidence_recall:
+            snippets = get_evidence_snippets(query, self.config.evidence_snippets, self.criteria_cache)
+            evidence_recall_result = await evaluate_evidence_recall(self.llm_provider, evaluable.text, snippets)
+            weighted_sum += evidence_recall_result.recall * self.config.evidence_recall_weight
+            total_weight += self.config.evidence_recall_weight
+
+        if self.config.citation_quality:
+            relevant_doc_ids = list(query.retrieved_docs.keys())
+            citation_quality_result = await evaluate_citation_quality(
+                self.llm_provider, evaluable.text, relevant_doc_ids
+            )
+            avg_citation_score = (
+                citation_quality_result.claims_with_citations_ratio
+                + citation_quality_result.citations_with_excerpts_ratio
+            ) / 2.0
+            weighted_sum += avg_citation_score * self.config.citation_quality_weight
+            total_weight += self.config.citation_quality_weight
+
+        updated_answer = answer_format.model_copy(
+            update={
+                "average_score": weighted_sum / total_weight if total_weight > 0 else 0.0,
+                "evidence_recall": evidence_recall_result,
+                "citation_quality": citation_quality_result,
+            }
+        )
+        return result.model_copy(update={"answer": updated_answer})

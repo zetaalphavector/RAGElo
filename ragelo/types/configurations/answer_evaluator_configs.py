@@ -134,6 +134,20 @@ class RubricPairwiseEvaluatorConfig(PairwiseDomainExpertEvaluatorConfig):
             "and use this instead."
         ),
     )
+    evidence_recall: bool = Field(default=False, description="Enable evidence recall scoring as a built-in criterion.")
+    citation_quality: bool = Field(
+        default=False, description="Enable citation quality scoring as a built-in criterion."
+    )
+    evidence_snippets: Optional[dict[str, list[str]]] = Field(
+        default=None,
+        description="Override evidence snippets per query ID. Maps qid to a list of text snippets.",
+    )
+    evidence_recall_weight: float = Field(
+        default=1.0, description="Weight for the evidence recall criterion in the final score."
+    )
+    citation_quality_weight: float = Field(
+        default=1.0, description="Weight for the citation quality criterion in the final score."
+    )
 
 
 class RubricPointwiseEvaluatorConfig(PairwiseDomainExpertEvaluatorConfig):
@@ -159,4 +173,18 @@ class RubricPointwiseEvaluatorConfig(PairwiseDomainExpertEvaluatorConfig):
     max_score: int = Field(
         default=5,
         description="The maximum score for graduated scoring. Only used when graduated_scoring is True.",
+    )
+    evidence_recall: bool = Field(default=False, description="Enable evidence recall scoring as a built-in criterion.")
+    citation_quality: bool = Field(
+        default=False, description="Enable citation quality scoring as a built-in criterion."
+    )
+    evidence_snippets: Optional[dict[str, list[str]]] = Field(
+        default=None,
+        description="Override evidence snippets per query ID. Maps qid to a list of text snippets.",
+    )
+    evidence_recall_weight: float = Field(
+        default=1.0, description="Weight for the evidence recall criterion in the final score."
+    )
+    citation_quality_weight: float = Field(
+        default=1.0, description="Weight for the citation quality criterion in the final score."
     )

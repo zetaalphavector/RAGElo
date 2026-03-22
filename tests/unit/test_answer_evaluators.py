@@ -986,3 +986,247 @@ class TestRubricPointwiseEvaluator:
         answer = processed.parsed_answer
         assert isinstance(answer, RubricPointwiseAnswerFormat)
         assert answer.average_score == pytest.approx(0.65)
+
+
+class TestBuiltinCriteriaPointwise:
+    """Tests for evidence recall and citation quality in RubricPointwiseEvaluator."""
+
+    def _make_criteria(self):
+        return [
+            Criterion(
+                criterion_name="accuracy",
+                evidence=["snippet_from_doc1"],
+                short_question="Is the answer accurate?",
+            ),
+        ]
+
+    def _make_eval_response(self, criteria):
+        EvalSchema = create_model(
+            "EvaluationSchema",
+            **{
+                c.criterion_name: create_model(
+                    c.criterion_name,
+                    reasoning=(str, Field(description="reasoning")),
+                    fulfillment=(bool, Field(description="fulfillment")),
+                )
+                for c in criteria
+            },
+        )  # type: ignore[call-overload]
+        SubModel = EvalSchema.model_fields["accuracy"].annotation
+        return EvalSchema(accuracy=SubModel(reasoning="good", fulfillment=True))
+
+    def test_pointwise_evidence_recall(self, llm_provider_mock, experiment):
+        """Evidence recall should evaluate snippet presence and contribute to average_score."""
+        from ragelo.types.answer_formats import EvidenceRecallSchema, EvidenceSnippetEvaluation
+        from ragelo.types.configurations import RubricPointwiseEvaluatorConfig
+
+        criteria = self._make_criteria()
+        config = RubricPointwiseEvaluatorConfig(
+            expert_in="AI",
+            rubrics={"0": criteria},
+            force=True,
+            evidence_recall=True,
+            evidence_snippets={"0": ["snippet A", "snippet B", "snippet C"]},
+            evidence_recall_weight=2.0,
+        )
+        eval_response = self._make_eval_response(criteria)
+
+        recall_response = EvidenceRecallSchema(
+            evaluations=[
+                EvidenceSnippetEvaluation(snippet="snippet A", present=True, reasoning="found"),
+                EvidenceSnippetEvaluation(snippet="snippet B", present=False, reasoning="not found"),
+                EvidenceSnippetEvaluation(snippet="snippet C", present=True, reasoning="found"),
+            ]
+        )
+
+        llm_provider_mock.async_call_mocker = AsyncMock(
+            side_effect=[
+                LLMResponseType(raw_answer="eval", parsed_answer=eval_response),
+                LLMResponseType(raw_answer="recall", parsed_answer=recall_response),
+            ]
+        )
+
+        evaluator = RubricPointwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
+        query = experiment["0"]
+        answer = query.answers["agent1"]
+        result = evaluator.evaluate(query, answer)
+
+        assert isinstance(result, AnswerEvaluatorResult)
+        assert isinstance(result.answer, RubricPointwiseAnswerFormat)
+        assert result.answer.evidence_recall is not None
+        assert result.answer.evidence_recall.snippets_found == 2
+        assert result.answer.evidence_recall.total_snippets == 3
+        assert result.answer.evidence_recall.recall == pytest.approx(2 / 3)
+        # average_score: (1.0 * 1.0 + (2/3) * 2.0) / (1.0 + 2.0) = (1.0 + 4/3) / 3.0
+        expected = (1.0 + (2 / 3) * 2.0) / 3.0
+        assert result.answer.average_score == pytest.approx(expected)
+
+    def test_pointwise_citation_quality(self, llm_provider_mock, experiment):
+        """Citation quality should evaluate claims/citations and contribute to average_score."""
+        from ragelo.types.answer_formats import CitationExcerptEvaluation, CitationQualitySchema, ClaimEvaluation
+        from ragelo.types.configurations import RubricPointwiseEvaluatorConfig
+
+        criteria = self._make_criteria()
+        config = RubricPointwiseEvaluatorConfig(
+            expert_in="AI",
+            rubrics={"0": criteria},
+            force=True,
+            citation_quality=True,
+            citation_quality_weight=1.0,
+        )
+        eval_response = self._make_eval_response(criteria)
+
+        cq_response = CitationQualitySchema(
+            claims=[
+                ClaimEvaluation(claim="claim 1", has_citation=True),
+                ClaimEvaluation(claim="claim 2", has_citation=False),
+            ],
+            citations=[
+                CitationExcerptEvaluation(citation="[1]", has_relevant_excerpt=True),
+            ],
+        )
+
+        llm_provider_mock.async_call_mocker = AsyncMock(
+            side_effect=[
+                LLMResponseType(raw_answer="eval", parsed_answer=eval_response),
+                LLMResponseType(raw_answer="cq", parsed_answer=cq_response),
+            ]
+        )
+
+        evaluator = RubricPointwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
+        query = experiment["0"]
+        answer = query.answers["agent1"]
+        result = evaluator.evaluate(query, answer)
+
+        assert isinstance(result.answer, RubricPointwiseAnswerFormat)
+        assert result.answer.citation_quality is not None
+        assert result.answer.citation_quality.claims_with_citations_ratio == 0.5
+        assert result.answer.citation_quality.citations_with_excerpts_ratio == 1.0
+        # avg citation score = (0.5 + 1.0) / 2 = 0.75
+        # average_score: (1.0 * 1.0 + 0.75 * 1.0) / (1.0 + 1.0) = 0.875
+        assert result.answer.average_score == pytest.approx(0.875)
+
+    def test_pointwise_disabled_by_default(self, llm_provider_mock, experiment):
+        """When evidence_recall and citation_quality are False, no built-in criteria are evaluated."""
+        from ragelo.types.configurations import RubricPointwiseEvaluatorConfig
+
+        criteria = self._make_criteria()
+        config = RubricPointwiseEvaluatorConfig(expert_in="AI", rubrics={"0": criteria}, force=True)
+        eval_response = self._make_eval_response(criteria)
+        llm_provider_mock.async_call_mocker = AsyncMock(
+            side_effect=[LLMResponseType(raw_answer="eval", parsed_answer=eval_response)]
+        )
+
+        evaluator = RubricPointwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
+        query = experiment["0"]
+        answer = query.answers["agent1"]
+        result = evaluator.evaluate(query, answer)
+
+        assert isinstance(result.answer, RubricPointwiseAnswerFormat)
+        assert result.answer.evidence_recall is None
+        assert result.answer.citation_quality is None
+        assert result.answer.average_score == 1.0
+        assert llm_provider_mock.async_call_mocker.call_count == 1
+
+    def test_evidence_snippets_fallback_to_criterion_evidence(self, llm_provider_mock, experiment):
+        """When no config snippets provided, evidence_snippets comes from Criterion.evidence fields."""
+        from ragelo.evaluators.answer_evaluators.builtin_criteria import get_evidence_snippets
+
+        criteria = [
+            Criterion(criterion_name="c1", evidence=["ev1", "ev2"], short_question="Q1?"),
+            Criterion(criterion_name="c2", evidence=["ev3"], short_question="Q2?"),
+        ]
+        rubric_cache = {"0": RubricSchema(criteria=criteria)}
+        query = experiment["0"]
+        snippets = get_evidence_snippets(query, None, rubric_cache)
+        assert snippets == ["ev1", "ev2", "ev3"]
+
+
+class TestBuiltinCriteriaPairwise:
+    """Tests for evidence recall and citation quality in RubricPairwiseEvaluator."""
+
+    def _make_criteria(self):
+        return [
+            Criterion(criterion_name="accuracy", evidence=["doc1"], short_question="Is the answer accurate?"),
+        ]
+
+    def test_pairwise_evidence_recall_a_wins(self, llm_provider_mock, experiment):
+        """Agent A has better evidence recall, so it should get the evidence_recall criterion win."""
+        from ragelo.types.answer_formats import EvidenceRecallSchema, EvidenceSnippetEvaluation
+        from ragelo.types.configurations import RubricPairwiseEvaluatorConfig
+
+        criteria = self._make_criteria()
+        config = RubricPairwiseEvaluatorConfig(
+            expert_in="AI",
+            rubrics={"0": criteria},
+            force=True,
+            evidence_recall=True,
+            evidence_snippets={"0": ["snippet A", "snippet B"]},
+            evidence_recall_weight=1.0,
+        )
+
+        # Build evaluation schema dynamically
+        EvalSchema = create_model(
+            "EvaluationSchema",
+            **{
+                c.criterion_name: create_model(
+                    c.criterion_name,
+                    agent_a_assessment=(str, Field(description="agent_a_assessment")),
+                    agent_b_assessment=(str, Field(description="agent_b_assessment")),
+                    winner_reasoning=(str, Field(description="winner_reasoning")),
+                    reasoning=(str, Field(description="reasoning")),
+                    winner=(str, Field(description="winner")),
+                )
+                for c in criteria
+            },
+        )  # type: ignore[call-overload]
+        SubModel = EvalSchema.model_fields["accuracy"].annotation
+        eval_response = EvalSchema(
+            accuracy=SubModel(
+                agent_a_assessment="good",
+                agent_b_assessment="good",
+                winner_reasoning="tie",
+                reasoning="tie",
+                winner="C",
+            )
+        )
+
+        recall_a = EvidenceRecallSchema(
+            evaluations=[
+                EvidenceSnippetEvaluation(snippet="snippet A", present=True, reasoning="found"),
+                EvidenceSnippetEvaluation(snippet="snippet B", present=True, reasoning="found"),
+            ]
+        )
+        recall_b = EvidenceRecallSchema(
+            evaluations=[
+                EvidenceSnippetEvaluation(snippet="snippet A", present=True, reasoning="found"),
+                EvidenceSnippetEvaluation(snippet="snippet B", present=False, reasoning="not found"),
+            ]
+        )
+
+        llm_provider_mock.async_call_mocker = AsyncMock(
+            side_effect=[
+                # Bidirectional: normal direction eval
+                LLMResponseType(raw_answer="eval", parsed_answer=eval_response),
+                # Bidirectional: reversed direction eval
+                LLMResponseType(raw_answer="eval", parsed_answer=eval_response),
+                # Evidence recall for agent A
+                LLMResponseType(raw_answer="recall_a", parsed_answer=recall_a),
+                # Evidence recall for agent B
+                LLMResponseType(raw_answer="recall_b", parsed_answer=recall_b),
+            ]
+        )
+
+        evaluator = RubricPairwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
+        query = experiment["0"]
+        result = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
+
+        assert isinstance(result, PairwiseGameEvaluatorResult)
+        assert isinstance(result.answer, RubricAnswerFormat)
+        assert result.answer.evidence_recall_a is not None
+        assert result.answer.evidence_recall_b is not None
+        assert result.answer.evidence_recall_a.recall == 1.0
+        assert result.answer.evidence_recall_b.recall == 0.5
+        # Regular criterion: C (tie, equally_good=1). Evidence recall: A wins (weight=1).
+        assert result.answer.agent_a_wins == 1.0
+        assert result.answer.winner == "A"

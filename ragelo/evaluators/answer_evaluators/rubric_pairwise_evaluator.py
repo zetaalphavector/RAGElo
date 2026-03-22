@@ -5,12 +5,18 @@ from typing import Literal, Type
 from pydantic import BaseModel, Field, create_model
 
 from ragelo.evaluators.answer_evaluators.base_answer_evaluator import AnswerEvaluatorFactory
+from ragelo.evaluators.answer_evaluators.builtin_criteria import (
+    evaluate_citation_quality,
+    evaluate_evidence_recall,
+    get_evidence_snippets,
+)
 from ragelo.evaluators.answer_evaluators.pairwise_evaluator import PairwiseAnswerEvaluator
 from ragelo.types.answer_formats import CriterionEvaluation, RubricAnswerFormat, RubricSchema
 from ragelo.types.configurations import RubricPairwiseEvaluatorConfig
-from ragelo.types.evaluables import Document, PairwiseGame
+from ragelo.types.evaluables import Document, Evaluable, PairwiseGame
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.query import Query
+from ragelo.types.results import AnswerEvaluatorResult, PairwiseGameEvaluatorResult
 from ragelo.types.types import AnswerEvaluatorTypes
 from ragelo.utils import call_async_fn, string_to_template
 
@@ -200,3 +206,70 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
             raw_answer=llm_response.raw_answer,
             parsed_answer=parsed_answer,
         )
+
+    async def evaluate_async(
+        self, eval_sample: tuple[Query, Evaluable]
+    ) -> AnswerEvaluatorResult | PairwiseGameEvaluatorResult:
+        result = await super().evaluate_async(eval_sample)
+        if not isinstance(result, PairwiseGameEvaluatorResult) or result.answer is None or result.exception:
+            return result
+
+        query, evaluable = eval_sample
+        if not isinstance(evaluable, PairwiseGame):
+            return result
+
+        answer_format = result.answer
+        if not isinstance(answer_format, RubricAnswerFormat):
+            return result
+
+        if not self.config.evidence_recall and not self.config.citation_quality:
+            return result
+
+        agent_a_text = evaluable.agent_a_answer.text or ""
+        agent_b_text = evaluable.agent_b_answer.text or ""
+        snippets = get_evidence_snippets(query, self.config.evidence_snippets, self.criteria_cache)
+        relevant_doc_ids = list(query.retrieved_docs.keys())
+        agent_a_wins = answer_format.agent_a_wins
+        agent_b_wins = answer_format.agent_b_wins
+        equally_good = answer_format.equally_good
+        updates: dict = {}
+
+        if self.config.evidence_recall:
+            recall_a = await evaluate_evidence_recall(self.llm_provider, agent_a_text, snippets)
+            recall_b = await evaluate_evidence_recall(self.llm_provider, agent_b_text, snippets)
+            updates["evidence_recall_a"] = recall_a
+            updates["evidence_recall_b"] = recall_b
+            weight = self.config.evidence_recall_weight
+            if recall_a.recall > recall_b.recall:
+                agent_a_wins += weight
+            elif recall_b.recall > recall_a.recall:
+                agent_b_wins += weight
+            else:
+                equally_good += weight
+
+        if self.config.citation_quality:
+            cq_a = await evaluate_citation_quality(self.llm_provider, agent_a_text, relevant_doc_ids)
+            cq_b = await evaluate_citation_quality(self.llm_provider, agent_b_text, relevant_doc_ids)
+            updates["citation_quality_a"] = cq_a
+            updates["citation_quality_b"] = cq_b
+            score_a = (cq_a.claims_with_citations_ratio + cq_a.citations_with_excerpts_ratio) / 2.0
+            score_b = (cq_b.claims_with_citations_ratio + cq_b.citations_with_excerpts_ratio) / 2.0
+            weight = self.config.citation_quality_weight
+            if score_a > score_b:
+                agent_a_wins += weight
+            elif score_b > score_a:
+                agent_b_wins += weight
+            else:
+                equally_good += weight
+
+        winner = "A" if agent_a_wins > agent_b_wins else "B" if agent_a_wins < agent_b_wins else "C"
+        updates.update(
+            {
+                "agent_a_wins": agent_a_wins,
+                "agent_b_wins": agent_b_wins,
+                "equally_good": equally_good,
+                "winner": winner,
+            }
+        )
+        updated_answer = answer_format.model_copy(update=updates)
+        return result.model_copy(update={"answer": updated_answer})
