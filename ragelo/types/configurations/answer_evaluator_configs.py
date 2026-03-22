@@ -152,3 +152,11 @@ class RubricPointwiseEvaluatorConfig(PairwiseDomainExpertEvaluatorConfig):
             "and use this instead."
         ),
     )
+    graduated_scoring: bool = Field(
+        default=False,
+        description="Use a graduated numeric scale (0 to max_score) instead of binary yes/no fulfillment.",
+    )
+    max_score: int = Field(
+        default=5,
+        description="The maximum score for graduated scoring. Only used when graduated_scoring is True.",
+    )

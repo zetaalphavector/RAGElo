@@ -259,7 +259,7 @@ class RubricAnswerFormat(EvaluationAnswer):
 class CriterionEvaluationPointwise(BaseModel):
     criterion: Criterion = Field(..., description="The criterion used for evaluating the answer quality")
     reasoning: str = Field(..., description="The LLM reasoning for the score of the criterion")
-    fulfillment: bool = Field(..., description="Whether the criterion is fully fulfilled by the answer")
+    fulfillment: bool | float = Field(..., description="Whether/how much the criterion is fulfilled by the answer")
 
 
 class RubricPointwiseAnswerFormat(EvaluationAnswer):

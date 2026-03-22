@@ -66,6 +66,29 @@ class RubricPointwiseEvaluator(BaseAnswerEvaluator[RubricPointwiseEvaluatorConfi
         """  # noqa: E501
     )
 
+    graduated_system_prompt = string_to_template(
+        """
+        You are a domain expert in {{ expert_in }}.{% if company %} You work for {{ company }}.{% endif %} 
+        You are tasked with evaluating the quality of a report written by a deep research agent in response of a user's question.
+        The report was written based on a set of documents retrieved by the agent, and should thoroughly answer the user's question based exclusively on the relevant documents retrieved by the agent.
+
+        To properly evaluate the quality of the report, you will be provided with a list of criteria to evaluate its quality.
+        Each criterion includes a short question, an optional weight indicating its relative importance, and a list of documents that support the inclusion of the criterion in the report.
+        For each criterion, you should think carefully about how well the report addresses the criterion, provide a brief reasoning, and assign a score from 0 to {{ max_score }}, where 0 means the criterion is not addressed at all and {{ max_score }} means it is fully and thoroughly addressed.
+
+        You should think carefully about the criteria and the answers, and assign the scores accordingly.
+
+        ## Criteria
+        {% for criteria in criteria.criteria %}
+        Criterion: {{criteria.criterion_name}}
+        {% if criteria.weight is not none %}Weight: {{criteria.weight}}
+        {% endif %}Supporting Documents: {{criteria.supporting_documents}}
+        Short Question: {{criteria.short_question}}
+        --------------------------------
+        {% endfor %}
+        """  # noqa: E501
+    )
+
     user_prompt = string_to_template("""
         [User Question]
             {{query.query}}
@@ -88,20 +111,41 @@ class RubricPointwiseEvaluator(BaseAnswerEvaluator[RubricPointwiseEvaluatorConfi
     def _build_evaluation_schema(self, criteria: RubricSchema) -> Type[BaseModel]:
         criteria_models = {}
         for criterion in criteria.criteria:
-            criteria_models[criterion.criterion_name] = create_model(
-                criterion.criterion_name,
-                reasoning=(
-                    str,
-                    Field(
-                        description="A brief explanation about your judgement, "
-                        "and why you believe the report fulfills or not the criterion"
+            if self.config.graduated_scoring:
+                criteria_models[criterion.criterion_name] = create_model(
+                    criterion.criterion_name,
+                    reasoning=(
+                        str,
+                        Field(
+                            description="A brief explanation about your judgement, "
+                            "and why you believe the report fulfills or not the criterion"
+                        ),
                     ),
-                ),
-                fulfillment=(
-                    bool,
-                    Field(description="Whether the report fulfills the criterion or not"),
-                ),
-            )
+                    score=(
+                        int,
+                        Field(
+                            description=f"Score from 0 to {self.config.max_score}. "
+                            f"0 means not addressed at all, {self.config.max_score} means fully addressed.",
+                            ge=0,
+                            le=self.config.max_score,
+                        ),
+                    ),
+                )
+            else:
+                criteria_models[criterion.criterion_name] = create_model(
+                    criterion.criterion_name,
+                    reasoning=(
+                        str,
+                        Field(
+                            description="A brief explanation about your judgement, "
+                            "and why you believe the report fulfills or not the criterion"
+                        ),
+                    ),
+                    fulfillment=(
+                        bool,
+                        Field(description="Whether the report fulfills the criterion or not"),
+                    ),
+                )
         return create_model("EvaluationSchema", **criteria_models)  # type: ignore[call-overload]
 
     async def _build_criteria(self, query: Query, documents: list[Document]) -> RubricSchema:
@@ -131,8 +175,12 @@ class RubricPointwiseEvaluator(BaseAnswerEvaluator[RubricPointwiseEvaluatorConfi
                 self._build_criteria, query, list(query.retrieved_docs.values())
             )
         criteria = self.criteria_cache[query.qid]
-        system_prompt = self.system_prompt.render(
-            expert_in=self.config.expert_in, criteria=criteria, company=self.config.company
+        prompt_template = self.graduated_system_prompt if self.config.graduated_scoring else self.system_prompt
+        system_prompt = prompt_template.render(
+            expert_in=self.config.expert_in,
+            criteria=criteria,
+            company=self.config.company,
+            max_score=self.config.max_score,
         )
         user_prompt = self.user_prompt.render(query=query, answer=answer)
         return LLMInputPrompt(
@@ -148,14 +196,22 @@ class RubricPointwiseEvaluator(BaseAnswerEvaluator[RubricPointwiseEvaluatorConfi
         total_weight = 0.0
         for crit, response in response_dict.items():
             crit_obj = [x for x in self.criteria_cache[query.qid].criteria if x.criterion_name == crit][0]
+            weight = crit_obj.weight if crit_obj.weight is not None else 1.0
+            if self.config.graduated_scoring:
+                raw_score = response["score"]
+                normalized = raw_score / self.config.max_score
+                fulfillment: bool | float = normalized
+            else:
+                fulfillment = response["fulfillment"]
+                normalized = float(fulfillment)
             criterion = CriterionEvaluationPointwise(
                 criterion=crit_obj,
                 reasoning=response["reasoning"],
-                fulfillment=response["fulfillment"],
+                fulfillment=fulfillment,
             )
             criteria.append(criterion)
-            weighted_sum += response["fulfillment"] * (crit_obj.weight if crit_obj.weight is not None else 1.0)
-            total_weight += crit_obj.weight if crit_obj.weight is not None else 1.0
+            weighted_sum += normalized * weight
+            total_weight += weight
         return LLMResponseType(
             raw_answer=llm_response.raw_answer,
             parsed_answer=RubricPointwiseAnswerFormat(

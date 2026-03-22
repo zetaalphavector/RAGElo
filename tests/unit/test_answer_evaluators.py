@@ -905,3 +905,84 @@ class TestRubricPointwiseEvaluator:
         answer = processed.parsed_answer
         assert isinstance(answer, RubricPointwiseAnswerFormat)
         assert answer.average_score == 0.75
+
+    def test_rubric_pointwise_graduated_scoring(self, llm_provider_mock, experiment):
+        """Graduated scoring normalizes integer scores to [0, 1] using max_score."""
+        from ragelo.types.configurations import RubricPointwiseEvaluatorConfig
+
+        criteria = self._make_criteria()
+        config = RubricPointwiseEvaluatorConfig(expert_in="AI", force=True, graduated_scoring=True, max_score=5)
+        evaluator = RubricPointwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
+
+        rubric = RubricSchema(criteria=criteria)
+        evaluator.criteria_cache["0"] = rubric
+        evaluator.answer_schema_cache["0"] = evaluator._build_evaluation_schema(rubric)
+
+        EvalSchema = create_model(
+            "EvaluationSchema",
+            **{
+                c.criterion_name: create_model(
+                    c.criterion_name,
+                    reasoning=(str, Field(description="reasoning")),
+                    score=(int, Field(description="score", ge=0, le=5)),
+                )
+                for c in criteria
+            },
+        )  # type: ignore[call-overload]
+        SubAccuracy = EvalSchema.model_fields["accuracy"].annotation
+        SubCompleteness = EvalSchema.model_fields["completeness"].annotation
+        # scores: accuracy=3, completeness=5, max_score=5
+        # average = ((3/5) + (5/5)) / 2 = (0.6 + 1.0) / 2 = 0.8
+        eval_response = EvalSchema(
+            accuracy=SubAccuracy(reasoning="acc reason", score=3),
+            completeness=SubCompleteness(reasoning="comp reason", score=5),
+        )
+        llm_response: LLMResponseType = LLMResponseType(raw_answer="test", parsed_answer=eval_response)
+        query = experiment["0"]
+        processed = evaluator._process_answer(llm_response, query)
+        answer = processed.parsed_answer
+        assert isinstance(answer, RubricPointwiseAnswerFormat)
+        assert answer.average_score == pytest.approx(0.8)
+        assert answer.criteria[0].fulfillment == pytest.approx(0.6)
+        assert answer.criteria[1].fulfillment == pytest.approx(1.0)
+
+    def test_rubric_pointwise_graduated_with_weights(self, llm_provider_mock, experiment):
+        """Graduated scoring with weights applies both normalization and weighting."""
+        from ragelo.types.configurations import RubricPointwiseEvaluatorConfig
+
+        criteria = [
+            Criterion(criterion_name="accuracy", evidence=["doc1"], short_question="Accurate?", weight=3.0),
+            Criterion(criterion_name="completeness", evidence=["doc2"], short_question="Complete?", weight=1.0),
+        ]
+        config = RubricPointwiseEvaluatorConfig(expert_in="AI", force=True, graduated_scoring=True, max_score=10)
+        evaluator = RubricPointwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
+
+        rubric = RubricSchema(criteria=criteria)
+        evaluator.criteria_cache["0"] = rubric
+        evaluator.answer_schema_cache["0"] = evaluator._build_evaluation_schema(rubric)
+
+        EvalSchema = create_model(
+            "EvaluationSchema",
+            **{
+                c.criterion_name: create_model(
+                    c.criterion_name,
+                    reasoning=(str, Field(description="reasoning")),
+                    score=(int, Field(description="score", ge=0, le=10)),
+                )
+                for c in criteria
+            },
+        )  # type: ignore[call-overload]
+        SubAccuracy = EvalSchema.model_fields["accuracy"].annotation
+        SubCompleteness = EvalSchema.model_fields["completeness"].annotation
+        # accuracy=8/10=0.8 (weight=3), completeness=2/10=0.2 (weight=1)
+        # weighted avg = (0.8*3 + 0.2*1) / (3+1) = (2.4 + 0.2) / 4 = 0.65
+        eval_response = EvalSchema(
+            accuracy=SubAccuracy(reasoning="acc reason", score=8),
+            completeness=SubCompleteness(reasoning="comp reason", score=2),
+        )
+        llm_response: LLMResponseType = LLMResponseType(raw_answer="test", parsed_answer=eval_response)
+        query = experiment["0"]
+        processed = evaluator._process_answer(llm_response, query)
+        answer = processed.parsed_answer
+        assert isinstance(answer, RubricPointwiseAnswerFormat)
+        assert answer.average_score == pytest.approx(0.65)
