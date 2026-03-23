@@ -8,6 +8,7 @@ from pydantic import BaseModel, field_validator
 from typing_extensions import Self
 
 from ragelo.types.evaluables import AgentAnswer, Document, Evaluable, PairwiseGame
+from ragelo.types.evaluator_utils import resolve_evaluator_result_type
 from ragelo.types.results import EvaluatorResult, RetrievalEvaluatorResult
 
 logger = logging.getLogger(__name__)
@@ -159,9 +160,6 @@ class Query(BaseModel):
             force bool: Whether to overwrite existing evaluations.
             exist_ok bool: Whether to raise an error if the evaluation already exists.
         """
-        # Import here to avoid circular imports
-        from ragelo.evaluators.evaluator_utils import resolve_evaluator_result_type
-
         expected_result_type = resolve_evaluator_result_type(evaluation.evaluator_name, evaluable)
         if not isinstance(evaluation, expected_result_type):
             evaluator_name = evaluation.evaluator_name

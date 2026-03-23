@@ -15,7 +15,7 @@ from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_prov
 from ragelo.types import LLMInputPrompt, Query, RetrievalEvaluatorResult
 from ragelo.types.configurations import BaseRetrievalEvaluatorConfig
 from ragelo.types.evaluables import Document, Evaluable
-from ragelo.types.types import RetrievalEvaluatorTypes
+from ragelo.types.types import RetrievalEvaluatorTypes, _result_type_registry
 from ragelo.utils import call_async_fn
 
 logger = logging.getLogger(__name__)
@@ -172,6 +172,7 @@ class RetrievalEvaluatorFactory:
             if evaluator_name in cls.registry:
                 logger.debug(f"Overwriting {evaluator_name} in registry")
             cls.registry[evaluator_name] = wrapped_class
+            _result_type_registry[f"retrieval:{evaluator_name}"] = wrapped_class.result_type
             return wrapped_class
 
         return inner_wrapper

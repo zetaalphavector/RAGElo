@@ -14,7 +14,7 @@ from ragelo.types import AnswerEvaluatorResult, LLMInputPrompt, PairwiseGameEval
 from ragelo.types.answer_formats import PairwiseEvaluationAnswer, RubricAnswerFormat
 from ragelo.types.configurations import BaseAnswerEvaluatorConfig, PairwiseEvaluatorConfig
 from ragelo.types.evaluables import AgentAnswer, Document, Evaluable, PairwiseGame
-from ragelo.types.types import AnswerEvaluatorTypes
+from ragelo.types.types import AnswerEvaluatorTypes, _result_type_registry
 from ragelo.utils import call_async_fn, get_placeholders_and_tags
 
 logger = logging.getLogger(__name__)
@@ -446,6 +446,7 @@ class AnswerEvaluatorFactory:
             if name in cls.registry:
                 logger.warning(f"Overwriting {name} in registry")
             cls.registry[name] = wrapped_class
+            _result_type_registry[f"answer:{name}"] = wrapped_class.result_type
             return wrapped_class
 
         return inner_wrapper

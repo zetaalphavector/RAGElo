@@ -6,6 +6,12 @@ class StrEnum(str, Enum):
         return self.value
 
 
+# Global registry mapping evaluator names to their result types.
+# Populated by factory @register decorators so that result-type resolution
+# does not need to import the evaluator packages.
+_result_type_registry: dict[str, type] = {}
+
+
 class RetrievalEvaluatorTypes(StrEnum):
     """Enum that contains the names of the available retrieval evaluators"""
 

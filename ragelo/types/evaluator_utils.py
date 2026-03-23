@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from ragelo.types.evaluables import AgentAnswer, Document, PairwiseGame
 from ragelo.types.results import EvaluatorResult
-from ragelo.types.types import AnswerEvaluatorTypes, RetrievalEvaluatorTypes
+from ragelo.types.types import AnswerEvaluatorTypes, RetrievalEvaluatorTypes, _result_type_registry
 
 
 def resolve_evaluator_result_type(
@@ -16,29 +17,27 @@ def resolve_evaluator_result_type(
       avoid name collisions (e.g., domain_expert existing for both answer and retrieval).
     - If `evaluable` is None, fall back to name-only resolution (answer first, then retrieval).
     """
-    # Import locally to avoid circular imports
-    from ragelo.evaluators.answer_evaluators.base_answer_evaluator import AnswerEvaluatorFactory
-    from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import RetrievalEvaluatorFactory
-    from ragelo.types.evaluables import AgentAnswer, Document, PairwiseGame
-
     name_str = str(evaluator_name)
 
     # Contextual resolution
     if evaluable is not None:
         if isinstance(evaluable, Document):
             try:
-                return RetrievalEvaluatorFactory.get_evaluator_result_type(RetrievalEvaluatorTypes(name_str))
-            except Exception:
+                return _result_type_registry[f"retrieval:{RetrievalEvaluatorTypes(name_str)}"]
+            except (ValueError, KeyError):
                 pass
         if isinstance(evaluable, (AgentAnswer, PairwiseGame)):
             try:
-                return AnswerEvaluatorFactory.get_evaluator_result_type(AnswerEvaluatorTypes(name_str))
-            except Exception:
+                return _result_type_registry[f"answer:{AnswerEvaluatorTypes(name_str)}"]
+            except (ValueError, KeyError):
                 pass
 
     # Name-only resolution (Answer first, then Retrieval)
     try:
-        return AnswerEvaluatorFactory.get_evaluator_result_type(AnswerEvaluatorTypes(name_str))
-    except Exception:
+        return _result_type_registry[f"answer:{AnswerEvaluatorTypes(name_str)}"]
+    except (ValueError, KeyError):
         pass
-    return RetrievalEvaluatorFactory.get_evaluator_result_type(RetrievalEvaluatorTypes(name_str))
+    try:
+        return _result_type_registry[f"retrieval:{RetrievalEvaluatorTypes(name_str)}"]
+    except (ValueError, KeyError):
+        raise ValueError(f"Unknown evaluator: {name_str}")

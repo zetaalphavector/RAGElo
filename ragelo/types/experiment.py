@@ -15,9 +15,9 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Literal, Sequence
 
-from ragelo.evaluators.evaluator_utils import resolve_evaluator_result_type
 from ragelo.presenters import render_evaluation, render_retrieval_summary
 from ragelo.types.evaluables import AgentAnswer, ChatMessage, Document, Evaluable
+from ragelo.types.evaluator_utils import resolve_evaluator_result_type
 from ragelo.types.query import Query
 from ragelo.types.results import (
     AnswerEvaluatorResult,
