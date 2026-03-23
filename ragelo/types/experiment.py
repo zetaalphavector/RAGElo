@@ -25,7 +25,7 @@ from ragelo.types.results import (
     PairwiseGameEvaluatorResult,
     RetrievalEvaluatorResult,
 )
-from ragelo.types.storage import FileStorageBackend, NullStorageBackend, StorageBackend
+from ragelo.types.storage import FileStorageBackend, StorageBackend, build_storage_backend
 
 logger = logging.getLogger(__name__)
 
@@ -90,8 +90,7 @@ class Experiment:
         Args:
             experiment_name (str): The name of your experiment.
             storage_backend (Optional[StorageBackend]): A storage backend for persisting experiment state and results.
-                Defaults to NullStorageBackend (no persistence). Use ``FileStorageBackend`` or
-                ``FileStorageBackend.default(experiment_name)`` for file-based persistence.
+                Defaults to using a files-based persistence based on the experiment name.
             show_results (bool, defaults to False): Whether to render evaluation result tables and summaries.
             rich_print (bool, defaults to True): Whether to use rich for colored/pretty output when rendering.
             clear_evaluations (bool, defaults to False): If set to True, will clear all existing evaluations and
@@ -114,7 +113,7 @@ class Experiment:
         self.elo_tournaments: list[EloTournamentResult] = []
         self.rich_print = rich_print
         self.show_results = show_results
-        self.storage = storage_backend or NullStorageBackend()
+        self.storage = storage_backend or build_storage_backend(experiment_name)
 
         self.queries = {}
         self.storage.initialize()
