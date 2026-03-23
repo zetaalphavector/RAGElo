@@ -347,8 +347,8 @@ Reproducibility tips:
 
 Evaluating retrieval metrics (optional):
 ```python
-from ragelo import Experiment
-exp = Experiment(experiment_name="my_exp", save_on_disk=False)
+from ragelo import Experiment, NullStorageBackend
+exp = Experiment(experiment_name="my_exp", storage_backend=NullStorageBackend())
 # load queries/docs/answers and evaluations...
 exp.evaluate_retrieval(metrics=["Precision@10", "nDCG@10"], relevance_threshold=1)
 ```

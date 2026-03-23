@@ -106,6 +106,4 @@ def build_storage_backend(experiment_name: str, output_file: str | None = None) 
         save_path = Path(output_file)
         evals_path = save_path.with_name(f"{experiment_name}_results.jsonl")
         return FileStorageBackend(save_path, evals_path)
-    save_path = Path("ragelo_cache") / f"{experiment_name}.json"
-    evals_path = Path("ragelo_cache") / f"{experiment_name}_results.jsonl"
-    return FileStorageBackend(save_path, evals_path)
+    return FileStorageBackend.default(experiment_name)

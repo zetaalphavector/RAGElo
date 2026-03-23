@@ -91,10 +91,9 @@ class TestNullStorageBackend:
 
 
 class TestExperimentStorageIntegration:
-    def test_experiment_uses_file_storage_by_default(self, tmp_path, base_experiment_config):
-        backend = FileStorageBackend(tmp_path / "exp.json", tmp_path / "results.jsonl")
-        base_experiment_config["storage_backend"] = backend
-        experiment = Experiment(**base_experiment_config)
+    def test_experiment_uses_file_storage_by_default(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        experiment = Experiment(experiment_name="test_default_storage")
         assert isinstance(experiment.storage, FileStorageBackend)
 
     def test_experiment_uses_custom_storage_backend(self, base_experiment_config):

@@ -90,55 +90,19 @@ class BaseEvaluator(ABC):
         """
         n_threads = n_threads or self.config.n_processes
         tuples_to_eval = self._get_tuples_to_evaluate(experiment)
-        pbar = get_pbar(
-            len(tuples_to_eval),
-            self.config.rich_print,
-            desc=f"Evaluating {self.evaluable_name}s",
-            disable=not getattr(self.config, "use_progress_bar", True),
-        )
-
-        awaitables_ended = False
-        pending: set[asyncio.Future] = set()
-        tuples_iter = iter(tuples_to_eval)
-        future_to_tuple: dict[asyncio.Future, tuple[Query, Evaluable]] = {}
-        failed = 0
-        evaluations = 0
-        while pending or not awaitables_ended:
-            while len(pending) < n_threads and not awaitables_ended:
-                try:
-                    eval_tuple = next(tuples_iter)
-                except StopIteration:
-                    awaitables_ended = True
-                else:
-                    future = asyncio.ensure_future(self.evaluate_async(eval_tuple))
-                    pending.add(future)
-                    future_to_tuple[future] = eval_tuple
-            if not pending:
-                break
-            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
-            while done:
-                finished = done.pop()
-                evaluation = await finished
-                eval_tuple = future_to_tuple.pop(finished)
-                evaluations += 1
-                pbar.update()
-                pbar.refresh()
-                if evaluation.exception:
-                    failed += 1
-                    continue
-                experiment.add_evaluation(
-                    eval_tuple,
-                    evaluation,
-                    exist_ok=True,
-                    force=self.config.force,
-                    should_print=self.config.show_results,
-                )
-                if on_result is not None:
-                    on_result(eval_tuple, evaluation)
-                yield eval_tuple, evaluation
-        pbar.close()
-        if self.config.show_results:
-            render_failed_evaluations(evaluations, failed, self.config.rich_print)
+        async for eval_tuple, evaluation in self._run_concurrent_evaluations(
+            tuples_to_eval, n_threads, f"Evaluating {self.evaluable_name}s"
+        ):
+            experiment.add_evaluation(
+                eval_tuple,
+                evaluation,
+                exist_ok=True,
+                force=self.config.force,
+                should_print=self.config.show_results,
+            )
+            if on_result is not None:
+                on_result(eval_tuple, evaluation)
+            yield eval_tuple, evaluation
 
     def evaluate_all_evaluables(self, query: Query, n_threads: int | None = None):
         """Evaluate all evaluables for a single query, useful for incremental workflows.
@@ -151,10 +115,22 @@ class BaseEvaluator(ABC):
 
     async def _evaluate_all_evaluables_async(self, query: Query, n_threads: int):
         tuples_to_eval = [(query, e) for e in self._get_all_evaluables(query)]
+        async for eval_tuple, evaluation in self._run_concurrent_evaluations(
+            tuples_to_eval, n_threads, f"Evaluating {self.evaluable_name}s for query {query.qid}"
+        ):
+            query.add_evaluation(eval_tuple[1], evaluation, exist_ok=True)
+
+    async def _run_concurrent_evaluations(
+        self,
+        tuples_to_eval: Sequence[tuple[Query, Evaluable]],
+        n_threads: int,
+        pbar_desc: str,
+    ) -> AsyncGenerator[tuple[tuple[Query, Evaluable], EvaluatorResult], None]:
         pbar = get_pbar(
             len(tuples_to_eval),
             self.config.rich_print,
-            desc=f"Evaluating {self.evaluable_name}s for query {query.qid}",
+            desc=pbar_desc,
+            disable=not getattr(self.config, "use_progress_bar", True),
         )
         awaitables_ended = False
         pending: set[asyncio.Future] = set()
@@ -184,7 +160,7 @@ class BaseEvaluator(ABC):
                 if evaluation.exception:
                     failed += 1
                     continue
-                query.add_evaluation(eval_tuple[1], evaluation, exist_ok=True)
+                yield eval_tuple, evaluation
         pbar.close()
         if self.config.show_results:
             render_failed_evaluations(evaluations, failed, self.config.rich_print)
