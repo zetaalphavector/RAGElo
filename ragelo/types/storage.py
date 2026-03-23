@@ -35,6 +35,15 @@ class FileStorageBackend:
         self.save_path = save_path
         self.evaluations_cache_path = evaluations_cache_path
 
+    @classmethod
+    def default(cls, experiment_name: str, output_dir: str = "ragelo_cache") -> FileStorageBackend:
+        """Create a FileStorageBackend with conventional paths based on experiment name."""
+        base = Path(output_dir)
+        return cls(
+            save_path=base / f"{experiment_name}.json",
+            evaluations_cache_path=base / f"{experiment_name}_results.jsonl",
+        )
+
     def initialize(self) -> None:
         self.save_path.parent.mkdir(exist_ok=True)
         self.save_path.touch()

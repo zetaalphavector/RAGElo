@@ -2,7 +2,7 @@ import typer
 
 from ragelo import Experiment, get_llm_provider, get_retrieval_evaluator
 from ragelo.cli.args import get_params_from_function
-from ragelo.cli.utils import get_path
+from ragelo.cli.utils import build_storage_backend, get_path
 from ragelo.logger import configure_logging
 from ragelo.types.configurations.cli_configs import (
     CLIDomainExpertEvaluatorConfig,
@@ -41,7 +41,7 @@ def domain_expert(config: CLIDomainExpertEvaluatorConfig = CLIDomainExpertEvalua
 
     experiment = Experiment(
         experiment_name=config.experiment_name,
-        save_path=output_file,
+        storage_backend=build_storage_backend(config.experiment_name, output_file),
         queries_csv_path=queries_csv_file,
         documents_csv_path=documents_file,
         show_results=config.show_results,
@@ -77,7 +77,7 @@ def reasoner(
 
     experiment = Experiment(
         experiment_name=config.experiment_name,
-        save_path=output_file,
+        storage_backend=build_storage_backend(config.experiment_name, output_file),
         queries_csv_path=queries_csv_file,
         documents_csv_path=documents_file,
         show_results=config.show_results,
@@ -110,7 +110,7 @@ def rdnam(config: CLIRDNAMEvaluatorConfig = CLIRDNAMEvaluatorConfig(), **kwargs)
 
     experiment = Experiment(
         experiment_name=config.experiment_name,
-        save_path=output_file,
+        storage_backend=build_storage_backend(config.experiment_name, output_file),
         queries_csv_path=queries_csv_file,
         documents_csv_path=documents_file,
         show_results=config.show_results,

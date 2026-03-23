@@ -56,8 +56,8 @@ class Experiment:
             relevant. Optionally saves the result to output_path with output_format.
         get_runs(agents, output_path, output_format): Gets the runs (retrieval results) for the provided agents for
             all the queries. Optionally saves the result to output_path with output_format.
-        save(): Saves the current state of the queries object to disk as a JSON object to `cache_path`.
-        save_results(result): Saves an evaluation result to the `evaluations_cache_path` file.
+        save(): Saves the current state of the queries object via the storage backend.
+        save_results(result): Saves an evaluation result via the storage backend.
         add_retrieved_docs_from_runfile(run_file_path, corpus, top_k): Adds retrieved documents from a trec-formatted
             run file to the queries. Will create the Document objects as needed.
 
@@ -70,9 +70,7 @@ class Experiment:
     def __init__(
         self,
         experiment_name: str,
-        save_path: str | None = None,
-        evaluations_cache_path: str | None = None,
-        save_on_disk: bool | None = None,
+        storage_backend: StorageBackend | None = None,
         show_results: bool = False,
         rich_print: bool = True,
         clear_evaluations: bool = False,
@@ -85,21 +83,15 @@ class Experiment:
         answers_csv_path: str | None = None,
         csv_agent_col: str = "agent",
         csv_answer_text_col: str = "answer",
-        storage_backend: StorageBackend | None = None,
     ):
         """
-        Initialize the experiment object with optional data and set up paths and caches.
+        Initialize the experiment object with optional data and set up persistence.
 
         Args:
-            experiment_name (str): The name of your experiment
-            save_path (Optional[str]): A JSON file path to persist the experiment on disk.
-                If not set, a default path based on experiment_name is used.
-                When provided without a storage_backend, a FileStorageBackend is created automatically.
-            evaluations_cache_path (Optional[str]): A JSON Lines file path to persist the evaluators result on disk,
-                to avoid re-computing evaluations. If not set, will create one based on experiment_name.
-            save_on_disk (Optional[bool]): Deprecated. Use ``storage_backend=NullStorageBackend()`` instead of
-                ``save_on_disk=False``. When not provided, the storage backend is resolved from save_path and
-                storage_backend parameters.
+            experiment_name (str): The name of your experiment.
+            storage_backend (Optional[StorageBackend]): A storage backend for persisting experiment state and results.
+                Defaults to NullStorageBackend (no persistence). Use ``FileStorageBackend`` or
+                ``FileStorageBackend.default(experiment_name)`` for file-based persistence.
             show_results (bool, defaults to False): Whether to render evaluation result tables and summaries.
             rich_print (bool, defaults to True): Whether to use rich for colored/pretty output when rendering.
             clear_evaluations (bool, defaults to False): If set to True, will clear all existing evaluations and
@@ -115,19 +107,6 @@ class Experiment:
             csv_agent_col (str, defaults to "agent"): The column name for agent name in the documents and answers
                 CSV files.
             csv_answer_text_col (str, defaults to "answer"): The column name for answer text in the answers CSV file.
-            storage_backend (Optional[StorageBackend]): A storage backend for persisting experiment state and results.
-                If not provided, a FileStorageBackend is created from save_path / evaluations_cache_path.
-                Pass ``NullStorageBackend()`` to disable persistence entirely.
-
-
-        The initialization process involves setting up paths and loading queries from different sources:
-        1. If `csv_path` is provided, queries are loaded from the specified CSV file.
-        2. If `csv_path` is not provided but `save_path` exists and points to a valid file, queries are loaded from
-            the cache file.
-        3. If both `csv_path` and `save_path` are provided, the method ensures that the queries loaded from the CSV
-            file match those in the cache file.
-        The method prioritizes loading queries from the CSV file over the cache file. If neither source is available,
-            it relies on the `queries` attribute if it has been set.
         """
 
         self.experiment_name = experiment_name
@@ -135,27 +114,7 @@ class Experiment:
         self.elo_tournaments: list[EloTournamentResult] = []
         self.rich_print = rich_print
         self.show_results = show_results
-
-        if save_on_disk is not None:
-            warnings.warn(
-                "save_on_disk is deprecated. Use storage_backend=NullStorageBackend() instead of "
-                "save_on_disk=False, or simply pass save_path to enable file persistence.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-
-        if storage_backend is not None:
-            self.storage = storage_backend
-        elif save_on_disk is False:
-            self.storage = NullStorageBackend()
-        else:
-            resolved_save_path = Path(save_path) if save_path else Path("ragelo_cache") / f"{experiment_name}.json"
-            resolved_evals_path = (
-                Path(evaluations_cache_path)
-                if evaluations_cache_path
-                else resolved_save_path.with_name(f"{experiment_name}_results.jsonl")
-            )
-            self.storage = FileStorageBackend(resolved_save_path, resolved_evals_path)
+        self.storage = storage_backend or NullStorageBackend()
 
         self.queries = {}
         self.storage.initialize()
@@ -972,4 +931,8 @@ class Experiment:
 
     @classmethod
     def load(cls, experiment_name: str, path: str):
-        return cls(experiment_name=experiment_name, save_path=path)
+        save_path = Path(path)
+        return cls(
+            experiment_name=experiment_name,
+            storage_backend=FileStorageBackend(save_path, save_path.with_name(f"{experiment_name}_results.jsonl")),
+        )

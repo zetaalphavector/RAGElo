@@ -15,6 +15,7 @@ from ragelo.types.results import (
     RetrievalEvaluationAnswer,
     RetrievalEvaluatorResult,
 )
+from ragelo.types.storage import FileStorageBackend
 
 
 class TestExperiment:
@@ -105,15 +106,16 @@ class TestExperiment:
         """Test saving and loading experiment state"""
         # Save experiment
         save_path = tmp_path / "test_experiment.json"
-        base_experiment_config.pop("storage_backend", None)
-        base_experiment_config["save_path"] = str(save_path)
+        results_path = tmp_path / "test_experiment_results.jsonl"
+        backend = FileStorageBackend(save_path, results_path)
+        base_experiment_config["storage_backend"] = backend
         experiment = Experiment(**base_experiment_config)
         experiment.save()
 
         # Load experiment
         loaded_experiment = Experiment(
             experiment_name="test_experiment",
-            save_path=str(save_path),
+            storage_backend=FileStorageBackend(save_path, results_path),
         )
 
         # Verify contents
@@ -234,9 +236,7 @@ class TestExperiment:
         """Test that nested a_vs_b_result and b_vs_a_result survive save/load."""
         save_path = tmp_path / "test_experiment.json"
         results_path = tmp_path / "nested_results.jsonl"
-        base_experiment_config.pop("storage_backend", None)
-        base_experiment_config["save_path"] = str(save_path)
-        base_experiment_config["evaluations_cache_path"] = str(results_path)
+        base_experiment_config["storage_backend"] = FileStorageBackend(save_path, results_path)
         experiment = Experiment(**base_experiment_config)
 
         query = experiment["0"]
@@ -286,8 +286,7 @@ class TestExperiment:
         # Reload from saved experiment
         loaded = Experiment(
             experiment_name="test_experiment",
-            save_path=str(save_path),
-            evaluations_cache_path=str(results_path),
+            storage_backend=FileStorageBackend(save_path, results_path),
         )
         loaded_query = loaded["0"]
         loaded_game = loaded_query.pairwise_games[game.game_id]
@@ -343,9 +342,7 @@ class TestExperiment:
         """Test saving evaluations to disk"""
         # Set up save paths
         results_path = tmp_path / "test_results.jsonl"
-        base_experiment_config.pop("storage_backend", None)
-        base_experiment_config["evaluations_cache_path"] = str(results_path)
-        base_experiment_config["save_path"] = str(tmp_path / "exp.json")
+        base_experiment_config["storage_backend"] = FileStorageBackend(tmp_path / "exp.json", results_path)
         experiment = Experiment(**base_experiment_config)
 
         # Add and save evaluations
@@ -590,8 +587,7 @@ class TestExperimentSerialization:
 
         experiment = Experiment(
             experiment_name="unique_test_round_trip",
-            save_path=str(save_path),
-            evaluations_cache_path=str(results_path),
+            storage_backend=FileStorageBackend(save_path, results_path),
             queries_csv_path="tests/data/queries.csv",
             documents_csv_path="tests/data/documents.csv",
             answers_csv_path="tests/data/answers.csv",
@@ -613,8 +609,7 @@ class TestExperimentSerialization:
         # Load experiment in a new instance
         loaded_experiment = Experiment(
             experiment_name="unique_test_round_trip",
-            save_path=str(save_path),
-            evaluations_cache_path=str(results_path),
+            storage_backend=FileStorageBackend(save_path, results_path),
         )
 
         # Verify evaluations were loaded
@@ -696,9 +691,7 @@ class TestExperimentSerialization:
     def test_load_corrupted_jsonl_gracefully(self, tmp_path, base_experiment_config):
         """Test that experiment handles corrupted JSONL gracefully."""
         results_path = tmp_path / "corrupted.jsonl"
-        base_experiment_config.pop("storage_backend", None)
-        base_experiment_config["evaluations_cache_path"] = str(results_path)
-        base_experiment_config["save_path"] = str(tmp_path / "exp.json")
+        base_experiment_config["storage_backend"] = FileStorageBackend(tmp_path / "exp.json", results_path)
 
         # Create corrupted JSONL file with various issues
         with open(results_path, "w") as f:
@@ -730,9 +723,7 @@ class TestExperimentSerialization:
     def test_missing_evaluable_in_loaded_results(self, tmp_path, base_experiment_config):
         """Test that experiment handles results for missing documents/answers gracefully."""
         results_path = tmp_path / "orphaned_results.jsonl"
-        base_experiment_config.pop("storage_backend", None)
-        base_experiment_config["evaluations_cache_path"] = str(results_path)
-        base_experiment_config["save_path"] = str(tmp_path / "exp.json")
+        base_experiment_config["storage_backend"] = FileStorageBackend(tmp_path / "exp.json", results_path)
 
         # Create result for non-existent document
         with open(results_path, "w") as f:
