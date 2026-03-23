@@ -15,6 +15,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Literal, Sequence
 
+from ragelo.evaluators.evaluator_utils import resolve_evaluator_result_type
 from ragelo.presenters import render_evaluation, render_retrieval_summary
 from ragelo.types.evaluables import AgentAnswer, ChatMessage, Document, Evaluable
 from ragelo.types.query import Query
@@ -900,8 +901,6 @@ class Experiment:
         self._load_results_from_cache(self.evaluations_cache_path)
 
     def _load_results_from_cache(self, cache_path: Path | None):
-        from ragelo.evaluators.evaluator_utils import resolve_evaluator_result_type
-
         if cache_path is None:
             return
         assert cache_path.is_file()
