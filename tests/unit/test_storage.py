@@ -92,24 +92,27 @@ class TestNullStorageBackend:
 
 class TestExperimentStorageIntegration:
     def test_experiment_uses_file_storage_by_default(self, tmp_path, base_experiment_config):
-        base_experiment_config["save_on_disk"] = True
+        base_experiment_config.pop("storage_backend", None)
         base_experiment_config["save_path"] = str(tmp_path / "exp.json")
         experiment = Experiment(**base_experiment_config)
         assert isinstance(experiment.storage, FileStorageBackend)
 
     def test_experiment_uses_null_storage_when_save_off(self, base_experiment_config):
+        base_experiment_config.pop("storage_backend", None)
         base_experiment_config["save_on_disk"] = False
-        experiment = Experiment(**base_experiment_config)
+        with pytest.warns(DeprecationWarning):
+            experiment = Experiment(**base_experiment_config)
         assert isinstance(experiment.storage, NullStorageBackend)
 
     def test_experiment_uses_custom_storage_backend(self, base_experiment_config):
         backend = NullStorageBackend()
-        experiment = Experiment(**base_experiment_config, storage_backend=backend)
+        base_experiment_config["storage_backend"] = backend
+        experiment = Experiment(**base_experiment_config)
         assert experiment.storage is backend
 
     def test_save_and_load_with_file_backend(self, tmp_path, base_experiment_config):
         save_path = tmp_path / "exp.json"
-        base_experiment_config["save_on_disk"] = True
+        base_experiment_config.pop("storage_backend", None)
         base_experiment_config["save_path"] = str(save_path)
         experiment = Experiment(**base_experiment_config)
         assert len(experiment) == 2
@@ -117,7 +120,6 @@ class TestExperimentStorageIntegration:
         loaded = Experiment(
             experiment_name="test_experiment",
             save_path=str(save_path),
-            save_on_disk=True,
         )
         assert len(loaded) == len(experiment)
         for qid in experiment.keys():
@@ -130,7 +132,7 @@ class TestExperimentStorageIntegration:
         retrieval_evaluation,
     ):
         results_path = tmp_path / "results.jsonl"
-        base_experiment_config["save_on_disk"] = True
+        base_experiment_config.pop("storage_backend", None)
         base_experiment_config["save_path"] = str(tmp_path / "exp.json")
         base_experiment_config["evaluations_cache_path"] = str(results_path)
         experiment = Experiment(**base_experiment_config)
@@ -146,7 +148,6 @@ class TestExperimentStorageIntegration:
             assert parsed["evaluator_name"] == "reasoner"
 
     def test_save_result_with_null_backend(self, base_experiment_config, retrieval_evaluation):
-        base_experiment_config["save_on_disk"] = False
         experiment = Experiment(**base_experiment_config)
 
         query = experiment["0"]

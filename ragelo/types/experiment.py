@@ -72,7 +72,7 @@ class Experiment:
         experiment_name: str,
         save_path: str | None = None,
         evaluations_cache_path: str | None = None,
-        save_on_disk: bool = True,
+        save_on_disk: bool | None = None,
         show_results: bool = False,
         rich_print: bool = True,
         clear_evaluations: bool = False,
@@ -93,11 +93,13 @@ class Experiment:
         Args:
             experiment_name (str): The name of your experiment
             save_path (Optional[str]): A JSON file path to persist the experiment on disk.
-                If not set, results will not be saved locally. If it already exists,
-                we will try to load the state from that file.
+                If not set, a default path based on experiment_name is used.
+                When provided without a storage_backend, a FileStorageBackend is created automatically.
             evaluations_cache_path (Optional[str]): A JSON Lines file path to persist the evaluators result on disk,
                 to avoid re-computing evaluations. If not set, will create one based on experiment_name.
-            save_on_disk (bool, defaults to True): Whether to save the experiment to disk using the experiment_name.
+            save_on_disk (Optional[bool]): Deprecated. Use ``storage_backend=NullStorageBackend()`` instead of
+                ``save_on_disk=False``. When not provided, the storage backend is resolved from save_path and
+                storage_backend parameters.
             show_results (bool, defaults to False): Whether to render evaluation result tables and summaries.
             rich_print (bool, defaults to True): Whether to use rich for colored/pretty output when rendering.
             clear_evaluations (bool, defaults to False): If set to True, will clear all existing evaluations and
@@ -114,9 +116,8 @@ class Experiment:
                 CSV files.
             csv_answer_text_col (str, defaults to "answer"): The column name for answer text in the answers CSV file.
             storage_backend (Optional[StorageBackend]): A storage backend for persisting experiment state and results.
-                If not provided, a FileStorageBackend is created when save_on_disk is True,
-                or a NullStorageBackend when save_on_disk is False.
-
+                If not provided, a FileStorageBackend is created from save_path / evaluations_cache_path.
+                Pass ``NullStorageBackend()`` to disable persistence entirely.
 
 
         The initialization process involves setting up paths and loading queries from different sources:
@@ -133,12 +134,21 @@ class Experiment:
         self.queries: dict[str, Query] = {}
         self.elo_tournaments: list[EloTournamentResult] = []
         self.rich_print = rich_print
-        self.save_on_disk = save_on_disk
         self.show_results = show_results
+
+        if save_on_disk is not None:
+            warnings.warn(
+                "save_on_disk is deprecated. Use storage_backend=NullStorageBackend() instead of "
+                "save_on_disk=False, or simply pass save_path to enable file persistence.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
 
         if storage_backend is not None:
             self.storage = storage_backend
-        elif save_on_disk:
+        elif save_on_disk is False:
+            self.storage = NullStorageBackend()
+        else:
             resolved_save_path = Path(save_path) if save_path else Path("ragelo_cache") / f"{experiment_name}.json"
             resolved_evals_path = (
                 Path(evaluations_cache_path)
@@ -146,8 +156,6 @@ class Experiment:
                 else resolved_save_path.with_name(f"{experiment_name}_results.jsonl")
             )
             self.storage = FileStorageBackend(resolved_save_path, resolved_evals_path)
-        else:
-            self.storage = NullStorageBackend()
 
         self.queries = {}
         self.storage.initialize()
