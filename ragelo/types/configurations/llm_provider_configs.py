@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from typing import Literal
 
 from pydantic import BaseModel, SecretStr
@@ -25,3 +23,12 @@ class OpenAIConfiguration(LLMProviderConfig):
 class OllamaConfiguration(LLMProviderConfig):
     api_base: str | None = "http://localhost:11434/v1/"
     model: str
+
+
+class InstructorConfiguration(LLMProviderConfig):
+    model: str
+    api_key: SecretStr | None = None
+    max_retries: int = 3
+    use_cache: bool = True
+    cache_size: int = 1000
+    model_kwargs: dict[str, str] = {}
