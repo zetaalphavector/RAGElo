@@ -27,9 +27,10 @@ class OllamaProvider(BaseLLMProvider):
     def __init__(
         self,
         config: OllamaConfiguration,
+        client: AsyncOpenAI | None = None,
     ):
         super().__init__(config)
-        self.__ollama_client = self.__get_ollama_client(config)
+        self.__ollama_client = client or self.__get_ollama_client(config)
 
     @retry(
         wait=wait_random_exponential(min=1, max=120),

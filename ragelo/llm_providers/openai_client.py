@@ -24,9 +24,9 @@ class OpenAIProvider(BaseLLMProvider):
     config: OpenAIConfiguration
     api_key_env_var: str = "OPENAI_API_KEY"
 
-    def __init__(self, config: OpenAIConfiguration) -> None:
+    def __init__(self, config: OpenAIConfiguration, client: AsyncOpenAI | None = None) -> None:
         super().__init__(config)
-        self.__openai_client = self.__get_openai_client(config)
+        self.__openai_client = client or self.__get_openai_client(config)
         if self.config.model.startswith("gpt-5") or self.config.model.startswith("o"):
             self.config.temperature = None
         elif self.config.reasoning_effort:

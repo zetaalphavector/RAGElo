@@ -291,7 +291,7 @@ def flexible_openai_client_mock(mocker):
 
 
 @pytest.fixture
-def openai_provider_structured(flexible_openai_client_mock, monkeypatch):
+def openai_provider_structured(flexible_openai_client_mock):
     """OpenAI provider configured for structured mode (json_mode=False) with mocked client."""
     from ragelo.llm_providers.openai_client import OpenAIProvider
 
@@ -300,13 +300,11 @@ def openai_provider_structured(flexible_openai_client_mock, monkeypatch):
         model="fake_model",
         json_mode=False,
     )
-    provider = OpenAIProvider(config=config)
-    monkeypatch.setattr(provider, "_OpenAIProvider__openai_client", flexible_openai_client_mock)
-    return provider
+    return OpenAIProvider(config=config, client=flexible_openai_client_mock)
 
 
 @pytest.fixture
-def openai_provider_json_mode(flexible_openai_client_mock, monkeypatch):
+def openai_provider_json_mode(flexible_openai_client_mock):
     """OpenAI provider configured for JSON mode (json_mode=True) with mocked client."""
     from ragelo.llm_providers.openai_client import OpenAIProvider
 
@@ -315,9 +313,7 @@ def openai_provider_json_mode(flexible_openai_client_mock, monkeypatch):
         model="fake_model",
         json_mode=True,
     )
-    provider = OpenAIProvider(config=config)
-    monkeypatch.setattr(provider, "_OpenAIProvider__openai_client", flexible_openai_client_mock)
-    return provider
+    return OpenAIProvider(config=config, client=flexible_openai_client_mock)
 
 
 @pytest.fixture
@@ -336,17 +332,15 @@ def instructor_client_mock(mocker):
 
 
 @pytest.fixture
-def instructor_provider(instructor_client_mock, monkeypatch):
-    """InstructorProvider with mocked instructor.from_provider to avoid real SDK calls."""
+def instructor_provider(instructor_client_mock):
+    """InstructorProvider with pre-built mock client injected via constructor."""
     pytest.importorskip("instructor")
-    import instructor
 
     from ragelo.llm_providers.instructor_client import InstructorProvider
     from ragelo.types.configurations.llm_provider_configs import InstructorConfiguration
 
-    monkeypatch.setattr(instructor, "from_provider", lambda *args, **kwargs: instructor_client_mock)
     config = InstructorConfiguration(model="openai/fake-model")
-    return InstructorProvider(config=config)
+    return InstructorProvider(config=config, client=instructor_client_mock)
 
 
 @pytest.fixture

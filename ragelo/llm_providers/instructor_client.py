@@ -38,11 +38,11 @@ class InstructorProvider(BaseLLMProvider):
     config: InstructorConfiguration
     api_key_env_var: str = ""
 
-    def __init__(self, config: InstructorConfiguration) -> None:
+    def __init__(self, config: InstructorConfiguration, client: AsyncInstructor | None = None) -> None:
         if not _INSTRUCTOR_AVAILABLE:
             raise ImportError("instructor is not installed. Install it with: pip install 'ragelo[instructor]'")
         super().__init__(config)
-        self.__instructor_client = self.__get_instructor_client(config)
+        self.__instructor_client = client or self.__get_instructor_client(config)
 
     @retry(
         wait=wait_random_exponential(min=1, max=120),
