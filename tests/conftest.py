@@ -41,6 +41,7 @@ from ragelo.types.results import (
     PairwiseGameEvaluatorResult,
     RetrievalEvaluatorResult,
 )
+from ragelo.types.storage import NullStorageBackend
 from ragelo.types.types import AnswerEvaluatorTypes, RetrievalEvaluatorTypes
 from ragelo.utils import string_to_template
 
@@ -347,7 +348,7 @@ def instructor_provider(instructor_client_mock):
 def base_experiment_config():
     config = {
         "experiment_name": "test_experiment",
-        "save_on_disk": False,
+        "storage_backend": NullStorageBackend(),
         "queries_csv_path": "tests/data/queries.csv",
         "documents_csv_path": "tests/data/documents.csv",
         "answers_csv_path": "tests/data/answers.csv",

@@ -10,6 +10,7 @@ from ragelo.types.configurations import EloAgentRankerConfig
 from ragelo.types.evaluables import AgentAnswer
 from ragelo.types.experiment import Experiment
 from ragelo.types.results import PairwiseGameEvaluatorResult
+from ragelo.types.storage import FileStorageBackend
 
 
 class TestEloRanker:
@@ -20,7 +21,10 @@ class TestEloRanker:
 
     @pytest.fixture
     def empty_experiment(self, tmp_path):
-        return Experiment(experiment_name="empty_test", save_path=str(tmp_path / "empty.json"))
+        return Experiment(
+            experiment_name="empty_test",
+            storage_backend=FileStorageBackend(tmp_path / "empty.json", tmp_path / "empty_test_results.jsonl"),
+        )
 
     def test_add_new_agent(self, elo_ranker):
         result = elo_ranker.add_new_agent("agent_x")

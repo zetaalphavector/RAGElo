@@ -7,6 +7,7 @@ from ragelo.cli.retrieval_evaluator_cli import app as retrieval_evaluator_app
 from ragelo.cli.utils import get_path
 from ragelo.logger import configure_logging
 from ragelo.types import CLIConfig
+from ragelo.types.storage import build_storage_backend
 
 typer.main.get_params_from_function = get_params_from_function  # type: ignore
 
@@ -32,10 +33,11 @@ def run_all(config: CLIConfig = CLIConfig(), **kwargs):
     documents_file = get_path(config.data_dir, config.documents_csv_file)
     answers_file = get_path(config.data_dir, config.answers_csv_file)
     output_file = get_path(config.data_dir, config.output_file, check_exists=False) if config.output_file else None
+    storage_backend = build_storage_backend(config.experiment_name, output_file)
 
     experiment = Experiment(
         experiment_name=config.experiment_name,
-        save_path=output_file,
+        storage_backend=storage_backend,
         queries_csv_path=queries_csv_file,
         documents_csv_path=documents_file,
         answers_csv_path=answers_file,

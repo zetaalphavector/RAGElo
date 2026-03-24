@@ -9,6 +9,7 @@ from ragelo.types.configurations.cli_configs import (
     CLIRDNAMEvaluatorConfig,
     CLIReasonerEvaluatorConfig,
 )
+from ragelo.types.storage import build_storage_backend
 from ragelo.types.types import RetrievalEvaluatorTypes
 
 typer.main.get_params_from_function = get_params_from_function  # type: ignore
@@ -38,10 +39,11 @@ def domain_expert(config: CLIDomainExpertEvaluatorConfig = CLIDomainExpertEvalua
     queries_csv_file = get_path(config.data_dir, config.queries_csv_file)
     documents_file = get_path(config.data_dir, config.documents_csv_file)
     output_file = get_path(config.data_dir, config.output_file, check_exists=False) if config.output_file else None
+    storage_backend = build_storage_backend(config.experiment_name, output_file)
 
     experiment = Experiment(
         experiment_name=config.experiment_name,
-        save_path=output_file,
+        storage_backend=storage_backend,
         queries_csv_path=queries_csv_file,
         documents_csv_path=documents_file,
         show_results=config.show_results,
@@ -77,7 +79,7 @@ def reasoner(
 
     experiment = Experiment(
         experiment_name=config.experiment_name,
-        save_path=output_file,
+        storage_backend=build_storage_backend(config.experiment_name, output_file),
         queries_csv_path=queries_csv_file,
         documents_csv_path=documents_file,
         show_results=config.show_results,
@@ -110,7 +112,7 @@ def rdnam(config: CLIRDNAMEvaluatorConfig = CLIRDNAMEvaluatorConfig(), **kwargs)
 
     experiment = Experiment(
         experiment_name=config.experiment_name,
-        save_path=output_file,
+        storage_backend=build_storage_backend(config.experiment_name, output_file),
         queries_csv_path=queries_csv_file,
         documents_csv_path=documents_file,
         show_results=config.show_results,

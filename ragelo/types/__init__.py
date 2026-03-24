@@ -27,6 +27,7 @@ from ragelo.types.results import (
     PairwiseGameEvaluatorResult,
     RetrievalEvaluatorResult,
 )
+from ragelo.types.storage import FileStorageBackend, NullStorageBackend, StorageBackend
 from ragelo.types.types import AgentRankerTypes, AnswerEvaluatorTypes, LLMProviderTypes, RetrievalEvaluatorTypes
 
 __all__ = [
@@ -62,4 +63,8 @@ __all__ = [
     # Common result types
     "PairwiseGameEvaluatorResult",
     "EloTournamentResult",
+    # Storage backends
+    "StorageBackend",
+    "FileStorageBackend",
+    "NullStorageBackend",
 ]
