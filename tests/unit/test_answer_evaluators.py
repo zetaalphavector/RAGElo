@@ -570,7 +570,6 @@ class TestPairwiseAnswerCanonicalization:
                     agent_a_assessment="[[A]] addresses the core fact",
                     agent_b_assessment="[[B]] misses the core fact",
                     winner_reasoning="[[A]] is more accurate than [[B]]",
-                    reasoning="Assistant A is more accurate than Assistant B",
                     winner="A",
                 )
             ],
@@ -586,7 +585,6 @@ class TestPairwiseAnswerCanonicalization:
         assert swapped.criteria[0].agent_a_assessment == "[[A]] misses the core fact"
         assert swapped.criteria[0].agent_b_assessment == "[[B]] addresses the core fact"
         assert swapped.criteria[0].winner_reasoning == "[[B]] is more accurate than [[A]]"
-        assert swapped.criteria[0].reasoning == "Assistant B is more accurate than Assistant A"
         assert swapped.criteria[0].winner == "B"
         assert swapped.agent_a_wins == 0
         assert swapped.agent_b_wins == 1
@@ -630,7 +628,6 @@ class TestRubricPairwiseEvaluator:
                     agent_a_assessment=(str, Field(description="agent_a_assessment")),
                     agent_b_assessment=(str, Field(description="agent_b_assessment")),
                     winner_reasoning=(str, Field(description="winner_reasoning")),
-                    reasoning=(str, Field(description="reasoning")),
                     winner=(str, Field(description="winner")),
                 )
                 for c in criteria
@@ -643,7 +640,6 @@ class TestRubricPairwiseEvaluator:
                 agent_a_assessment=f"[[A]] assessment for {c.criterion_name}",
                 agent_b_assessment=f"[[B]] assessment for {c.criterion_name}",
                 winner_reasoning=f"[[A]] vs [[B]] on {c.criterion_name}",
-                reasoning=f"{c.criterion_name} reasoning",
                 winner=w,
             )
         return EvalSchema(**data)
@@ -1174,7 +1170,6 @@ class TestBuiltinCriteriaPairwise:
                     agent_a_assessment=(str, Field(description="agent_a_assessment")),
                     agent_b_assessment=(str, Field(description="agent_b_assessment")),
                     winner_reasoning=(str, Field(description="winner_reasoning")),
-                    reasoning=(str, Field(description="reasoning")),
                     winner=(str, Field(description="winner")),
                 )
                 for c in criteria
@@ -1186,7 +1181,6 @@ class TestBuiltinCriteriaPairwise:
                 agent_a_assessment="good",
                 agent_b_assessment="good",
                 winner_reasoning="tie",
-                reasoning="tie",
                 winner="C",
             )
         )

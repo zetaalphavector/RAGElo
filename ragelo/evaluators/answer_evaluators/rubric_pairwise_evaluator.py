@@ -111,10 +111,6 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
                 agent_a_assessment=(str, Field(description="How well [[A]] satisfies the criterion.")),
                 agent_b_assessment=(str, Field(description="How well [[B]] satisfies the criterion.")),
                 winner_reasoning=(str, Field(description="A brief explanation of why the winner was chosen.")),
-                reasoning=(
-                    str,
-                    Field(description="A brief explanation about your judgement, and why you chose the winner"),
-                ),
                 winner=(Literal["A", "B", "C", "D"], Field(description="The winner of the criterion")),
             )
         return create_model("EvaluationSchema", **criteria_models)  # type: ignore[call-overload]
@@ -180,7 +176,6 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
                 agent_a_assessment=agent_a_assessment,
                 agent_b_assessment=agent_b_assessment,
                 winner_reasoning=winner_reasoning,
-                reasoning=response.get("reasoning", winner_reasoning),
                 winner=response["winner"],
             )
             criteria.append(criterion)

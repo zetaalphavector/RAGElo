@@ -110,16 +110,12 @@ class PairwiseEvaluationAnswer(EvaluationAnswer):
     comparison_reasoning: str = Field(
         ..., description="A string with your comparison between the two answers and their differences"
     )
-    reasoning: str = Field(
-        default="",
-        description=(
-            "A concise explanation of why the winner was chosen. Use only [[A]] and [[B]] when referring to the "
-            "assistants."
-        ),
-    )
     winner_reasoning: str = Field(
         default="",
-        description="A concise explanation of why the winner was chosen, focused on the deciding factor.",
+        description=(
+            "A concise explanation of why the winner was chosen, focused on the deciding factor. "
+            "Use only [[A]] and [[B]] when referring to the assistants."
+        ),
     )
     winner: PairwiseWinner = Field(
         ...,
@@ -139,7 +135,6 @@ class PairwiseEvaluationAnswer(EvaluationAnswer):
                 "answer_a_analysis": swap_pairwise_labels(self.answer_b_analysis),
                 "answer_b_analysis": swap_pairwise_labels(self.answer_a_analysis),
                 "comparison_reasoning": swap_pairwise_labels(self.comparison_reasoning),
-                "reasoning": swap_pairwise_labels(self.reasoning),
                 "winner_reasoning": swap_pairwise_labels(self.winner_reasoning),
                 "winner": swap_pairwise_winner(self.winner),
             }
@@ -226,10 +221,10 @@ class CriterionEvaluation(BaseModel):
         description="How well [[B]] satisfies the criterion. Use only [[A]] and [[B]] in text.",
     )
     winner_reasoning: str = Field(
-        default="",
-        description="Why the criterion winner was chosen. Use only [[A]] and [[B]] in text.",
+        ...,
+        description="A brief explanation of why the winner was chosen for this criterion. "
+        "Use only [[A]] and [[B]] in text.",
     )
-    reasoning: str = Field(..., description="The LLM reasoning for the winner of the criteria")
     winner: PairwiseWinner = Field(..., description="The winner of the criteria")
 
     def swap_perspective(self) -> Self:
@@ -238,7 +233,6 @@ class CriterionEvaluation(BaseModel):
                 "agent_a_assessment": swap_pairwise_labels(self.agent_b_assessment),
                 "agent_b_assessment": swap_pairwise_labels(self.agent_a_assessment),
                 "winner_reasoning": swap_pairwise_labels(self.winner_reasoning),
-                "reasoning": swap_pairwise_labels(self.reasoning),
                 "winner": swap_pairwise_winner(self.winner),
             }
         )
