@@ -303,28 +303,22 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
         """
         tuples_to_eval: list[tuple[Query, Evaluable]] = []
         all_tuples = 0
-        missing_evaluations = 0
         evaluator_name = str(self.config.evaluator_name)
         for q in experiment:
             if self.config.pairwise:
                 for g in q.pairwise_games.values():
                     all_tuples += 1
-                    tuples_to_eval.append((q, g))
-                    if evaluator_name not in g.evaluations:
-                        missing_evaluations += 1
+                    if evaluator_name not in g.evaluations or self.config.force:
+                        tuples_to_eval.append((q, g))
 
             else:
                 for a in q.answers.values():
                     all_tuples += 1
-                    tuples_to_eval.append((q, a))
-                    if evaluator_name not in a.evaluations:
-                        missing_evaluations += 1
+                    if evaluator_name not in a.evaluations or self.config.force:
+                        tuples_to_eval.append((q, a))
 
-        if missing_evaluations == 0 and not self.config.force:
-            logger.info(
-                f"All {all_tuples} answers are already evaluated.\n"
-                "If you want to re-evaluate them, use the --force flag"
-            )
+        if len(tuples_to_eval) == 0 and all_tuples > 0:
+            logger.info(f"All {all_tuples} answers are already evaluated")
 
         return tuples_to_eval
 

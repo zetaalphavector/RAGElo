@@ -128,6 +128,8 @@ class BaseEvaluator(ABC, Generic[T_Config, T_Result]):
 
     async def _evaluate_experiment_async(self, experiment: Experiment, n_threads: int = 1):
         tuples_to_eval = self._get_tuples_to_evaluate(experiment)
+        if len(tuples_to_eval) == 0:
+            return
         pbar = get_pbar(
             len(tuples_to_eval),
             self.config.rich_print,

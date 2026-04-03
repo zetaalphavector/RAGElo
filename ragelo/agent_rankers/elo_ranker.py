@@ -171,6 +171,8 @@ class EloRanker(AgentRanker[EloAgentRankerConfig]):
             self.ties[agent_b] = self.ties.get(agent_b, 0) + 1
         self.games.append((query.qid, agent_a, agent_b, winner))
         self.update_rankings(agent_a, agent_b, score_val)
+        if experiment is not None:
+            experiment.add_evaluation((query, game), evaluation, exist_ok=True, should_print=False)
         return evaluation
 
     def update_rankings(self, agent_a: str, agent_b: str, score_val: float) -> tuple[float, float]:
@@ -380,7 +382,9 @@ class EloRanker(AgentRanker[EloAgentRankerConfig]):
 
                     if should_stop() or observed_games >= max_games_budget:
                         pbar.close()
-                        return self._build_tournament_result()
+                        result = self._build_tournament_result()
+                        experiment.add_evaluation(None, result, should_print=self.config.show_results)
+                        return result
 
                 if per_opp_indices[opp] >= len(qids):
                     selected_opponents.remove(opp)
@@ -388,7 +392,9 @@ class EloRanker(AgentRanker[EloAgentRankerConfig]):
             if not progressed:
                 break
         pbar.close()
-        return self._build_tournament_result()
+        result = self._build_tournament_result()
+        experiment.add_evaluation(None, result, should_print=self.config.show_results)
+        return result
 
     def _build_tournament_result(self) -> EloTournamentResult:
         return EloTournamentResult(
