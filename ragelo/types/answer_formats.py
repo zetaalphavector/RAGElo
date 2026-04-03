@@ -58,7 +58,10 @@ class EvaluationAnswer(BaseModel):
 class RetrievalEvaluationAnswer(EvaluationAnswer):
     """Output format for evaluating the relevance of a document to a question."""
 
-    reasoning: str = Field(..., description="A concise explanation and reasoning of the relevance of the document.")
+    reasoning: str = Field(
+        ...,
+        description="A concise explanation and reasoning of the relevance of the document.",
+    )
     score: float | int = Field(
         ...,
         description="Your relevance score for the document. 0 for non-relevant, 1 for somewhat relevant "
@@ -69,7 +72,10 @@ class RetrievalEvaluationAnswer(EvaluationAnswer):
 class AnswerEvaluationAnswer(EvaluationAnswer):
     """Output format for evaluating the quality of an answer to a question."""
 
-    reasoning: str = Field(..., description="A concise explanation and reasoning of the quality of the answer.")
+    reasoning: str = Field(
+        ...,
+        description="A concise explanation and reasoning of the quality of the answer.",
+    )
     score: int = Field(
         ...,
         description=(
@@ -104,12 +110,16 @@ class PairwiseEvaluationAnswer(EvaluationAnswer):
     comparison_reasoning: str = Field(
         ..., description="A string with your comparison between the two answers and their differences"
     )
-    winner_reasoning: str = Field(
+    reasoning: str = Field(
         default="",
         description=(
             "A concise explanation of why the winner was chosen. Use only [[A]] and [[B]] when referring to the "
             "assistants."
         ),
+    )
+    winner_reasoning: str = Field(
+        default="",
+        description="A concise explanation of why the winner was chosen, focused on the deciding factor.",
     )
     winner: PairwiseWinner = Field(
         ...,
@@ -129,6 +139,7 @@ class PairwiseEvaluationAnswer(EvaluationAnswer):
                 "answer_a_analysis": swap_pairwise_labels(self.answer_b_analysis),
                 "answer_b_analysis": swap_pairwise_labels(self.answer_a_analysis),
                 "comparison_reasoning": swap_pairwise_labels(self.comparison_reasoning),
+                "reasoning": swap_pairwise_labels(self.reasoning),
                 "winner_reasoning": swap_pairwise_labels(self.winner_reasoning),
                 "winner": swap_pairwise_winner(self.winner),
             }

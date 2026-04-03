@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import math
 import random
@@ -302,7 +303,83 @@ class EloRanker(AgentRanker[EloAgentRankerConfig]):
             info_values.sort(key=lambda x: x[1], reverse=True)
             selected_opponents = [opp for opp, _ in info_values[: min(3, len(info_values))]]
 
-        per_opp_indices: dict[str, int] = {opp: 0 for opp in selected_opponents}
+        # Phase 1: Collect candidate game pairs in round-robin order
+        candidate_games: list[tuple[str, str]] = []
+        _per_opp_idx: dict[str, int] = {opp: 0 for opp in selected_opponents}
+        _remaining = list(selected_opponents)
+        played_pairs: set[tuple[str, str]] = set()
+
+        while len(candidate_games) < max_games_budget and _remaining:
+            progressed = False
+            for opp in list(_remaining):
+                qids = opponent_answered_qids.get(opp, [])
+                found = False
+                while _per_opp_idx[opp] < len(qids):
+                    qid = qids[_per_opp_idx[opp]]
+                    _per_opp_idx[opp] += 1
+                    if (qid, opp) not in played_pairs:
+                        candidate_games.append((qid, opp))
+                        played_pairs.add((qid, opp))
+                        progressed = True
+                        found = True
+                        break
+                if not found:
+                    _remaining.remove(opp)
+                if len(candidate_games) >= max_games_budget:
+                    break
+            if not progressed:
+                break
+
+        # Phase 2: Pre-fetch agent answers in parallel
+        if agent_callable:
+            qids_needing_answers = list(
+                {qid for qid, _ in candidate_games if new_agent not in queries_by_id[qid].answers}
+            )
+
+            async def _fetch_answer(fetch_qid: str) -> tuple[str, str | None, list[Any] | None]:
+                try:
+                    answer_text, docs = await agent_callable(fetch_qid, queries_by_id[fetch_qid].query)
+                    return fetch_qid, str(answer_text), docs
+                except Exception as e:
+                    logger.warning(f"Failed to get answer for new agent on qid={fetch_qid}: {e}")
+                    return fetch_qid, None, None
+
+            fetch_results = await asyncio.gather(*[_fetch_answer(qid) for qid in qids_needing_answers])
+
+            for qid, answer_text, docs in fetch_results:
+                if answer_text is None:
+                    continue
+                query = queries_by_id[qid]
+                if docs:
+                    for d in docs:
+                        try:
+                            if isinstance(d, Document):
+                                experiment.add_retrieved_doc(d, exist_ok=True, agent=new_agent)
+                            else:
+                                experiment.add_retrieved_doc(
+                                    str(d), query_id=query.qid, doc_id=str(d), agent=new_agent, exist_ok=True
+                                )
+                        except Exception as e:
+                            logger.debug(f"Skipping doc add for qid={qid}: {e}")
+                try:
+                    experiment.add_agent_answer(
+                        AgentAnswer(qid=qid, agent=new_agent, text=answer_text),
+                        exist_ok=True,
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to add new agent answer for qid={qid}: {e}")
+
+        # Phase 3: Run retrieval evaluations for candidate queries
+        if retrieval_evaluator:
+            retrieval_qids = {qid for qid, _ in candidate_games if new_agent in queries_by_id[qid].answers}
+            for qid in retrieval_qids:
+                retrieval_evaluator.evaluate_all_evaluables(queries_by_id[qid], n_threads=10)
+            if experiment:
+                experiment.save()
+
+        # Phase 4: Evaluate in batches — LLM calls parallel, ELO updates sequential
+        valid_games = [(qid, opp) for qid, opp in candidate_games if new_agent in queries_by_id[qid].answers]
+        batch_size = max(1, len(selected_opponents))
         observed_success_sum = 0.0
         observed_games = 0
 
@@ -312,85 +389,70 @@ class EloRanker(AgentRanker[EloAgentRankerConfig]):
             low, high = self._wilson_ci(observed_success_sum, observed_games, 1.96)
             return (high - low) <= target_ci_width
 
-        played_pairs: set[tuple[str, str]] = set()
-        pbar = get_pbar(max_games_budget, self.config.rich_print, desc=f"Playing games for {new_agent}")
+        pbar = get_pbar(len(valid_games), self.config.rich_print, desc=f"Playing games for {new_agent}")
 
-        while observed_games < max_games_budget and len(selected_opponents) > 0:
-            progressed = False
-            for opp in list(selected_opponents):
-                qids = opponent_answered_qids.get(opp, [])
-                while per_opp_indices[opp] < len(qids):
-                    qid = qids[per_opp_indices[opp]]
-                    per_opp_indices[opp] += 1
-                    if (qid, opp) in played_pairs:
-                        continue
-                    query = queries_by_id[qid]
+        for batch_start in range(0, len(valid_games), batch_size):
+            batch = valid_games[batch_start : batch_start + batch_size]
 
-                    if new_agent not in query.answers and agent_callable is not None:
-                        try:
-                            answer_text, docs = await agent_callable(query.qid, query.query)
-                        except Exception as e:
-                            logger.warning(f"Failed to get answer for new agent on qid={query.qid}: {e}")
-                            continue
-                        if docs:
-                            for d in docs:
-                                try:
-                                    if isinstance(d, Document):
-                                        experiment.add_retrieved_doc(d, exist_ok=True, agent=new_agent)
-                                    else:
-                                        experiment.add_retrieved_doc(
-                                            str(d), query_id=query.qid, doc_id=str(d), agent=new_agent, exist_ok=True
-                                        )
-                                except Exception as e:
-                                    logger.debug(f"Skipping doc add for qid={query.qid}: {e}")
-                        try:
-                            experiment.add_agent_answer(
-                                AgentAnswer(qid=query.qid, agent=new_agent, text=str(answer_text)),
-                                exist_ok=True,
-                            )
-                        except Exception as e:
-                            logger.warning(f"Failed to add new agent answer for qid={query.qid}: {e}")
-                            continue
+            # Run LLM evaluations in parallel within the batch
+            batch_context: list[tuple[Query, PairwiseGame, str]] = []
+            eval_coros: list[Any] = []
+            for qid, opp in batch:
+                query = queries_by_id[qid]
+                game = PairwiseGame(
+                    qid=qid,
+                    agent_a_answer=query.answers[new_agent],
+                    agent_b_answer=query.answers[opp],
+                )
+                batch_context.append((query, game, opp))
+                eval_coros.append(answer_evaluator.evaluate_async((query, game)))
 
-                    if new_agent not in query.answers:
-                        continue
+            eval_results = await asyncio.gather(*eval_coros, return_exceptions=True)
 
-                    wins_before = self.wins.get(new_agent, 0)
-                    ties_before = self.ties.get(new_agent, 0)
-                    try:
-                        await self.run_single_game(
-                            query=query,
-                            agent_a=new_agent,
-                            agent_b=opp,
-                            answer_evaluator=answer_evaluator,
-                            retrieval_evaluator=retrieval_evaluator,
-                            experiment=experiment,
-                        )
-                    except Exception as e:
-                        logger.warning(f"Failed to run game on qid={query.qid} between {new_agent} and {opp}: {e}")
-                        pbar.update()
-                        continue
-                    pbar.update()
-                    wins_after = self.wins.get(new_agent, 0)
-                    ties_after = self.ties.get(new_agent, 0)
-                    delta_wins = max(0, wins_after - wins_before)
-                    delta_ties = max(0, ties_after - ties_before)
-                    observed_success_sum += float(delta_wins) + 0.5 * float(delta_ties)
-                    observed_games += 1
-                    played_pairs.add((qid, opp))
-                    progressed = True
+            # Apply ELO updates sequentially
+            for (query, game, opp), eval_result in zip(batch_context, eval_results):
+                pbar.update()
+                if isinstance(eval_result, BaseException):
+                    logger.warning(
+                        f"Failed to run game on qid={query.qid} between {new_agent} and {opp}: {eval_result}"
+                    )
+                    continue
 
-                    if should_stop() or observed_games >= max_games_budget:
-                        pbar.close()
-                        result = self._build_tournament_result()
-                        experiment.add_evaluation(None, result, should_print=self.config.show_results)
-                        return result
+                assert isinstance(eval_result, PairwiseGameEvaluatorResult)
+                winner = eval_result.winner
+                assert winner is not None
+                score_val = self.score_map[winner]
 
-                if per_opp_indices[opp] >= len(qids):
-                    selected_opponents.remove(opp)
+                if winner == "A":
+                    self.wins[new_agent] = self.wins.get(new_agent, 0) + 1
+                    self.losses[opp] = self.losses.get(opp, 0) + 1
+                elif winner == "B":
+                    self.wins[opp] = self.wins.get(opp, 0) + 1
+                    self.losses[new_agent] = self.losses.get(new_agent, 0) + 1
+                else:
+                    self.ties[new_agent] = self.ties.get(new_agent, 0) + 1
+                    self.ties[opp] = self.ties.get(opp, 0) + 1
 
-            if not progressed:
+                self.games.append((query.qid, new_agent, opp, winner))
+                self.update_rankings(new_agent, opp, score_val)
+
+                if experiment is not None:
+                    experiment.add_evaluation(
+                        (query, game),
+                        eval_result,
+                        exist_ok=True,
+                        should_print=False,
+                    )
+
+                if winner == "A":
+                    observed_success_sum += 1.0
+                elif winner != "B":
+                    observed_success_sum += 0.5
+                observed_games += 1
+
+            if should_stop():
                 break
+
         pbar.close()
         result = self._build_tournament_result()
         experiment.add_evaluation(None, result, should_print=self.config.show_results)
