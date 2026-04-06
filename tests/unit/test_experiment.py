@@ -789,3 +789,60 @@ class TestExperimentSerialization:
 
         # Verify no crash occurred and queries were loaded
         assert len(experiment) == 2
+
+    def test_pairwise_game_reconstructed_from_cached_results(self, tmp_path, base_experiment_config):
+        """Test that pairwise games are reconstructed when loading evaluation results from cache.
+
+        When an experiment is saved with pairwise evaluations, the games exist in the JSONL
+        results cache but may not be present in `query.pairwise_games` on reload. The loader
+        should reconstruct the game from the result's agent_a/agent_b fields if both agents
+        have answers in the query.
+        """
+        save_path = tmp_path / "experiment.json"
+        results_path = tmp_path / "results.jsonl"
+
+        base_experiment_config["save_on_disk"] = True
+        base_experiment_config["save_path"] = str(save_path)
+        base_experiment_config["evaluations_cache_path"] = str(results_path)
+
+        # First, create an experiment with a pairwise game and evaluation
+        exp1 = Experiment(**base_experiment_config)
+        query = exp1["0"]
+        game = query.add_pairwise_game("agent1", "agent2")
+        pairwise_result = PairwiseGameEvaluatorResult(
+            qid="0",
+            agent_a="agent1",
+            agent_b="agent2",
+            evaluator_name="pairwise",
+            answer=PairwiseEvaluationAnswer(
+                answer_a_analysis="A is strong",
+                answer_b_analysis="B is weaker",
+                comparison_reasoning="A wins",
+                winner="A",
+            ),
+        )
+        exp1.add_evaluation((query, game), pairwise_result, should_save=True)
+        exp1.save()
+
+        # Now clear the pairwise games from the saved JSON (simulating the bug scenario
+        # where games are not saved or lost on reload)
+        with open(save_path) as f:
+            saved_data = json.load(f)
+        for q_data in saved_data.get("queries", {}).values():
+            q_data["pairwise_games"] = {}
+        with open(save_path, "w") as f:
+            json.dump(saved_data, f)
+
+        # Reload experiment — the JSONL has the pairwise result but the JSON has no games
+        exp2 = Experiment(**base_experiment_config)
+
+        loaded_query = exp2["0"]
+        assert (
+            "agent1-agent2" in loaded_query.pairwise_games
+        ), "Pairwise game should be reconstructed from cached results"
+        loaded_game = loaded_query.pairwise_games["agent1-agent2"]
+        assert "pairwise" in loaded_game.evaluations
+        loaded_eval = loaded_game.evaluations["pairwise"]
+        assert isinstance(loaded_eval, PairwiseGameEvaluatorResult)
+        assert isinstance(loaded_eval.answer, PairwiseEvaluationAnswer)
+        assert loaded_eval.answer.winner == "A"

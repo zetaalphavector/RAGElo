@@ -937,8 +937,14 @@ class Experiment:
                 evaluable = query.retrieved_docs[result.did]
             elif isinstance(result, PairwiseGameEvaluatorResult):
                 if result.game_id not in query.pairwise_games:
-                    logger.warning(f"Pairwise game {result.game_id} not found in query {result.qid}. Skipping")
-                    continue
+                    if result.agent_a in query.answers and result.agent_b in query.answers:
+                        query.add_pairwise_game(result.agent_a, result.agent_b)
+                    else:
+                        logger.warning(
+                            f"Pairwise game {result.game_id} not found in query {result.qid} "
+                            f"and cannot reconstruct (missing agent answers). Skipping"
+                        )
+                        continue
                 evaluable = query.pairwise_games[result.game_id]
             elif isinstance(result, AnswerEvaluatorResult):
                 if result.agent not in query.answers:
