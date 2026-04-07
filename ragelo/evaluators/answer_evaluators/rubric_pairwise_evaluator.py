@@ -55,19 +55,44 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
 
         To properly evaluate the quality of the reports, you will be provided with a list of criteria to evaluate the quality of the responses. 
         Each criterion includes a short question, an optional weight indicating its relative importance, and a list of documents that support the inclusion of the criterion in the report.
-        For each criterion, you should think carefully about which of two answers better answers the criterion, and assign, for each criterion, one of the following values:
+        For each criterion, you should think carefully about which of two answers better answers the criterion, and provide the following:
 
-        - A if the report written by Agent A clearly answers the criterion better than the report written by     B
+        ### Winner
+        Assign one of the following values:
+        - A if the report written by Agent A clearly answers the criterion better than the report written by Agent B.
         - B if the report written by Agent B clearly answers the criterion better than the report written by Agent A.
         - C if the report written by Agent A and Agent B are equally good and answer the criterion equally well.
-        - D if the report written by Agent A and Agent B are equally bad and neither answers the criterion.
+        {% if preserve_d %}- D if the report written by Agent A and Agent B are equally bad and neither answers the criterion.
+        {% endif %}
+        {% if rich_output %}
+        ### Scores
+        - `score_a`: Rate how well [[A]] satisfies this criterion from 0.0 (not at all) to 1.0 (fully).
+        - `score_b`: Rate how well [[B]] satisfies this criterion from 0.0 (not at all) to 1.0 (fully).
 
-        You should think carefully about the criteria and the answers, and assign the winner accordingly.
+        ### Diagnostics
+        - `loser_fix`: A concise, actionable suggestion for how the losing answer could improve on this criterion. If tied{% if preserve_d %} (C or D){% endif %}, leave empty.
+        - `failure_tags`: Tag the loser's weaknesses using zero or more of: `missing_evidence`, `unsupported_claim`, `incomplete_coverage`, `poor_synthesis`, `citation_error`, `verbosity_without_content`. If tied, leave empty.
+        - `confidence`: Your confidence in this criterion's verdict from 0.0 (very uncertain) to 1.0 (certain).
+        {% endif %}
+        {% if include_evidence %}
+
+        ### Evidence Assessment
+        - `missing_evidence_doc_ids`: List any document IDs from the supporting documents that the loser failed to use.
+        - `missing_evidence_snippets`: List specific evidence snippets from the supporting documents that the loser omitted or misused.
+        {% endif %}
 
         ## Output Constraints
         - In any free-text field, refer to the reports only as [[A]] and [[B]].
         - Do not use phrases such as first answer, second answer, former, latter, this answer, or that answer.
         - For each criterion, provide a side-specific assessment for [[A]], a side-specific assessment for [[B]], and a brief winner_reasoning.
+
+        {% if evidence_snippets %}
+        ## Evidence Snippets
+        The following evidence snippets were extracted from the retrieved documents. Use them to assess whether each answer correctly leverages the available evidence.
+        {% for snippet in evidence_snippets %}
+        - {{ snippet }}
+        {% endfor %}
+        {% endif %}
 
         ## Criteria
         {% for criteria in criteria.criteria %}
@@ -104,15 +129,49 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
         self.answer_schema_cache = {}
 
     def _build_evaluation_schema(self, criteria: RubricSchema) -> Type[BaseModel]:
+        include_evidence = getattr(self.config, "include_evidence_in_evaluation", False)
+        rich_output = getattr(self.config, "rich_pairwise_output", True)
+        preserve_d = getattr(self.config, "preserve_d", True)
+        winner_type = Literal["A", "B", "C", "D"] if preserve_d else Literal["A", "B", "C"]
         criteria_models = {}
         for criterion in criteria.criteria:
-            criteria_models[criterion.criterion_name] = create_model(
-                criterion.criterion_name,
-                agent_a_assessment=(str, Field(description="How well [[A]] satisfies the criterion.")),
-                agent_b_assessment=(str, Field(description="How well [[B]] satisfies the criterion.")),
-                winner_reasoning=(str, Field(description="A brief explanation of why the winner was chosen.")),
-                winner=(Literal["A", "B", "C", "D"], Field(description="The winner of the criterion")),
-            )
+            fields: dict = {
+                "agent_a_assessment": (str, Field(description="How well [[A]] satisfies the criterion.")),
+                "agent_b_assessment": (str, Field(description="How well [[B]] satisfies the criterion.")),
+                "winner_reasoning": (str, Field(description="A brief explanation of why the winner was chosen.")),
+                "winner": (winner_type, Field(description="The winner of the criterion")),
+            }
+            if rich_output:
+                fields.update(
+                    {
+                        "score_a": (float, Field(description="Score for [[A]] on this criterion (0.0 to 1.0).")),
+                        "score_b": (float, Field(description="Score for [[B]] on this criterion (0.0 to 1.0).")),
+                        "loser_fix": (
+                            str,
+                            Field(
+                                description="One sentence: what should the losing side do differently? Empty if tied."
+                            ),
+                        ),
+                        "failure_tags": (
+                            list[str],
+                            Field(
+                                description="Tags from: missing_evidence, unsupported_claim, incomplete_coverage, "
+                                "poor_synthesis, citation_error, verbosity_without_content. Empty if tied."
+                            ),
+                        ),
+                        "confidence": (float, Field(description="Your confidence in this verdict, 0.0 to 1.0.")),
+                    }
+                )
+            if include_evidence:
+                fields["missing_evidence_doc_ids"] = (
+                    list[str],
+                    Field(description="Document IDs the loser failed to use."),
+                )
+                fields["missing_evidence_snippets"] = (
+                    list[str],
+                    Field(description="Evidence snippets the loser omitted or misused."),
+                )
+            criteria_models[criterion.criterion_name] = create_model(criterion.criterion_name, **fields)
         return create_model("EvaluationSchema", **criteria_models)  # type: ignore[call-overload]
 
     async def _build_criteria(self, query: Query, documents: list[Document]) -> RubricSchema:
@@ -140,8 +199,22 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
         if query.qid not in self.answer_schema_cache:
             call_async_fn(self._build_criteria, query, list(query.retrieved_docs.values()))
         criteria = self.criteria_cache[query.qid]
+        include_evidence = getattr(self.config, "include_evidence_in_evaluation", False)
+        evidence_snippets: list[str] = []
+        if include_evidence:
+            evidence_snippets = get_evidence_snippets(
+                query, getattr(self.config, "evidence_snippets", None), self.criteria_cache
+            )
+            max_tokens = getattr(self.config, "max_evidence_tokens", 2000)
+            evidence_snippets = _truncate_snippets(evidence_snippets, max_tokens)
         system_prompt = self.system_prompt.render(
-            expert_in=self.config.expert_in, criteria=criteria, company=self.config.company
+            expert_in=self.config.expert_in,
+            criteria=criteria,
+            company=self.config.company,
+            include_evidence=include_evidence,
+            evidence_snippets=evidence_snippets,
+            preserve_d=getattr(self.config, "preserve_d", True),
+            rich_output=getattr(self.config, "rich_pairwise_output", True),
         )
         user_prompt = self.user_prompt.render(
             query=query,
@@ -155,10 +228,12 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
 
     def _process_answer(self, llm_response: LLMResponseType, query: Query) -> LLMResponseType:
         response_dict = llm_response.parsed_answer.model_dump()
+        preserve_d = getattr(self.config, "preserve_d", True)
         agent_a_wins = 0.0
         agent_b_wins = 0.0
         equally_good = 0.0
         equally_bad = 0.0
+        total_confidence = 0.0
         criteria: list[CriterionEvaluation] = []
 
         for crit, response in response_dict.items():
@@ -166,17 +241,26 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
             weight = crit_obj.weight if crit_obj.weight is not None else 1.0
             if len(response["winner"]) > 1:
                 response["winner"] = response["winner"][-1]
-            if response["winner"] == "D":
+            if not preserve_d and response["winner"] == "D":
                 response["winner"] = "C"
             agent_a_assessment = response.get("agent_a_assessment", "")
             agent_b_assessment = response.get("agent_b_assessment", "")
             winner_reasoning = response.get("winner_reasoning", response.get("reasoning", ""))
+            confidence = response.get("confidence", 1.0)
+            total_confidence += confidence
             criterion = CriterionEvaluation(
                 criterion=crit_obj,
                 agent_a_assessment=agent_a_assessment,
                 agent_b_assessment=agent_b_assessment,
                 winner_reasoning=winner_reasoning,
                 winner=response["winner"],
+                score_a=response.get("score_a", 0.0),
+                score_b=response.get("score_b", 0.0),
+                loser_fix=response.get("loser_fix", ""),
+                failure_tags=response.get("failure_tags", []),
+                confidence=confidence,
+                missing_evidence_doc_ids=response.get("missing_evidence_doc_ids", []),
+                missing_evidence_snippets=response.get("missing_evidence_snippets", []),
             )
             criteria.append(criterion)
             if response["winner"] == "A":
@@ -188,6 +272,7 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
             else:
                 equally_bad += weight
         winner = "A" if agent_a_wins > agent_b_wins else "B" if agent_a_wins < agent_b_wins else "C"
+        n_criteria = len(criteria) or 1
         parsed_answer = RubricAnswerFormat(
             criteria=criteria,
             agent_a_wins=agent_a_wins,
@@ -195,6 +280,8 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
             equally_good=equally_good,
             equally_bad=equally_bad,
             winner=winner,
+            margin=agent_a_wins - agent_b_wins,
+            mean_confidence=total_confidence / n_criteria,
         )
 
         return LLMResponseType(
@@ -264,7 +351,22 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
                 "agent_b_wins": agent_b_wins,
                 "equally_good": equally_good,
                 "winner": winner,
+                "margin": agent_a_wins - agent_b_wins,
             }
         )
         updated_answer = answer_format.model_copy(update=updates)
         return result.model_copy(update={"answer": updated_answer})
+
+
+def _truncate_snippets(snippets: list[str], max_chars: int) -> list[str]:
+    result = []
+    total = 0
+    for s in snippets:
+        if total + len(s) > max_chars:
+            remaining = max_chars - total
+            if remaining > 50:
+                result.append(s[:remaining])
+            break
+        result.append(s)
+        total += len(s)
+    return result

@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from pydantic.json_schema import SkipJsonSchema
 
 PairwiseWinner = Literal["A", "B", "C"]
+PairwiseCriterionWinner = Literal["A", "B", "C", "D"]
 
 
 def swap_pairwise_winner(winner: PairwiseWinner) -> PairwiseWinner:
@@ -15,6 +16,14 @@ def swap_pairwise_winner(winner: PairwiseWinner) -> PairwiseWinner:
     if winner == "B":
         return "A"
     return "C"
+
+
+def swap_criterion_winner(winner: PairwiseCriterionWinner) -> PairwiseCriterionWinner:
+    if winner == "A":
+        return "B"
+    if winner == "B":
+        return "A"
+    return winner
 
 
 def swap_pairwise_labels(text: str) -> str:
@@ -225,7 +234,23 @@ class CriterionEvaluation(BaseModel):
         description="A brief explanation of why the winner was chosen for this criterion. "
         "Use only [[A]] and [[B]] in text.",
     )
-    winner: PairwiseWinner = Field(..., description="The winner of the criteria")
+    winner: PairwiseCriterionWinner = Field(..., description="The winner of the criteria")
+    score_a: float = Field(default=0.0, description="How well [[A]] satisfies this criterion (0.0 to 1.0).")
+    score_b: float = Field(default=0.0, description="How well [[B]] satisfies this criterion (0.0 to 1.0).")
+    loser_fix: str = Field(
+        default="",
+        description="A concise, actionable suggestion for how the losing answer could improve on this criterion.",
+    )
+    failure_tags: list[str] = Field(
+        default_factory=list,
+        description="Tags describing the loser's weaknesses (e.g. missing_evidence, unsupported_claim, "
+        "incomplete_coverage, poor_synthesis, citation_error, verbosity_without_content).",
+    )
+    confidence: float = Field(default=1.0, description="Judge's confidence in this criterion's verdict (0.0 to 1.0).")
+    missing_evidence_doc_ids: list[str] = Field(default_factory=list, description="Document IDs the loser omitted.")
+    missing_evidence_snippets: list[str] = Field(
+        default_factory=list, description="Evidence snippets the loser missed."
+    )
 
     def swap_perspective(self) -> Self:
         return self.model_copy(
@@ -233,7 +258,10 @@ class CriterionEvaluation(BaseModel):
                 "agent_a_assessment": swap_pairwise_labels(self.agent_b_assessment),
                 "agent_b_assessment": swap_pairwise_labels(self.agent_a_assessment),
                 "winner_reasoning": swap_pairwise_labels(self.winner_reasoning),
-                "winner": swap_pairwise_winner(self.winner),
+                "winner": swap_criterion_winner(self.winner),
+                "score_a": self.score_b,
+                "score_b": self.score_a,
+                "loser_fix": swap_pairwise_labels(self.loser_fix),
             }
         )
 
@@ -292,6 +320,8 @@ class RubricAnswerFormat(EvaluationAnswer):
         ..., description="The weighted score of criteria that agent A and agent B are equally bad"
     )
     winner: PairwiseWinner = Field(..., description="The winner of the pairwise comparison")
+    margin: float = Field(default=0.0, description="agent_a_wins minus agent_b_wins (signed)")
+    mean_confidence: float = Field(default=1.0, description="Average confidence across all criteria")
     evidence_recall_a: EvidenceRecallResult | None = Field(
         default=None, description="Evidence recall result for agent A"
     )
@@ -312,6 +342,7 @@ class RubricAnswerFormat(EvaluationAnswer):
                 "agent_a_wins": self.agent_b_wins,
                 "agent_b_wins": self.agent_a_wins,
                 "winner": swap_pairwise_winner(self.winner),
+                "margin": -self.margin,
                 "evidence_recall_a": self.evidence_recall_b,
                 "evidence_recall_b": self.evidence_recall_a,
                 "citation_quality_a": self.citation_quality_b,

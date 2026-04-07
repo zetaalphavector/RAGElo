@@ -148,6 +148,23 @@ class RubricPairwiseEvaluatorConfig(PairwiseDomainExpertEvaluatorConfig):
     citation_quality_weight: float = Field(
         default=1.0, description="Weight for the citation quality criterion in the final score."
     )
+    include_evidence_in_evaluation: bool = Field(
+        default=False,
+        description="Include evidence snippets in the pairwise evaluation prompt for evidence-grounded judging.",
+    )
+    max_evidence_tokens: int = Field(
+        default=2000,
+        description="Maximum character budget for evidence snippets in the evaluation prompt.",
+    )
+    preserve_d: bool = Field(
+        default=True,
+        description="Preserve D (both-bad) as distinct from C (tied-good) at criterion level.",
+    )
+    rich_pairwise_output: bool = Field(
+        default=True,
+        description="Request richer diagnostic fields (score_a, score_b, loser_fix, failure_tags, confidence) "
+        "from the LLM judge. When False, only basic fields are requested.",
+    )
 
 
 class RubricPointwiseEvaluatorConfig(PairwiseDomainExpertEvaluatorConfig):

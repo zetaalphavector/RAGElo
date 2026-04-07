@@ -629,6 +629,11 @@ class TestRubricPairwiseEvaluator:
                     agent_b_assessment=(str, Field(description="agent_b_assessment")),
                     winner_reasoning=(str, Field(description="winner_reasoning")),
                     winner=(str, Field(description="winner")),
+                    score_a=(float, Field(default=0.5)),
+                    score_b=(float, Field(default=0.5)),
+                    loser_fix=(str, Field(default="")),
+                    failure_tags=(list[str], Field(default_factory=lambda: [])),
+                    confidence=(float, Field(default=0.9)),
                 )
                 for c in criteria
             },
@@ -636,11 +641,20 @@ class TestRubricPairwiseEvaluator:
         data = {}
         for c, w in zip(criteria, winners):
             SubModel = EvalSchema.model_fields[c.criterion_name].annotation
+            score_a = 0.8 if w == "A" else 0.3 if w == "B" else 0.5
+            score_b = 0.3 if w == "A" else 0.8 if w == "B" else 0.5
+            loser_fix = f"Improve on {c.criterion_name}" if w in ("A", "B") else ""
+            tags = ["incomplete_coverage"] if w in ("A", "B") else []
             data[c.criterion_name] = SubModel(
                 agent_a_assessment=f"[[A]] assessment for {c.criterion_name}",
                 agent_b_assessment=f"[[B]] assessment for {c.criterion_name}",
                 winner_reasoning=f"[[A]] vs [[B]] on {c.criterion_name}",
                 winner=w,
+                score_a=score_a,
+                score_b=score_b,
+                loser_fix=loser_fix,
+                failure_tags=tags,
+                confidence=0.9,
             )
         return EvalSchema(**data)
 
@@ -698,7 +712,7 @@ class TestRubricPairwiseEvaluator:
         assert answer.criteria[0].winner_reasoning == "[[A]] vs [[B]] on accuracy"
 
     def test_rubric_pairwise_d_counted_as_equally_bad(self, llm_provider_mock, experiment):
-        """Winner 'D' should be normalized to 'C' and counted as equally_bad in tally."""
+        """Winner 'D' should be preserved and counted as equally_bad in tally."""
         from ragelo.types.configurations import RubricPairwiseEvaluatorConfig
 
         rubrics = {"0": self._make_criteria()}
@@ -711,11 +725,11 @@ class TestRubricPairwiseEvaluator:
         processed = evaluator._process_answer(llm_response, query)
         answer = processed.parsed_answer
         assert isinstance(answer, RubricAnswerFormat)
-        # D is converted to C, then "C" goes into equally_good
-        # After D→C normalization: winners are [C, C, A]
         assert answer.agent_a_wins == 1
-        assert answer.equally_good == 2
+        assert answer.equally_good == 1
+        assert answer.equally_bad == 1
         assert answer.winner == "A"
+        assert answer.criteria[0].winner == "D"
 
     def test_build_evaluation_schema(self, llm_provider_mock):
         """_build_evaluation_schema should create a valid Pydantic model with per-criterion fields."""
@@ -757,6 +771,71 @@ class TestRubricPairwiseEvaluator:
         assert answer.agent_a_wins == 5.0
         assert answer.agent_b_wins == 2.0
         assert answer.winner == "A"
+
+    def test_rubric_pairwise_richer_fields_populated(self, llm_provider_mock, experiment):
+        """New diagnostic fields should be populated from LLM response."""
+        from ragelo.types.configurations import RubricPairwiseEvaluatorConfig
+
+        rubrics = {"0": self._make_criteria()}
+        config = RubricPairwiseEvaluatorConfig(expert_in="AI", rubrics=rubrics, force=True)
+        evaluator = RubricPairwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
+
+        eval_response = self._make_evaluation_response(["A", "B", "C"])
+        llm_response: LLMResponseType = LLMResponseType(raw_answer="test", parsed_answer=eval_response)
+        query = experiment["0"]
+        processed = evaluator._process_answer(llm_response, query)
+        answer = processed.parsed_answer
+        assert isinstance(answer, RubricAnswerFormat)
+
+        crit_a = answer.criteria[0]
+        assert crit_a.winner == "A"
+        assert crit_a.score_a == 0.8
+        assert crit_a.score_b == 0.3
+        assert crit_a.loser_fix == "Improve on accuracy"
+        assert crit_a.failure_tags == ["incomplete_coverage"]
+        assert crit_a.confidence == 0.9
+
+        crit_c = answer.criteria[2]
+        assert crit_c.winner == "C"
+        assert crit_c.loser_fix == ""
+        assert crit_c.failure_tags == []
+
+    def test_rubric_pairwise_aggregates(self, llm_provider_mock, experiment):
+        """Margin and mean_confidence should be correctly computed."""
+        from ragelo.types.configurations import RubricPairwiseEvaluatorConfig
+
+        rubrics = {"0": self._make_criteria()}
+        config = RubricPairwiseEvaluatorConfig(expert_in="AI", rubrics=rubrics, force=True)
+        evaluator = RubricPairwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
+
+        eval_response = self._make_evaluation_response(["A", "A", "B"])
+        llm_response: LLMResponseType = LLMResponseType(raw_answer="test", parsed_answer=eval_response)
+        query = experiment["0"]
+        processed = evaluator._process_answer(llm_response, query)
+        answer = processed.parsed_answer
+        assert isinstance(answer, RubricAnswerFormat)
+        assert answer.margin == 1.0  # 2 - 1
+        assert answer.mean_confidence == 0.9
+
+    def test_rubric_pairwise_swap_perspective_new_fields(self, llm_provider_mock, experiment):
+        """swap_perspective should swap scores and labels in new fields."""
+        from ragelo.types.configurations import RubricPairwiseEvaluatorConfig
+
+        rubrics = {"0": self._make_criteria()}
+        config = RubricPairwiseEvaluatorConfig(expert_in="AI", rubrics=rubrics, force=True)
+        evaluator = RubricPairwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
+
+        eval_response = self._make_evaluation_response(["A", "B", "C"])
+        llm_response: LLMResponseType = LLMResponseType(raw_answer="test", parsed_answer=eval_response)
+        query = experiment["0"]
+        processed = evaluator._process_answer(llm_response, query)
+        answer = processed.parsed_answer
+        assert isinstance(answer, RubricAnswerFormat)
+        swapped = answer.swap_perspective()
+        assert swapped.margin == -answer.margin
+        assert swapped.criteria[0].winner == "B"
+        assert swapped.criteria[0].score_a == answer.criteria[0].score_b
+        assert swapped.criteria[0].score_b == answer.criteria[0].score_a
 
 
 class TestRubricPointwiseEvaluator:
