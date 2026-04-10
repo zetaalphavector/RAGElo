@@ -155,6 +155,7 @@ class EloRanker(AgentRanker[EloAgentRankerConfig]):
             agent_a_answer=answer_a,
             agent_b_answer=answer_b,
         )
+        query.pairwise_games[game.game_id] = game
         evaluation = await answer_evaluator.evaluate_async((query, game))
         assert isinstance(evaluation, PairwiseGameEvaluatorResult)
         winner = evaluation.winner
@@ -404,6 +405,7 @@ class EloRanker(AgentRanker[EloAgentRankerConfig]):
                     agent_a_answer=query.answers[new_agent],
                     agent_b_answer=query.answers[opp],
                 )
+                query.pairwise_games[game.game_id] = game
                 batch_context.append((query, game, opp))
                 eval_coros.append(answer_evaluator.evaluate_async((query, game)))
 
