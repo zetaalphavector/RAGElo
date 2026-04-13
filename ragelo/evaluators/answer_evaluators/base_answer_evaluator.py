@@ -204,48 +204,45 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
             if isinstance(cached, PairwiseGameEvaluatorResult):
                 return cached
 
-        # Evaluate in both directions
+        # Evaluate in both directions.
+        # Use model_construct for the reversed game to bypass ensure_agent_order,
+        # which would re-sort the agents back to the original order.
         normal_game = PairwiseGame(
             qid=game.qid,
             agent_a_answer=game.agent_a_answer,
             agent_b_answer=game.agent_b_answer,
         )
-        reversed_game = PairwiseGame(
+        reversed_game = PairwiseGame.model_construct(
             qid=game.qid,
-            agent_a_answer=game.agent_a_answer,
-            agent_b_answer=game.agent_b_answer,
+            metadata=game.metadata,
+            evaluations={},
+            agent_a_answer=game.agent_b_answer,
+            agent_b_answer=game.agent_a_answer,
         )
 
         a_vs_b_result = await self.__evaluate_single_game(query, normal_game)
         b_vs_a_result = await self.__evaluate_single_game(query, reversed_game)
 
-        # Reconcile winners
-        winner_normal = a_vs_b_result.winner
-        winner_reversed = b_vs_a_result.winner
+        # Reconcile using weighted scores.
+        # Positive margin = A is better; the reversed game's margin is negated
+        # to normalize back to the original (A vs B) perspective.
+        margin_normal = self._get_game_margin(a_vs_b_result)
+        margin_reversed = -self._get_game_margin(b_vs_a_result)
+        total_margin = margin_normal + margin_reversed
 
-        # Normalize reversed winner back to original agent perspective
-        if winner_reversed == "A":
-            normalized_reversed: PairwiseWinner | None = "B"
-        elif winner_reversed == "B":
-            normalized_reversed = "A"
+        # Pick the answer source from whichever direction had the stronger signal.
+        use_reversed = abs(margin_reversed) > abs(margin_normal)
+
+        if total_margin > 0:
+            final_winner: PairwiseWinner = "A"
+        elif total_margin < 0:
+            final_winner = "B"
         else:
-            normalized_reversed = winner_reversed  # None or "C"
+            final_winner = "C"
 
-        if winner_normal is not None and winner_normal == normalized_reversed:
-            # Both directions agree on the same winner
-            final_winner = winner_normal
-            answer_source = a_vs_b_result.answer
-        elif winner_normal in ("A", "B") and normalized_reversed in ("C", None):
-            # One win + one tie → count the win
-            final_winner = winner_normal
-            answer_source = a_vs_b_result.answer
-        elif normalized_reversed in ("A", "B") and winner_normal in ("C", None):
-            # One tie + one win → count the win
-            final_winner = normalized_reversed
+        if use_reversed:
             answer_source = self._canonicalize_pairwise_answer(b_vs_a_result.answer)
         else:
-            # Full disagreement (A wins one way, B wins the other) → tie
-            final_winner = "C"
             answer_source = a_vs_b_result.answer
 
         # Build parent result with reconciled winner
@@ -273,6 +270,15 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
         if answer is None:
             return None
         return answer.swap_perspective()
+
+    def _get_game_margin(self, result: PairwiseGameEvaluatorResult) -> float:
+        if isinstance(result.answer, RubricAnswerFormat):
+            return result.answer.margin
+        if result.winner == "A":
+            return 1.0
+        if result.winner == "B":
+            return -1.0
+        return 0.0
 
     def _resolve_response_schema(self, prompt: LLMInputPrompt) -> type[BaseModel] | None:
         schema = prompt.llm_response_schema or self.config.llm_response_schema

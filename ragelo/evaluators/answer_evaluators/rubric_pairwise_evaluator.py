@@ -54,7 +54,7 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
         The reports are written based on a set of documents retrieved by the two agents, and should thoroughly answer the user's question based on the relevant documents retrieved by the agents.
 
         To properly evaluate the quality of the reports, you will be provided with a list of criteria to evaluate the quality of the responses. 
-        Each criterion includes a short question, an optional weight indicating its relative importance, and a list of documents that support the inclusion of the criterion in the report.
+        Each criterion includes a short question and an optional list of documents that support the inclusion of the criterion in the report.
         For each criterion, you should think carefully about which of two answers better answers the criterion, and provide the following:
 
         ### Winner
@@ -97,8 +97,7 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
         ## Criteria
         {% for criteria in criteria.criteria %}
         Criterion: {{criteria.criterion_name}}
-        {% if criteria.weight is not none %}Weight: {{criteria.weight}}
-        {% endif %}Supporting Documents: {{criteria.supporting_documents}}
+        Supporting Documents: {{criteria.supporting_documents}}
         Short Question: {{criteria.short_question}}
         --------------------------------
         {% endfor %}

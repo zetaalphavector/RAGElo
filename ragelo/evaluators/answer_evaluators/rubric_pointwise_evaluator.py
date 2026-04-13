@@ -55,7 +55,7 @@ class RubricPointwiseEvaluator(BaseAnswerEvaluator[RubricPointwiseEvaluatorConfi
         The report was written based on a set of documents retrieved by the agent, and should thoroughly answer the user's question based exclusively on the relevant documents retrieved by the agent.
 
         To properly evaluate the quality of the report, you will be provided with a list of criteria to evaluate its quality.
-        Each criterion includes a short question, an optional weight indicating its relative importance, and a list of documents that support the inclusion of the criterion in the report.
+        Each criterion includes a short question and an optional list of documents that support the inclusion of the criterion in the report.
         For each criterion, you should think carefully about wether the report answers the criterion, and include a brief reasoning for your decision.
 
         You should think carefully about the criteria and the answers, and assign the final judgement accordingly.
@@ -63,8 +63,7 @@ class RubricPointwiseEvaluator(BaseAnswerEvaluator[RubricPointwiseEvaluatorConfi
         ## Criteria
         {% for criteria in criteria.criteria %}
         Criterion: {{criteria.criterion_name}}
-        {% if criteria.weight is not none %}Weight: {{criteria.weight}}
-        {% endif %}Supporting Documents: {{criteria.supporting_documents}}
+        Supporting Documents: {{criteria.supporting_documents}}
         Short Question: {{criteria.short_question}}
         --------------------------------
         {% endfor %}
@@ -78,7 +77,7 @@ class RubricPointwiseEvaluator(BaseAnswerEvaluator[RubricPointwiseEvaluatorConfi
         The report was written based on a set of documents retrieved by the agent, and should thoroughly answer the user's question based exclusively on the relevant documents retrieved by the agent.
 
         To properly evaluate the quality of the report, you will be provided with a list of criteria to evaluate its quality.
-        Each criterion includes a short question, an optional weight indicating its relative importance, and a list of documents that support the inclusion of the criterion in the report.
+        Each criterion includes a short question, and an optional list of documents that support the inclusion of the criterion in the report.
         For each criterion, you should think carefully about how well the report addresses the criterion, provide a brief reasoning, and assign a score from 0 to {{ max_score }}, where 0 means the criterion is not addressed at all and {{ max_score }} means it is fully and thoroughly addressed.
 
         You should think carefully about the criteria and the answers, and assign the scores accordingly.
@@ -86,8 +85,7 @@ class RubricPointwiseEvaluator(BaseAnswerEvaluator[RubricPointwiseEvaluatorConfi
         ## Criteria
         {% for criteria in criteria.criteria %}
         Criterion: {{criteria.criterion_name}}
-        {% if criteria.weight is not none %}Weight: {{criteria.weight}}
-        {% endif %}Supporting Documents: {{criteria.supporting_documents}}
+        Supporting Documents: {{criteria.supporting_documents}}
         Short Question: {{criteria.short_question}}
         --------------------------------
         {% endfor %}

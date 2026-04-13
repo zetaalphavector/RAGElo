@@ -158,6 +158,10 @@ class EloRanker(AgentRanker[EloAgentRankerConfig]):
         query.pairwise_games[game.game_id] = game
         evaluation = await answer_evaluator.evaluate_async((query, game))
         assert isinstance(evaluation, PairwiseGameEvaluatorResult)
+        if evaluation.exception or evaluation.answer is None:
+            raise ValueError(
+                f"Failed to evaluate game on qid={query.qid} between {agent_a} and {agent_b}: {evaluation.exception}"
+            )
         winner = evaluation.winner
         assert winner is not None
         score_val = self.score_map[winner]
@@ -421,6 +425,12 @@ class EloRanker(AgentRanker[EloAgentRankerConfig]):
                     continue
 
                 assert isinstance(eval_result, PairwiseGameEvaluatorResult)
+                if eval_result.exception or eval_result.answer is None:
+                    logger.warning(
+                        f"Evaluation failed on qid={query.qid} between {new_agent} and {opp}: {eval_result.exception}"
+                    )
+                    continue
+
                 winner = eval_result.winner
                 assert winner is not None
                 score_val = self.score_map[winner]
