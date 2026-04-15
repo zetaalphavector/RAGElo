@@ -147,9 +147,9 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
         self.answer_schema_cache = {}
 
     def _build_evaluation_schema(self, criteria: RubricSchema) -> Type[BaseModel]:
-        include_evidence = getattr(self.config, "include_evidence_in_evaluation", False)
-        rich_output = getattr(self.config, "rich_pairwise_output", True)
-        preserve_d = getattr(self.config, "preserve_d", True)
+        include_evidence = self.config.include_evidence_in_evaluation
+        rich_output = self.config.rich_pairwise_output
+        preserve_d = self.config.preserve_d
         winner_type = Literal["A", "B", "C", "D"] if preserve_d else Literal["A", "B", "C"]
         criteria_models = {}
         for criterion in criteria.criteria:
@@ -224,15 +224,12 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
         if query.qid not in self.answer_schema_cache:
             call_async_fn(self._build_criteria, query, list(query.retrieved_docs.values()), conversation_context)
         criteria = self.criteria_cache[query.qid]
-        include_evidence = getattr(self.config, "include_evidence_in_evaluation", False)
+        include_evidence = self.config.include_evidence_in_evaluation
         evidence_snippets: list[str] = []
         is_conversation = bool(game.agent_a_answer.conversation or game.agent_b_answer.conversation)
         if include_evidence:
-            evidence_snippets = get_evidence_snippets(
-                query, getattr(self.config, "evidence_snippets", None), self.criteria_cache
-            )
-            max_tokens = getattr(self.config, "max_evidence_tokens", 2000)
-            evidence_snippets = _truncate_snippets(evidence_snippets, max_tokens)
+            evidence_snippets = get_evidence_snippets(query, self.config.evidence_snippets, self.criteria_cache)
+            evidence_snippets = _truncate_snippets(evidence_snippets, self.config.max_evidence_tokens)
         system_prompt = self.system_prompt.render(
             expert_in=self.config.expert_in,
             criteria=criteria,
@@ -240,8 +237,8 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
             include_evidence=include_evidence,
             is_conversation=is_conversation,
             evidence_snippets=evidence_snippets,
-            preserve_d=getattr(self.config, "preserve_d", True),
-            rich_output=getattr(self.config, "rich_pairwise_output", True),
+            preserve_d=self.config.preserve_d,
+            rich_output=self.config.rich_pairwise_output,
         )
         user_prompt = self.user_prompt.render(
             query=query,
@@ -255,7 +252,7 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
 
     def _process_answer(self, llm_response: LLMResponseType, query: Query) -> LLMResponseType:
         response_dict = llm_response.parsed_answer.model_dump()
-        preserve_d = getattr(self.config, "preserve_d", True)
+        preserve_d = self.config.preserve_d
         agent_a_wins = 0.0
         agent_b_wins = 0.0
         equally_good = 0.0

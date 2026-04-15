@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import warnings
 from collections.abc import Iterator
 from typing import Any
 
@@ -275,3 +276,8 @@ class Query(BaseModel):
                     query_data["metadata"] = metadata
             return cls(**query_data)
         return cls(qid="<no_qid>", query=query, metadata=metadata)
+
+    @classmethod
+    def assemble_query(cls, query: Self | str, metadata: dict[str, Any] | None = None) -> Self:
+        warnings.warn("assemble_query() is deprecated, use build() instead", DeprecationWarning, stacklevel=2)
+        return cls.build(query, metadata)

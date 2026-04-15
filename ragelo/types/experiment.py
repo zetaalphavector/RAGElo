@@ -349,10 +349,10 @@ class Experiment:
         self,
         eval_tuple: tuple[Query, Evaluable] | None,
         evaluation: EvaluatorResult | EloTournamentResult,
+        should_save: bool = True,
         should_print: bool | None = None,
         force: bool = False,
         exist_ok: bool = False,
-        should_save: bool = True,
     ):
         """
         Add an evaluation to the queries and optionally save the result.
@@ -360,11 +360,11 @@ class Experiment:
             eval_tuple (tuple[Query, Evaluable] | None): The query and evaluable to add the evaluation to.
                 If None, the evaluation is an EloTournamentResult.
             evaluation (EvaluatorResult | EloTournamentResult): The evaluation result to be added.
+            should_save (bool): Whether to save the result to disk. Defaults to True.
             should_print (bool | None): Whether to render the evaluation. Defaults to None.
                 If None, will use the show_results attribute.
             force (bool): Whether to overwrite an existing evaluation. Defaults to False.
             exist_ok (bool): Whether to warn if an evaluation already exists. Defaults to False.
-            should_save (bool): Whether to save the result to disk. Defaults to True.
         """
         if isinstance(evaluation, EloTournamentResult):
             self.elo_tournaments.append(evaluation)

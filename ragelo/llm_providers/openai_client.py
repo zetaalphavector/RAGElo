@@ -141,7 +141,7 @@ class OpenAIProvider(BaseLLMProvider):
                 api_key=openai_config.api_key.get_secret_value(),
                 api_version=openai_config.api_version,
             )
-        elif openai_config.api_type == "open_ai" or openai_config.api_type is None:
+        elif openai_config.api_type in ("openai", "open_ai", None):
             return AsyncOpenAI(
                 base_url=openai_config.api_base,
                 api_key=openai_config.api_key.get_secret_value(),

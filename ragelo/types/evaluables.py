@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import warnings
 from typing import Any, Generic
 
 from pydantic import BaseModel, computed_field, field_validator, model_validator
@@ -114,6 +115,16 @@ class Document(Evaluable[RetrievalEvaluatorResult]):
             document = cls(qid=qid, did=did, text=document, retrieved_by=retrieved_by)
         document.add_metadata(metadata)
         return document
+
+    @classmethod
+    def assemble_document(
+        cls,
+        document: Self | str,
+        qid: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> Self:
+        warnings.warn("assemble_document() is deprecated, use build() instead", DeprecationWarning, stacklevel=2)
+        return cls.build(document, qid, metadata=metadata)
 
     @property
     def evaluation(self):
