@@ -5,6 +5,7 @@ from ragelo.types.configurations.answer_evaluator_configs import (
     CustomPromptAnswerEvaluatorConfig,
     PairwiseDomainExpertEvaluatorConfig,
     PairwiseEvaluatorConfig,
+    RubricEvaluatorConfigMixin,
     RubricPairwiseEvaluatorConfig,
     RubricPointwiseEvaluatorConfig,
 )
@@ -46,4 +47,5 @@ __all__ = [
     "DomainExpertEvaluatorConfig",
     "RubricPairwiseEvaluatorConfig",
     "RubricPointwiseEvaluatorConfig",
+    "RubricEvaluatorConfigMixin",
 ]

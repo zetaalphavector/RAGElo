@@ -32,7 +32,7 @@ class RubricPointwiseEvaluator(BaseAnswerEvaluator[RubricPointwiseEvaluatorConfi
         You should think deeply and carefully about what questions should a complete and high-quality report that answer the question should answer. 
         Each criterion should be a short yes/no question that can be used to evaluate the quality of the responses. 
         You should write {{ n_criteria }} criteria.
-        If a criterion is supported by a document, you should include the document ID in the supporting_documents list for that criterion.
+        If a criterion is supported by a document, you should include the document ID in the evidence list for that criterion.
         You may optionally assign a weight (a positive number) to each criterion to indicate its relative importance. More important criteria should have higher weights. If no weight is provided, all criteria are weighted equally.
         """  # noqa: E501
     )
@@ -63,7 +63,7 @@ class RubricPointwiseEvaluator(BaseAnswerEvaluator[RubricPointwiseEvaluatorConfi
         ## Criteria
         {% for criteria in criteria.criteria %}
         Criterion: {{criteria.criterion_name}}
-        Supporting Documents: {{criteria.supporting_documents}}
+        Supporting Documents: {{criteria.evidence}}
         Short Question: {{criteria.short_question}}
         --------------------------------
         {% endfor %}
@@ -85,7 +85,7 @@ class RubricPointwiseEvaluator(BaseAnswerEvaluator[RubricPointwiseEvaluatorConfi
         ## Criteria
         {% for criteria in criteria.criteria %}
         Criterion: {{criteria.criterion_name}}
-        Supporting Documents: {{criteria.supporting_documents}}
+        Supporting Documents: {{criteria.evidence}}
         Short Question: {{criteria.short_question}}
         --------------------------------
         {% endfor %}

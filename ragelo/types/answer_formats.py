@@ -46,14 +46,12 @@ def swap_pairwise_labels(text: str) -> str:
         "response B": "response A",
         "Response A": "Response B",
         "Response B": "Response A",
-        "A": "B",
-        "B": "A",
     }
     pattern = re.compile(
         r"\[\[A\]\]|\[\[B\]\]|\bagent A\b|\bagent B\b|\bAgent A\b|\bAgent B\b|"
         r"\bassistant A\b|\bassistant B\b|\bAssistant A\b|\bAssistant B\b|\banswer A\b|"
         r"\banswer B\b|\bAnswer A\b|\bAnswer B\b|\bresponse A\b|\bresponse B\b|"
-        r"\bResponse A\b|\bResponse B\b|\bA\b|\bB\b"
+        r"\bResponse A\b|\bResponse B\b"
     )
     return pattern.sub(lambda match: swaps[match.group(0)], text)
 

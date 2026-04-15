@@ -119,12 +119,7 @@ class PairwiseDomainExpertEvaluatorConfig(PairwiseEvaluatorConfig):
     )
 
 
-class RubricPairwiseEvaluatorConfig(PairwiseDomainExpertEvaluatorConfig):
-    evaluator_name: AnswerEvaluatorTypes = AnswerEvaluatorTypes.RUBRIC_PAIRWISE
-    llm_response_schema: Optional[Type[BaseModel] | dict[str, Any]] = Field(
-        default=RubricAnswerFormat,
-        description="The response schema for the LLM.",
-    )
+class RubricEvaluatorConfigMixin(PairwiseDomainExpertEvaluatorConfig):
     n_criteria: int = Field(default=5, description="The number of criteria to use for the evaluator.")
     rubrics: Optional[dict[str, list[Criterion]]] = Field(
         default=None,
@@ -147,6 +142,14 @@ class RubricPairwiseEvaluatorConfig(PairwiseDomainExpertEvaluatorConfig):
     )
     citation_quality_weight: float = Field(
         default=1.0, description="Weight for the citation quality criterion in the final score."
+    )
+
+
+class RubricPairwiseEvaluatorConfig(RubricEvaluatorConfigMixin):
+    evaluator_name: AnswerEvaluatorTypes = AnswerEvaluatorTypes.RUBRIC_PAIRWISE
+    llm_response_schema: Optional[Type[BaseModel] | dict[str, Any]] = Field(
+        default=RubricAnswerFormat,
+        description="The response schema for the LLM.",
     )
     include_evidence_in_evaluation: bool = Field(
         default=False,
@@ -167,22 +170,13 @@ class RubricPairwiseEvaluatorConfig(PairwiseDomainExpertEvaluatorConfig):
     )
 
 
-class RubricPointwiseEvaluatorConfig(PairwiseDomainExpertEvaluatorConfig):
+class RubricPointwiseEvaluatorConfig(RubricEvaluatorConfigMixin):
     evaluator_name: AnswerEvaluatorTypes = AnswerEvaluatorTypes.RUBRIC_POINTWISE
     llm_response_schema: Optional[Type[BaseModel] | dict[str, Any]] = Field(
         default=RubricPointwiseAnswerFormat,
         description="The response schema for the LLM.",
     )
     pairwise: bool = False
-    n_criteria: int = Field(default=5, description="The number of criteria to use for the evaluator.")
-    rubrics: Optional[dict[str, list[Criterion]]] = Field(
-        default=None,
-        description=(
-            "The cache of criteria for the evaluator. Maps a query_id to a list of Criterion objects. "
-            "If provided, the evaluator will skip creating the rubric based on the retrieved documents "
-            "and use this instead."
-        ),
-    )
     graduated_scoring: bool = Field(
         default=False,
         description="Use a graduated numeric scale (0 to max_score) instead of binary yes/no fulfillment.",
@@ -190,18 +184,4 @@ class RubricPointwiseEvaluatorConfig(PairwiseDomainExpertEvaluatorConfig):
     max_score: int = Field(
         default=5,
         description="The maximum score for graduated scoring. Only used when graduated_scoring is True.",
-    )
-    evidence_recall: bool = Field(default=False, description="Enable evidence recall scoring as a built-in criterion.")
-    citation_quality: bool = Field(
-        default=False, description="Enable citation quality scoring as a built-in criterion."
-    )
-    evidence_snippets: Optional[dict[str, list[str]]] = Field(
-        default=None,
-        description="Override evidence snippets per query ID. Maps qid to a list of text snippets.",
-    )
-    evidence_recall_weight: float = Field(
-        default=1.0, description="Weight for the evidence recall criterion in the final score."
-    )
-    citation_quality_weight: float = Field(
-        default=1.0, description="Weight for the citation quality criterion in the final score."
     )

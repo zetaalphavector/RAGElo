@@ -4,14 +4,14 @@ import itertools
 import logging
 import random
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any, Callable, Literal, TypeVar, get_type_hints
+from typing import TYPE_CHECKING, Any, Callable, TypeVar, get_type_hints
 
 from pydantic import BaseModel
 
 from ragelo.evaluators.base_evaluator import BaseEvaluator, T_Result
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
 from ragelo.types import AnswerEvaluatorResult, LLMInputPrompt, PairwiseGameEvaluatorResult, Query
-from ragelo.types.answer_formats import PairwiseEvaluationAnswer, RubricAnswerFormat
+from ragelo.types.answer_formats import PairwiseEvaluationAnswer, PairwiseWinner, RubricAnswerFormat
 from ragelo.types.configurations import BaseAnswerEvaluatorConfig, PairwiseEvaluatorConfig
 from ragelo.types.evaluables import AgentAnswer, Document, Evaluable, PairwiseGame
 from ragelo.types.types import AnswerEvaluatorTypes, _result_type_registry
@@ -20,7 +20,6 @@ from ragelo.utils import call_async_fn, get_placeholders_and_tags
 logger = logging.getLogger(__name__)
 
 T_AnswerConfig = TypeVar("T_AnswerConfig", bound=BaseAnswerEvaluatorConfig)
-PairwiseWinner = Literal["A", "B", "C"]
 
 if TYPE_CHECKING:
     from ragelo.types.experiment import Experiment

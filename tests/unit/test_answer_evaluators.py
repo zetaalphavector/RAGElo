@@ -1641,3 +1641,123 @@ class TestConversationSupportInPairwiseEvaluators:
         context = evaluator._get_shared_conversation_context(game)
         assert len(context) == 3
         assert context[-1].content == "Q2"
+
+
+class TestPRFixVerification:
+    """Tests that verify the fixes from the PR review."""
+
+    def test_pairwise_winner_imported_not_duplicated(self):
+        """PairwiseWinner should be imported from answer_formats, not re-defined."""
+        from ragelo.evaluators.answer_evaluators import base_answer_evaluator
+        from ragelo.types import answer_formats
+
+        # Should be the same type alias (imported, not duplicated)
+        assert base_answer_evaluator.PairwiseWinner is answer_formats.PairwiseWinner
+
+    def test_openai_provider_accepts_client_parameter(self):
+        """OpenAIProvider should accept an optional client parameter for testability."""
+        import inspect
+
+        from ragelo.llm_providers.openai_client import OpenAIProvider
+
+        sig = inspect.signature(OpenAIProvider.__init__)
+        assert "client" in sig.parameters
+        param = sig.parameters["client"]
+        assert param.default is None
+
+    def test_swap_pairwise_labels_does_not_swap_bare_a_b(self):
+        """swap_pairwise_labels should not swap bare standalone 'A' or 'B' in natural prose."""
+        from ragelo.types.answer_formats import swap_pairwise_labels
+
+        # Bare "A" at word boundary in prose should NOT be swapped
+        assert swap_pairwise_labels("A list of documents") == "A list of documents"
+        assert swap_pairwise_labels("Apply B-type scoring") == "Apply B-type scoring"
+        assert swap_pairwise_labels("This is A good answer") == "This is A good answer"
+
+    def test_swap_pairwise_labels_still_swaps_labeled_patterns(self):
+        """swap_pairwise_labels should still swap labeled A/B references."""
+        from ragelo.types.answer_formats import swap_pairwise_labels
+
+        assert swap_pairwise_labels("[[A]] is better") == "[[B]] is better"
+        assert swap_pairwise_labels("[[B]] is better") == "[[A]] is better"
+        assert swap_pairwise_labels("Agent A wins") == "Agent B wins"
+        assert swap_pairwise_labels("agent B wins") == "agent A wins"
+        assert swap_pairwise_labels("Assistant A is more precise") == "Assistant B is more precise"
+        assert swap_pairwise_labels("answer A is better") == "answer B is better"
+        assert swap_pairwise_labels("Response A is complete") == "Response B is complete"
+
+    def test_rubric_template_renders_evidence_field(self, llm_provider_mock):
+        """Rubric evaluator templates should reference the Criterion.evidence field, not supporting_documents."""
+        from ragelo.evaluators.answer_evaluators.rubric_pairwise_evaluator import RubricPairwiseEvaluator
+        from ragelo.evaluators.answer_evaluators.rubric_pointwise_evaluator import RubricPointwiseEvaluator
+
+        # Check that the system_prompt template contains 'criteria.evidence' (the correct field)
+        pairwise_source: str = getattr(RubricPairwiseEvaluator.system_prompt, "_ragelo_source")
+        assert "criteria.evidence" in pairwise_source
+        assert "criteria.supporting_documents" not in pairwise_source
+
+        pointwise_source: str = getattr(RubricPointwiseEvaluator.system_prompt, "_ragelo_source")
+        assert "criteria.evidence" in pointwise_source
+        assert "criteria.supporting_documents" not in pointwise_source
+
+        # Also check the graduated system prompt for pointwise
+        graduated_source: str = getattr(RubricPointwiseEvaluator.graduated_system_prompt, "_ragelo_source")
+        assert "criteria.evidence" in graduated_source
+        assert "criteria.supporting_documents" not in graduated_source
+
+    def test_rubric_template_renders_evidence_values(self, llm_provider_mock):
+        """Verify that the evidence field actually renders into the prompt output."""
+        from ragelo.evaluators.answer_evaluators.rubric_pairwise_evaluator import RubricPairwiseEvaluator
+
+        criterion = Criterion(
+            criterion_name="test_crit",
+            evidence=["doc_1", "doc_2"],
+            short_question="Is the answer good?",
+        )
+        rubric = RubricSchema(criteria=[criterion])
+
+        rendered = RubricPairwiseEvaluator.system_prompt.render(
+            expert_in="testing",
+            criteria=rubric,
+            company=None,
+            include_evidence=False,
+            is_conversation=False,
+            evidence_snippets=[],
+            preserve_d=True,
+            rich_output=False,
+        )
+        assert "doc_1" in rendered
+        assert "doc_2" in rendered
+
+    def test_shared_config_fields_inherited(self):
+        """RubricPairwiseEvaluatorConfig and RubricPointwiseEvaluatorConfig should share evidence/citation fields."""
+        from ragelo.types.configurations.answer_evaluator_configs import RubricEvaluatorConfigMixin
+
+        assert issubclass(RubricPairwiseEvaluatorConfig, RubricEvaluatorConfigMixin)
+        assert issubclass(RubricPointwiseEvaluatorConfig, RubricEvaluatorConfigMixin)
+
+        shared_fields = {
+            "evidence_recall",
+            "citation_quality",
+            "evidence_snippets",
+            "evidence_recall_weight",
+            "citation_quality_weight",
+            "n_criteria",
+            "rubrics",
+        }
+        mixin_fields = set(RubricEvaluatorConfigMixin.model_fields.keys())
+        for field in shared_fields:
+            assert field in mixin_fields, f"{field} not in RubricEvaluatorConfigMixin"
+
+    def test_shared_config_defaults_consistent(self):
+        """Both rubric configs should inherit the same defaults for shared fields."""
+        pairwise_config = RubricPairwiseEvaluatorConfig(expert_in="test")
+        pointwise_config = RubricPointwiseEvaluatorConfig(expert_in="test")
+
+        assert pairwise_config.evidence_recall == pointwise_config.evidence_recall == False  # noqa: E712
+        assert pairwise_config.citation_quality == pointwise_config.citation_quality == False  # noqa: E712
+        assert pairwise_config.evidence_recall_weight == pointwise_config.evidence_recall_weight == 1.0
+        assert pairwise_config.citation_quality_weight == pointwise_config.citation_quality_weight == 1.0
+        assert pairwise_config.n_criteria == pointwise_config.n_criteria == 5
+        assert pairwise_config.rubrics is None
+        assert pointwise_config.rubrics is None

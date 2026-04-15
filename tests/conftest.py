@@ -282,7 +282,7 @@ def flexible_openai_client_mock(mocker):
 
 
 @pytest.fixture
-def openai_provider_structured(flexible_openai_client_mock, monkeypatch):
+def openai_provider_structured(flexible_openai_client_mock):
     """OpenAI provider configured for structured mode (json_mode=False) with mocked client."""
     from ragelo.llm_providers.openai_client import OpenAIProvider
 
@@ -291,13 +291,11 @@ def openai_provider_structured(flexible_openai_client_mock, monkeypatch):
         model="fake_model",
         json_mode=False,
     )
-    provider = OpenAIProvider(config=config)
-    monkeypatch.setattr(provider, "_OpenAIProvider__openai_client", flexible_openai_client_mock)
-    return provider
+    return OpenAIProvider(config=config, client=flexible_openai_client_mock)
 
 
 @pytest.fixture
-def openai_provider_json_mode(flexible_openai_client_mock, monkeypatch):
+def openai_provider_json_mode(flexible_openai_client_mock):
     """OpenAI provider configured for JSON mode (json_mode=True) with mocked client."""
     from ragelo.llm_providers.openai_client import OpenAIProvider
 
@@ -306,9 +304,7 @@ def openai_provider_json_mode(flexible_openai_client_mock, monkeypatch):
         model="fake_model",
         json_mode=True,
     )
-    provider = OpenAIProvider(config=config)
-    monkeypatch.setattr(provider, "_OpenAIProvider__openai_client", flexible_openai_client_mock)
-    return provider
+    return OpenAIProvider(config=config, client=flexible_openai_client_mock)
 
 
 @pytest.fixture
