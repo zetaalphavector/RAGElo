@@ -155,6 +155,26 @@ class AgentAnswer(Evaluable[AnswerEvaluatorResult]):
     text: str | None = None
     conversation: list[ChatMessage] | None = None
 
+    @property
+    def rendered_text(self) -> str:
+        if self.text is not None:
+            return self.text
+        if self.conversation:
+            return "\n".join(str(msg) for msg in self.conversation)
+        return ""
+
+    @property
+    def final_response(self) -> str:
+        if self.text is not None:
+            return self.text
+        if not self.conversation:
+            return ""
+        assistant_labels = {"assistant", "bot"}
+        assistant_messages = [msg for msg in self.conversation if msg.sender.lower() in assistant_labels]
+        if assistant_messages:
+            return assistant_messages[-1].content
+        return self.conversation[-1].content
+
     @model_validator(mode="before")
     @classmethod
     def one_of_text_or_conversation(cls, values):

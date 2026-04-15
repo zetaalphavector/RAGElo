@@ -43,12 +43,13 @@ class PairwiseDomainExpertEvaluator(PairwiseAnswerEvaluator):
         - Remember that you are in expert in {{ expert_in }}. Make your judgement accordingly.
 
         ## Workflow
-        First, you should analyze each of the two answers, explaining whether or not each of them correctly answers the user's question, based on the relevant documents retrieved and your expertise.
-        Then, you should compare the two responses and provide a short explanation on their differences, explaining in which aspects each answer is better or worst than the other. 
+        First, you should analyze each of the two {% if is_conversation %}conversations{% else %}answers{% endif %}, explaining whether or not each of them correctly answers the user's question, based on the relevant documents retrieved and your expertise.
+        Then, you should compare the two {% if is_conversation %}conversations{% else %}responses{% endif %} and provide a short explanation on their differences, explaining in which aspects each {% if is_conversation %}conversation{% else %}answer{% endif %} is better or worst than the other. 
         After providing your explanation, output your final verdict by strictly following his format: "A" if assistant A is better, "B" if assistant B is better, or "C" for a tie.""")  # noqa: E501
 
     def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> LLMInputPrompt:
         documents = self._filter_documents(query)
+        is_conversation = bool(game.agent_a_answer.conversation or game.agent_b_answer.conversation)
         context = {
             "factors": self.config.factors,
             "query": query,
@@ -59,6 +60,7 @@ class PairwiseDomainExpertEvaluator(PairwiseAnswerEvaluator):
             "expert_in": self.config.expert_in,
             "company": self.config.company,
             "reasoning": self.config.include_relevance_reasoning,
+            "is_conversation": is_conversation,
         }
 
         return LLMInputPrompt(

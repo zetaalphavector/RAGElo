@@ -15,15 +15,22 @@ from ragelo.evaluators.answer_evaluators import (
     RubricPairwiseEvaluator,
     RubricPointwiseEvaluator,
 )
+from ragelo.evaluators.answer_evaluators.builtin_criteria import get_evidence_snippets
 from ragelo.types.answer_formats import (
+    CitationExcerptEvaluation,
+    CitationQualitySchema,
+    ClaimEvaluation,
     Criterion,
     CriterionEvaluation,
+    EvidenceRecallSchema,
+    EvidenceSnippetEvaluation,
     PairwiseEvaluationAnswer,
     RubricAnswerFormat,
     RubricPointwiseAnswerFormat,
     RubricSchema,
 )
-from ragelo.types.evaluables import AgentAnswer
+from ragelo.types.configurations import RubricPairwiseEvaluatorConfig, RubricPointwiseEvaluatorConfig
+from ragelo.types.evaluables import AgentAnswer, ChatMessage, PairwiseGame
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.query import Query
 from ragelo.types.results import AnswerEvaluatorResult, PairwiseGameEvaluatorResult
@@ -58,6 +65,62 @@ def test_get_by_name(llm_provider_mock):
         llm_provider=llm_provider_mock,
     )
     assert isinstance(chat_pairwise_evaluator, ChatPairwiseEvaluator)
+
+
+class TestAgentAnswer:
+    def test_rendered_text_prefers_text(self):
+        answer = AgentAnswer(qid="0", agent="agent1", text="Final answer")
+        assert answer.rendered_text == "Final answer"
+
+    def test_rendered_text_joins_conversation(self):
+        answer = AgentAnswer(
+            qid="0",
+            agent="agent1",
+            conversation=[
+                ChatMessage(sender="User", content="What is RAG?"),
+                ChatMessage(sender="Assistant", content="RAG combines retrieval and generation."),
+            ],
+        )
+        assert answer.rendered_text == "User: What is RAG?\nAssistant: RAG combines retrieval and generation."
+
+    def test_final_response_prefers_text(self):
+        answer = AgentAnswer(qid="0", agent="agent1", text="Final answer")
+        assert answer.final_response == "Final answer"
+
+    def test_final_response_extracts_last_assistant_message(self):
+        answer = AgentAnswer(
+            qid="0",
+            agent="agent1",
+            conversation=[
+                ChatMessage(sender="User", content="What is RAG?"),
+                ChatMessage(sender="Assistant", content="First reply"),
+                ChatMessage(sender="User", content="Tell me more"),
+                ChatMessage(sender="Assistant", content="Second reply"),
+            ],
+        )
+        assert answer.final_response == "Second reply"
+
+    def test_final_response_falls_back_to_last_message(self):
+        answer = AgentAnswer(
+            qid="0",
+            agent="agent1",
+            conversation=[
+                ChatMessage(sender="User", content="What is RAG?"),
+                ChatMessage(sender="agent1", content="RAG combines retrieval and generation."),
+            ],
+        )
+        assert answer.final_response == "RAG combines retrieval and generation."
+
+    def test_final_response_recognizes_bot_sender(self):
+        answer = AgentAnswer(
+            qid="0",
+            agent="agent1",
+            conversation=[
+                ChatMessage(sender="User", content="Hello"),
+                ChatMessage(sender="Bot", content="Hi there!"),
+            ],
+        )
+        assert answer.final_response == "Hi there!"
 
 
 class TestAnswerEvaluator:
@@ -660,8 +723,6 @@ class TestRubricPairwiseEvaluator:
 
     def test_rubric_pairwise_with_presupplied_rubrics(self, llm_provider_mock, experiment):
         """When rubrics are pre-supplied, the evaluator skips rubric generation and only calls LLM for evaluation."""
-        from ragelo.types.configurations import RubricPairwiseEvaluatorConfig
-
         rubrics = {"0": self._make_criteria(), "1": self._make_criteria()}
         config = RubricPairwiseEvaluatorConfig(
             expert_in="AI research",
@@ -690,9 +751,87 @@ class TestRubricPairwiseEvaluator:
         assert result.answer.agent_a_wins == 2
         assert result.answer.agent_b_wins == 1
 
+    def test_rubric_pairwise_prompt_renders_conversations(self, llm_provider_mock, experiment):
+        config = RubricPairwiseEvaluatorConfig(expert_in="AI", rubrics={"0": self._make_criteria()}, force=True)
+        evaluator = RubricPairwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
+        query = experiment["0"]
+        answer_a = AgentAnswer(
+            qid=query.qid,
+            agent="agent1",
+            conversation=[
+                ChatMessage(sender="User", content="What is the capital of Brazil?"),
+                ChatMessage(sender="Assistant", content="Please clarify if you want the current capital."),
+                ChatMessage(sender="User", content=query.query),
+                ChatMessage(sender="Assistant", content="Brasilia is the capital of Brazil."),
+            ],
+        )
+        answer_b = AgentAnswer(
+            qid=query.qid,
+            agent="agent2",
+            conversation=[
+                ChatMessage(sender="User", content="What is the capital of Brazil?"),
+                ChatMessage(sender="Assistant", content="Please clarify if you want the current capital."),
+                ChatMessage(sender="User", content=query.query),
+                ChatMessage(sender="Assistant", content="Rio de Janeiro used to be the capital."),
+            ],
+        )
+
+        prompt = evaluator._build_message_pairwise(
+            query,
+            PairwiseGame(qid=query.qid, agent_a_answer=answer_a, agent_b_answer=answer_b),
+        )
+        assert prompt.system_prompt
+        assert prompt.user_message
+        assert "two conversations written by two agents" in prompt.system_prompt
+        assert "User: What is the capital of Brazil?" in prompt.user_message
+        assert "Assistant: Brasilia is the capital of Brazil." in prompt.user_message
+        assert "Assistant: Rio de Janeiro used to be the capital." in prompt.user_message
+
+    def test_rubric_pairwise_criteria_uses_shared_conversation_context_only(self, llm_provider_mock, experiment):
+        llm_provider_mock.async_call_mocker = AsyncMock(
+            side_effect=[LLMResponseType(raw_answer="criteria", parsed_answer=self._make_rubric_schema())]
+        )
+        evaluator = RubricPairwiseEvaluator.from_config(
+            config=RubricPairwiseEvaluatorConfig(expert_in="AI", force=True),
+            llm_provider=llm_provider_mock,
+        )
+        query = experiment["0"]
+        answer_a = AgentAnswer(
+            qid=query.qid,
+            agent="agent1",
+            conversation=[
+                ChatMessage(sender="User", content="Start question"),
+                ChatMessage(sender="Assistant", content="Shared follow-up context"),
+                ChatMessage(sender="User", content=query.query),
+                ChatMessage(sender="Assistant", content="Agent A final answer"),
+            ],
+        )
+        answer_b = AgentAnswer(
+            qid=query.qid,
+            agent="agent2",
+            conversation=[
+                ChatMessage(sender="User", content="Start question"),
+                ChatMessage(sender="Assistant", content="Shared follow-up context"),
+                ChatMessage(sender="User", content=query.query),
+                ChatMessage(sender="Assistant", content="Agent B final answer"),
+            ],
+        )
+
+        evaluator._build_message_pairwise(
+            query,
+            PairwiseGame(qid=query.qid, agent_a_answer=answer_a, agent_b_answer=answer_b),
+        )
+
+        criteria_call = llm_provider_mock.async_call_mocker.call_args_list[0][0][0]
+        assert "[Conversation Context]" in criteria_call.user_message
+        assert "User: Start question" in criteria_call.user_message
+        assert "Assistant: Shared follow-up context" in criteria_call.user_message
+        assert f"User: {query.query}" in criteria_call.user_message
+        assert "Agent A final answer" not in criteria_call.user_message
+        assert "Agent B final answer" not in criteria_call.user_message
+
     def test_rubric_pairwise_process_answer_tallies(self, llm_provider_mock, experiment):
         """Test that _process_answer correctly tallies per-criterion winners."""
-        from ragelo.types.configurations import RubricPairwiseEvaluatorConfig
 
         rubrics = {"0": self._make_criteria()}
         config = RubricPairwiseEvaluatorConfig(expert_in="AI", rubrics=rubrics, force=True)
@@ -713,7 +852,6 @@ class TestRubricPairwiseEvaluator:
 
     def test_rubric_pairwise_d_counted_as_equally_bad(self, llm_provider_mock, experiment):
         """Winner 'D' should be preserved and counted as equally_bad in tally."""
-        from ragelo.types.configurations import RubricPairwiseEvaluatorConfig
 
         rubrics = {"0": self._make_criteria()}
         config = RubricPairwiseEvaluatorConfig(expert_in="AI", rubrics=rubrics, force=True)
@@ -733,7 +871,6 @@ class TestRubricPairwiseEvaluator:
 
     def test_build_evaluation_schema(self, llm_provider_mock):
         """_build_evaluation_schema should create a valid Pydantic model with per-criterion fields."""
-        from ragelo.types.configurations import RubricPairwiseEvaluatorConfig
 
         config = RubricPairwiseEvaluatorConfig(expert_in="AI", force=True)
         evaluator = RubricPairwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
@@ -746,7 +883,6 @@ class TestRubricPairwiseEvaluator:
 
     def test_rubric_pairwise_weighted_scoring(self, llm_provider_mock, experiment):
         """A single high-weight A-win should outweigh multiple low-weight B-wins."""
-        from ragelo.types.configurations import RubricPairwiseEvaluatorConfig
 
         criteria = [
             Criterion(criterion_name="accuracy", evidence=["doc1"], short_question="Accurate?", weight=5.0),
@@ -774,7 +910,6 @@ class TestRubricPairwiseEvaluator:
 
     def test_rubric_pairwise_richer_fields_populated(self, llm_provider_mock, experiment):
         """New diagnostic fields should be populated from LLM response."""
-        from ragelo.types.configurations import RubricPairwiseEvaluatorConfig
 
         rubrics = {"0": self._make_criteria()}
         config = RubricPairwiseEvaluatorConfig(expert_in="AI", rubrics=rubrics, force=True)
@@ -802,7 +937,6 @@ class TestRubricPairwiseEvaluator:
 
     def test_rubric_pairwise_aggregates(self, llm_provider_mock, experiment):
         """Margin and mean_confidence should be correctly computed."""
-        from ragelo.types.configurations import RubricPairwiseEvaluatorConfig
 
         rubrics = {"0": self._make_criteria()}
         config = RubricPairwiseEvaluatorConfig(expert_in="AI", rubrics=rubrics, force=True)
@@ -852,7 +986,6 @@ class TestRubricPointwiseEvaluator:
 
     def test_rubric_pointwise_process_answer(self, llm_provider_mock, experiment):
         """Test that _process_answer computes average score correctly."""
-        from ragelo.types.configurations import RubricPointwiseEvaluatorConfig
 
         config = RubricPointwiseEvaluatorConfig(expert_in="AI", force=True)
         evaluator = RubricPointwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
@@ -894,7 +1027,6 @@ class TestRubricPointwiseEvaluator:
 
     def test_rubric_pointwise_with_presupplied_rubrics(self, llm_provider_mock, experiment):
         """When rubrics are pre-supplied, the evaluator skips rubric generation and only calls LLM for evaluation."""
-        from ragelo.types.configurations import RubricPointwiseEvaluatorConfig
 
         criteria = self._make_criteria()
         rubrics = {"0": criteria, "1": criteria}
@@ -942,7 +1074,6 @@ class TestRubricPointwiseEvaluator:
 
     def test_rubric_pointwise_weighted_average(self, llm_provider_mock, experiment):
         """Weighted average should give more importance to high-weight criteria."""
-        from ragelo.types.configurations import RubricPointwiseEvaluatorConfig
 
         criteria = [
             Criterion(criterion_name="accuracy", evidence=["doc1"], short_question="Accurate?", weight=3.0),
@@ -983,7 +1114,6 @@ class TestRubricPointwiseEvaluator:
 
     def test_rubric_pointwise_graduated_scoring(self, llm_provider_mock, experiment):
         """Graduated scoring normalizes integer scores to [0, 1] using max_score."""
-        from ragelo.types.configurations import RubricPointwiseEvaluatorConfig
 
         criteria = self._make_criteria()
         config = RubricPointwiseEvaluatorConfig(expert_in="AI", force=True, graduated_scoring=True, max_score=5)
@@ -1023,7 +1153,6 @@ class TestRubricPointwiseEvaluator:
 
     def test_rubric_pointwise_graduated_with_weights(self, llm_provider_mock, experiment):
         """Graduated scoring with weights applies both normalization and weighting."""
-        from ragelo.types.configurations import RubricPointwiseEvaluatorConfig
 
         criteria = [
             Criterion(criterion_name="accuracy", evidence=["doc1"], short_question="Accurate?", weight=3.0),
@@ -1092,8 +1221,6 @@ class TestBuiltinCriteriaPointwise:
 
     def test_pointwise_evidence_recall(self, llm_provider_mock, experiment):
         """Evidence recall should evaluate snippet presence and contribute to average_score."""
-        from ragelo.types.answer_formats import EvidenceRecallSchema, EvidenceSnippetEvaluation
-        from ragelo.types.configurations import RubricPointwiseEvaluatorConfig
 
         criteria = self._make_criteria()
         config = RubricPointwiseEvaluatorConfig(
@@ -1138,8 +1265,6 @@ class TestBuiltinCriteriaPointwise:
 
     def test_pointwise_citation_quality(self, llm_provider_mock, experiment):
         """Citation quality should evaluate claims/citations and contribute to average_score."""
-        from ragelo.types.answer_formats import CitationExcerptEvaluation, CitationQualitySchema, ClaimEvaluation
-        from ragelo.types.configurations import RubricPointwiseEvaluatorConfig
 
         criteria = self._make_criteria()
         config = RubricPointwiseEvaluatorConfig(
@@ -1183,7 +1308,6 @@ class TestBuiltinCriteriaPointwise:
 
     def test_pointwise_disabled_by_default(self, llm_provider_mock, experiment):
         """When evidence_recall and citation_quality are False, no built-in criteria are evaluated."""
-        from ragelo.types.configurations import RubricPointwiseEvaluatorConfig
 
         criteria = self._make_criteria()
         config = RubricPointwiseEvaluatorConfig(expert_in="AI", rubrics={"0": criteria}, force=True)
@@ -1205,7 +1329,6 @@ class TestBuiltinCriteriaPointwise:
 
     def test_evidence_snippets_fallback_to_criterion_evidence(self, llm_provider_mock, experiment):
         """When no config snippets provided, evidence_snippets comes from Criterion.evidence fields."""
-        from ragelo.evaluators.answer_evaluators.builtin_criteria import get_evidence_snippets
 
         criteria = [
             Criterion(criterion_name="c1", evidence=["ev1", "ev2"], short_question="Q1?"),
@@ -1227,9 +1350,6 @@ class TestBuiltinCriteriaPairwise:
 
     def test_pairwise_evidence_recall_a_wins(self, llm_provider_mock, experiment):
         """Agent A has better evidence recall, so it should get the evidence_recall criterion win."""
-        from ragelo.types.answer_formats import EvidenceRecallSchema, EvidenceSnippetEvaluation
-        from ragelo.types.configurations import RubricPairwiseEvaluatorConfig
-
         criteria = self._make_criteria()
         config = RubricPairwiseEvaluatorConfig(
             expert_in="AI",
@@ -1303,3 +1423,221 @@ class TestBuiltinCriteriaPairwise:
         # Regular criterion: C (tie, equally_good=1). Evidence recall: A wins (weight=1).
         assert result.answer.agent_a_wins == 1.0
         assert result.answer.winner == "A"
+
+    def test_pairwise_evidence_recall_uses_terminal_conversation_response(self, llm_provider_mock, experiment):
+        """Evidence recall should evaluate only the last assistant turn from a conversation answer."""
+
+        criteria = self._make_criteria()
+        config = RubricPairwiseEvaluatorConfig(
+            expert_in="AI",
+            rubrics={"0": criteria},
+            force=True,
+            evidence_recall=True,
+            evidence_snippets={"0": ["snippet A"]},
+            evidence_recall_weight=1.0,
+        )
+
+        EvalSchema = create_model(
+            "EvaluationSchema",
+            **{
+                c.criterion_name: create_model(
+                    c.criterion_name,
+                    agent_a_assessment=(str, Field(description="agent_a_assessment")),
+                    agent_b_assessment=(str, Field(description="agent_b_assessment")),
+                    winner_reasoning=(str, Field(description="winner_reasoning")),
+                    winner=(str, Field(description="winner")),
+                )
+                for c in criteria
+            },
+        )  # type: ignore[call-overload]
+        SubModel = EvalSchema.model_fields["accuracy"].annotation
+        eval_response = EvalSchema(
+            accuracy=SubModel(
+                agent_a_assessment="good",
+                agent_b_assessment="good",
+                winner_reasoning="tie",
+                winner="C",
+            )
+        )
+        recall_response = EvidenceRecallSchema(
+            evaluations=[
+                EvidenceSnippetEvaluation(snippet="snippet A", present=True, reasoning="found"),
+            ]
+        )
+
+        llm_provider_mock.async_call_mocker = AsyncMock(
+            side_effect=[
+                LLMResponseType(raw_answer="eval", parsed_answer=eval_response),
+                LLMResponseType(raw_answer="eval", parsed_answer=eval_response),
+                LLMResponseType(raw_answer="recall_a", parsed_answer=recall_response),
+                LLMResponseType(raw_answer="recall_b", parsed_answer=recall_response),
+            ]
+        )
+
+        evaluator = RubricPairwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
+        query = experiment["0"]
+        query.answers["agent1"] = AgentAnswer(
+            qid=query.qid,
+            agent="agent1",
+            conversation=[
+                ChatMessage(sender="User", content="Earlier question"),
+                ChatMessage(sender="Assistant", content="Earlier assistant response"),
+                ChatMessage(sender="User", content=query.query),
+                ChatMessage(sender="Assistant", content="Terminal answer A"),
+            ],
+        )
+        query.answers["agent2"] = AgentAnswer(
+            qid=query.qid,
+            agent="agent2",
+            conversation=[
+                ChatMessage(sender="User", content="Earlier question"),
+                ChatMessage(sender="Assistant", content="Earlier assistant response"),
+                ChatMessage(sender="User", content=query.query),
+                ChatMessage(sender="Assistant", content="Terminal answer B"),
+            ],
+        )
+
+        result = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
+
+        assert isinstance(result, PairwiseGameEvaluatorResult)
+        recall_a_prompt = llm_provider_mock.async_call_mocker.call_args_list[2][0][0].user_message
+        recall_b_prompt = llm_provider_mock.async_call_mocker.call_args_list[3][0][0].user_message
+        assert "Terminal answer A" in recall_a_prompt
+        assert "Earlier question" not in recall_a_prompt
+        assert "Earlier assistant response" not in recall_a_prompt
+        assert "Terminal answer B" in recall_b_prompt
+        assert "Earlier question" not in recall_b_prompt
+
+
+class TestConversationSupportInPairwiseEvaluators:
+    """Tests that PairwiseAnswerEvaluator and subclasses handle conversations."""
+
+    def test_pairwise_evaluator_renders_conversations(
+        self, llm_provider_mock, experiment, pairwise_answer_eval_config
+    ):
+        pairwise_answer_eval_config.user_prompt = None
+        pairwise_answer_eval_config.system_prompt = None
+        pairwise_answer_eval_config.include_relevance_reasoning = False
+        evaluator = PairwiseAnswerEvaluator.from_config(
+            config=pairwise_answer_eval_config, llm_provider=llm_provider_mock
+        )
+        query = experiment["0"]
+        answer_a = AgentAnswer(
+            qid=query.qid,
+            agent="agent1",
+            conversation=[
+                ChatMessage(sender="User", content="What is the capital of Brazil?"),
+                ChatMessage(sender="Assistant", content="Brasilia is the capital."),
+            ],
+        )
+        answer_b = AgentAnswer(
+            qid=query.qid,
+            agent="agent2",
+            conversation=[
+                ChatMessage(sender="User", content="What is the capital of Brazil?"),
+                ChatMessage(sender="Assistant", content="Rio used to be the capital."),
+            ],
+        )
+
+        game = PairwiseGame(qid=query.qid, agent_a_answer=answer_a, agent_b_answer=answer_b)
+        prompt = evaluator._build_message_pairwise(query, game)
+
+        assert "Conversation with Assistant A" in prompt.user_message
+        assert "Conversation with Assistant B" in prompt.user_message
+        assert "User: What is the capital of Brazil?" in prompt.user_message
+        assert "Assistant: Brasilia is the capital." in prompt.user_message
+        assert "Assistant: Rio used to be the capital." in prompt.user_message
+        assert "conversations" in prompt.system_prompt
+
+    def test_pairwise_evaluator_renders_text_answers(self, llm_provider_mock, experiment, pairwise_answer_eval_config):
+        pairwise_answer_eval_config.user_prompt = None
+        pairwise_answer_eval_config.system_prompt = None
+        pairwise_answer_eval_config.include_relevance_reasoning = False
+        evaluator = PairwiseAnswerEvaluator.from_config(
+            config=pairwise_answer_eval_config, llm_provider=llm_provider_mock
+        )
+        query = experiment["0"]
+
+        game = PairwiseGame(
+            qid=query.qid,
+            agent_a_answer=query.answers["agent1"],
+            agent_b_answer=query.answers["agent2"],
+        )
+        prompt = evaluator._build_message_pairwise(query, game)
+
+        assert "Answer from Assistant A" in prompt.user_message
+        assert "Answer from Assistant B" in prompt.user_message
+        assert query.answers["agent1"].text in prompt.user_message
+        assert query.answers["agent2"].text in prompt.user_message
+        assert "answers" in prompt.system_prompt
+
+    def test_domain_expert_evaluator_renders_conversations(
+        self, llm_provider_mock, experiment, domain_expert_answer_eval_config
+    ):
+        evaluator = PairwiseDomainExpertEvaluator.from_config(
+            config=domain_expert_answer_eval_config, llm_provider=llm_provider_mock
+        )
+        query = experiment["0"]
+        answer_a = AgentAnswer(
+            qid=query.qid,
+            agent="agent1",
+            conversation=[
+                ChatMessage(sender="User", content="What is the capital of Brazil?"),
+                ChatMessage(sender="Assistant", content="Brasilia is the capital."),
+            ],
+        )
+        answer_b = AgentAnswer(
+            qid=query.qid,
+            agent="agent2",
+            conversation=[
+                ChatMessage(sender="User", content="What is the capital of Brazil?"),
+                ChatMessage(sender="Assistant", content="Rio used to be the capital."),
+            ],
+        )
+
+        game = PairwiseGame(qid=query.qid, agent_a_answer=answer_a, agent_b_answer=answer_b)
+        prompt = evaluator._build_message_pairwise(query, game)
+
+        assert "Conversation with Assistant A" in prompt.user_message
+        assert "Conversation with Assistant B" in prompt.user_message
+        assert "User: What is the capital of Brazil?" in prompt.user_message
+        assert "Assistant: Brasilia is the capital." in prompt.user_message
+
+    def test_pairwise_evaluator_get_conversation_prefix(self):
+        conversation = [
+            ChatMessage(sender="User", content="Q1"),
+            ChatMessage(sender="Assistant", content="A1"),
+            ChatMessage(sender="User", content="Q2"),
+            ChatMessage(sender="Assistant", content="A2"),
+        ]
+        prefix = PairwiseAnswerEvaluator._get_conversation_prefix(conversation)
+        assert len(prefix) == 3
+        assert prefix[-1].content == "Q2"
+
+    def test_pairwise_evaluator_get_conversation_prefix_no_user(self):
+        conversation = [
+            ChatMessage(sender="System", content="Setup"),
+            ChatMessage(sender="Assistant", content="Response"),
+        ]
+        prefix = PairwiseAnswerEvaluator._get_conversation_prefix(conversation)
+        assert prefix == conversation
+
+    def test_pairwise_evaluator_get_shared_conversation_context(self, llm_provider_mock, pairwise_answer_eval_config):
+        evaluator = PairwiseAnswerEvaluator.from_config(
+            config=pairwise_answer_eval_config, llm_provider=llm_provider_mock
+        )
+        answer_a = AgentAnswer(
+            qid="0",
+            agent="agent1",
+            conversation=[
+                ChatMessage(sender="User", content="Q1"),
+                ChatMessage(sender="Assistant", content="A1"),
+                ChatMessage(sender="User", content="Q2"),
+                ChatMessage(sender="Assistant", content="Final A"),
+            ],
+        )
+        answer_b = AgentAnswer(qid="0", agent="agent2", text="Text answer")
+        game = PairwiseGame(qid="0", agent_a_answer=answer_a, agent_b_answer=answer_b)
+        context = evaluator._get_shared_conversation_context(game)
+        assert len(context) == 3
+        assert context[-1].content == "Q2"

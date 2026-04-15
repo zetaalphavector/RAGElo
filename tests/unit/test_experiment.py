@@ -5,7 +5,7 @@ import shutil
 import pytest
 
 from ragelo import Experiment, get_agent_ranker, get_answer_evaluator, get_llm_provider, get_retrieval_evaluator
-from ragelo.types.evaluables import AgentAnswer, Document
+from ragelo.types.evaluables import AgentAnswer, ChatMessage, Document
 from ragelo.types.query import Query
 from ragelo.types.results import (
     AnswerEvaluationAnswer,
@@ -165,6 +165,44 @@ class TestExperiment:
             assert len(loaded_experiment[qid].answers) == len(experiment[qid].answers)
             for did, doc in experiment[qid].retrieved_docs.items():
                 assert loaded_experiment[qid].retrieved_docs[did].retrieved_by == doc.retrieved_by
+
+    def test_save_and_load_conversation_only_answers(self, tmp_path):
+        save_path = tmp_path / "conversation_experiment.json"
+        experiment = Experiment(
+            experiment_name="conversation_experiment",
+            save_path=str(save_path),
+            save_on_disk=True,
+            show_results=False,
+            rich_print=False,
+        )
+        experiment.add_query("What is retrieval augmented generation?", query_id="q0")
+        experiment.add_agent_answer(
+            AgentAnswer(
+                qid="q0",
+                agent="agent1",
+                conversation=[
+                    ChatMessage(sender="User", content="What is retrieval augmented generation?"),
+                    ChatMessage(sender="Assistant", content="It combines retrieval with generation."),
+                ],
+            )
+        )
+        experiment.save()
+
+        loaded_experiment = Experiment(
+            experiment_name="conversation_experiment",
+            save_path=str(save_path),
+            save_on_disk=True,
+            show_results=False,
+            rich_print=False,
+        )
+
+        loaded_answer = loaded_experiment["q0"].answers["agent1"]
+        assert loaded_answer.text is None
+        assert loaded_answer.conversation is not None
+        assert [str(message) for message in loaded_answer.conversation] == [
+            "User: What is retrieval augmented generation?",
+            "Assistant: It combines retrieval with generation.",
+        ]
 
     def test_get_qrels(self, tmp_path, experiment):
         """Test getting relevance judgments"""

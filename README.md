@@ -156,7 +156,53 @@ The LLM identifies claims and citations; ratios (claims with citations, citation
 
 Both built-in criteria work with the pairwise evaluator as well — each agent is evaluated independently and the scores are compared to determine the winner.
 
-### 📜 Evaluating multiple documents or answers
+### � Evaluating multi-turn conversations
+
+All pairwise evaluators (`pairwise`, `domain_expert`, `custom_pairwise`, `rubric_pairwise`) support multi-turn conversations in addition to single-text answers. Instead of providing a plain text answer, pass a list of `ChatMessage` objects as the `conversation` parameter:
+
+```python
+from ragelo import get_answer_evaluator
+from ragelo.types.evaluables import AgentAnswer, ChatMessage, PairwiseGame
+from ragelo.types.query import Query
+
+query = Query(qid="q0", query="What is the capital of Brazil?")
+
+answer_a = AgentAnswer(
+    qid="q0",
+    agent="agent1",
+    conversation=[
+        ChatMessage(sender="User", content="What is the capital of Brazil?"),
+        ChatMessage(sender="Assistant", content="Could you clarify — current or historical?"),
+        ChatMessage(sender="User", content="Current capital."),
+        ChatMessage(sender="Assistant", content="Brasília has been the capital since 1960."),
+    ],
+)
+
+answer_b = AgentAnswer(
+    qid="q0",
+    agent="agent2",
+    conversation=[
+        ChatMessage(sender="User", content="What is the capital of Brazil?"),
+        ChatMessage(sender="Assistant", content="Rio de Janeiro is a major city in Brazil."),
+    ],
+)
+
+evaluator = get_answer_evaluator("pairwise", llm_provider="openai")
+result = evaluator.evaluate(query, answer_a=answer_a, answer_b=answer_b)
+print(result.answer.winner)  # "A", "B", or "C"
+```
+
+When conversations are detected, the evaluator automatically adapts the prompt — section headers switch to "Conversation with Assistant A/B" instead of "Answer from Assistant A/B", and the system prompt adjusts its wording accordingly.
+
+Each `AgentAnswer` must have **either** `text` or `conversation` set (not both). The two agents in a pairwise game can use different formats — one can provide `text` while the other provides `conversation`.
+
+There is also a dedicated `chat_pairwise` evaluator with a system prompt specifically optimized for multi-turn conversation comparison. Use it when both agents always produce multi-turn conversations:
+
+```python
+evaluator = get_answer_evaluator("chat_pairwise", llm_provider="openai")
+```
+
+### �📜 Evaluating multiple documents or answers
 
 RAGElo supports `Experiments` to keep track of which documents and answers were already evaluated and to compute overall scores for each Agent:
 

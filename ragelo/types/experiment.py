@@ -879,18 +879,22 @@ class Experiment:
                 )
                 q_object.add_retrieved_doc(doc_object)
             for agent, answer_data in q_data.get("answers", {}).items():
+                text = answer_data.get("text")
                 conversation_data = answer_data.get("conversation")
                 if conversation_data is None:
                     conversation = None
                 else:
-                    conversation = [
-                        ChatMessage(sender=sender, content=content)
-                        for sender, content in answer_data.get("conversation")
-                    ]
+                    conversation = []
+                    for message in conversation_data:
+                        if isinstance(message, dict):
+                            conversation.append(ChatMessage(sender=message["sender"], content=message["content"]))
+                        else:
+                            sender, content = message
+                            conversation.append(ChatMessage(sender=sender, content=content))
                 answer_object = AgentAnswer(
                     qid=qid,
                     agent=agent,
-                    text=answer_data["text"],
+                    text=text,
                     metadata=answer_data.get("metadata"),
                     conversation=conversation,
                 )

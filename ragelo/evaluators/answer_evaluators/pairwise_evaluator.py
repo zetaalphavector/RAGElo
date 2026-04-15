@@ -1,6 +1,6 @@
 from ragelo.evaluators.answer_evaluators.base_answer_evaluator import AnswerEvaluatorFactory, BaseAnswerEvaluator
 from ragelo.types.configurations import PairwiseEvaluatorConfig
-from ragelo.types.evaluables import PairwiseGame
+from ragelo.types.evaluables import ChatMessage, PairwiseGame
 from ragelo.types.formats import LLMInputPrompt
 from ragelo.types.query import Query
 from ragelo.types.results import PairwiseGameEvaluatorResult
@@ -46,8 +46,8 @@ class PairwiseAnswerEvaluator(BaseAnswerEvaluator[PairwiseEvaluatorConfig, Pairw
         - Be as objective as possible.
 
         ## Workflow
-        First, you should analyze each of the two answers, explaining whether or not each of them correctly answers the user's question, based on the relevant documents retrieved.
-        Then, you should compare the two responses and provide a short explanation on their differences, explaining in which aspects each answer is better or worse than the other.
+        First, you should analyze each of the two {% if is_conversation %}conversations{% else %}answers{% endif %}, explaining whether or not each of them correctly answers the user's question, based on the relevant documents retrieved.
+        Then, you should compare the two {% if is_conversation %}conversations{% else %}responses{% endif %} and provide a short explanation on their differences, explaining in which aspects each {% if is_conversation %}conversation{% else %}answer{% endif %} is better or worse than the other.
 
         ## Output Constraints
         - In any free-text field, refer to the assistants only as [[A]] and [[B]].
@@ -78,16 +78,45 @@ class PairwiseAnswerEvaluator(BaseAnswerEvaluator[PairwiseEvaluatorConfig, Pairw
         {% endfor %}
         {% endif -%}
 
-        [The Start of Assistant A's Answer]
+        [The Start of {% if game.agent_a_answer.conversation %}Conversation with{% else %}Answer from{% endif %} Assistant A]
+        {% if game.agent_a_answer.conversation -%}
+        {% for msg in game.agent_a_answer.conversation %}{{ msg }}
+        {% endfor -%}
+        {% else -%}
             {{ game.agent_a_answer.text }}
-        [The End of Assistant A's Answer]
+        {% endif -%}
+        [The End of {% if game.agent_a_answer.conversation %}Conversation with{% else %}Answer from{% endif %} Assistant A]
 
-        [The Start of Assistant B's Answer]
+        [The Start of {% if game.agent_b_answer.conversation %}Conversation with{% else %}Answer from{% endif %} Assistant B]
+        {% if game.agent_b_answer.conversation -%}
+        {% for msg in game.agent_b_answer.conversation %}{{ msg }}
+        {% endfor -%}
+        {% else -%}
             {{ game.agent_b_answer.text }}
-        [The End of Assistant B's Answer]""")  # noqa: E501
+        {% endif -%}
+        [The End of {% if game.agent_b_answer.conversation %}Conversation with{% else %}Answer from{% endif %} Assistant B]""")  # noqa: E501
+
+    @staticmethod
+    def _get_conversation_prefix(conversation: list[ChatMessage] | None) -> list[ChatMessage]:
+        if not conversation:
+            return []
+        last_user_idx = None
+        for idx, message in enumerate(conversation):
+            if message.sender.lower() == "user":
+                last_user_idx = idx
+        if last_user_idx is None:
+            return conversation
+        return conversation[: last_user_idx + 1]
+
+    def _get_shared_conversation_context(self, game: PairwiseGame) -> list[ChatMessage]:
+        for answer in (game.agent_a_answer, game.agent_b_answer):
+            if answer.conversation:
+                return self._get_conversation_prefix(answer.conversation)
+        return []
 
     def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> LLMInputPrompt:
         documents = self._filter_documents(query)
+        is_conversation = bool(game.agent_a_answer.conversation or game.agent_b_answer.conversation)
         context = {
             "factors": self.config.factors,
             "query": query,
@@ -96,6 +125,7 @@ class PairwiseAnswerEvaluator(BaseAnswerEvaluator[PairwiseEvaluatorConfig, Pairw
             "doc": self.config.include_raw_documents,
             "annotation": self.config.include_relevance_score,
             "reasoning": self.config.include_relevance_reasoning,
+            "is_conversation": is_conversation,
         }
         return LLMInputPrompt(
             system_prompt=self.system_prompt.render(**context),
