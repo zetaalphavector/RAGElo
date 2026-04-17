@@ -875,9 +875,9 @@ class TestExperimentSerialization:
         exp2 = Experiment(**base_experiment_config)
 
         loaded_query = exp2["0"]
-        assert (
-            "agent1-agent2" in loaded_query.pairwise_games
-        ), "Pairwise game should be reconstructed from cached results"
+        assert "agent1-agent2" in loaded_query.pairwise_games, (
+            "Pairwise game should be reconstructed from cached results"
+        )
         loaded_game = loaded_query.pairwise_games["agent1-agent2"]
         assert "pairwise" in loaded_game.evaluations
         loaded_eval = loaded_game.evaluations["pairwise"]

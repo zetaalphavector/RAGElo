@@ -68,7 +68,19 @@ All evaluations are **async**: `evaluate_async()` is the core abstract method. `
 
 ### LLM Providers
 
-`BaseLLMProvider` defines the interface: `call_async(input, response_schema) → LLMResponseType[T]`. Implementations: `OpenAIProvider` (structured output via Responses API), `OllamaProvider`. Providers return `LLMResponseType[T]` with `raw_answer` and `parsed_answer`.
+`BaseLLMProvider` defines the interface: `call_async(input, response_schema) → LLMResponseType[T]`. Implementations: `OpenAIProvider` (structured output via Responses API), `OllamaProvider`, `InstructorProvider`. Providers return `LLMResponseType[T]` with `raw_answer` and `parsed_answer`.
+
+`InstructorProvider` is registered as `"instructor"` and uses the [`instructor`](https://github.com/jxnl/instructor) library to support multiple backends (Anthropic, OpenAI, Mistral, Cohere) through a unified interface. It is an **optional dependency** — requires `pip install 'ragelo[instructor]'` plus the relevant provider SDK. Instantiation raises `ImportError` with a helpful message if instructor is not installed, so `import ragelo` always works regardless.
+
+Supported backends and their call path:
+| `provider=` | SDK package | API path used |
+|---|---|---|
+| `"openai"` | `openai` | `chat.completions.create` |
+| `"anthropic"` | `anthropic` | `messages.create` |
+| `"mistral"` | `mistralai` | `chat.completions.create` |
+| `"cohere"` | `cohere` | `chat.completions.create` |
+
+**Conditional import pattern** — `instructor_client.py` wraps `import instructor` in a module-level `try/except` and checks `_INSTRUCTOR_AVAILABLE` in `__init__`. This is the standard Python pattern for optional dependencies and is a necessary exception to the "no conditional imports" rule. The `__init__.py` can import `InstructorProvider` unconditionally since the module-level import always succeeds (just sets a flag).
 
 ### Data Model
 
