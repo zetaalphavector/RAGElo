@@ -119,7 +119,7 @@ class PairwiseDomainExpertEvaluatorConfig(PairwiseEvaluatorConfig):
     )
 
 
-class RubricEvaluatorConfigMixin(PairwiseDomainExpertEvaluatorConfig):
+class RubricEvaluatorConfigBase(PairwiseDomainExpertEvaluatorConfig):
     n_criteria: int = Field(default=5, description="The number of criteria to use for the evaluator.")
     rubrics: Optional[dict[str, list[Criterion]]] = Field(
         default=None,
@@ -145,7 +145,7 @@ class RubricEvaluatorConfigMixin(PairwiseDomainExpertEvaluatorConfig):
     )
 
 
-class RubricPairwiseEvaluatorConfig(RubricEvaluatorConfigMixin):
+class RubricPairwiseEvaluatorConfig(RubricEvaluatorConfigBase):
     evaluator_name: AnswerEvaluatorTypes = AnswerEvaluatorTypes.RUBRIC_PAIRWISE
     llm_response_schema: Optional[Type[BaseModel] | dict[str, Any]] = Field(
         default=RubricAnswerFormat,
@@ -170,7 +170,7 @@ class RubricPairwiseEvaluatorConfig(RubricEvaluatorConfigMixin):
     )
 
 
-class RubricPointwiseEvaluatorConfig(RubricEvaluatorConfigMixin):
+class RubricPointwiseEvaluatorConfig(RubricEvaluatorConfigBase):
     evaluator_name: AnswerEvaluatorTypes = AnswerEvaluatorTypes.RUBRIC_POINTWISE
     llm_response_schema: Optional[Type[BaseModel] | dict[str, Any]] = Field(
         default=RubricPointwiseAnswerFormat,
