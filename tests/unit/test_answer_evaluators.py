@@ -1,3 +1,4 @@
+import asyncio
 import warnings
 from unittest.mock import AsyncMock
 
@@ -817,10 +818,9 @@ class TestRubricPairwiseEvaluator:
             ],
         )
 
-        evaluator._build_message_pairwise(
-            query,
-            PairwiseGame(qid=query.qid, agent_a_answer=answer_a, agent_b_answer=answer_b),
-        )
+        game = PairwiseGame(qid=query.qid, agent_a_answer=answer_a, agent_b_answer=answer_b)
+        conversation_context = evaluator._get_shared_conversation_context(game)
+        asyncio.run(evaluator._build_criteria(query, list(query.retrieved_docs.values()), conversation_context))
 
         criteria_call = llm_provider_mock.async_call_mocker.call_args_list[0][0][0]
         assert "[Conversation Context]" in criteria_call.user_message
@@ -1731,10 +1731,10 @@ class TestPRFixVerification:
 
     def test_shared_config_fields_inherited(self):
         """RubricPairwiseEvaluatorConfig and RubricPointwiseEvaluatorConfig should share evidence/citation fields."""
-        from ragelo.types.configurations.answer_evaluator_configs import RubricEvaluatorConfigMixin
+        from ragelo.types.configurations.answer_evaluator_configs import RubricEvaluatorConfigBase
 
-        assert issubclass(RubricPairwiseEvaluatorConfig, RubricEvaluatorConfigMixin)
-        assert issubclass(RubricPointwiseEvaluatorConfig, RubricEvaluatorConfigMixin)
+        assert issubclass(RubricPairwiseEvaluatorConfig, RubricEvaluatorConfigBase)
+        assert issubclass(RubricPointwiseEvaluatorConfig, RubricEvaluatorConfigBase)
 
         shared_fields = {
             "evidence_recall",
@@ -1745,9 +1745,9 @@ class TestPRFixVerification:
             "n_criteria",
             "rubrics",
         }
-        mixin_fields = set(RubricEvaluatorConfigMixin.model_fields.keys())
+        mixin_fields = set(RubricEvaluatorConfigBase.model_fields.keys())
         for field in shared_fields:
-            assert field in mixin_fields, f"{field} not in RubricEvaluatorConfigMixin"
+            assert field in mixin_fields, f"{field} not in RubricEvaluatorConfigBase"
 
     def test_shared_config_defaults_consistent(self):
         """Both rubric configs should inherit the same defaults for shared fields."""

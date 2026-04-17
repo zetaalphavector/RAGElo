@@ -17,7 +17,7 @@ from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.query import Query
 from ragelo.types.results import AnswerEvaluatorResult, PairwiseGameEvaluatorResult
 from ragelo.types.types import AnswerEvaluatorTypes
-from ragelo.utils import call_async_fn, string_to_template
+from ragelo.utils import string_to_template
 
 
 @AnswerEvaluatorFactory.register(AnswerEvaluatorTypes.RUBRIC_POINTWISE)
@@ -105,11 +105,13 @@ class RubricPointwiseEvaluator(BaseAnswerEvaluator[RubricPointwiseEvaluatorConfi
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.answer_schema_cache = {}
         if self.config.rubrics:
             self.criteria_cache = {qid: RubricSchema(criteria=rubrics) for qid, rubrics in self.config.rubrics.items()}
+            for qid, criteria in self.criteria_cache.items():
+                self.answer_schema_cache[qid] = self._build_evaluation_schema(criteria)
         else:
             self.criteria_cache = {}
-        self.answer_schema_cache = {}
 
     def _build_evaluation_schema(self, criteria: RubricSchema) -> Type[BaseModel]:
         criteria_models = {}
@@ -174,8 +176,9 @@ class RubricPointwiseEvaluator(BaseAnswerEvaluator[RubricPointwiseEvaluatorConfi
 
     def _build_message(self, query: Query, answer: AgentAnswer) -> LLMInputPrompt:
         if query.qid not in self.answer_schema_cache:
-            self.criteria_cache[query.qid] = call_async_fn(
-                self._build_criteria, query, list(query.retrieved_docs.values())
+            raise RuntimeError(
+                f"Rubric for qid={query.qid} has not been built. "
+                "evaluate_async() must be called, which awaits _build_criteria() before _build_message()."
             )
         criteria = self.criteria_cache[query.qid]
         prompt_template = self.graduated_system_prompt if self.config.graduated_scoring else self.system_prompt
@@ -226,11 +229,14 @@ class RubricPointwiseEvaluator(BaseAnswerEvaluator[RubricPointwiseEvaluatorConfi
     async def evaluate_async(
         self, eval_sample: tuple[Query, Evaluable]
     ) -> AnswerEvaluatorResult | PairwiseGameEvaluatorResult:
+        query, evaluable = eval_sample
+        if isinstance(evaluable, AgentAnswer) and query.qid not in self.answer_schema_cache:
+            await self._build_criteria(query, list(query.retrieved_docs.values()))
+
         result = await super().evaluate_async(eval_sample)
         if not isinstance(result, AnswerEvaluatorResult) or result.answer is None or result.exception:
             return result
 
-        query, evaluable = eval_sample
         if not isinstance(evaluable, AgentAnswer) or not evaluable.text:
             return result
 

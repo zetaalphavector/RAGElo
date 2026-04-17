@@ -18,7 +18,7 @@ from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.query import Query
 from ragelo.types.results import AnswerEvaluatorResult, PairwiseGameEvaluatorResult
 from ragelo.types.types import AnswerEvaluatorTypes
-from ragelo.utils import call_async_fn, string_to_template
+from ragelo.utils import string_to_template
 
 
 @AnswerEvaluatorFactory.register(AnswerEvaluatorTypes.RUBRIC_PAIRWISE)
@@ -140,11 +140,13 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.answer_schema_cache = {}
         if self.config.rubrics:
             self.criteria_cache = {qid: RubricSchema(criteria=rubrics) for qid, rubrics in self.config.rubrics.items()}
+            for qid, criteria in self.criteria_cache.items():
+                self.answer_schema_cache[qid] = self._build_evaluation_schema(criteria)
         else:
             self.criteria_cache = {}
-        self.answer_schema_cache = {}
 
     def _build_evaluation_schema(self, criteria: RubricSchema) -> Type[BaseModel]:
         include_evidence = self.config.include_evidence_in_evaluation
@@ -220,9 +222,11 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
         return criteria
 
     def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> LLMInputPrompt:
-        conversation_context = self._get_shared_conversation_context(game)
         if query.qid not in self.answer_schema_cache:
-            call_async_fn(self._build_criteria, query, list(query.retrieved_docs.values()), conversation_context)
+            raise RuntimeError(
+                f"Rubric for qid={query.qid} has not been built. "
+                "evaluate_async() must be called, which awaits _build_criteria() before _build_message_pairwise()."
+            )
         criteria = self.criteria_cache[query.qid]
         include_evidence = self.config.include_evidence_in_evaluation
         evidence_snippets: list[str] = []
@@ -316,11 +320,15 @@ class RubricPairwiseEvaluator(PairwiseAnswerEvaluator):
     async def evaluate_async(
         self, eval_sample: tuple[Query, Evaluable]
     ) -> AnswerEvaluatorResult | PairwiseGameEvaluatorResult:
+        query, evaluable = eval_sample
+        if isinstance(evaluable, PairwiseGame) and query.qid not in self.answer_schema_cache:
+            conversation_context = self._get_shared_conversation_context(evaluable)
+            await self._build_criteria(query, list(query.retrieved_docs.values()), conversation_context)
+
         result = await super().evaluate_async(eval_sample)
         if not isinstance(result, PairwiseGameEvaluatorResult) or result.answer is None or result.exception:
             return result
 
-        query, evaluable = eval_sample
         if not isinstance(evaluable, PairwiseGame):
             return result
 
