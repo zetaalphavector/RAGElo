@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import re
-from typing import Annotated, Literal, Self
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 from pydantic.json_schema import SkipJsonSchema
+from typing_extensions import Self
 
 PairwiseWinner = Literal["A", "B", "C"]
 PairwiseCriterionWinner = Literal["A", "B", "C", "D"]
