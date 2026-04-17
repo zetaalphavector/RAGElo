@@ -103,6 +103,7 @@ class TestEloRanker:
         assert elo_ranker.losses["agent2"] == 1
         assert elo_ranker.games_played["agent1"] == 1
         assert elo_ranker.games_played["agent2"] == 1
+        assert elo_ranker.total_games == 1
 
     @pytest.mark.asyncio
     async def test_run_single_game_updates_rankings(self, elo_ranker, experiment):
@@ -236,6 +237,8 @@ class TestEloRanker:
         assert call_count > 0
         # New agent always wins → score should be above initial
         assert result.scores["new_agent"] >= elo_ranker.initial_score
+        assert result.total_games == call_count
+        assert elo_ranker.total_games == call_count
 
     @pytest.mark.asyncio
     async def test_run_single_game_stores_game_on_query(self, elo_ranker, experiment):

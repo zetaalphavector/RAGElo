@@ -177,6 +177,7 @@ class EloRanker(AgentRanker[EloAgentRankerConfig]):
             self.ties[agent_b] = self.ties.get(agent_b, 0) + 1
         self.games.append((query.qid, agent_a, agent_b, winner))
         self.update_rankings(agent_a, agent_b, score_val)
+        self.total_games += 1
         if experiment is not None:
             experiment.add_evaluation((query, game), evaluation, exist_ok=True, should_print=False)
         return evaluation
@@ -447,6 +448,7 @@ class EloRanker(AgentRanker[EloAgentRankerConfig]):
 
                 self.games.append((query.qid, new_agent, opp, winner))
                 self.update_rankings(new_agent, opp, score_val)
+                self.total_games += 1
 
                 if experiment is not None:
                     experiment.add_evaluation(
