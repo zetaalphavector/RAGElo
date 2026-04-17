@@ -52,16 +52,25 @@ def pytest_addoption(parser):
         default=False,
         help="run tests that requires an OpenAI API key",
     )
+    parser.addoption(
+        "--runanthropic",
+        action="store_true",
+        default=False,
+        help="run tests that require an Anthropic API key",
+    )
 
 
 def pytest_collection_modifyitems(config, items):
-    if config.getoption("--runopenai"):
-        # --runopenai given in cli: do not skip tests that will call OpenAI
-        return
-    skip_openai = pytest.mark.skip(reason="need --runopenai option to run")
-    for item in items:
-        if "requires_openai" in item.keywords:
-            item.add_marker(skip_openai)
+    if not config.getoption("--runopenai"):
+        skip_openai = pytest.mark.skip(reason="need --runopenai option to run")
+        for item in items:
+            if "requires_openai" in item.keywords:
+                item.add_marker(skip_openai)
+    if not config.getoption("--runanthropic"):
+        skip_anthropic = pytest.mark.skip(reason="need --runanthropic option to run")
+        for item in items:
+            if "requires_anthropic" in item.keywords:
+                item.add_marker(skip_anthropic)
 
 
 @pytest.fixture
@@ -305,6 +314,33 @@ def openai_provider_json_mode(flexible_openai_client_mock):
         json_mode=True,
     )
     return OpenAIProvider(config=config, client=flexible_openai_client_mock)
+
+
+@pytest.fixture
+def instructor_client_mock(mocker):
+    """Mock for an instructor-patched AsyncInstructor client."""
+    from unittest.mock import AsyncMock
+
+    mock_client = mocker.MagicMock()
+    mock_client.create = AsyncMock(
+        return_value=RetrievalEvaluationAnswer(
+            reasoning="The document is highly relevant to the query",
+            score=2,
+        )
+    )
+    return mock_client
+
+
+@pytest.fixture
+def instructor_provider(instructor_client_mock):
+    """InstructorProvider with pre-built mock client injected via constructor."""
+    pytest.importorskip("instructor")
+
+    from ragelo.llm_providers.instructor_client import InstructorProvider
+    from ragelo.types.configurations.llm_provider_configs import InstructorConfiguration
+
+    config = InstructorConfiguration(model="openai/fake-model")
+    return InstructorProvider(config=config, client=instructor_client_mock)
 
 
 @pytest.fixture
