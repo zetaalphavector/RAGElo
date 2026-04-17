@@ -121,10 +121,12 @@ class Document(Evaluable[RetrievalEvaluatorResult]):
         cls,
         document: Self | str,
         qid: str | None = None,
+        did: str | None = None,
+        retrieved_by: dict[str, float] = {},
         metadata: dict[str, Any] | None = None,
     ) -> Self:
         warnings.warn("assemble_document() is deprecated, use build() instead", DeprecationWarning, stacklevel=2)
-        return cls.build(document, qid, metadata=metadata)
+        return cls.build(document, qid, did=did, retrieved_by=retrieved_by, metadata=metadata)
 
     @property
     def evaluation(self):
@@ -230,8 +232,7 @@ class PairwiseGame(Evaluable[PairwiseGameEvaluatorResult]):
     def ensure_agent_order(cls, values):
         agent_a_answer = values.get("agent_a_answer")
         agent_b_answer = values.get("agent_b_answer")
-        reversed = values.get("reversed", False)
-        agent_answers = sorted([agent_a_answer, agent_b_answer], reverse=reversed, key=lambda x: x.agent)
+        agent_answers = sorted([agent_a_answer, agent_b_answer], key=lambda x: x.agent)
         values["agent_a_answer"] = agent_answers[0]
         values["agent_b_answer"] = agent_answers[1]
         return values
