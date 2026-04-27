@@ -239,15 +239,24 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
         else:
             final_winner = "C"
 
-        if use_reversed:
-            answer_source = self._canonicalize_pairwise_answer(b_vs_a_result.answer)
-        else:
-            answer_source = a_vs_b_result.answer
+        forward_answer = a_vs_b_result.answer
+        reversed_canonical = self._canonicalize_pairwise_answer(b_vs_a_result.answer)
 
-        # Build parent result with reconciled winner
-        parent_answer = None
-        if answer_source is not None:
-            parent_answer = answer_source.model_copy(update={"winner": final_winner})
+        # Build parent result reconciled across both directions.
+        # Rubric answers carry per-criterion votes and weighted aggregates;
+        # merging keeps the top-level ``winner`` consistent with the
+        # per-criterion verdicts and the ``agent_a_wins``/``agent_b_wins``
+        # totals. Plain pairwise answers only carry a winner, so for them we
+        # fall back to picking the stronger direction and overriding ``winner``.
+        parent_answer: PairwiseEvaluationAnswer | RubricAnswerFormat | None
+        if isinstance(forward_answer, RubricAnswerFormat) and isinstance(reversed_canonical, RubricAnswerFormat):
+            parent_answer = forward_answer.merge_with_canonicalized(reversed_canonical)
+        else:
+            answer_source = reversed_canonical if use_reversed else forward_answer
+            if answer_source is None:
+                parent_answer = None
+            else:
+                parent_answer = answer_source.model_copy(update={"winner": final_winner})
 
         exc = a_vs_b_result.exception or b_vs_a_result.exception
 

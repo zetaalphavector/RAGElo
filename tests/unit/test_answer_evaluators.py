@@ -654,6 +654,98 @@ class TestPairwiseAnswerCanonicalization:
         assert swapped.agent_b_wins == 1
         assert swapped.winner == "B"
 
+    def test_rubric_answer_merge_with_canonicalized(self):
+        """Merging two same-perspective directions should produce consistent aggregates and per-criterion verdicts."""
+        accuracy = Criterion(criterion_name="accuracy", evidence=[], short_question="Is it accurate?", weight=0.2)
+        clarity = Criterion(criterion_name="clarity", evidence=[], short_question="Is it clear?", weight=0.05)
+
+        forward = RubricAnswerFormat(
+            criteria=[
+                CriterionEvaluation(
+                    criterion=accuracy,
+                    agent_a_assessment="forward A",
+                    agent_b_assessment="forward B",
+                    winner_reasoning="forward acc",
+                    winner="A",
+                    score_a=0.8,
+                    score_b=0.4,
+                    confidence=0.9,
+                    failure_tags=["missing_evidence"],
+                ),
+                CriterionEvaluation(
+                    criterion=clarity,
+                    agent_a_assessment="forward A clarity",
+                    agent_b_assessment="forward B clarity",
+                    winner_reasoning="forward clarity",
+                    winner="A",
+                    score_a=0.6,
+                    score_b=0.5,
+                    confidence=0.8,
+                ),
+            ],
+            agent_a_wins=0.25,
+            agent_b_wins=0.0,
+            equally_good=0.0,
+            equally_bad=0.0,
+            winner="A",
+            margin=0.25,
+            mean_confidence=0.85,
+        )
+        # Reversed direction (already canonicalized to A-vs-B perspective):
+        # disagrees with forward on `accuracy`, agrees on `clarity`. Weighted aggregate
+        # still favors A overall because clarity remains A and accuracy collapses to a tie.
+        reversed_canonical = RubricAnswerFormat(
+            criteria=[
+                CriterionEvaluation(
+                    criterion=accuracy,
+                    agent_a_assessment="reverse A",
+                    agent_b_assessment="reverse B",
+                    winner_reasoning="reverse acc",
+                    winner="B",
+                    score_a=0.5,
+                    score_b=0.6,
+                    confidence=0.7,
+                    failure_tags=["unsupported_claim"],
+                ),
+                CriterionEvaluation(
+                    criterion=clarity,
+                    agent_a_assessment="reverse A clarity",
+                    agent_b_assessment="reverse B clarity",
+                    winner_reasoning="reverse clarity",
+                    winner="A",
+                    score_a=0.7,
+                    score_b=0.4,
+                    confidence=1.0,
+                ),
+            ],
+            agent_a_wins=0.05,
+            agent_b_wins=0.20,
+            equally_good=0.0,
+            equally_bad=0.0,
+            winner="B",
+            margin=-0.15,
+            mean_confidence=0.85,
+        )
+
+        merged = forward.merge_with_canonicalized(reversed_canonical)
+
+        # Top-level aggregates are averaged and consistent with each other.
+        assert merged.agent_a_wins == pytest.approx(0.15)
+        assert merged.agent_b_wins == pytest.approx(0.10)
+        assert merged.margin == pytest.approx(0.05)
+        assert merged.winner == "A"
+        # Per-criterion verdicts: disagreement collapses to "C", agreement is preserved.
+        merged_by_name = {c.criterion.criterion_name: c for c in merged.criteria}
+        assert merged_by_name["accuracy"].winner == "C"
+        assert merged_by_name["accuracy"].score_a == pytest.approx(0.65)
+        assert merged_by_name["accuracy"].score_b == pytest.approx(0.50)
+        assert merged_by_name["accuracy"].confidence == pytest.approx(0.80)
+        # Failure tags are unioned across directions, preserving order.
+        assert merged_by_name["accuracy"].failure_tags == ["missing_evidence", "unsupported_claim"]
+        assert merged_by_name["clarity"].winner == "A"
+        # Free-text fields remain from the forward direction.
+        assert merged_by_name["accuracy"].winner_reasoning == "forward acc"
+
     def test_llm_response_schema_from_config(
         self, llm_provider_answer_mock, experiment, base_answer_eval_config, answer_eval_format
     ):
@@ -731,12 +823,17 @@ class TestRubricPairwiseEvaluator:
             force=True,
         )
         eval_response = self._make_evaluation_response(["A", "B", "A"])
+        # Reversed direction: an unbiased judge that judges the same content the same
+        # way regardless of position will produce mirrored winners (A ↔ B) when the
+        # agents are swapped. Without this, the bidirectional reconciliation would
+        # correctly cancel out the verdicts as position-biased.
+        reversed_eval_response = self._make_evaluation_response(["B", "A", "B"])
 
         responses: list[LLMResponseType] = [
             # For bidirectional: normal direction
             LLMResponseType(raw_answer="eval", parsed_answer=eval_response),
             # reversed direction
-            LLMResponseType(raw_answer="eval", parsed_answer=eval_response),
+            LLMResponseType(raw_answer="eval", parsed_answer=reversed_eval_response),
         ]
         llm_provider_mock.async_call_mocker = AsyncMock(side_effect=responses)
 

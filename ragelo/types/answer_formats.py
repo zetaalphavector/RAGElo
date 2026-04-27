@@ -264,6 +264,46 @@ class CriterionEvaluation(BaseModel):
             }
         )
 
+    def merge_with_canonicalized(self, other: Self) -> Self:
+        """Merge this criterion evaluation with another in the same A-vs-B perspective.
+
+        Used to reconcile bidirectional pairwise judgments after the reversed
+        evaluation has been canonicalized via :py:meth:`swap_perspective`. The
+        per-criterion winner agrees with both directions when they match; if
+        they disagree, the merged winner is ``C`` (tie). Numeric scores and
+        confidence are averaged; tag/evidence lists are unioned. Free-text
+        fields are kept from ``self`` (the forward direction).
+        """
+        if self.winner == other.winner:
+            merged_winner: PairwiseCriterionWinner = self.winner
+        else:
+            merged_winner = "C"
+        return self.model_copy(
+            update={
+                "winner": merged_winner,
+                "score_a": (self.score_a + other.score_a) / 2.0,
+                "score_b": (self.score_b + other.score_b) / 2.0,
+                "confidence": (self.confidence + other.confidence) / 2.0,
+                "failure_tags": _union_preserving_order(self.failure_tags, other.failure_tags),
+                "missing_evidence_doc_ids": _union_preserving_order(
+                    self.missing_evidence_doc_ids, other.missing_evidence_doc_ids
+                ),
+                "missing_evidence_snippets": _union_preserving_order(
+                    self.missing_evidence_snippets, other.missing_evidence_snippets
+                ),
+            }
+        )
+
+
+def _union_preserving_order(a: list[str], b: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for item in (*a, *b):
+        if item not in seen:
+            seen.add(item)
+            result.append(item)
+    return result
+
 
 class EvidenceSnippetEvaluation(BaseModel):
     snippet: str = Field(..., description="The evidence snippet being checked")
@@ -346,6 +386,54 @@ class RubricAnswerFormat(EvaluationAnswer):
                 "evidence_recall_b": self.evidence_recall_a,
                 "citation_quality_a": self.citation_quality_b,
                 "citation_quality_b": self.citation_quality_a,
+            }
+        )
+
+    def merge_with_canonicalized(self, other: Self) -> Self:
+        """Merge this rubric answer with another in the same A-vs-B perspective.
+
+        Used to reconcile bidirectional pairwise judgments after the reversed
+        evaluation has been canonicalized via :py:meth:`swap_perspective`.
+        Aggregate scores (``agent_a_wins``, ``agent_b_wins``, ``equally_good``,
+        ``equally_bad``, ``mean_confidence``) are averaged across both
+        directions; ``margin`` and ``winner`` are recomputed from the merged
+        aggregates so they remain consistent with each other and with the
+        per-criterion verdicts. Per-criterion records are merged by
+        ``criterion_name`` via :py:meth:`CriterionEvaluation.merge_with_canonicalized`;
+        criteria that appear in only one direction are kept as-is. Free-text
+        fields are kept from ``self`` (the forward direction).
+        """
+        merged_a_wins = (self.agent_a_wins + other.agent_a_wins) / 2.0
+        merged_b_wins = (self.agent_b_wins + other.agent_b_wins) / 2.0
+        merged_equally_good = (self.equally_good + other.equally_good) / 2.0
+        merged_equally_bad = (self.equally_bad + other.equally_bad) / 2.0
+        merged_margin = merged_a_wins - merged_b_wins
+        if merged_margin > 0:
+            merged_winner: PairwiseWinner = "A"
+        elif merged_margin < 0:
+            merged_winner = "B"
+        else:
+            merged_winner = "C"
+
+        other_by_name = {c.criterion.criterion_name: c for c in other.criteria}
+        merged_criteria: list[CriterionEvaluation] = []
+        for crit in self.criteria:
+            counterpart = other_by_name.get(crit.criterion.criterion_name)
+            if counterpart is None:
+                merged_criteria.append(crit)
+            else:
+                merged_criteria.append(crit.merge_with_canonicalized(counterpart))
+
+        return self.model_copy(
+            update={
+                "criteria": merged_criteria,
+                "agent_a_wins": merged_a_wins,
+                "agent_b_wins": merged_b_wins,
+                "equally_good": merged_equally_good,
+                "equally_bad": merged_equally_bad,
+                "winner": merged_winner,
+                "margin": merged_margin,
+                "mean_confidence": (self.mean_confidence + other.mean_confidence) / 2.0,
             }
         )
 
