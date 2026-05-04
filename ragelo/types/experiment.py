@@ -931,7 +931,17 @@ class Experiment:
                 if evaluator_name == "EloTournament":
                     result = EloTournamentResult.model_validate(result)
                     continue
-                expected_result_type = resolve_evaluator_result_type(evaluator_name)
+                # Disambiguate retrieval vs. answer evaluators (which can share names
+                # like "domain_expert") by inspecting the persisted dict shape:
+                #  - "did" present  -> retrieval result
+                #  - "agent_a"/"agent_b" or "agent" -> answer-side result
+                if "did" in result:
+                    kind: Literal["retrieval", "answer"] | None = "retrieval"
+                elif "agent_a" in result or "agent_b" in result or "agent" in result:
+                    kind = "answer"
+                else:
+                    kind = None
+                expected_result_type = resolve_evaluator_result_type(evaluator_name, kind=kind)
                 result = expected_result_type.model_validate(result)
             except (ValueError, Exception) as e:
                 logger.error(f"Failed to validate result for evaluator {evaluator_name}: {e}")
