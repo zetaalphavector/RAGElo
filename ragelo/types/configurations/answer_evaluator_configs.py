@@ -119,12 +119,7 @@ class PairwiseDomainExpertEvaluatorConfig(PairwiseEvaluatorConfig):
     )
 
 
-class RubricPairwiseEvaluatorConfig(PairwiseDomainExpertEvaluatorConfig):
-    evaluator_name: AnswerEvaluatorTypes = AnswerEvaluatorTypes.RUBRIC_PAIRWISE
-    llm_response_schema: Optional[Type[BaseModel] | dict[str, Any]] = Field(
-        default=RubricAnswerFormat,
-        description="The response schema for the LLM.",
-    )
+class RubricEvaluatorConfigBase(PairwiseDomainExpertEvaluatorConfig):
     n_criteria: int = Field(default=5, description="The number of criteria to use for the evaluator.")
     rubrics: Optional[dict[str, list[Criterion]]] = Field(
         default=None,
@@ -134,13 +129,59 @@ class RubricPairwiseEvaluatorConfig(PairwiseDomainExpertEvaluatorConfig):
             "and use this instead."
         ),
     )
+    evidence_recall: bool = Field(default=False, description="Enable evidence recall scoring as a built-in criterion.")
+    citation_quality: bool = Field(
+        default=False, description="Enable citation quality scoring as a built-in criterion."
+    )
+    evidence_snippets: Optional[dict[str, list[str]]] = Field(
+        default=None,
+        description="Override evidence snippets per query ID. Maps qid to a list of text snippets.",
+    )
+    evidence_recall_weight: float = Field(
+        default=1.0, description="Weight for the evidence recall criterion in the final score."
+    )
+    citation_quality_weight: float = Field(
+        default=1.0, description="Weight for the citation quality criterion in the final score."
+    )
 
 
-class RubricPointwiseEvaluatorConfig(PairwiseDomainExpertEvaluatorConfig):
+class RubricPairwiseEvaluatorConfig(RubricEvaluatorConfigBase):
+    evaluator_name: AnswerEvaluatorTypes = AnswerEvaluatorTypes.RUBRIC_PAIRWISE
+    llm_response_schema: Optional[Type[BaseModel] | dict[str, Any]] = Field(
+        default=RubricAnswerFormat,
+        description="The response schema for the LLM.",
+    )
+    include_evidence_in_evaluation: bool = Field(
+        default=False,
+        description="Include evidence snippets in the pairwise evaluation prompt for evidence-grounded judging.",
+    )
+    max_evidence_tokens: int = Field(
+        default=2000,
+        description="Maximum character budget for evidence snippets in the evaluation prompt.",
+    )
+    preserve_d: bool = Field(
+        default=True,
+        description="Preserve D (both-bad) as distinct from C (tied-good) at criterion level.",
+    )
+    rich_pairwise_output: bool = Field(
+        default=True,
+        description="Request richer diagnostic fields (score_a, score_b, loser_fix, failure_tags, confidence) "
+        "from the LLM judge. When False, only basic fields are requested.",
+    )
+
+
+class RubricPointwiseEvaluatorConfig(RubricEvaluatorConfigBase):
     evaluator_name: AnswerEvaluatorTypes = AnswerEvaluatorTypes.RUBRIC_POINTWISE
     llm_response_schema: Optional[Type[BaseModel] | dict[str, Any]] = Field(
         default=RubricPointwiseAnswerFormat,
         description="The response schema for the LLM.",
     )
     pairwise: bool = False
-    n_criteria: int = Field(default=5, description="The number of criteria to use for the evaluator.")
+    graduated_scoring: bool = Field(
+        default=False,
+        description="Use a graduated numeric scale (0 to max_score) instead of binary yes/no fulfillment.",
+    )
+    max_score: int = Field(
+        default=5,
+        description="The maximum score for graduated scoring. Only used when graduated_scoring is True.",
+    )

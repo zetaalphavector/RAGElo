@@ -10,12 +10,12 @@ from typing import TYPE_CHECKING, Any, Callable, get_type_hints
 
 from tenacity import RetryError
 
-from ragelo.evaluators.base_evaluator import BaseEvaluator
+from ragelo.evaluators.base_evaluator import BaseEvaluator, T_Config
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
 from ragelo.types import LLMInputPrompt, Query, RetrievalEvaluatorResult
 from ragelo.types.configurations import BaseRetrievalEvaluatorConfig
 from ragelo.types.evaluables import Document, Evaluable
-from ragelo.types.types import RetrievalEvaluatorTypes
+from ragelo.types.types import RetrievalEvaluatorTypes, _result_type_registry
 from ragelo.utils import call_async_fn
 
 logger = logging.getLogger(__name__)
@@ -24,16 +24,16 @@ if TYPE_CHECKING:
     from ragelo.types.experiment import Experiment
 
 
-class BaseRetrievalEvaluator(BaseEvaluator):
+class BaseRetrievalEvaluator(BaseEvaluator[T_Config, RetrievalEvaluatorResult]):
     """
     A base class for retrieval evaluators.
     """
 
-    config: BaseRetrievalEvaluatorConfig
+    config: T_Config
     evaluable_name: str = "Retrieved document"
     result_type: type[RetrievalEvaluatorResult] = RetrievalEvaluatorResult
 
-    def __init__(self, config: BaseRetrievalEvaluatorConfig, llm_provider: BaseLLMProvider):
+    def __init__(self, config: T_Config, llm_provider: BaseLLMProvider):
         super().__init__(config, llm_provider)
 
     def evaluate(
@@ -52,8 +52,8 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             query_metadata (dict[str, Any] | None): The metadata for the query.
             doc_metadata (dict[str, Any] | None): The metadata for the document.
         """
-        query = Query.assemble_query(query, query_metadata)
-        document = Document.assemble_document(document, query.qid, doc_metadata)
+        query = Query.build(query, query_metadata)
+        document = Document.build(document, query.qid, metadata=doc_metadata)
         result = call_async_fn(self.evaluate_async, (query, document))
 
         if result.exception or result.answer is None:
@@ -114,7 +114,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
             qid=query.qid,
             did=document.did,
             evaluator_name=str(self.config.evaluator_name),
-            answer=parsed_answer,
+            answer=parsed_answer,  # type: ignore[arg-type]
             exception=exc,
         )
 
@@ -145,7 +145,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
     def _build_message(self, query: Query, document: Document) -> LLMInputPrompt:
         context = {"query": query, "document": document}
         user_message = self.user_prompt.render(**context) if self.user_prompt else None
-        system_prompt = self.system_prompt.render(**context) if self.system_prompt else None
+        system_prompt = self.system_prompt.render(**context)
 
         return LLMInputPrompt(
             system_prompt=system_prompt,
@@ -153,7 +153,7 @@ class BaseRetrievalEvaluator(BaseEvaluator):
         )
 
     @classmethod
-    def from_config(cls, config: BaseRetrievalEvaluatorConfig, llm_provider: BaseLLMProvider):
+    def from_config(cls, config: T_Config, llm_provider: BaseLLMProvider):
         return cls(config, llm_provider)
 
     @classmethod
@@ -172,6 +172,7 @@ class RetrievalEvaluatorFactory:
             if evaluator_name in cls.registry:
                 logger.debug(f"Overwriting {evaluator_name} in registry")
             cls.registry[evaluator_name] = wrapped_class
+            _result_type_registry[f"retrieval:{evaluator_name}"] = wrapped_class.result_type
             return wrapped_class
 
         return inner_wrapper

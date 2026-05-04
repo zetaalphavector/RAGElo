@@ -3,9 +3,8 @@ Bhaskar Mitra. Large language models can accurately predict searcher preferences
 https://arxiv.org/abs/2309.10621
 """
 
-from typing import cast
-
 import numpy as np
+from pydantic import BaseModel
 
 from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     BaseRetrievalEvaluator,
@@ -27,14 +26,13 @@ from ragelo.types.results import (
     RDNAMMultipleAnnotatorsNoAspectsResult,
     RDNAMMUltipleAnnotatorsResult,
     RDNAMNoAspectsResult,
-    T_Result,
 )
 from ragelo.types.types import RetrievalEvaluatorTypes
 from ragelo.utils import string_to_template
 
 
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.RDNAM)
-class RDNAMEvaluator(BaseRetrievalEvaluator):
+class RDNAMEvaluator(BaseRetrievalEvaluator[RDNAMEvaluatorConfig]):
     config: RDNAMEvaluatorConfig
     system_prompt = string_to_template("""
         {% if annotator_role %}{{ annotator_role }} {% endif %} Given a query and a document, you must provide a score on an integer scale of 0 to 2 with the following meanings:
@@ -102,7 +100,7 @@ class RDNAMEvaluator(BaseRetrievalEvaluator):
             user_message=self.user_prompt.render(**context),
         )
 
-    def _process_answer(self, llm_response: LLMResponseType[T_Result], query: Query) -> LLMResponseType[T_Result]:
+    def _process_answer(self, llm_response: LLMResponseType[BaseModel], query: Query) -> LLMResponseType[BaseModel]:
         parsed = llm_response.parsed_answer
         if parsed is None:
             return llm_response
@@ -140,7 +138,7 @@ class RDNAMEvaluator(BaseRetrievalEvaluator):
                 trustworthiness: float | None = float(np.mean(trustworthiness_vals))  # type: ignore
 
                 # Create aggregated answer
-                response = RDNAMEvaluationAnswer(
+                response: BaseModel = RDNAMEvaluationAnswer(
                     score=score,
                     reasoning="Aggregated from 5 annotators",
                     intent_match=intent_match,
@@ -169,10 +167,7 @@ class RDNAMEvaluator(BaseRetrievalEvaluator):
             # parsed is already RDNAMEvaluationAnswer or RDNAMNoAspectsAnswer
             response = parsed
 
-        return cast(
-            LLMResponseType[T_Result],
-            LLMResponseType(
-                raw_answer=llm_response.raw_answer,
-                parsed_answer=response,
-            ),
+        return LLMResponseType(
+            raw_answer=llm_response.raw_answer,
+            parsed_answer=response,
         )

@@ -10,7 +10,7 @@ from ragelo.utils import string_to_template
 
 
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.DOMAIN_EXPERT)
-class DomainExpertEvaluator(BaseRetrievalEvaluator):
+class DomainExpertEvaluator(BaseRetrievalEvaluator[DomainExpertEvaluatorConfig]):
     config: DomainExpertEvaluatorConfig
 
     system_prompt = string_to_template("""

@@ -4,29 +4,32 @@ import itertools
 import logging
 import random
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any, Callable, get_type_hints
+from typing import TYPE_CHECKING, Any, Callable, TypeVar, get_type_hints
 
 from pydantic import BaseModel
 
-from ragelo.evaluators.base_evaluator import BaseEvaluator
+from ragelo.evaluators.base_evaluator import BaseEvaluator, T_Result
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
 from ragelo.types import AnswerEvaluatorResult, LLMInputPrompt, PairwiseGameEvaluatorResult, Query
+from ragelo.types.answer_formats import PairwiseEvaluationAnswer, PairwiseWinner, RubricAnswerFormat
 from ragelo.types.configurations import BaseAnswerEvaluatorConfig, PairwiseEvaluatorConfig
 from ragelo.types.evaluables import AgentAnswer, Document, Evaluable, PairwiseGame
-from ragelo.types.types import AnswerEvaluatorTypes
+from ragelo.types.types import AnswerEvaluatorTypes, _result_type_registry
 from ragelo.utils import call_async_fn, get_placeholders_and_tags
 
 logger = logging.getLogger(__name__)
+
+T_AnswerConfig = TypeVar("T_AnswerConfig", bound=BaseAnswerEvaluatorConfig)
 
 if TYPE_CHECKING:
     from ragelo.types.experiment import Experiment
 
 
-class BaseAnswerEvaluator(BaseEvaluator):
-    config: BaseAnswerEvaluatorConfig
+class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
+    config: T_AnswerConfig
     evaluable_name: str = "Agent Answer"
     _warned_queries: set[str] = set()
-    result_type: type[AnswerEvaluatorResult] | type[PairwiseGameEvaluatorResult] = AnswerEvaluatorResult
+    result_type: type[T_Result] = AnswerEvaluatorResult  # type: ignore[assignment]
 
     def evaluate(
         self,
@@ -63,7 +66,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
         Returns:
             AnswerEvaluatorResult: The result of the evaluation.
         """
-        query = Query.assemble_query(query, query_metadata)
+        query = Query.build(query, query_metadata)
 
         if isinstance(retrieved_documents, str):
             retrieved_documents = [retrieved_documents]
@@ -148,7 +151,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
         raw_answer = ""
         try:
             llm_response = await self.llm_provider.call_async(input=prompt, response_schema=response_schema)  # type: ignore[arg-type]
-            llm_response = self._process_answer(llm_response, query)  # type: ignore[arg-type,type-var]
+            llm_response = self._process_answer(llm_response, query)
             parsed_answer = llm_response.parsed_answer
             raw_answer = llm_response.raw_answer
         except Exception as e:
@@ -159,7 +162,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
             qid=query.qid,
             agent=answer.agent,
             evaluator_name=evaluator_name,
-            answer=parsed_answer,
+            answer=parsed_answer,  # type: ignore[arg-type]
             exception=exc,
         )
 
@@ -174,7 +177,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
         raw_answer = ""
         try:
             llm_response = await self.llm_provider.call_async(input=prompt, response_schema=response_schema)  # type: ignore[arg-type]
-            llm_response = self._process_answer(llm_response, query)  # type: ignore[arg-type,type-var]
+            llm_response = self._process_answer(llm_response, query)
             parsed_answer = llm_response.parsed_answer
             raw_answer = llm_response.raw_answer
         except Exception as e:
@@ -189,7 +192,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
             agent_a=game.agent_a_answer.agent,
             agent_b=game.agent_b_answer.agent,
             evaluator_name=evaluator_name,
-            answer=parsed_answer,
+            answer=parsed_answer,  # type: ignore[arg-type]
             exception=exc,
         )
 
@@ -200,43 +203,60 @@ class BaseAnswerEvaluator(BaseEvaluator):
             if isinstance(cached, PairwiseGameEvaluatorResult):
                 return cached
 
-        # Evaluate in both directions
+        # Evaluate in both directions.
+        # Use model_construct for the reversed game to bypass ensure_agent_order,
+        # which would re-sort the agents back to the original order.
         normal_game = PairwiseGame(
             qid=game.qid,
             agent_a_answer=game.agent_a_answer,
             agent_b_answer=game.agent_b_answer,
         )
-        reversed_game = PairwiseGame(
+        reversed_game = PairwiseGame.model_construct(
             qid=game.qid,
-            agent_a_answer=game.agent_a_answer,
-            agent_b_answer=game.agent_b_answer,
-            reversed=True,
+            metadata=game.metadata,
+            evaluations={},
+            agent_a_answer=game.agent_b_answer,
+            agent_b_answer=game.agent_a_answer,
         )
 
         a_vs_b_result = await self.__evaluate_single_game(query, normal_game)
         b_vs_a_result = await self.__evaluate_single_game(query, reversed_game)
 
-        # Reconcile winners
-        winner_normal = a_vs_b_result.winner
-        winner_reversed = b_vs_a_result.winner
+        # Reconcile using weighted scores.
+        # Positive margin = A is better; the reversed game's margin is negated
+        # to normalize back to the original (A vs B) perspective.
+        margin_normal = self._get_game_margin(a_vs_b_result)
+        margin_reversed = -self._get_game_margin(b_vs_a_result)
+        total_margin = margin_normal + margin_reversed
 
-        # Normalize reversed winner back to original agent perspective
-        if winner_reversed == "A":
-            normalized_reversed: str | None = "B"
-        elif winner_reversed == "B":
-            normalized_reversed = "A"
-        else:
-            normalized_reversed = winner_reversed  # None or "C"
+        # Pick the answer source from whichever direction had the stronger signal.
+        use_reversed = abs(margin_reversed) > abs(margin_normal)
 
-        if winner_normal is not None and winner_normal == normalized_reversed:
-            final_winner = winner_normal
+        if total_margin > 0:
+            final_winner: PairwiseWinner = "A"
+        elif total_margin < 0:
+            final_winner = "B"
         else:
             final_winner = "C"
 
-        # Build parent result with reconciled winner
-        parent_answer = None
-        if a_vs_b_result.answer is not None:
-            parent_answer = a_vs_b_result.answer.model_copy(update={"winner": final_winner})
+        forward_answer = a_vs_b_result.answer
+        reversed_canonical = self._canonicalize_pairwise_answer(b_vs_a_result.answer)
+
+        # Build parent result reconciled across both directions.
+        # Rubric answers carry per-criterion votes and weighted aggregates;
+        # merging keeps the top-level ``winner`` consistent with the
+        # per-criterion verdicts and the ``agent_a_wins``/``agent_b_wins``
+        # totals. Plain pairwise answers only carry a winner, so for them we
+        # fall back to picking the stronger direction and overriding ``winner``.
+        parent_answer: PairwiseEvaluationAnswer | RubricAnswerFormat | None
+        if isinstance(forward_answer, RubricAnswerFormat) and isinstance(reversed_canonical, RubricAnswerFormat):
+            parent_answer = forward_answer.merge_with_canonicalized(reversed_canonical)
+        else:
+            answer_source = reversed_canonical if use_reversed else forward_answer
+            if answer_source is None:
+                parent_answer = None
+            else:
+                parent_answer = answer_source.model_copy(update={"winner": final_winner})
 
         exc = a_vs_b_result.exception or b_vs_a_result.exception
 
@@ -250,6 +270,23 @@ class BaseAnswerEvaluator(BaseEvaluator):
             a_vs_b_result=a_vs_b_result,
             b_vs_a_result=b_vs_a_result,
         )
+
+    def _canonicalize_pairwise_answer(
+        self,
+        answer: PairwiseEvaluationAnswer | RubricAnswerFormat | None,
+    ) -> PairwiseEvaluationAnswer | RubricAnswerFormat | None:
+        if answer is None:
+            return None
+        return answer.swap_perspective()
+
+    def _get_game_margin(self, result: PairwiseGameEvaluatorResult) -> float:
+        if isinstance(result.answer, RubricAnswerFormat):
+            return result.answer.margin
+        if result.winner == "A":
+            return 1.0
+        if result.winner == "B":
+            return -1.0
+        return 0.0
 
     def _resolve_response_schema(self, prompt: LLMInputPrompt) -> type[BaseModel] | None:
         schema = prompt.llm_response_schema or self.config.llm_response_schema
@@ -280,28 +317,22 @@ class BaseAnswerEvaluator(BaseEvaluator):
         """
         tuples_to_eval: list[tuple[Query, Evaluable]] = []
         all_tuples = 0
-        missing_evaluations = 0
         evaluator_name = str(self.config.evaluator_name)
         for q in experiment:
             if self.config.pairwise:
                 for g in q.pairwise_games.values():
                     all_tuples += 1
-                    tuples_to_eval.append((q, g))
-                    if evaluator_name not in g.evaluations:
-                        missing_evaluations += 1
+                    if evaluator_name not in g.evaluations or self.config.force:
+                        tuples_to_eval.append((q, g))
 
             else:
                 for a in q.answers.values():
                     all_tuples += 1
-                    tuples_to_eval.append((q, a))
-                    if evaluator_name not in a.evaluations:
-                        missing_evaluations += 1
+                    if evaluator_name not in a.evaluations or self.config.force:
+                        tuples_to_eval.append((q, a))
 
-        if missing_evaluations == 0 and not self.config.force:
-            logger.info(
-                f"All {all_tuples} answers are already evaluated.\n"
-                "If you want to re-evaluate them, use the --force flag"
-            )
+        if len(tuples_to_eval) == 0 and all_tuples > 0:
+            logger.info(f"All {all_tuples} answers are already evaluated")
 
         return tuples_to_eval
 
@@ -310,7 +341,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
         documents = self._filter_documents(query)
         context = {"query": query, "answer": answer, "documents": documents}
         user_message = self.user_prompt.render(**context)
-        system_prompt = self.system_prompt.render(**context) if self.system_prompt else None
+        system_prompt = self.system_prompt.render(**context)
         return LLMInputPrompt(
             system_prompt=system_prompt,
             user_message=user_message,
@@ -321,14 +352,14 @@ class BaseAnswerEvaluator(BaseEvaluator):
         documents = self._filter_documents(query)
         context = {"query": query, "game": game, "documents": documents}
         user_message = self.user_prompt.render(**context)
-        system_prompt = self.system_prompt.render(**context) if self.system_prompt else None
+        system_prompt = self.system_prompt.render(**context)
         return LLMInputPrompt(
             system_prompt=system_prompt,
             user_message=user_message,
         )
 
     @classmethod
-    def from_config(cls, config: BaseAnswerEvaluatorConfig, llm_provider: BaseLLMProvider):
+    def from_config(cls, config: T_AnswerConfig, llm_provider: BaseLLMProvider):
         return cls(config, llm_provider)
 
     @classmethod
@@ -359,8 +390,7 @@ class BaseAnswerEvaluator(BaseEvaluator):
         # Check if we will actually include documents in any prompt
         system_placeholders: set[str] = set()
         user_placeholders: set[str] = set()
-        if self.system_prompt:
-            system_placeholders = get_placeholders_and_tags(self.system_prompt)
+        system_placeholders = get_placeholders_and_tags(self.system_prompt)
         if self.user_prompt:
             user_placeholders = get_placeholders_and_tags(self.user_prompt)
         all_placeholders = system_placeholders | user_placeholders
@@ -424,6 +454,7 @@ class AnswerEvaluatorFactory:
             if name in cls.registry:
                 logger.warning(f"Overwriting {name} in registry")
             cls.registry[name] = wrapped_class
+            _result_type_registry[f"answer:{name}"] = wrapped_class.result_type
             return wrapped_class
 
         return inner_wrapper
@@ -445,7 +476,7 @@ class AnswerEvaluatorFactory:
                 f"Unknown answer evaluator {evaluator_name}\nValid options are {list(cls.registry.keys())}"
             )
         evaluator_class = cls.registry[evaluator_name]
-        return evaluator_class.result_type
+        return evaluator_class.result_type  # type: ignore
 
     @classmethod
     def create(

@@ -2,11 +2,14 @@ from enum import Enum
 
 
 class StrEnum(str, Enum):
-    # Implementing __str__ to allow for easy conversion to string
-    # e.g. str(RetrievalEvaluatorTypes.CUSTOM_PROMPT) -> "custom_prompt"
-    # otherwise, it's "RetrievalEvaluatorTypes.CUSTOM_PROMPT"
     def __str__(self):
         return self.value
+
+
+# Global registry mapping evaluator names to their result types.
+# Populated by factory @register decorators so that result-type resolution
+# does not need to import the evaluator packages.
+_result_type_registry: dict[str, type] = {}
 
 
 class RetrievalEvaluatorTypes(StrEnum):

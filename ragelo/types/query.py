@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import warnings
 from collections.abc import Iterator
 from typing import Any
 
@@ -8,6 +9,7 @@ from pydantic import BaseModel, field_validator
 from typing_extensions import Self
 
 from ragelo.types.evaluables import AgentAnswer, Document, Evaluable, PairwiseGame
+from ragelo.types.evaluator_utils import resolve_evaluator_result_type
 from ragelo.types.results import EvaluatorResult, RetrievalEvaluatorResult
 
 logger = logging.getLogger(__name__)
@@ -159,9 +161,6 @@ class Query(BaseModel):
             force bool: Whether to overwrite existing evaluations.
             exist_ok bool: Whether to raise an error if the evaluation already exists.
         """
-        # Import here to avoid circular imports
-        from ragelo.evaluators.evaluator_utils import resolve_evaluator_result_type
-
         expected_result_type = resolve_evaluator_result_type(evaluation.evaluator_name, evaluable)
         if not isinstance(evaluation, expected_result_type):
             evaluator_name = evaluation.evaluator_name
@@ -258,7 +257,7 @@ class Query(BaseModel):
         return iter(self.retrieved_docs.values())
 
     @classmethod
-    def assemble_query(cls, query: Self | str, metadata: dict[str, Any] | None = None) -> Self:
+    def build(cls, query: Self | str, metadata: dict[str, Any] | None = None) -> Self:
         """Assembles a Query object from a Query object or a query text.
         Args:
             query Query | str: The query object or the query text.
@@ -277,3 +276,8 @@ class Query(BaseModel):
                     query_data["metadata"] = metadata
             return cls(**query_data)
         return cls(qid="<no_qid>", query=query, metadata=metadata)
+
+    @classmethod
+    def assemble_query(cls, query: Self | str, metadata: dict[str, Any] | None = None) -> Self:
+        warnings.warn("assemble_query() is deprecated, use build() instead", DeprecationWarning, stacklevel=2)
+        return cls.build(query, metadata)

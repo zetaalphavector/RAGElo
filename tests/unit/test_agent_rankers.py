@@ -7,7 +7,7 @@ import pytest
 from ragelo.agent_rankers.elo_ranker import EloRanker
 from ragelo.types.answer_formats import PairwiseEvaluationAnswer
 from ragelo.types.configurations import EloAgentRankerConfig
-from ragelo.types.evaluables import AgentAnswer
+from ragelo.types.evaluables import AgentAnswer, PairwiseGame
 from ragelo.types.experiment import Experiment
 from ragelo.types.results import PairwiseGameEvaluatorResult
 
@@ -69,6 +69,17 @@ class TestEloRanker:
         ]
         assert elo_ranker.get_agent_losses("agent_a") == []
 
+    def test_pairwise_game_reversed_deprecation_compatibility(self):
+        answer_a = AgentAnswer(qid="0", agent="a_agent", text="A answer")
+        answer_b = AgentAnswer(qid="0", agent="z_agent", text="Z answer")
+
+        with pytest.warns(DeprecationWarning, match="PairwiseGame.reversed is deprecated"):
+            game = PairwiseGame(qid="0", agent_a_answer=answer_a, agent_b_answer=answer_b, reversed=True)
+
+        assert game.agent_a_answer.agent == "z_agent"
+        assert game.agent_b_answer.agent == "a_agent"
+        assert game.reversed is False
+
     @pytest.mark.asyncio
     async def test_run_single_game(self, elo_ranker, experiment):
         query = experiment.queries["0"]
@@ -103,6 +114,7 @@ class TestEloRanker:
         assert elo_ranker.losses["agent2"] == 1
         assert elo_ranker.games_played["agent1"] == 1
         assert elo_ranker.games_played["agent2"] == 1
+        assert elo_ranker.total_games == 1
 
     @pytest.mark.asyncio
     async def test_run_single_game_updates_rankings(self, elo_ranker, experiment):
@@ -133,6 +145,47 @@ class TestEloRanker:
 
         assert elo_ranker.agents_scores["agent1"] > elo_ranker.initial_score
         assert elo_ranker.agents_scores["agent2"] < elo_ranker.initial_score
+
+    @pytest.mark.asyncio
+    async def test_run_single_game_uses_canonical_game_order(self, elo_ranker, experiment):
+        query = experiment.queries["0"]
+        query.answers["z_agent"] = AgentAnswer(qid="0", agent="z_agent", text="Z answer")
+        query.answers["a_agent"] = AgentAnswer(qid="0", agent="a_agent", text="A answer")
+        mock_evaluator = MagicMock()
+        mock_evaluator.config.pairwise = True
+
+        async def mock_evaluate_async(eval_tuple):
+            game = eval_tuple[1]
+            assert game.agent_a_answer.agent == "a_agent"
+            assert game.agent_b_answer.agent == "z_agent"
+            return PairwiseGameEvaluatorResult(
+                qid="0",
+                agent_a=game.agent_a_answer.agent,
+                agent_b=game.agent_b_answer.agent,
+                evaluator_name="pairwise",
+                answer=PairwiseEvaluationAnswer(
+                    answer_a_analysis="A is bad",
+                    answer_b_analysis="B is good",
+                    comparison_reasoning="B is better",
+                    winner="B",
+                ),
+            )
+
+        mock_evaluator.evaluate_async = AsyncMock(side_effect=mock_evaluate_async)
+
+        result = await elo_ranker.run_single_game(
+            query=query,
+            agent_a="z_agent",
+            agent_b="a_agent",
+            answer_evaluator=mock_evaluator,
+        )
+
+        assert result.winner == "B"
+        assert elo_ranker.games[0] == ("0", "a_agent", "z_agent", "B")
+        assert elo_ranker.wins["z_agent"] == 1
+        assert elo_ranker.losses["a_agent"] == 1
+        assert elo_ranker.agents_scores["z_agent"] > elo_ranker.initial_score
+        assert elo_ranker.agents_scores["a_agent"] < elo_ranker.initial_score
 
     def test_expected_score(self, elo_ranker):
         assert elo_ranker._expected_score(1000, 1000) == pytest.approx(0.5)
@@ -207,16 +260,18 @@ class TestEloRanker:
         async def mock_evaluate_async(eval_tuple):
             nonlocal call_count
             call_count += 1
+            game = eval_tuple[1]
+            winner = "A" if game.agent_a_answer.agent == "new_agent" else "B"
             return PairwiseGameEvaluatorResult(
                 qid=eval_tuple[0].qid,
-                agent_a="new_agent",
-                agent_b=eval_tuple[1].agent_b_answer.agent,
+                agent_a=game.agent_a_answer.agent,
+                agent_b=game.agent_b_answer.agent,
                 evaluator_name="pairwise",
                 answer=PairwiseEvaluationAnswer(
                     answer_a_analysis="A is good",
                     answer_b_analysis="B is bad",
                     comparison_reasoning="A is better",
-                    winner="A",
+                    winner=winner,
                 ),
             )
 
@@ -236,3 +291,118 @@ class TestEloRanker:
         assert call_count > 0
         # New agent always wins → score should be above initial
         assert result.scores["new_agent"] >= elo_ranker.initial_score
+        assert result.total_games == call_count
+        assert elo_ranker.total_games == call_count
+
+    @pytest.mark.asyncio
+    async def test_add_agent_without_games_uses_canonical_game_order(self, elo_ranker, empty_experiment):
+        qid = empty_experiment.add_query("Question?", query_id="q0")
+        empty_experiment.add_agent_answer(AgentAnswer(qid=qid, agent="a_agent", text="A answer"))
+        empty_experiment.add_agent_answer(AgentAnswer(qid=qid, agent="z_new_agent", text="Z answer"))
+        mock_evaluator = MagicMock()
+        mock_evaluator.config.pairwise = True
+
+        async def mock_evaluate_async(eval_tuple):
+            game = eval_tuple[1]
+            assert game.agent_a_answer.agent == "a_agent"
+            assert game.agent_b_answer.agent == "z_new_agent"
+            return PairwiseGameEvaluatorResult(
+                qid=eval_tuple[0].qid,
+                agent_a=game.agent_a_answer.agent,
+                agent_b=game.agent_b_answer.agent,
+                evaluator_name="pairwise",
+                answer=PairwiseEvaluationAnswer(
+                    answer_a_analysis="A is bad",
+                    answer_b_analysis="B is good",
+                    comparison_reasoning="B is better",
+                    winner="B",
+                ),
+            )
+
+        mock_evaluator.evaluate_async = AsyncMock(side_effect=mock_evaluate_async)
+
+        result = await elo_ranker.add_agent_without_games(
+            experiment=empty_experiment,
+            new_agent="z_new_agent",
+            answer_evaluator=mock_evaluator,
+        )
+
+        assert result.scores["z_new_agent"] > elo_ranker.initial_score
+        assert elo_ranker.wins["z_new_agent"] == 1
+        assert elo_ranker.losses["a_agent"] == 1
+        assert elo_ranker.games[0] == ("q0", "a_agent", "z_new_agent", "B")
+        assert elo_ranker.games_played["z_new_agent"] == 1
+        assert elo_ranker.games_played["a_agent"] == 1
+
+    @pytest.mark.asyncio
+    async def test_run_single_game_stores_game_on_query(self, elo_ranker, experiment):
+        query = experiment.queries["0"]
+        mock_evaluator = MagicMock()
+        mock_evaluator.config.pairwise = True
+
+        mock_result = PairwiseGameEvaluatorResult(
+            qid="0",
+            agent_a="agent1",
+            agent_b="agent2",
+            evaluator_name="pairwise",
+            answer=PairwiseEvaluationAnswer(
+                answer_a_analysis="A is good",
+                answer_b_analysis="B is bad",
+                comparison_reasoning="A is better",
+                winner="A",
+            ),
+        )
+        mock_evaluator.evaluate_async = AsyncMock(return_value=mock_result)
+
+        await elo_ranker.run_single_game(
+            query=query,
+            agent_a="agent1",
+            agent_b="agent2",
+            answer_evaluator=mock_evaluator,
+            experiment=experiment,
+        )
+
+        game_key = "-".join(sorted(["agent1", "agent2"]))
+        assert game_key in query.pairwise_games
+        game = query.pairwise_games[game_key]
+        assert game.agent_a_answer.agent == "agent1"
+        assert game.agent_b_answer.agent == "agent2"
+        assert "pairwise" in game.evaluations
+
+    @pytest.mark.asyncio
+    async def test_add_agent_without_games_stores_games_on_queries(self, elo_ranker, experiment):
+        mock_evaluator = MagicMock()
+        mock_evaluator.config.pairwise = True
+
+        async def mock_evaluate_async(eval_tuple):
+            game = eval_tuple[1]
+            winner = "A" if game.agent_a_answer.agent == "new_agent" else "B"
+            return PairwiseGameEvaluatorResult(
+                qid=eval_tuple[0].qid,
+                agent_a=game.agent_a_answer.agent,
+                agent_b=game.agent_b_answer.agent,
+                evaluator_name="pairwise",
+                answer=PairwiseEvaluationAnswer(
+                    answer_a_analysis="A is good",
+                    answer_b_analysis="B is bad",
+                    comparison_reasoning="A is better",
+                    winner=winner,
+                ),
+            )
+
+        mock_evaluator.evaluate_async = AsyncMock(side_effect=mock_evaluate_async)
+
+        for qid, query in experiment.queries.items():
+            query.answers["new_agent"] = AgentAnswer(qid=qid, agent="new_agent", text="New agent answer")
+
+        await elo_ranker.add_agent_without_games(
+            experiment=experiment,
+            new_agent="new_agent",
+            answer_evaluator=mock_evaluator,
+        )
+
+        queries_with_games = [q for q in experiment.queries.values() if q.pairwise_games]
+        assert len(queries_with_games) > 0
+        for query in queries_with_games:
+            for game in query.pairwise_games.values():
+                assert "new_agent" in (game.agent_a_answer.agent, game.agent_b_answer.agent)

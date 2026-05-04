@@ -5,7 +5,7 @@ import shutil
 import pytest
 
 from ragelo import Experiment, get_agent_ranker, get_answer_evaluator, get_llm_provider, get_retrieval_evaluator
-from ragelo.types.evaluables import AgentAnswer, Document
+from ragelo.types.evaluables import AgentAnswer, ChatMessage, Document
 from ragelo.types.query import Query
 from ragelo.types.results import (
     AnswerEvaluationAnswer,
@@ -84,6 +84,45 @@ class TestExperiment:
         empty_experiment[qid].add_retrieved_doc(doc, agent="agent2")
         assert "agent1" in empty_experiment[qid].retrieved_docs["doc1"].retrieved_by
         assert "agent2" in empty_experiment[qid].retrieved_docs["doc1"].retrieved_by
+
+    def test_add_retrieved_docs_saves_once(self, empty_experiment, mocker):
+        qid = empty_experiment.add_query("Test query", query_id="test1")
+        docs = [Document(qid=qid, did=f"doc{idx}", text=f"Test document {idx}") for idx in range(5)]
+
+        save_spy = mocker.spy(empty_experiment, "save")
+
+        empty_experiment.add_retrieved_docs(docs)
+
+        assert save_spy.call_count == 1
+        assert len(empty_experiment[qid].retrieved_docs) == 5
+
+    def test_add_agent_answers_from_csv_saves_once(self, empty_experiment, mocker, tmp_path):
+        qid = empty_experiment.add_query("Test query", query_id="test1")
+        answers_csv = tmp_path / "answers.csv"
+        answers_csv.write_text(
+            f"qid,agent,answer\n{qid},agent1,Answer one\n{qid},agent2,Answer two\n",
+        )
+
+        save_spy = mocker.spy(empty_experiment, "save")
+
+        empty_experiment.add_agent_answers_from_csv(str(answers_csv))
+
+        assert save_spy.call_count == 1
+        assert set(empty_experiment[qid].answers) == {"agent1", "agent2"}
+
+    def test_add_answers_from_multiple_csv_saves_once(self, empty_experiment, mocker, tmp_path):
+        answers_a = tmp_path / "agent_a.csv"
+        answers_b = tmp_path / "agent_b.csv"
+        answers_a.write_text("qid,query,answer\nq1,Question one,Answer one\nq2,Question two,Answer two\n")
+        answers_b.write_text("qid,query,answer\nq1,Question one,Alt answer one\nq2,Question two,Alt answer two\n")
+
+        save_spy = mocker.spy(empty_experiment, "save")
+
+        empty_experiment.add_answers_from_multiple_csv([str(answers_a), str(answers_b)])
+
+        assert save_spy.call_count == 1
+        assert set(empty_experiment.keys()) == {"q1", "q2"}
+        assert set(empty_experiment["q1"].answers) == {"agent_a", "agent_b"}
         """Test adding agent answers manually"""
         qid = empty_experiment.add_query("Test query", query_id="test1")
 
@@ -126,6 +165,87 @@ class TestExperiment:
             assert len(loaded_experiment[qid].answers) == len(experiment[qid].answers)
             for did, doc in experiment[qid].retrieved_docs.items():
                 assert loaded_experiment[qid].retrieved_docs[did].retrieved_by == doc.retrieved_by
+
+    def test_save_and_load_retrieval_result_with_colliding_evaluator_name(self, tmp_path):
+        """Regression: persisted RetrievalEvaluatorResult must reload as RetrievalEvaluatorResult
+        even when the evaluator name (e.g. "domain_expert") is also registered as an answer evaluator.
+        Previously the loader would resolve to PairwiseGameEvaluatorResult and fail validation.
+        """
+        save_path = tmp_path / "exp.json"
+        cache_path = tmp_path / "exp_results.jsonl"
+        experiment = Experiment(
+            experiment_name="exp",
+            save_path=str(save_path),
+            evaluations_cache_path=str(cache_path),
+            save_on_disk=True,
+        )
+        qid = experiment.add_query("What is RAG?", query_id="q0")
+        experiment.add_retrieved_doc("Some text", query_id=qid, doc_id="d0", agent="agent1")
+        result = RetrievalEvaluatorResult(
+            qid=qid,
+            did="d0",
+            evaluator_name="domain_expert",
+            answer=RetrievalEvaluationAnswer(reasoning="relevant doc", score=2),
+        )
+        query = experiment[qid]
+        doc = query.retrieved_docs["d0"]
+        experiment.add_evaluation((query, doc), result, should_save=True)
+        experiment.save()
+
+        loaded = Experiment(
+            experiment_name="exp",
+            save_path=str(save_path),
+            evaluations_cache_path=str(cache_path),
+            save_on_disk=True,
+        )
+        loaded_doc = loaded[qid].retrieved_docs["d0"]
+        loaded_result = loaded_doc.evaluations.get("domain_expert")
+        assert isinstance(loaded_result, RetrievalEvaluatorResult)
+        assert not isinstance(loaded_result, PairwiseGameEvaluatorResult)
+        assert loaded_result.answer is not None
+        assert loaded_result.answer.score == 2
+        assert loaded_result.answer.reasoning == "relevant doc"
+
+    def test_save_and_load_conversation_only_answers(self, tmp_path):
+        save_path = tmp_path / "conversation_experiment.json"
+        experiment = Experiment(
+            experiment_name="conversation_experiment",
+            save_path=str(save_path),
+            save_on_disk=True,
+            show_results=False,
+            rich_print=False,
+        )
+        experiment.add_query("What is retrieval augmented generation?", query_id="q0")
+        experiment.add_agent_answer(
+            AgentAnswer(
+                qid="q0",
+                agent="agent1",
+                conversation=[
+                    ChatMessage(sender="User", content="What is retrieval augmented generation?"),
+                    ChatMessage(
+                        sender="Assistant",
+                        content="It combines retrieval with generation.",
+                    ),
+                ],
+            )
+        )
+        experiment.save()
+
+        loaded_experiment = Experiment(
+            experiment_name="conversation_experiment",
+            save_path=str(save_path),
+            save_on_disk=True,
+            show_results=False,
+            rich_print=False,
+        )
+
+        loaded_answer = loaded_experiment["q0"].answers["agent1"]
+        assert loaded_answer.text is None
+        assert loaded_answer.conversation is not None
+        assert [str(message) for message in loaded_answer.conversation] == [
+            "User: What is retrieval augmented generation?",
+            "Assistant: It combines retrieval with generation.",
+        ]
 
     def test_get_qrels(self, tmp_path, experiment):
         """Test getting relevance judgments"""
@@ -465,20 +585,30 @@ class TestExperiment:
         # Add four documents retrieved for these queries.
         # Alternatively, we can load them from a csv file with .add_documents_from_csv()
         experiment.add_retrieved_doc("Brasília is the capital of Brazil", query_id="q0", doc_id="d0")
-        experiment.add_retrieved_doc("Rio de Janeiro used to be the capital of Brazil.", query_id="q0", doc_id="d1")
+        experiment.add_retrieved_doc(
+            "Rio de Janeiro used to be the capital of Brazil.",
+            query_id="q0",
+            doc_id="d1",
+        )
         experiment.add_retrieved_doc("Paris is the capital of France.", query_id="q1", doc_id="d2")
         experiment.add_retrieved_doc("Lyon is the second largest city in France.", query_id="q1", doc_id="d3")
 
         # Add the answers generated by agents
         experiment.add_agent_answer(
-            "Brasília is the capital of Brazil, according to [0].", agent="agent1", query_id="q0"
+            "Brasília is the capital of Brazil, according to [0].",
+            agent="agent1",
+            query_id="q0",
         )
         experiment.add_agent_answer(
             "According to [1], Rio de Janeiro used to be the capital of Brazil, until the 60s.",
             agent="agent2",
             query_id="q0",
         )
-        experiment.add_agent_answer("Paris is the capital of France, according to [2].", agent="agent1", query_id="q1")
+        experiment.add_agent_answer(
+            "Paris is the capital of France, according to [2].",
+            agent="agent1",
+            query_id="q1",
+        )
         experiment.add_agent_answer(
             "According to [3], Lyon is the second largest city in France. Meanwhile, Paris is its capital [2].",
             agent="agent2",
@@ -582,7 +712,11 @@ class TestExperimentSerialization:
         assert loaded_result.answer.comparison_reasoning == pairwise_answer_evaluation.answer.comparison_reasoning
 
     def test_experiment_with_evaluations_round_trip(
-        self, tmp_path, retrieval_evaluation, answer_evaluation, pairwise_answer_evaluation
+        self,
+        tmp_path,
+        retrieval_evaluation,
+        answer_evaluation,
+        pairwise_answer_evaluation,
     ):
         """Test saving and loading experiment with evaluations."""
         # Create experiment with save enabled using unique temp paths
@@ -750,3 +884,60 @@ class TestExperimentSerialization:
 
         # Verify no crash occurred and queries were loaded
         assert len(experiment) == 2
+
+    def test_pairwise_game_reconstructed_from_cached_results(self, tmp_path, base_experiment_config):
+        """Test that pairwise games are reconstructed when loading evaluation results from cache.
+
+        When an experiment is saved with pairwise evaluations, the games exist in the JSONL
+        results cache but may not be present in `query.pairwise_games` on reload. The loader
+        should reconstruct the game from the result's agent_a/agent_b fields if both agents
+        have answers in the query.
+        """
+        save_path = tmp_path / "experiment.json"
+        results_path = tmp_path / "results.jsonl"
+
+        base_experiment_config["save_on_disk"] = True
+        base_experiment_config["save_path"] = str(save_path)
+        base_experiment_config["evaluations_cache_path"] = str(results_path)
+
+        # First, create an experiment with a pairwise game and evaluation
+        exp1 = Experiment(**base_experiment_config)
+        query = exp1["0"]
+        game = query.add_pairwise_game("agent1", "agent2")
+        pairwise_result = PairwiseGameEvaluatorResult(
+            qid="0",
+            agent_a="agent1",
+            agent_b="agent2",
+            evaluator_name="pairwise",
+            answer=PairwiseEvaluationAnswer(
+                answer_a_analysis="A is strong",
+                answer_b_analysis="B is weaker",
+                comparison_reasoning="A wins",
+                winner="A",
+            ),
+        )
+        exp1.add_evaluation((query, game), pairwise_result, should_save=True)
+        exp1.save()
+
+        # Now clear the pairwise games from the saved JSON (simulating the bug scenario
+        # where games are not saved or lost on reload)
+        with open(save_path) as f:
+            saved_data = json.load(f)
+        for q_data in saved_data.get("queries", {}).values():
+            q_data["pairwise_games"] = {}
+        with open(save_path, "w") as f:
+            json.dump(saved_data, f)
+
+        # Reload experiment — the JSONL has the pairwise result but the JSON has no games
+        exp2 = Experiment(**base_experiment_config)
+
+        loaded_query = exp2["0"]
+        assert (
+            "agent1-agent2" in loaded_query.pairwise_games
+        ), "Pairwise game should be reconstructed from cached results"
+        loaded_game = loaded_query.pairwise_games["agent1-agent2"]
+        assert "pairwise" in loaded_game.evaluations
+        loaded_eval = loaded_game.evaluations["pairwise"]
+        assert isinstance(loaded_eval, PairwiseGameEvaluatorResult)
+        assert isinstance(loaded_eval.answer, PairwiseEvaluationAnswer)
+        assert loaded_eval.answer.winner == "A"

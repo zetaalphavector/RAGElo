@@ -15,6 +15,7 @@ from ragelo.types.answer_formats import (
     RDNAMNoAspectsAnswer,
     RetrievalEvaluationAnswer,
     RubricAnswerFormat,
+    RubricPointwiseAnswerFormat,
 )
 
 
@@ -97,7 +98,7 @@ class AnswerEvaluatorResult(EvaluatorResult):
     """
 
     agent: Annotated[str, SkipJsonSchema] = Field(description="The agent that provided the answer.")
-    answer: AnswerEvaluationAnswer | None = None
+    answer: AnswerEvaluationAnswer | RubricPointwiseAnswerFormat | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -106,8 +107,13 @@ class AnswerEvaluatorResult(EvaluatorResult):
         if isinstance(data, dict) and "answer" in data and data["answer"] is not None:
             answer_data = data["answer"]
             if isinstance(answer_data, dict) and not isinstance(answer_data, BaseModel):
-                # Deserialize as AnswerEvaluationAnswer by default
-                data["answer"] = AnswerEvaluationAnswer.model_validate(answer_data)
+                try:
+                    data["answer"] = AnswerEvaluationAnswer.model_validate(answer_data)
+                except ValidationError:
+                    try:
+                        data["answer"] = RubricPointwiseAnswerFormat.model_validate(answer_data)
+                    except ValidationError:
+                        pass
         return data
 
     @property
@@ -163,43 +169,39 @@ class PairwiseGameEvaluatorResult(EvaluatorResult):
     @property
     def answer_a_analysis(self) -> str | None:
         """Convenience property to access answer_a_analysis from the nested answer."""
-        if self.answer and hasattr(self.answer, "answer_a_analysis"):
-            return self.answer.answer_a_analysis  # type: ignore
+        if isinstance(self.answer, PairwiseEvaluationAnswer):
+            return self.answer.answer_a_analysis
         return None
 
     @property
     def answer_b_analysis(self) -> str | None:
         """Convenience property to access answer_b_analysis from the nested answer."""
-        if self.answer and hasattr(self.answer, "answer_b_analysis"):
-            return self.answer.answer_b_analysis  # type: ignore
+        if isinstance(self.answer, PairwiseEvaluationAnswer):
+            return self.answer.answer_b_analysis
         return None
 
     @property
     def comparison_reasoning(self) -> str | None:
         """Convenience property to access comparison_reasoning from the nested answer."""
-        if self.answer and hasattr(self.answer, "comparison_reasoning"):
-            return self.answer.comparison_reasoning  # type: ignore
+        if isinstance(self.answer, PairwiseEvaluationAnswer):
+            return self.answer.comparison_reasoning
         return None
 
     @property
     def winner(self) -> Literal["A", "B", "C"] | None:
         """Convenience property to access winner from the nested answer."""
-        if self.answer and hasattr(self.answer, "winner"):
-            return self.answer.winner  # type: ignore
+        if isinstance(self.answer, (PairwiseEvaluationAnswer, RubricAnswerFormat)):
+            return self.answer.winner
         return None
 
     def strigify_answer(self) -> str:
-        if (
-            self.answer
-            and hasattr(self.answer, "answer_a_analysis")
-            and hasattr(self.answer, "answer_b_analysis")
-            and hasattr(self.answer, "comparison_reasoning")
-            and hasattr(self.answer, "winner")
-        ):
+        if isinstance(self.answer, PairwiseEvaluationAnswer):
             return f"""Answer A Analysis: {self.answer.answer_a_analysis}
 Answer B Analysis: {self.answer.answer_b_analysis}
 Comparison Reasoning: {self.answer.comparison_reasoning}
 Winner: {self.answer.winner}"""
+        if isinstance(self.answer, RubricAnswerFormat):
+            return f"""Winner: {self.answer.winner}"""
         return "No answer available"
 
     @computed_field

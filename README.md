@@ -77,6 +77,138 @@ for doc in query.retrieved_docs.values():
 
 This calls the same evaluation logic as `evaluate_experiment` but scoped to one query, making it suitable for incremental pipelines.
 
+### 📝 Rubric-based evaluators
+
+Rubric evaluators automatically generate evaluation criteria from the retrieved documents and then score each agent's answer against those criteria. Two modes are available:
+
+- **Pointwise** (`rubric_pointwise`) — scores a single answer against the rubric, returning per-criterion fulfillment and an average score.
+- **Pairwise** (`rubric_pairwise`) — compares two answers side-by-side on each criterion and picks a winner.
+
+```python
+from ragelo import get_answer_evaluator
+
+# Pointwise: evaluate each answer independently
+pointwise = get_answer_evaluator(
+    "rubric_pointwise",
+    llm_provider="openai",
+    expert_in="Machine Learning",
+    n_criteria=5,           # number of criteria the LLM will generate
+)
+pointwise.evaluate_all_evaluables(query)
+
+for agent, answer in query.answers.items():
+    print(agent, answer.evaluation.answer)
+
+# Pairwise: compare pairs of answers on the generated rubric
+pairwise = get_answer_evaluator(
+    "rubric_pairwise",
+    llm_provider="openai",
+    expert_in="Machine Learning",
+    n_criteria=5,
+)
+pairwise.evaluate_experiment(experiment)
+```
+
+#### Criteria weights
+
+When the LLM generates criteria it may optionally assign a **weight** (a positive float) to each criterion. Weights are normalized at scoring time so their absolute scale does not matter. If no weight is generated, all criteria are weighted equally.
+
+#### Graduated scoring (pointwise only)
+
+By default the pointwise evaluator uses binary answers to each criterion (yes/no). However, it also supports **graduated scoring** with the `graduated_scoring` flag in the evaluator configuration:
+
+```python
+pointwise = get_answer_evaluator(
+    "rubric_pointwise",
+    llm_provider="openai",
+    graduated_scoring=True,  # enable graduated scoring
+    max_score=5,             # score range 0–5 (default)
+)
+```
+
+Scores are normalized to `[0, 1]` via `score / max_score` before computing the weighted average.
+
+#### Built-in criteria: evidence recall & citation quality
+
+We also include two built-in criteria to evaluate `evidence_recall` (how many relevant snippets were included in the answer) and `citation_quality` (wether the answer is well supported with proper citations). They can be added to the rubric with the `evidence_recall` and `citation_quality` flags.
+
+**Evidence recall** — checks how many expected evidence snippets appear in the answer:
+
+```python
+pointwise = get_answer_evaluator(
+    "rubric_pointwise",
+    llm_provider="openai",
+    evidence_recall=True,
+    evidence_recall_weight=1.5,  # relative importance (default 1.0)
+    evidence_snippets={          # optional per-query snippets
+        "q0": ["Brasília is the capital", "since 1960"],
+    },
+)
+```
+
+Evidence snippets are resolved in priority order: `evidence_snippets` config → `Criterion.evidence` fields from the generated rubric → text of relevant documents in the query.
+
+**Citation quality** — evaluates whether the answer supports claims with citations and includes relevant excerpts:
+
+```python
+pointwise = get_answer_evaluator(
+    "rubric_pointwise",
+    llm_provider="openai",
+    citation_quality=True,
+    citation_quality_weight=2.0,  # relative importance (default 1.0)
+)
+```
+
+The LLM identifies claims and citations; ratios (claims with citations, citations with excerpts) are computed programmatically. The final citation quality score is the average of both ratios.
+
+Both built-in criteria work with the pairwise evaluator as well — each agent is evaluated independently and the scores are compared to determine the winner.
+
+### � Evaluating multi-turn conversations
+
+All pairwise evaluators (`pairwise`, `domain_expert`, `custom_pairwise`, `rubric_pairwise`) support multi-turn conversations in addition to single-text answers. Instead of providing a plain text answer, pass a list of `ChatMessage` objects as the `conversation` parameter:
+
+```python
+from ragelo import get_answer_evaluator
+from ragelo.types.evaluables import AgentAnswer, ChatMessage, PairwiseGame
+from ragelo.types.query import Query
+
+query = Query(qid="q0", query="What is the capital of Brazil?")
+
+answer_a = AgentAnswer(
+    qid="q0",
+    agent="agent1",
+    conversation=[
+        ChatMessage(sender="User", content="What is the capital of Brazil?"),
+        ChatMessage(sender="Assistant", content="Could you clarify — current or historical?"),
+        ChatMessage(sender="User", content="Current capital."),
+        ChatMessage(sender="Assistant", content="Brasília has been the capital since 1960."),
+    ],
+)
+
+answer_b = AgentAnswer(
+    qid="q0",
+    agent="agent2",
+    conversation=[
+        ChatMessage(sender="User", content="What is the capital of Brazil?"),
+        ChatMessage(sender="Assistant", content="Rio de Janeiro is a major city in Brazil."),
+    ],
+)
+
+evaluator = get_answer_evaluator("pairwise", llm_provider="openai")
+result = evaluator.evaluate(query, answer_a=answer_a, answer_b=answer_b)
+print(result.answer.winner)  # "A", "B", or "C"
+```
+
+When conversations are detected, the evaluator automatically adapts the prompt — section headers switch to "Conversation with Assistant A/B" instead of "Answer from Assistant A/B", and the system prompt adjusts its wording accordingly.
+
+Each `AgentAnswer` must have **either** `text` or `conversation` set (not both). The two agents in a pairwise game can use different formats — one can provide `text` while the other provides `conversation`.
+
+There is also a dedicated `chat_pairwise` evaluator with a system prompt specifically optimized for multi-turn conversation comparison. Use it when both agents always produce multi-turn conversations:
+
+```python
+evaluator = get_answer_evaluator("chat_pairwise", llm_provider="openai")
+```
+
 ### 📜 Evaluating multiple documents or answers
 
 RAGElo supports `Experiments` to keep track of which documents and answers were already evaluated and to compute overall scores for each Agent:
@@ -126,6 +258,39 @@ elo_ranker.run(experiment)
 ```
 
 The experiment is save as a JSON in `ragelo_cache/experiment_name.json`. 
+
+### 🎮 Interactive Elo ranking
+
+Instead of running a full tournament, you can rank agents incrementally — run individual games or onboard a brand-new agent with minimal matches:
+
+```python
+from ragelo import get_agent_ranker, get_answer_evaluator
+from ragelo.utils import call_async_fn
+
+elo = get_agent_ranker("elo")
+answer_evaluator = get_answer_evaluator("pairwise", llm_provider="openai")
+
+# Run a single game between two agents on a query
+result = call_async_fn(
+    elo.run_single_game,
+    query=query,
+    agent_a="agent1",
+    agent_b="agent2",
+    answer_evaluator=answer_evaluator,
+)
+print(elo.agents_scores)  # updated Elo ratings
+
+# Rank a new agent with minimal games (picks informative opponents automatically)
+tournament = call_async_fn(
+    elo.add_agent_without_games,
+    experiment=experiment,
+    new_agent="agent3",
+    answer_evaluator=answer_evaluator,
+)
+print(tournament.scores)
+```
+
+`add_agent_without_games` selects up to 3 informative opponents and high-entropy questions, stopping early once the rating confidence interval is tight enough (up to 10 games).
 
 ### 🛠️ Using a custom prompt and injecting metadata
 For a more complete example, we can evaluate with a custom prompt, and inject metadata into our evaluation prompt:
