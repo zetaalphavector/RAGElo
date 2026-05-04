@@ -165,18 +165,20 @@ class EloRanker(AgentRanker[EloAgentRankerConfig]):
         winner = evaluation.winner
         assert winner is not None
         score_val = self.score_map[winner]
+        game_agent_a = game.agent_a_answer.agent
+        game_agent_b = game.agent_b_answer.agent
 
         if winner == "A":
-            self.wins[agent_a] = self.wins.get(agent_a, 0) + 1
-            self.losses[agent_b] = self.losses.get(agent_b, 0) + 1
+            self.wins[game_agent_a] = self.wins.get(game_agent_a, 0) + 1
+            self.losses[game_agent_b] = self.losses.get(game_agent_b, 0) + 1
         elif winner == "B":
-            self.wins[agent_b] = self.wins.get(agent_b, 0) + 1
-            self.losses[agent_a] = self.losses.get(agent_a, 0) + 1
+            self.wins[game_agent_b] = self.wins.get(game_agent_b, 0) + 1
+            self.losses[game_agent_a] = self.losses.get(game_agent_a, 0) + 1
         else:
-            self.ties[agent_a] = self.ties.get(agent_a, 0) + 1
-            self.ties[agent_b] = self.ties.get(agent_b, 0) + 1
-        self.games.append((query.qid, agent_a, agent_b, winner))
-        self.update_rankings(agent_a, agent_b, score_val)
+            self.ties[game_agent_a] = self.ties.get(game_agent_a, 0) + 1
+            self.ties[game_agent_b] = self.ties.get(game_agent_b, 0) + 1
+        self.games.append((query.qid, game_agent_a, game_agent_b, winner))
+        self.update_rankings(game_agent_a, game_agent_b, score_val)
         self.total_games += 1
         if experiment is not None:
             experiment.add_evaluation((query, game), evaluation, exist_ok=True, should_print=False)
@@ -435,19 +437,21 @@ class EloRanker(AgentRanker[EloAgentRankerConfig]):
                 winner = eval_result.winner
                 assert winner is not None
                 score_val = self.score_map[winner]
+                game_agent_a = game.agent_a_answer.agent
+                game_agent_b = game.agent_b_answer.agent
 
                 if winner == "A":
-                    self.wins[new_agent] = self.wins.get(new_agent, 0) + 1
-                    self.losses[opp] = self.losses.get(opp, 0) + 1
+                    self.wins[game_agent_a] = self.wins.get(game_agent_a, 0) + 1
+                    self.losses[game_agent_b] = self.losses.get(game_agent_b, 0) + 1
                 elif winner == "B":
-                    self.wins[opp] = self.wins.get(opp, 0) + 1
-                    self.losses[new_agent] = self.losses.get(new_agent, 0) + 1
+                    self.wins[game_agent_b] = self.wins.get(game_agent_b, 0) + 1
+                    self.losses[game_agent_a] = self.losses.get(game_agent_a, 0) + 1
                 else:
-                    self.ties[new_agent] = self.ties.get(new_agent, 0) + 1
-                    self.ties[opp] = self.ties.get(opp, 0) + 1
+                    self.ties[game_agent_a] = self.ties.get(game_agent_a, 0) + 1
+                    self.ties[game_agent_b] = self.ties.get(game_agent_b, 0) + 1
 
-                self.games.append((query.qid, new_agent, opp, winner))
-                self.update_rankings(new_agent, opp, score_val)
+                self.games.append((query.qid, game_agent_a, game_agent_b, winner))
+                self.update_rankings(game_agent_a, game_agent_b, score_val)
                 self.total_games += 1
 
                 if experiment is not None:
@@ -458,9 +462,11 @@ class EloRanker(AgentRanker[EloAgentRankerConfig]):
                         should_print=False,
                     )
 
-                if winner == "A":
+                if winner == "A" and game_agent_a == new_agent:
                     observed_success_sum += 1.0
-                elif winner != "B":
+                elif winner == "B" and game_agent_b == new_agent:
+                    observed_success_sum += 1.0
+                elif winner == "C":
                     observed_success_sum += 0.5
                 observed_games += 1
 

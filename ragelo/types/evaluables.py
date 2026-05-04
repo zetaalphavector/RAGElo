@@ -226,15 +226,24 @@ class PairwiseGame(Evaluable[PairwiseGameEvaluatorResult]):
 
     agent_a_answer: AgentAnswer
     agent_b_answer: AgentAnswer
+    reversed: bool = False
 
     @model_validator(mode="before")
     @classmethod
     def ensure_agent_order(cls, values):
         agent_a_answer = values.get("agent_a_answer")
         agent_b_answer = values.get("agent_b_answer")
-        agent_answers = sorted([agent_a_answer, agent_b_answer], key=lambda x: x.agent)
+        reversed_order = values.get("reversed", False)
+        if reversed_order:
+            warnings.warn(
+                "PairwiseGame.reversed is deprecated; use model_construct for internal swapped games",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        agent_answers = sorted([agent_a_answer, agent_b_answer], reverse=reversed_order, key=lambda x: x.agent)
         values["agent_a_answer"] = agent_answers[0]
         values["agent_b_answer"] = agent_answers[1]
+        values["reversed"] = False
         return values
 
     @computed_field
