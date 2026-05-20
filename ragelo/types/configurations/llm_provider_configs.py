@@ -32,3 +32,9 @@ class InstructorConfiguration(LLMProviderConfig):
     use_cache: bool = True
     cache_size: int = 1000
     model_kwargs: dict[str, str] = {}
+
+
+class LiteLLMConfiguration(LLMProviderConfig):
+    model: str
+    api_key: SecretStr | None = None
+    api_base: str | None = None

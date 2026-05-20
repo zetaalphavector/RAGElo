@@ -13,6 +13,7 @@ from ragelo.types.configurations.base_configs import BaseConfig, BaseEvaluatorCo
 from ragelo.types.configurations.cli_configs import CLIConfig
 from ragelo.types.configurations.llm_provider_configs import (
     InstructorConfiguration,
+    LiteLLMConfiguration,
     LLMProviderConfig,
     OllamaConfiguration,
     OpenAIConfiguration,
@@ -34,6 +35,7 @@ __all__ = [
     "OpenAIConfiguration",
     "OllamaConfiguration",
     "InstructorConfiguration",
+    "LiteLLMConfiguration",
     "AgentRankerConfig",
     "EloAgentRankerConfig",
     "BaseAnswerEvaluatorConfig",

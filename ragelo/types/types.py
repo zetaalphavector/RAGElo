@@ -28,6 +28,7 @@ class LLMProviderTypes(StrEnum):
     OPENAI = "openai"
     OLLAMA = "ollama"
     INSTRUCTOR = "instructor"
+    LITELLM = "litellm"
 
 
 class AnswerEvaluatorTypes(StrEnum):
