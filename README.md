@@ -27,13 +27,7 @@ When working from source we recommend an isolated environment (e.g., `uv venv &&
 Environment variables and providers:
 - OpenAI requires `OPENAI_API_KEY`. Set it in your shell or load it via dotenv before invoking the CLI.
 - Ollama is supported for local models (`--llm-provider-name ollama`).
-- The **Instructor provider** enables multi-provider support (Anthropic, Mistral, Cohere, and more) via the [`instructor`](https://github.com/jxnl/instructor) library. Install the extra and the relevant SDK:
-  ```bash
-  pip install 'ragelo[instructor]' anthropic   # for Anthropic/Claude
-  pip install 'ragelo[instructor]' mistralai   # for Mistral
-  pip install 'ragelo[instructor]' cohere      # for Cohere
-  ```
-  Then set the matching API key environment variable (e.g. `ANTHROPIC_API_KEY`).
+- The **AnyLLM provider** enables multi-provider support through Mozilla's [`any-llm-sdk`](https://docs.mozilla.ai/). Select a provider/model pair and set the matching provider API key environment variable or pass `api_key` explicitly.
 
 ## 🚀 Library Quickstart
 
@@ -235,8 +229,9 @@ experiment.add_agent_answer("According to [3], Lyon is the second largest city i
 
 llm_provider = get_llm_provider("openai", model="gpt-4.1-nano")
 
-# Or use the Instructor provider to run evaluations against Anthropic Claude (requires pip install 'ragelo[instructor]' anthropic):
-# llm_provider = get_llm_provider("instructor", model="anthropic/claude-sonnet-4-20250514")
+# Or use the AnyLLM provider for supported providers through Mozilla's any-llm-sdk:
+# llm_provider = get_llm_provider("any_llm", provider="anthropic", model="claude-sonnet-4-20250514")
+
 
 retrieval_evaluator = get_retrieval_evaluator("reasoner", llm_provider, rich_print=True)
 answer_evaluator = get_answer_evaluator("pairwise", llm_provider, rich_print=True)

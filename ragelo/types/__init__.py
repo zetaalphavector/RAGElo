@@ -6,6 +6,7 @@ from ragelo.types.answer_formats import (
 )
 from ragelo.types.configurations import (
     AgentRankerConfig,
+    AnyLLMConfiguration,
     BaseAnswerEvaluatorConfig,
     BaseConfig,
     EloAgentRankerConfig,
@@ -33,6 +34,7 @@ __all__ = [
     "AgentAnswer",
     "AgentRankerConfig",
     "AgentRankerTypes",
+    "AnyLLMConfiguration",
     "CLIConfig",
     "BaseAnswerEvaluatorConfig",
     "BaseConfig",

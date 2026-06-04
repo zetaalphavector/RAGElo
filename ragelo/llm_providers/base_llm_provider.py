@@ -48,10 +48,13 @@ class BaseLLMProvider(ABC, Generic[T_Config]):
     @classmethod
     def get_config_class(cls) -> type[LLMProviderConfig]:
         hint = get_type_hints(cls)["config"]
-        if hasattr(hint, "__args__"):
-            for arg in hint.__args__:
-                if isinstance(arg, type) and issubclass(arg, LLMProviderConfig):
-                    return arg
+        args = hint.__args__ if hasattr(hint, "__args__") else (hint,)
+        for arg in args:
+            if isinstance(arg, type) and issubclass(arg, LLMProviderConfig):
+                return arg
+            bound = getattr(arg, "__bound__", None)
+            if isinstance(bound, type) and issubclass(bound, LLMProviderConfig):
+                return bound
         return hint
 
 

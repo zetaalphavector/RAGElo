@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, SecretStr
 
@@ -32,3 +32,12 @@ class InstructorConfiguration(LLMProviderConfig):
     use_cache: bool = True
     cache_size: int = 1000
     model_kwargs: dict[str, str] = {}
+
+
+class AnyLLMConfiguration(LLMProviderConfig):
+    provider: str
+    model: str
+    api_key: SecretStr | None = None
+    api_base: str | None = None
+    api_version: str | None = None
+    model_kwargs: dict[str, Any] = {}

@@ -6,11 +6,23 @@ import pytest
 from pydantic import SecretStr, ValidationError
 from tenacity import RetryError
 
+from ragelo.llm_providers.any_llm_provider import AnyLLMProvider
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.llm_providers.openai_client import OpenAIProvider
-from ragelo.types.configurations import LLMProviderConfig, OpenAIConfiguration
+from ragelo.types.configurations import AnyLLMConfiguration, LLMProviderConfig, OpenAIConfiguration
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.results import PairwiseEvaluationAnswer, RetrievalEvaluationAnswer
+
+
+def _any_llm_response(raw_answer: str, parsed_answer):
+    message = MagicMock()
+    message.content = raw_answer
+    message.parsed = parsed_answer
+    choice = MagicMock()
+    choice.message = message
+    response = MagicMock()
+    response.choices = [choice]
+    return response
 
 
 class TestOpenAIProvider:
@@ -308,6 +320,108 @@ class TestOpenAIProvider:
         provider_regular = OpenAIProvider(config=config_regular)
         assert provider_regular.config
         assert provider_regular.config.temperature == 0.7
+
+
+class TestAnyLLMProvider:
+    def test_retrieval_evaluation(self):
+        parsed_answer = RetrievalEvaluationAnswer(
+            reasoning="The document is highly relevant to the query",
+            score=2,
+        )
+        client = MagicMock()
+        client.acompletion = AsyncMock(return_value=_any_llm_response(parsed_answer.model_dump_json(), parsed_answer))
+        provider = AnyLLMProvider(AnyLLMConfiguration(provider="openai", model="fake-model"), client=client)
+
+        result = provider(
+            LLMInputPrompt(user_message="Evaluate the relevance of this document."),
+            response_schema=RetrievalEvaluationAnswer,
+        )
+
+        assert isinstance(result, LLMResponseType)
+        assert result.parsed_answer == parsed_answer
+        assert result.raw_answer == parsed_answer.model_dump_json()
+        call_args = client.acompletion.call_args
+        assert call_args.kwargs["model"] == "fake-model"
+        assert call_args.kwargs["messages"] == [
+            {"role": "user", "content": "Evaluate the relevance of this document."}
+        ]
+        assert call_args.kwargs["response_format"] == RetrievalEvaluationAnswer
+        assert call_args.kwargs["temperature"] == 0.1
+        assert call_args.kwargs["max_tokens"] == 4096
+        assert call_args.kwargs["seed"] == 42
+
+    def test_system_and_user_prompt(self):
+        from ragelo.llm_providers.any_llm_provider import AnyLLMProvider
+
+        parsed_answer = RetrievalEvaluationAnswer(reasoning="ok", score=1)
+        client = MagicMock()
+        client.acompletion = AsyncMock(return_value=_any_llm_response(parsed_answer.model_dump_json(), parsed_answer))
+        provider = AnyLLMProvider(AnyLLMConfiguration(provider="anthropic", model="fake-model"), client=client)
+
+        provider(
+            LLMInputPrompt(system_prompt="You are an evaluator.", user_message="Evaluate this."),
+            response_schema=RetrievalEvaluationAnswer,
+        )
+
+        assert client.acompletion.call_args.kwargs["messages"] == [
+            {"role": "system", "content": "You are an evaluator."},
+            {"role": "user", "content": "Evaluate this."},
+        ]
+
+    def test_messages_list_input(self):
+        from ragelo.llm_providers.any_llm_provider import AnyLLMProvider
+
+        parsed_answer = RetrievalEvaluationAnswer(reasoning="ok", score=1)
+        client = MagicMock()
+        client.acompletion = AsyncMock(return_value=_any_llm_response(parsed_answer.model_dump_json(), parsed_answer))
+        provider = AnyLLMProvider(AnyLLMConfiguration(provider="mistral", model="fake-model"), client=client)
+        messages = [
+            {"role": "system", "content": "You are an evaluator."},
+            {"role": "user", "content": "Evaluate this."},
+        ]
+
+        provider(LLMInputPrompt(messages=messages), response_schema=RetrievalEvaluationAnswer)
+
+        assert client.acompletion.call_args.kwargs["messages"] == messages
+
+    def test_raw_json_is_validated_when_parsed_answer_is_missing(self):
+        from ragelo.llm_providers.any_llm_provider import AnyLLMProvider
+
+        raw_answer = '{"reasoning":"ok","score":1}'
+        client = MagicMock()
+        client.acompletion = AsyncMock(return_value=_any_llm_response(raw_answer, None))
+        provider = AnyLLMProvider(AnyLLMConfiguration(provider="openai", model="fake-model"), client=client)
+
+        result = provider(LLMInputPrompt(user_message="Test"), response_schema=RetrievalEvaluationAnswer)
+
+        assert result.parsed_answer == RetrievalEvaluationAnswer(reasoning="ok", score=1)
+
+    def test_api_error_raises_retry_error(self):
+        from ragelo.llm_providers.any_llm_provider import AnyLLMProvider
+
+        client = MagicMock()
+        client.acompletion = AsyncMock(side_effect=RuntimeError("Connection refused"))
+        provider = AnyLLMProvider(AnyLLMConfiguration(provider="openai", model="fake-model"), client=client)
+
+        with pytest.raises(RetryError) as exc_info:
+            provider(LLMInputPrompt(user_message="Test"), response_schema=RetrievalEvaluationAnswer)
+
+        underlying = str(exc_info.value.last_attempt.exception())
+        assert "AnyLLM request failed" in underlying
+        assert "Connection refused" in underlying
+
+    def test_get_llm_provider_any_llm_via_factory(self, monkeypatch):
+        from ragelo.llm_providers import get_llm_provider
+        from ragelo.llm_providers.any_llm_provider import AnyLLM, AnyLLMProvider
+
+        client = MagicMock()
+        monkeypatch.setattr(AnyLLM, "create", lambda *args, **kwargs: client)
+
+        provider = get_llm_provider("any_llm", provider="openai", model="fake-model", api_key="test-secret-key")
+
+        assert isinstance(provider, AnyLLMProvider)
+        assert provider.config.provider == "openai"
+        assert provider.config.model == "fake-model"
 
 
 class TestExternalAdapterProvider:
