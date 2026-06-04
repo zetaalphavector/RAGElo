@@ -44,7 +44,7 @@ class ReasonerEvaluator(BaseRetrievalEvaluator): ...
 
 # Instantiation (via factory functions)
 evaluator = get_retrieval_evaluator("reasoner", llm_provider=provider)
-provider = get_llm_provider("openai", api_key="...")
+provider = get_llm_provider("anyllm", model="gpt-5-mini", api_key="...")
 ranker = get_agent_ranker("elo")
 ```
 

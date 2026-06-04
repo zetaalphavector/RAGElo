@@ -28,7 +28,7 @@ class OpenAIProvider(BaseLLMProvider):
 
     def __init__(self, config: OpenAIConfiguration, client: AsyncOpenAI | None = None) -> None:
         super().__init__(config)
-        self.__openai_client = client or self.__get_openai_client(config)
+        self.__openai_client = client or self.__get_client(config)
         if self.config.model.startswith("gpt-5") or self.config.model.startswith("o"):
             self.config.temperature = None
         elif self.config.reasoning_effort:
@@ -132,7 +132,7 @@ class OpenAIProvider(BaseLLMProvider):
         )
 
     @staticmethod
-    def __get_openai_client(openai_config: OpenAIConfiguration) -> AsyncOpenAI:
+    def __get_client(openai_config: OpenAIConfiguration) -> AsyncOpenAI:
         if openai_config.api_type == "azure":
             if openai_config.api_base is None:
                 raise ValueError("Azure-OpenAI base url (api_base) not found in configuration.")

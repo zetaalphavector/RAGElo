@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import itertools
 import logging
 import random
@@ -509,7 +507,7 @@ class AnswerEvaluatorFactory:
 
 def get_answer_evaluator(
     evaluator_name: AnswerEvaluatorTypes | str | None = None,
-    llm_provider: BaseLLMProvider | str = "openai",
+    llm_provider: BaseLLMProvider | str = "anyllm",
     config: BaseAnswerEvaluatorConfig | None = None,
     **kwargs,
 ) -> BaseAnswerEvaluator:

@@ -1,6 +1,6 @@
 import os
 from abc import ABC, abstractmethod
-from typing import Generic, TypeVar, get_type_hints
+from typing import Any, Generic, TypeVar, get_type_hints
 
 from pydantic import BaseModel
 
@@ -17,8 +17,9 @@ class BaseLLMProvider(ABC, Generic[T_Config]):
     config: T_Config | None
     api_key_env_var: str = "OPENAI_API_KEY"
 
-    def __init__(self, config: T_Config | None = None):
+    def __init__(self, config: T_Config | None = None, client: Any = None) -> None:
         self.config = config
+        self.client = client
 
     def __call__(
         self,
@@ -41,9 +42,10 @@ class BaseLLMProvider(ABC, Generic[T_Config]):
     def from_config(
         cls,
         config: T_Config,
+        client: Any = None,
     ) -> "BaseLLMProvider":
         """Inits the LLM provider from a credentials file."""
-        return cls(config)
+        return cls(config, client)
 
     @classmethod
     def get_config_class(cls) -> type[LLMProviderConfig]:
@@ -104,7 +106,7 @@ class LLMProviderFactory:
 
 
 def get_llm_provider(
-    name: LLMProviderTypes | str,
+    name: LLMProviderTypes | str = LLMProviderTypes.ANYLLM,
     config: LLMProviderConfig | None = None,
     **kwargs,
 ) -> BaseLLMProvider:

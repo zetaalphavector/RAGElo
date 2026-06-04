@@ -351,8 +351,6 @@ class TestAnyLLMProvider:
         assert call_args.kwargs["seed"] == 42
 
     def test_system_and_user_prompt(self):
-        from ragelo.llm_providers.any_llm_provider import AnyLLMProvider
-
         parsed_answer = RetrievalEvaluationAnswer(reasoning="ok", score=1)
         client = MagicMock()
         client.acompletion = AsyncMock(return_value=_any_llm_response(parsed_answer.model_dump_json(), parsed_answer))
@@ -417,9 +415,10 @@ class TestAnyLLMProvider:
         client = MagicMock()
         monkeypatch.setattr(AnyLLM, "create", lambda *args, **kwargs: client)
 
-        provider = get_llm_provider("any_llm", provider="openai", model="fake-model", api_key="test-secret-key")
+        provider = get_llm_provider("anyllm", provider="openai", model="fake-model", api_key="test-secret-key")
 
         assert isinstance(provider, AnyLLMProvider)
+        assert provider.config
         assert provider.config.provider == "openai"
         assert provider.config.model == "fake-model"
 
@@ -429,8 +428,8 @@ class TestExternalAdapterProvider:
         """Simulates an external adapter that wraps a pre-configured client."""
 
         class ExternalAdapterProvider(BaseLLMProvider):
-            def __init__(self, some_client):
-                super().__init__()
+            def __init__(self, some_client, config=None):
+                super().__init__(config)
                 self.client = some_client
 
             async def call_async(self, input, response_schema): ...

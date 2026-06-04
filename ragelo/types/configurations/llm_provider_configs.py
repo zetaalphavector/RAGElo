@@ -35,8 +35,8 @@ class InstructorConfiguration(LLMProviderConfig):
 
 
 class AnyLLMConfiguration(LLMProviderConfig):
-    provider: str
-    model: str
+    provider: str = "openai"
+    model: str = "gpt-5.4-nano"
     api_key: SecretStr | None = None
     api_base: str | None = None
     api_version: str | None = None

@@ -2,8 +2,6 @@
 It receives a set of queries used to retrieve a document and their respective retrieved documents,
 and returns a score or a label for each document."""
 
-from __future__ import annotations
-
 import logging
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, Callable, get_type_hints
@@ -225,7 +223,7 @@ class RetrievalEvaluatorFactory:
 
 def get_retrieval_evaluator(
     evaluator_name: RetrievalEvaluatorTypes | str | None = None,
-    llm_provider: BaseLLMProvider | str = "openai",
+    llm_provider: BaseLLMProvider | str = "anyllm",
     config: BaseRetrievalEvaluatorConfig | None = None,
     **kwargs,
 ) -> BaseRetrievalEvaluator:

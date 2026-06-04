@@ -36,7 +36,7 @@ To use RAGElo as a library, all you need to do is import RAGElo, initialize an `
 ```python
 from ragelo import get_retrieval_evaluator
 
-evaluator = get_retrieval_evaluator("RDNAM", llm_provider="openai")
+evaluator = get_retrieval_evaluator("RDNAM")
 result = evaluator.evaluate(query="What is the capital of France?", document='Lyon is the second largest city in France.')
 print(result.answer)
 # Output: RDNAMEvaluationAnswer(reasoning='...', score=1.0, intent_match=None, trustworthiness=None)
@@ -61,7 +61,7 @@ query = Query(qid="q0", query="What is the capital of Brazil?")
 query.add_retrieved_doc(Document(qid="q0", did="d0", text="Brasília is the capital of Brazil."))
 query.add_agent_answer(AgentAnswer(qid="q0", agent="agent1", text="Brasília."))
 
-retrieval_evaluator = get_retrieval_evaluator("reasoner", llm_provider="openai")
+retrieval_evaluator = get_retrieval_evaluator("reasoner")
 retrieval_evaluator.evaluate_all_evaluables(query)
 
 # Each document now has an evaluation attached
@@ -84,7 +84,6 @@ from ragelo import get_answer_evaluator
 # Pointwise: evaluate each answer independently
 pointwise = get_answer_evaluator(
     "rubric_pointwise",
-    llm_provider="openai",
     expert_in="Machine Learning",
     n_criteria=5,           # number of criteria the LLM will generate
 )
@@ -96,7 +95,6 @@ for agent, answer in query.answers.items():
 # Pairwise: compare pairs of answers on the generated rubric
 pairwise = get_answer_evaluator(
     "rubric_pairwise",
-    llm_provider="openai",
     expert_in="Machine Learning",
     n_criteria=5,
 )
@@ -114,7 +112,6 @@ By default the pointwise evaluator uses binary answers to each criterion (yes/no
 ```python
 pointwise = get_answer_evaluator(
     "rubric_pointwise",
-    llm_provider="openai",
     graduated_scoring=True,  # enable graduated scoring
     max_score=5,             # score range 0–5 (default)
 )
@@ -131,7 +128,6 @@ We also include two built-in criteria to evaluate `evidence_recall` (how many re
 ```python
 pointwise = get_answer_evaluator(
     "rubric_pointwise",
-    llm_provider="openai",
     evidence_recall=True,
     evidence_recall_weight=1.5,  # relative importance (default 1.0)
     evidence_snippets={          # optional per-query snippets
@@ -147,7 +143,6 @@ Evidence snippets are resolved in priority order: `evidence_snippets` config →
 ```python
 pointwise = get_answer_evaluator(
     "rubric_pointwise",
-    llm_provider="openai",
     citation_quality=True,
     citation_quality_weight=2.0,  # relative importance (default 1.0)
 )
@@ -188,7 +183,7 @@ answer_b = AgentAnswer(
     ],
 )
 
-evaluator = get_answer_evaluator("pairwise", llm_provider="openai")
+evaluator = get_answer_evaluator("pairwise")
 result = evaluator.evaluate(query, answer_a=answer_a, answer_b=answer_b)
 print(result.answer.winner)  # "A", "B", or "C"
 ```
@@ -200,7 +195,7 @@ Each `AgentAnswer` must have **either** `text` or `conversation` set (not both).
 There is also a dedicated `chat_pairwise` evaluator with a system prompt specifically optimized for multi-turn conversation comparison. Use it when both agents always produce multi-turn conversations:
 
 ```python
-evaluator = get_answer_evaluator("chat_pairwise", llm_provider="openai")
+evaluator = get_answer_evaluator("chat_pairwise")
 ```
 
 ### 📜 Evaluating multiple documents or answers
@@ -227,10 +222,10 @@ experiment.add_agent_answer("According to [1], Rio de Janeiro used to be the cap
 experiment.add_agent_answer("Paris is the capital of France, according to [2].", agent="agent1", query_id="q1")
 experiment.add_agent_answer("According to [3], Lyon is the second largest city in France. Meanwhile, Paris is its capital [2].", agent="agent2", query_id="q1")
 
-llm_provider = get_llm_provider("openai", model="gpt-4.1-nano")
+llm_provider = get_llm_provider("anyllm", model="gpt-4.1-nano")
 
 # Or use the AnyLLM provider for supported providers through Mozilla's any-llm-sdk:
-# llm_provider = get_llm_provider("any_llm", provider="anthropic", model="claude-sonnet-4-20250514")
+# llm_provider = get_llm_provider("anyllm", provider="anthropic", model="claude-sonnet-4-20250514")
 
 
 retrieval_evaluator = get_retrieval_evaluator("reasoner", llm_provider, rich_print=True)
@@ -263,7 +258,7 @@ from ragelo import get_agent_ranker, get_answer_evaluator
 from ragelo.utils import call_async_fn
 
 elo = get_agent_ranker("elo")
-answer_evaluator = get_answer_evaluator("pairwise", llm_provider="openai")
+answer_evaluator = get_answer_evaluator("pairwise")
 
 # Run a single game between two agents on a query
 result = call_async_fn(
@@ -318,7 +313,7 @@ class ResponseSchema(BaseModel):
 
 evaluator = get_retrieval_evaluator(
     "custom_prompt", # name of the retrieval evaluator
-    llm_provider="openai", # Which LLM provider to use
+    llm_provider="anyllm", # Which LLM provider to use
     system_prompt=system_prompt, # your custom prompt
     user_prompt=user_prompt, # your custom prompt
     result_type=ResponseSchema, # The response schema for the LLM. 

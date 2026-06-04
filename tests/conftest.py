@@ -158,7 +158,7 @@ class MockLLMProvider(BaseLLMProvider):
         self.async_call_mocker = AsyncMock()
 
     @classmethod
-    def from_config(cls, config: LLMProviderConfig):
+    def from_config(cls, config: LLMProviderConfig, client: Any | None = None):
         return cls(config)
 
     async def call_async(
@@ -608,6 +608,7 @@ def mock_llm_provider_factory(monkeypatch):
 
     monkeypatch.setitem(LLMProviderFactory.registry, LLMProviderTypes.OPENAI, MockLLMProvider)
     monkeypatch.setitem(LLMProviderFactory.registry, LLMProviderTypes.OLLAMA, MockLLMProvider)
+    monkeypatch.setitem(LLMProviderFactory.registry, LLMProviderTypes.ANYLLM, MockLLMProvider)
     monkeypatch.setattr(MockLLMProvider, "api_key_env_var", "OPENAI_API_KEY", raising=False)
 
 

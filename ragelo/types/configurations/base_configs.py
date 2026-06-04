@@ -23,7 +23,7 @@ class BaseConfig(BaseModel):
         description="Whether to render evaluation result tables and summaries to the console.",
         validation_alias=AliasChoices("show_results", "verbose"),
     )
-    llm_provider_name: str = Field(default="openai", description="The name of the LLM provider to be used.")
+    llm_provider_name: str = Field(default="anyllm", description="The name of the LLM provider to be used.")
     use_progress_bar: bool = Field(
         default=True,
         description="Whether or not to show a progress bar while running the evaluations.",

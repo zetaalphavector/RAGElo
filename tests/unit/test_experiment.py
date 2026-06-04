@@ -615,7 +615,7 @@ class TestExperiment:
             query_id="q1",
         )
 
-        llm_provider = get_llm_provider("openai", model="gpt-4.1-nano")
+        llm_provider = get_llm_provider("anyllm", model="gpt-4.1-nano")
 
         retrieval_evaluator = get_retrieval_evaluator("reasoner", llm_provider=llm_provider, rich_print=True)
         answer_evaluator = get_answer_evaluator("pairwise", llm_provider=llm_provider, rich_print=True)
