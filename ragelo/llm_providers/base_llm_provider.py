@@ -1,8 +1,6 @@
-from __future__ import annotations
-
 import os
 from abc import ABC, abstractmethod
-from typing import TypeVar, get_type_hints
+from typing import Generic, TypeVar, get_type_hints
 
 from pydantic import BaseModel
 
@@ -12,13 +10,14 @@ from ragelo.types.types import LLMProviderTypes
 from ragelo.utils import call_async_fn
 
 T_Schema = TypeVar("T_Schema", bound=BaseModel)
+T_Config = TypeVar("T_Config", bound=LLMProviderConfig)
 
 
-class BaseLLMProvider(ABC):
-    config: LLMProviderConfig | None
+class BaseLLMProvider(ABC, Generic[T_Config]):
+    config: T_Config | None
     api_key_env_var: str = "OPENAI_API_KEY"
 
-    def __init__(self, config: LLMProviderConfig | None = None):
+    def __init__(self, config: T_Config | None = None):
         self.config = config
 
     def __call__(
@@ -41,7 +40,7 @@ class BaseLLMProvider(ABC):
     @classmethod
     def from_config(
         cls,
-        config: LLMProviderConfig,
+        config: T_Config,
     ) -> "BaseLLMProvider":
         """Inits the LLM provider from a credentials file."""
         return cls(config)
