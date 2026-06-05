@@ -1,5 +1,6 @@
 import json
 import os
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -422,6 +423,28 @@ class TestAnyLLMProvider:
         assert provider.config.provider == "openai"
         assert provider.config.model == "fake-model"
 
+    def test_get_llm_provider_defaults_to_any_llm(self, monkeypatch):
+        from ragelo.llm_providers import get_llm_provider
+        from ragelo.llm_providers.any_llm_provider import AnyLLM, AnyLLMProvider
+
+        captured_args: dict[str, Any] = {}
+        client = MagicMock()
+
+        def create_client(*args, **kwargs):
+            captured_args["args"] = args
+            captured_args["kwargs"] = kwargs
+            return client
+
+        monkeypatch.setattr(AnyLLM, "create", create_client)
+
+        provider = get_llm_provider()
+
+        assert isinstance(provider, AnyLLMProvider)
+        assert provider.config
+        assert provider.config.provider == "openai"
+        assert provider.config.model == "gpt-5.4-nano"
+        assert captured_args == {"args": ("openai",), "kwargs": {}}
+
 
 class TestExternalAdapterProvider:
     def test_external_adapter_can_be_instantiated_without_config(self):
@@ -432,14 +455,16 @@ class TestExternalAdapterProvider:
                 super().__init__(config)
                 self.client = some_client
 
-            async def call_async(self, input, response_schema): ...
+            async def call_async(self, input, response_schema) -> LLMResponseType:
+                raise NotImplementedError
 
         provider = ExternalAdapterProvider(some_client=object())
         assert provider.config is None
 
     def test_base_llm_provider_still_accepts_config(self):
         class SimpleProvider(BaseLLMProvider):
-            async def call_async(self, input, response_schema): ...
+            async def call_async(self, input, response_schema) -> LLMResponseType:
+                raise NotImplementedError
 
         config = LLMProviderConfig()
         provider = SimpleProvider(config=config)
@@ -464,7 +489,8 @@ class TestExternalAdapterProvider:
                 super().__init__()
                 self.client = client
 
-            async def call_async(self, input, response_schema): ...
+            async def call_async(self, input, response_schema) -> LLMResponseType:
+                raise NotImplementedError
 
         provider = ExternalAdapterProvider(client=object())
         provider.call_async = AsyncMock(return_value=expected)  # type: ignore[method-assign]
@@ -517,6 +543,7 @@ class TestOllamaProviderFactory:
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         provider = get_llm_provider("ollama", model="test-model")
         assert isinstance(provider, OllamaProvider)
+        assert provider.config
         assert provider.config.model == "test-model"
 
 
@@ -635,6 +662,7 @@ class TestInstructorProvider:
         monkeypatch.setattr(instructor, "from_provider", lambda *args, **kwargs: mock_client)
         provider = get_llm_provider("instructor", model="openai/fake-model")
         assert isinstance(provider, InstructorProvider)
+        assert provider.config
         assert provider.config.model == "openai/fake-model"
 
     def test_api_key_forwarded_to_from_provider(self, monkeypatch):

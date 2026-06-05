@@ -2,6 +2,8 @@
 It receives a set of queries used to retrieve a document and their respective retrieved documents,
 and returns a score or a label for each document."""
 
+from __future__ import annotations
+
 import logging
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, Callable, get_type_hints
