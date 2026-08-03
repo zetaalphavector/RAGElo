@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any, Literal, Sequence
 
 from ragelo.measures import is_coverage_measure, make_qrel, make_run, parse_measure
 from ragelo.presenters import render_evaluation, render_retrieval_summary
+from ragelo.types.answer_formats import SubtopicJudgment
 from ragelo.types.evaluables import AgentAnswer, ChatMessage, Document, Evaluable
 from ragelo.types.evaluator_utils import resolve_evaluator_result_type
 from ragelo.types.query import Query
@@ -503,11 +504,10 @@ class Experiment:
                     if retrieval_evaluator_name is not None and name != retrieval_evaluator_name:
                         continue
                     answer = getattr(evaluation, "answer", None)
-                    criteria_addressed = getattr(answer, "criteria_addressed", None)
-                    if not criteria_addressed:
+                    if not isinstance(answer, SubtopicJudgment):
                         continue
-                    for criterion_name in criteria_addressed:
-                        qrels.append(make_qrel(qid, did, 1, subtopic=criterion_name))
+                    for subtopic in answer.subtopics():
+                        qrels.append(make_qrel(qid, did, 1, subtopic=subtopic))
         if not qrels:
             logger.warning(
                 "No addressed rubric criteria found. Coverage measures need judgements from a "

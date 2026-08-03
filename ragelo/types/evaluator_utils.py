@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal, get_args, get_origin
+
+from pydantic import BaseModel
 
 from ragelo.types.evaluables import AgentAnswer, Document, PairwiseGame
 from ragelo.types.results import EvaluatorResult
@@ -59,3 +61,26 @@ def resolve_evaluator_result_type(
         return _result_type_registry[f"retrieval:{RetrievalEvaluatorTypes(name_str)}"]
     except (ValueError, KeyError):
         raise ValueError(f"Unknown evaluator: {name_str}")
+
+
+def default_answer_type(result_type: type[EvaluatorResult]) -> type[BaseModel]:
+    """The answer format an evaluator asks the LLM to produce.
+
+    A result's `answer` annotation is the union of formats it must be able to *store*: its own,
+    plus those of other judges writing to the same evaluable. The first member is the format the
+    evaluator produces, so member order is load-bearing and not merely cosmetic. The union may be
+    wrapped in `Annotated` to carry the discriminator.
+    """
+    annotation = result_type.model_fields["answer"].annotation
+    if annotation is None:
+        raise ValueError(f"Result type {result_type} does not have an 'answer' field with annotation")
+    for candidate in get_args(annotation) or (annotation,):
+        if candidate is type(None):
+            continue
+        if get_origin(candidate) is Annotated:
+            candidate = get_args(candidate)[0]
+        members = [arg for arg in get_args(candidate) if arg is not type(None)]
+        candidate = members[0] if members else candidate
+        if isinstance(candidate, type) and issubclass(candidate, BaseModel):
+            return candidate
+    raise ValueError(f"Could not determine the answer type for result type {result_type}")

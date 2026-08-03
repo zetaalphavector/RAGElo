@@ -14,6 +14,7 @@ from ragelo.types import AnswerEvaluatorResult, LLMInputPrompt, PairwiseGameEval
 from ragelo.types.answer_formats import PairwiseEvaluationAnswer, PairwiseWinner, RubricAnswerFormat
 from ragelo.types.configurations import BaseAnswerEvaluatorConfig, PairwiseEvaluatorConfig
 from ragelo.types.evaluables import AgentAnswer, Document, Evaluable, PairwiseGame
+from ragelo.types.evaluator_utils import default_answer_type
 from ragelo.types.types import AnswerEvaluatorTypes, _result_type_registry
 from ragelo.utils import call_async_fn, get_placeholders_and_tags
 
@@ -294,17 +295,7 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
             if isinstance(schema, type):
                 return schema
             return None
-        # Fall back to extracting from result_type
-        answer_field = self.result_type.model_fields.get("answer")
-        if not answer_field or not answer_field.annotation:
-            return None
-        answer_type = answer_field.annotation
-        if hasattr(answer_type, "__args__"):
-            answer_type = next(
-                (arg for arg in answer_type.__args__ if arg is not type(None)),
-                answer_type,
-            )
-        return answer_type
+        return default_answer_type(self.result_type)
 
     def _get_all_evaluables(self, query: Query) -> list[Evaluable]:
         if self.config.pairwise:

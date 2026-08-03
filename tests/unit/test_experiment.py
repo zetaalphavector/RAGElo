@@ -815,6 +815,34 @@ class TestExperimentSerialization:
         assert loaded_result.qid == answer_evaluation.qid
         assert loaded_result.agent == answer_evaluation.agent
 
+    @pytest.mark.parametrize(
+        "payload,expected",
+        [
+            ({"reasoning": "r", "score": 2}, AnswerEvaluationAnswer),
+            (
+                {
+                    "criteria": [
+                        {
+                            "criterion": {"criterion_name": "accuracy", "short_question": "Is it accurate?"},
+                            "reasoning": "r",
+                            "fulfillment": True,
+                        }
+                    ],
+                    "average_score": 1.0,
+                },
+                RubricPointwiseAnswerFormat,
+            ),
+        ],
+    )
+    def test_reloads_answers_saved_before_the_discriminator_existed(self, payload, expected):
+        """Experiments saved by an earlier version carry no `answer_format`, so they are matched
+        structurally. Without this, every previously saved evaluation would fail to load."""
+        reloaded = AnswerEvaluatorResult.model_validate(
+            {"qid": "0", "agent": "agent1", "evaluator_name": "whichever", "answer": payload}
+        )
+
+        assert isinstance(reloaded.answer, expected)
+
     def test_round_trip_rubric_pointwise_evaluation(self):
         """A rubric answer must not reload as the base AnswerEvaluationAnswer.
 

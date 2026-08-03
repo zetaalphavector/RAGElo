@@ -16,6 +16,7 @@ from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_prov
 from ragelo.types import LLMInputPrompt, Query, RetrievalEvaluatorResult
 from ragelo.types.configurations import BaseRetrievalEvaluatorConfig
 from ragelo.types.evaluables import Document, Evaluable
+from ragelo.types.evaluator_utils import default_answer_type
 from ragelo.types.types import RetrievalEvaluatorTypes, _result_type_registry
 from ragelo.utils import call_async_fn
 
@@ -142,14 +143,7 @@ class BaseRetrievalEvaluator(BaseEvaluator[T_Config, RetrievalEvaluatorResult]):
         schema = prompt.llm_response_schema or self.config.llm_response_schema
         if isinstance(schema, type) and issubclass(schema, BaseModel):
             return schema
-
-        answer_field = self.result_type.model_fields.get("answer")
-        if not answer_field or not answer_field.annotation:
-            raise ValueError(f"Result type {self.result_type} does not have an 'answer' field with annotation")
-        answer_type = answer_field.annotation
-        if hasattr(answer_type, "__args__"):
-            answer_type = next((arg for arg in answer_type.__args__ if arg is not type(None)), answer_type)
-        return answer_type
+        return default_answer_type(self.result_type)
 
     def _build_message(self, query: Query, document: Document) -> LLMInputPrompt:
         context = {"query": query, "document": document}

@@ -20,6 +20,7 @@ from ragelo.types.answer_formats import (
     RDNAMEvaluationAnswer,
     RDNAMNoAspectsAnswer,
     RetrievalEvaluationAnswer,
+    RubricCoverageAnswerFormat,
 )
 from ragelo.types.configurations import RubricCoverageEvaluatorConfig
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
@@ -226,6 +227,26 @@ class TestCustomPromptEvaluator:
             llm_provider_mock_retrieval.async_call_mocker.call_args_list[0][0][0].user_message
             == "query: this is a query doc: this is a document q_metadata: q_1 d_metadata: d_1"
         )
+
+
+class TestAnswerFormatSchemas:
+    @pytest.mark.parametrize(
+        "answer_format,hidden",
+        [
+            (RubricCoverageAnswerFormat, {"score"}),
+            (RDNAMEvaluationAnswer, {"reasoning"}),
+        ],
+    )
+    def test_internal_fields_are_hidden_from_the_llm_schema(self, answer_format, hidden):
+        """Fields the evaluator fills in itself must not be requested from the LLM.
+
+        `Annotated[T, SkipJsonSchema]` passes the class rather than a marker instance, which makes
+        `model_json_schema()` raise instead of hiding the field; `SkipJsonSchema[T]` is the form
+        that works.
+        """
+        schema_fields = set(answer_format.model_json_schema()["properties"])
+        assert hidden.isdisjoint(schema_fields)
+        assert hidden < set(answer_format.model_fields)
 
 
 class TestRubricCoverageEvaluator:

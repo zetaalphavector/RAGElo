@@ -46,19 +46,19 @@ Not chasing coverage as a number: a test earns its place only where the behaviou
       unknown name, and `Measure` passthrough; coverage classification; subtopic in `iteration`.
       Owed regardless of this roadmap — it was shipped with the rubric coverage work untested.
       (65% → 86%.)
-- [ ] `AnswerEvaluatorResult` reloads a serialized `RubricPointwiseAnswerFormat` as that type,
+- [x] `AnswerEvaluatorResult` reloads a serialized `RubricPointwiseAnswerFormat` as that type,
       with its criteria intact (results.py:113-124, fallback branch uncovered). The union is
       untagged, so this works only because the strict type is attempted *first*; an adversarial
       review identified making that branch permissive as data corruption, and nothing currently
       fails if someone does.
-- [ ] `PairwiseGameEvaluatorResult` reloads a serialized `RubricAnswerFormat` as that type
+- [x] `PairwiseGameEvaluatorResult` reloads a serialized `RubricAnswerFormat` as that type
       (results.py:163-174, same fallback shape, different union).
-- [ ] `Query.get_qrels` happy path with real values, and honouring `retrieval_evaluator_name`
+- [x] `Query.get_qrels` happy path with real values, and honouring `retrieval_evaluator_name`
       when several judges have scored the same document. Today's `test_get_qrels` asserts only
       `len(qrels) == 2`, so a step-2 protocol could change the values with nothing failing.
-- [ ] `Query.get_qrels` skips a document it cannot score instead of raising. Load-bearing for
+- [x] `Query.get_qrels` skips a document it cannot score instead of raising. Load-bearing for
       half-evaluated experiments; step 2 must not turn it into an exception.
-- [ ] `Query.get_qrels` **zeroes** a score below `relevance_threshold` rather than dropping the
+- [x] `Query.get_qrels` **zeroes** a score below `relevance_threshold` rather than dropping the
       document. Subtle, and the obvious "fix" during a refactor is to drop it, which changes
       `Judged@k` without changing `nDCG@k`.
 
@@ -72,7 +72,7 @@ Deliberately **not** covered, and why:
   `.score` / `.reasoning` / `.strigify_answer`. Reachable only via an answer type that does not
   exist; the tolerance test above already covers the shape that matters.
 
-## Step 1 — discriminated unions on answer formats
+## Step 1 — discriminated unions on answer formats — DONE
 
 **Symptom.** `EvaluatorResult.answer` is a union widened once per judge. Each widening costs a
 hand-rolled `@model_validator(mode="before")` that infers the type structurally — try the strict
@@ -94,7 +94,7 @@ clothing.
 already-saved experiments. Step 0's round-trip tests are the safety net; add one that loads a
 tag-less payload written by the previous version.
 
-## Step 2 — judgments declare their measurable projection
+## Step 2 — judgments declare their measurable projection — DONE
 
 **Symptom.** Layer 3 reads layer 2's concrete classes by duck-typing. `Query.get_qrels` does
 `getattr(evaluation, "score")`; `Experiment.get_rubric_qrels` does
@@ -169,3 +169,39 @@ reason to override `evaluate_async` and retires `criteria_cache` entirely.
   factories, but `registry: dict = {}` on a shared base is a shared-mutable-class-attribute trap
   and the precise return types are what `mypy ragelo` currently checks. Independent of this
   roadmap; do it on its own or not at all.
+
+
+---
+
+## Log
+
+**Steps 1 and 2 landed together** (they touch the same two readers, and splitting them would have
+left `get_qrels` duck-typing into freshly tagged formats).
+
+Delivered: `answer_format` tags on all 10 answer formats, hidden from the JSON schema so the LLM is
+never asked for them; the three storage unions declared with `Field(discriminator=...)`; the 7
+bespoke validators reduced to one-line delegations to a single `_resolve_legacy_answer` shim;
+`GradedJudgment` / `SubtopicJudgment` protocols, with `Query.get_qrels` and
+`Experiment.get_rubric_qrels` consuming them instead of `getattr`.
+
+Measured: duck-typed probes into `answer` 17 → 14 (the 13 remaining are the property wrappers on
+result classes, which step 4 removes); `results.py` 338 → 311 lines while gaining a discriminator
+and legacy shim. End-to-end coverage numbers unchanged.
+
+Two things found on the way, both pre-existing:
+
+- `Annotated[T, SkipJsonSchema]` passes the class rather than a marker instance, which makes
+  `model_json_schema()` **raise** instead of hiding the field. All 14 uses were the broken form, so
+  RDNAM's `reasoning` and the rubric coverage `score` were never actually hidden — and any provider
+  path that builds a schema dict from those models would have crashed. Fixed to `SkipJsonSchema[T]`.
+- Both bases derived the LLM request schema by unwrapping the *storage* union and taking the first
+  member. So the union's member order silently decided what the LLM was asked to produce, and
+  reordering it for legacy-matching purposes changed behaviour. Extracted as
+  `default_answer_type`, which names the coupling and removes the duplicated unwrapping. **This is
+  the layer confusion again** — the storage union should not be the source of the request schema.
+  Worth its own step; folded into step 4's scope note rather than fixed here.
+
+Ordering constraint discovered: the annotation's first member is the evaluator's own format (it
+decides the request schema), while legacy structural matching needs most-constrained-first. These
+are different orders, so the legacy order is passed explicitly to the shim rather than inferred
+from the annotation.

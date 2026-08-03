@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Annotated, Literal
+from typing import Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field, field_validator
 from pydantic.json_schema import SkipJsonSchema
@@ -57,14 +57,45 @@ def swap_pairwise_labels(text: str) -> str:
     return pattern.sub(lambda match: swaps[match.group(0)], text)
 
 
-class EvaluationAnswer(BaseModel):
-    """Base class for LLM-generated evaluation content (without metadata)."""
+@runtime_checkable
+class GradedJudgment(Protocol):
+    """A judgment that contributes a relevance label to qrels.
 
-    pass
+    The metrics layer consumes this rather than reaching into a concrete answer format, so a judge
+    with a new payload needs no change there. `None` means the judgment carries no usable label and
+    the document is left unjudged.
+    """
+
+    def relevance(self) -> float | int | None: ...
+
+
+@runtime_checkable
+class SubtopicJudgment(Protocol):
+    """A judgment that contributes subtopic labels to diversity qrels.
+
+    A query's subtopics are the facets a complete answer must cover, so a document addressing only
+    some of them is partial coverage. Coverage measures need one qrel per addressed subtopic.
+    """
+
+    def subtopics(self) -> list[str]: ...
+
+
+class EvaluationAnswer(BaseModel):
+    """Base class for LLM-generated evaluation content (without metadata).
+
+    `answer_format` tags the concrete format so that the unions on `EvaluatorResult` subclasses
+    can be discriminated instead of inferred from which fields happen to validate. It is hidden
+    from the JSON schema, so the LLM is never asked for it, and defaults to empty on formats
+    defined outside the library, which fall back to structural matching on load.
+    """
+
+    answer_format: SkipJsonSchema[str] = ""
 
 
 class RetrievalEvaluationAnswer(EvaluationAnswer):
     """Output format for evaluating the relevance of a document to a question."""
+
+    answer_format: SkipJsonSchema[Literal["retrieval_relevance"]] = "retrieval_relevance"
 
     reasoning: str = Field(
         ...,
@@ -76,9 +107,14 @@ class RetrievalEvaluationAnswer(EvaluationAnswer):
         "and 2 for highly relevant.",
     )
 
+    def relevance(self) -> float | int | None:
+        return self.score
+
 
 class AnswerEvaluationAnswer(EvaluationAnswer):
     """Output format for evaluating the quality of an answer to a question."""
+
+    answer_format: SkipJsonSchema[Literal["answer_quality"]] = "answer_quality"
 
     reasoning: str = Field(
         ...,
@@ -96,6 +132,8 @@ class AnswerEvaluationAnswer(EvaluationAnswer):
 
 class PairwiseEvaluationAnswer(EvaluationAnswer):
     """Output format for evaluating the quality of answers from two agents to the same question."""
+
+    answer_format: SkipJsonSchema[Literal["pairwise"]] = "pairwise"
 
     answer_a_strengths: list[str] = Field(
         default_factory=list,
@@ -152,7 +190,11 @@ class PairwiseEvaluationAnswer(EvaluationAnswer):
 class RDNAMEvaluationAnswer(RetrievalEvaluationAnswer):
     """LLM-generated evaluation for RDNAM retrieval tasks."""
 
-    reasoning: Annotated[str, SkipJsonSchema] = ""
+    # Narrowing the discriminator in a subclass is intended: an RDNAM payload must not
+    # identify itself as the base relevance format.
+    answer_format: SkipJsonSchema[Literal["rdnam"]] = "rdnam"  # type: ignore[assignment]
+
+    reasoning: SkipJsonSchema[str] = ""
     score: float = Field(
         ...,
         description="An number between 0 and 2 representing the score of the document.",
@@ -169,7 +211,11 @@ class RDNAMEvaluationAnswer(RetrievalEvaluationAnswer):
 class RDNAMNoAspectsAnswer(RetrievalEvaluationAnswer):
     """Output format for evaluating the relevance of a document to a question."""
 
-    reasoning: Annotated[str, SkipJsonSchema] = ""
+    # Narrowing the discriminator in a subclass is intended: an RDNAM payload must not
+    # identify itself as the base relevance format.
+    answer_format: SkipJsonSchema[Literal["rdnam_no_aspects"]] = "rdnam_no_aspects"  # type: ignore[assignment]
+
+    reasoning: SkipJsonSchema[str] = ""
     score: float = Field(
         ...,
         description="An number between 0 and 2 representing the overall score of the document.",
@@ -179,8 +225,12 @@ class RDNAMNoAspectsAnswer(RetrievalEvaluationAnswer):
 class RDNAMMultipleAnnotatorsAnswer(RetrievalEvaluationAnswer):
     """Output format for evaluating the relevance of a document to a question by simulating 5 annotators."""
 
-    score: Annotated[float | int, SkipJsonSchema] = 0.0
-    reasoning: Annotated[str, SkipJsonSchema] = ""
+    # Narrowing the discriminator in a subclass is intended: an RDNAM payload must not
+    # identify itself as the base relevance format.
+    answer_format: SkipJsonSchema[Literal["rdnam_multiple_annotators"]] = "rdnam_multiple_annotators"  # type: ignore[assignment]
+
+    score: SkipJsonSchema[float | int] = 0.0
+    reasoning: SkipJsonSchema[str] = ""
     annotator_1: RDNAMEvaluationAnswer
     annotator_2: RDNAMEvaluationAnswer
     annotator_3: RDNAMEvaluationAnswer
@@ -191,8 +241,14 @@ class RDNAMMultipleAnnotatorsAnswer(RetrievalEvaluationAnswer):
 class RDNAMMultipleAnnotatorsNoAspectsAnswer(RetrievalEvaluationAnswer):
     """Output format for evaluating the relevance of a document to a question by simulating 5 annotators."""
 
-    score: Annotated[float | int, SkipJsonSchema] = 0.0
-    reasoning: Annotated[str, SkipJsonSchema] = ""
+    # Narrowing the discriminator in a subclass is intended: an RDNAM payload must not
+    # identify itself as the base relevance format.
+    answer_format: SkipJsonSchema[Literal["rdnam_multiple_annotators_no_aspects"]] = (
+        "rdnam_multiple_annotators_no_aspects"  # type: ignore[assignment]
+    )
+
+    score: SkipJsonSchema[float | int] = 0.0
+    reasoning: SkipJsonSchema[str] = ""
     annotator_1: RDNAMNoAspectsAnswer
     annotator_2: RDNAMNoAspectsAnswer
     annotator_3: RDNAMNoAspectsAnswer
@@ -362,6 +418,7 @@ class CitationQualitySchema(BaseModel):
 
 
 class RubricAnswerFormat(EvaluationAnswer):
+    answer_format: SkipJsonSchema[Literal["rubric_pairwise"]] = "rubric_pairwise"
     criteria: list[CriterionEvaluation] = Field(..., description="The criteria used for evaluating the answer quality")
     agent_a_wins: float = Field(..., description="The weighted score of criteria that agent A wins")
     agent_b_wins: float = Field(..., description="The weighted score of criteria that agent B wins")
@@ -458,6 +515,7 @@ class CriterionEvaluationPointwise(BaseModel):
 
 
 class RubricPointwiseAnswerFormat(EvaluationAnswer):
+    answer_format: SkipJsonSchema[Literal["rubric_pointwise"]] = "rubric_pointwise"
     criteria: list[CriterionEvaluationPointwise] = Field(
         ..., description="The criteria used for evaluating the answer quality"
     )
@@ -481,8 +539,16 @@ class RubricCoverageAnswerFormat(EvaluationAnswer):
     relevance label while `criteria_addressed` feeds subtopic qrels for coverage measures.
     """
 
+    answer_format: SkipJsonSchema[Literal["rubric_coverage"]] = "rubric_coverage"
+
     reasoning: str = Field(description="A concise explanation of which criteria the document addresses.")
     criteria_addressed: list[str] = Field(
         default_factory=list, description="The names of the rubric criteria this document addresses."
     )
-    score: Annotated[float | int, SkipJsonSchema] = 0
+    score: SkipJsonSchema[float | int] = 0
+
+    def relevance(self) -> float | int | None:
+        return self.score
+
+    def subtopics(self) -> list[str]:
+        return self.criteria_addressed

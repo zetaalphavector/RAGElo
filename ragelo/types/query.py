@@ -8,7 +8,7 @@ from typing import Any
 from pydantic import BaseModel, field_validator
 from typing_extensions import Self
 
-from ragelo.types.answer_formats import Criterion
+from ragelo.types.answer_formats import Criterion, GradedJudgment
 from ragelo.types.evaluables import AgentAnswer, Document, Evaluable, PairwiseGame
 from ragelo.types.evaluator_utils import resolve_evaluator_result_type
 from ragelo.types.results import EvaluatorResult, RetrievalEvaluatorResult
@@ -220,16 +220,14 @@ class Query(BaseModel):
                 )
                 docs_without_relevance += 1
                 continue
-            evaluation = document.evaluations[retrieval_evaluator_name]
-            # Read flattened score
-            try:
-                score = getattr(evaluation, "score")
-            except AttributeError:
-                logger.warning(f"Evaluation {evaluation} does not have a score attribute.")
+            answer = getattr(document.evaluations[retrieval_evaluator_name], "answer", None)
+            if not isinstance(answer, GradedJudgment):
+                logger.warning(f"Evaluation {answer} does not contribute a relevance label.")
                 docs_without_relevance += 1
                 continue
-            if not isinstance(score, int) and not isinstance(score, float):
-                logger.warning(f"Score {score} is not an integer or a float.")
+            score = answer.relevance()
+            if not isinstance(score, (int, float)):
+                logger.warning(f"Relevance {score} is not an integer or a float.")
                 docs_without_relevance += 1
                 continue
 
