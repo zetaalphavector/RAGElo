@@ -8,6 +8,7 @@ from typing import Any
 from pydantic import BaseModel, field_validator
 from typing_extensions import Self
 
+from ragelo.types.answer_formats import Criterion
 from ragelo.types.evaluables import AgentAnswer, Document, Evaluable, PairwiseGame
 from ragelo.types.evaluator_utils import resolve_evaluator_result_type
 from ragelo.types.results import EvaluatorResult, RetrievalEvaluatorResult
@@ -21,6 +22,10 @@ class Query(BaseModel):
         qid str: The query ID.
         query str: The query text.
         metadata Optional[dict[str, Any]]: Metadata that can be templated in the prompt.
+        rubric list[Criterion]: The criteria a complete answer to this query must satisfy, known in the
+            retrieval-evaluation literature as a nugget bank. Shared by every evaluator that grades
+            against it: `rubric_coverage` over retrieved documents, `rubric_pointwise` and
+            `rubric_pairwise` over agent answers.
         retrieved_docs dict[str, Document]: A dictionary of retrieved documents, where the key is the document ID.
         answers list[AgentAnswer]: The list of agent answers.
         pairwise_games list[PairwiseGame]: The list games to be played between agent's answers.
@@ -30,6 +35,7 @@ class Query(BaseModel):
     qid: str
     query: str
     metadata: dict[str, Any] | None = None
+    rubric: list[Criterion] = []
     retrieved_docs: dict[str, Document] = {}
     answers: dict[str, AgentAnswer] = {}
     pairwise_games: dict[str, PairwiseGame] = {}
@@ -231,7 +237,7 @@ class Query(BaseModel):
         if docs_without_relevance > 0:
             logger.warning(f"Query {self.qid} has {docs_without_relevance} documents without relevance.")
         if docs_without_relevance == len(self.retrieved_docs):
-            logger.error(f"Query {self.qid} has no documents without relevance.")
+            logger.error(f"Query {self.qid} has no documents with relevance.")
         return qrels
 
     def get_runs(self, agents: list[str] | None = None) -> dict[str, dict[str, dict[str, float]]]:

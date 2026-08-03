@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from pydantic.json_schema import SkipJsonSchema
 from typing_extensions import Self
 
@@ -202,11 +202,14 @@ class RDNAMMultipleAnnotatorsNoAspectsAnswer(RetrievalEvaluationAnswer):
 
 class Criterion(BaseModel):
     criterion_name: str = Field(
-        description="The name of the criterion to be used to evaluate the quality of the responses."
+        description="The name of the criterion to be used to evaluate the quality of the responses. "
+        "Normalized to a valid Python identifier, as it is used as a response-schema field name "
+        "and as a subtopic id in diversity qrels."
     )
     evidence: list[str] = Field(
+        default_factory=list,
         description="The list of documents IDs or snippets that support the criterion. "
-        "If no documents support the criterion, leave this list empty."
+        "If no documents support the criterion, leave this list empty.",
     )
     short_question: str = Field(
         description="A short, yes/no question that can be used to evaluate the quality of the responses."
@@ -216,6 +219,16 @@ class Criterion(BaseModel):
         description="The relative importance of this criterion. "
         "Higher values give more weight in the final score. If not provided, all criteria are weighted equally.",
     )
+
+    @field_validator("criterion_name", mode="after")
+    @classmethod
+    def normalize_criterion_name(cls, name: str) -> str:
+        normalized = re.sub(r"\W+", "_", name.strip()).strip("_")
+        if normalized and normalized[0].isdigit():
+            normalized = f"c_{normalized}"
+        if not normalized:
+            raise ValueError(f"criterion_name {name!r} has no alphanumeric characters to build an identifier from")
+        return normalized
 
 
 class CriterionEvaluation(BaseModel):
@@ -457,3 +470,19 @@ class RubricPointwiseAnswerFormat(EvaluationAnswer):
 
 class RubricSchema(BaseModel):
     criteria: list[Criterion] = Field(description="The criteria to be used to evaluate the quality of the responses.")
+
+
+class RubricCoverageAnswerFormat(EvaluationAnswer):
+    """Output format for judging which of a query's rubric criteria a retrieved document addresses.
+
+    The LLM answers one criterion at a time through a per-query response schema, so
+    `criteria_addressed` is assembled by the evaluator rather than free-listed by the LLM.
+    `score` is the number of criteria addressed, which makes the flat qrels read as a graded
+    relevance label while `criteria_addressed` feeds subtopic qrels for coverage measures.
+    """
+
+    reasoning: str = Field(description="A concise explanation of which criteria the document addresses.")
+    criteria_addressed: list[str] = Field(
+        default_factory=list, description="The names of the rubric criteria this document addresses."
+    )
+    score: Annotated[float | int, SkipJsonSchema] = 0

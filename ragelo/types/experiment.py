@@ -13,8 +13,9 @@ import os
 import warnings
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Literal, Sequence
+from typing import TYPE_CHECKING, Any, Literal, Sequence
 
+from ragelo.measures import is_coverage_measure, make_qrel, make_run, parse_measure
 from ragelo.presenters import render_evaluation, render_retrieval_summary
 from ragelo.types.evaluables import AgentAnswer, ChatMessage, Document, Evaluable
 from ragelo.types.evaluator_utils import resolve_evaluator_result_type
@@ -26,6 +27,9 @@ from ragelo.types.results import (
     PairwiseGameEvaluatorResult,
     RetrievalEvaluatorResult,
 )
+
+if TYPE_CHECKING:
+    from ir_measures import Qrel
 
 logger = logging.getLogger(__name__)
 
@@ -396,6 +400,9 @@ class Experiment:
         Evaluate the retrieval performance of agents using specified metrics.
         Args:
             metrics (list[str]): A list of metrics to use. defaults to ["Precision@10", "nDCG@10", "Judged@10"].
+                Coverage measures (`alpha_nDCG`, `alpha_DCG`, `StRecall`, `NRBP`, `nNRBP`) are computed over
+                the rubric qrels from `get_rubric_qrels()`; every other measure over the flat qrels from
+                `get_qrels()`. Coverage measures additionally require `pip install 'ir-measures[pyndeval]'`.
             relevance_threshold (int): The threshold above which a document is considered relevant (default is 0).
             retrieval_evaluator_name (str | None): The name of the retrieval evaluator to use to get the relevance
                 of the documents.
@@ -426,33 +433,87 @@ class Experiment:
 
         try:
             import ir_measures
-            from ir_measures import parse_measure
         except ImportError:
             raise ImportError("ir_measures is not installed. Please install it with `pip install ir-measures`")
+        measures = [parse_measure(metric) for metric in metrics]
+        metrics = [str(m) for m in measures]
+        flat_measures = [m for m in measures if not is_coverage_measure(m)]
+        coverage_measures = [m for m in measures if is_coverage_measure(m)]
+
         qrels = self.get_qrels(
             relevance_threshold=relevance_threshold,
             retrieval_evaluator_name=retrieval_evaluator_name,
         )
+        rubric_qrels = (
+            self.get_rubric_qrels(retrieval_evaluator_name=retrieval_evaluator_name) if coverage_measures else []
+        )
         runs = self.get_runs()
-        measures = []
-        for metric in metrics:
-            try:
-                measure = parse_measure(metric)
-            except NameError:
-                valid_metrics = list(ir_measures.measures.registry.keys())
-                raise ValueError(f"Metric {metric} not found. Valid metrics are: {valid_metrics}")
-            measures.append(measure)
-        metrics = [str(m) for m in measures]
         results = {}
         for agent, run in runs.items():
-            # Transform the keys of the results back to strings
-            results[agent] = {
-                str(k): v
-                for k, v in ir_measures.calc_aggregate(measures, qrels, run).items()  # type: ignore
-            }
+            scores: dict[str, float] = {}
+            if flat_measures:
+                # Transform the keys of the results back to strings
+                scores.update(
+                    {
+                        str(k): v
+                        for k, v in ir_measures.calc_aggregate(flat_measures, qrels, run).items()  # type: ignore
+                    }
+                )
+            if coverage_measures:
+                coverage_run = make_run(run)
+                scores.update(
+                    {
+                        str(k): v
+                        for k, v in ir_measures.calc_aggregate(  # type: ignore
+                            coverage_measures, rubric_qrels, coverage_run
+                        ).items()
+                    }
+                )
+            results[agent] = scores
 
         render_retrieval_summary(results, metrics, relevance_threshold, self.rich_print)
         return results
+
+    def get_rubric_qrels(
+        self,
+        retrieval_evaluator_name: str | None = None,
+    ) -> list["Qrel"]:
+        """
+        Retrieve subtopic qrels, where each of a query's rubric criteria is one subtopic.
+
+        Coverage measures such as `StRecall` and `alpha_nDCG` reward a ranking that collectively
+        addresses all of a query's criteria and discount redundancy, so they need to know which
+        criterion each document addresses. The flat qrels from `get_qrels()` cannot express that:
+        they hold one relevance value per document. Here the criterion name travels in the
+        `iteration` field, which is where `ir_measures` expects a subtopic id.
+
+        Only judgements from a `rubric_coverage` evaluator contribute, since only those record
+        which criteria a document addresses.
+        Args:
+            retrieval_evaluator_name (str | None): The name of the retrieval evaluator to read the addressed
+                criteria from. If None, any evaluation carrying addressed criteria is used.
+        Returns:
+            list[Qrel]: One qrel per (query, criterion, addressing document).
+        """
+
+        qrels = []
+        for qid, query in self.queries.items():
+            for did, document in query.retrieved_docs.items():
+                for name, evaluation in document.evaluations.items():
+                    if retrieval_evaluator_name is not None and name != retrieval_evaluator_name:
+                        continue
+                    answer = getattr(evaluation, "answer", None)
+                    criteria_addressed = getattr(answer, "criteria_addressed", None)
+                    if not criteria_addressed:
+                        continue
+                    for criterion_name in criteria_addressed:
+                        qrels.append(make_qrel(qid, did, 1, subtopic=criterion_name))
+        if not qrels:
+            logger.warning(
+                "No addressed rubric criteria found. Coverage measures need judgements from a "
+                "rubric_coverage evaluator."
+            )
+        return qrels
 
     def get_qrels(
         self,
@@ -869,7 +930,12 @@ class Experiment:
 
         queries_data = data.get("queries", {})
         for qid, q_data in queries_data.items():
-            q_object = Query(qid=qid, query=q_data["query"], metadata=q_data.get("metadata"))
+            q_object = Query(
+                qid=qid,
+                query=q_data["query"],
+                metadata=q_data.get("metadata"),
+                rubric=q_data.get("rubric", []),
+            )
             for did, doc_data in q_data.get("retrieved_docs", {}).items():
                 doc_object = Document(
                     qid=qid,

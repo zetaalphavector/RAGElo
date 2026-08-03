@@ -68,6 +68,15 @@ class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     )
 
 
+class RubricCoverageEvaluatorConfig(BaseRetrievalEvaluatorConfig):
+    evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.RUBRIC_COVERAGE
+    expert_in: str = Field(description="What the LLM should mimic being an expert in.")
+    company: str | None = Field(
+        default=None,
+        description="Name of the company or organization that the user that submitted the query works for.",
+    )
+
+
 class CustomPromptEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.CUSTOM_PROMPT
     user_prompt: Optional[Template] = Field(

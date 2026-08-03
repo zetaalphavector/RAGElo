@@ -8,6 +8,7 @@ import logging
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, Callable, get_type_hints
 
+from pydantic import BaseModel
 from tenacity import RetryError
 
 from ragelo.evaluators.base_evaluator import BaseEvaluator, T_Config
@@ -81,18 +82,8 @@ class BaseRetrievalEvaluator(BaseEvaluator[T_Config, RetrievalEvaluatorResult]):
             if isinstance(cached_eval, RetrievalEvaluatorResult):
                 return cached_eval
 
-        # Get the answer schema type from the result_type's 'answer' field
-        answer_field = self.result_type.model_fields.get("answer")
-        if not answer_field or not answer_field.annotation:
-            raise ValueError(f"Result type {self.result_type} does not have an 'answer' field with annotation")
-
-        answer_type = answer_field.annotation
-        # Handle Optional types (answer_type might be "SomeType | None")
-        if hasattr(answer_type, "__args__"):
-            # Get the first non-None type from the union
-            answer_type = next((arg for arg in answer_type.__args__ if arg is not type(None)), answer_type)
-
         llm_input = self._build_message(query, document)
+        answer_type = self._resolve_response_schema(llm_input)
         parsed_answer = None
         raw_answer = ""
         try:
@@ -142,10 +133,28 @@ class BaseRetrievalEvaluator(BaseEvaluator[T_Config, RetrievalEvaluatorResult]):
             )
         return tuples_to_eval
 
+    def _resolve_response_schema(self, prompt: LLMInputPrompt) -> type[BaseModel]:
+        """Prefer a per-call schema, then the config's, then the result_type's `answer` annotation.
+
+        Evaluators whose response shape depends on the query (a rubric with one field per criterion)
+        set `llm_response_schema` on the prompt they build.
+        """
+        schema = prompt.llm_response_schema or self.config.llm_response_schema
+        if isinstance(schema, type) and issubclass(schema, BaseModel):
+            return schema
+
+        answer_field = self.result_type.model_fields.get("answer")
+        if not answer_field or not answer_field.annotation:
+            raise ValueError(f"Result type {self.result_type} does not have an 'answer' field with annotation")
+        answer_type = answer_field.annotation
+        if hasattr(answer_type, "__args__"):
+            answer_type = next((arg for arg in answer_type.__args__ if arg is not type(None)), answer_type)
+        return answer_type
+
     def _build_message(self, query: Query, document: Document) -> LLMInputPrompt:
         context = {"query": query, "document": document}
         user_message = self.user_prompt.render(**context) if self.user_prompt else None
-        system_prompt = self.system_prompt.render(**context)
+        system_prompt = self.system_prompt.render(**context) if self.system_prompt else None
 
         return LLMInputPrompt(
             system_prompt=system_prompt,

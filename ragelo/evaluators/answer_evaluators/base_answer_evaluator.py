@@ -341,7 +341,7 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
         documents = self._filter_documents(query)
         context = {"query": query, "answer": answer, "documents": documents}
         user_message = self.user_prompt.render(**context)
-        system_prompt = self.system_prompt.render(**context)
+        system_prompt = self.system_prompt.render(**context) if self.system_prompt else None
         return LLMInputPrompt(
             system_prompt=system_prompt,
             user_message=user_message,
@@ -352,7 +352,7 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
         documents = self._filter_documents(query)
         context = {"query": query, "game": game, "documents": documents}
         user_message = self.user_prompt.render(**context)
-        system_prompt = self.system_prompt.render(**context)
+        system_prompt = self.system_prompt.render(**context) if self.system_prompt else None
         return LLMInputPrompt(
             system_prompt=system_prompt,
             user_message=user_message,
@@ -390,7 +390,8 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
         # Check if we will actually include documents in any prompt
         system_placeholders: set[str] = set()
         user_placeholders: set[str] = set()
-        system_placeholders = get_placeholders_and_tags(self.system_prompt)
+        if self.system_prompt:
+            system_placeholders = get_placeholders_and_tags(self.system_prompt)
         if self.user_prompt:
             user_placeholders = get_placeholders_and_tags(self.user_prompt)
         all_placeholders = system_placeholders | user_placeholders

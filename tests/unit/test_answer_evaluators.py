@@ -3,7 +3,7 @@ import warnings
 from unittest.mock import AsyncMock
 
 import pytest
-from pydantic import BaseModel, Field, create_model
+from pydantic import BaseModel, Field, ValidationError, create_model
 
 from ragelo import get_answer_evaluator
 from ragelo.evaluators.answer_evaluators import (
@@ -1067,6 +1067,26 @@ class TestRubricPairwiseEvaluator:
         assert swapped.criteria[0].winner == "B"
         assert swapped.criteria[0].score_a == answer.criteria[0].score_b
         assert swapped.criteria[0].score_b == answer.criteria[0].score_a
+
+
+class TestCriterion:
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ("accuracy", "accuracy"),
+            ("Names the capital?", "Names_the_capital"),
+            ("  cheque-cancellation  ", "cheque_cancellation"),
+            ("2 step approval", "c_2_step_approval"),
+        ],
+    )
+    def test_criterion_name_is_normalized_to_an_identifier(self, raw, expected):
+        """The name is used as a response-schema field name and as a diversity-qrels subtopic id."""
+        assert Criterion(criterion_name=raw, short_question="q").criterion_name == expected
+        assert expected.isidentifier()
+
+    def test_criterion_name_without_alphanumerics_is_rejected(self):
+        with pytest.raises(ValidationError):
+            Criterion(criterion_name="???", short_question="q")
 
 
 class TestRubricPointwiseEvaluator:

@@ -30,7 +30,7 @@ class BaseEvaluator(ABC, Generic[T_Config, T_Result]):
     """
 
     config: T_Config
-    system_prompt: Template
+    system_prompt: Template | None = None
     user_prompt: Template
     evaluable_name: str = "Evaluable"
     result_type: type[T_Result]

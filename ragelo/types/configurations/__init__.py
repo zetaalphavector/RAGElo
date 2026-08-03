@@ -24,6 +24,7 @@ from ragelo.types.configurations.retrieval_evaluator_configs import (
     FewShotEvaluatorConfig,
     RDNAMEvaluatorConfig,
     ReasonerEvaluatorConfig,
+    RubricCoverageEvaluatorConfig,
 )
 
 __all__ = [
@@ -47,6 +48,7 @@ __all__ = [
     "ReasonerEvaluatorConfig",
     "CustomPromptEvaluatorConfig",
     "DomainExpertEvaluatorConfig",
+    "RubricCoverageEvaluatorConfig",
     "RubricPairwiseEvaluatorConfig",
     "RubricPointwiseEvaluatorConfig",
     "RubricEvaluatorConfigBase",

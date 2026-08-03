@@ -1,6 +1,8 @@
 import json
 from unittest.mock import AsyncMock
 
+import pytest
+
 from ragelo import get_retrieval_evaluator
 from ragelo.evaluators.retrieval_evaluators import (
     BaseRetrievalEvaluator,
@@ -9,14 +11,17 @@ from ragelo.evaluators.retrieval_evaluators import (
     FewShotEvaluator,
     RDNAMEvaluator,
     ReasonerEvaluator,
+    RubricCoverageEvaluator,
 )
 from ragelo.types import Document, Query
 from ragelo.types.answer_formats import (
+    Criterion,
     EvaluationAnswer,
     RDNAMEvaluationAnswer,
     RDNAMNoAspectsAnswer,
     RetrievalEvaluationAnswer,
 )
+from ragelo.types.configurations import RubricCoverageEvaluatorConfig
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.results import RetrievalEvaluatorResult
 from ragelo.utils import string_to_template
@@ -184,6 +189,24 @@ class TestCustomPromptEvaluator:
         assert call_args[0][0][0].user_message == user_prompt
         assert call_args[0][0][0].system_prompt == system_prompt
 
+    def test_evaluates_without_a_system_prompt(
+        self, llm_provider_mock_retrieval, custom_prompt_retrieval_eval_config, experiment
+    ):
+        custom_prompt_retrieval_eval_config.system_prompt = None
+        query = experiment["0"]
+        doc = query.retrieved_docs["0"]
+
+        evaluator = CustomPromptEvaluator.from_config(
+            config=custom_prompt_retrieval_eval_config,
+            llm_provider=llm_provider_mock_retrieval,
+        )
+        response = evaluator.evaluate(query, doc)
+
+        assert response.answer.score == 2
+        llm_input = llm_provider_mock_retrieval.async_call_mocker.call_args_list[0][0][0]
+        assert llm_input.system_prompt is None
+        assert llm_input.user_message == evaluator.user_prompt.render(query=query, document=doc)
+
     def test_process_with_custom_fields(self, llm_provider_mock_retrieval, custom_prompt_retrieval_eval_config):
         custom_prompt_retrieval_eval_config.user_prompt = string_to_template(
             "query: {{ query.query }} doc: {{ document.text }} q_metadata: {{ query.metadata.q_metadata }} d_metadata: {{ document.metadata.d_metadata }}"  # noqa: E501
@@ -203,6 +226,54 @@ class TestCustomPromptEvaluator:
             llm_provider_mock_retrieval.async_call_mocker.call_args_list[0][0][0].user_message
             == "query: this is a query doc: this is a document q_metadata: q_1 d_metadata: d_1"
         )
+
+
+class TestRubricCoverageEvaluator:
+    def _rubric(self):
+        return [
+            Criterion(criterion_name="names_capital", short_question="Does it name the capital?"),
+            Criterion(criterion_name="gives_population", short_question="Does it give the population?"),
+        ]
+
+    def test_judges_each_criterion_and_scores_coverage(self, llm_provider_mock, experiment):
+        query = experiment["0"]
+        query.rubric = self._rubric()
+        document = query.retrieved_docs["0"]
+
+        def address_first_criterion_only(input, response_schema):
+            parsed = response_schema(
+                reasoning="Names the capital but says nothing about population.",
+                names_capital=True,
+                gives_population=False,
+            )
+            return LLMResponseType(raw_answer=parsed.model_dump_json(), parsed_answer=parsed)
+
+        llm_provider_mock.async_call_mocker.side_effect = address_first_criterion_only
+        evaluator = RubricCoverageEvaluator.from_config(
+            config=RubricCoverageEvaluatorConfig(expert_in="geography", force=True),
+            llm_provider=llm_provider_mock,
+        )
+
+        result = evaluator.evaluate(query, document)
+
+        assert result.answer.criteria_addressed == ["names_capital"]
+        assert result.answer.score == 1
+        llm_input = llm_provider_mock.async_call_mocker.call_args_list[0][0][0]
+        assert "Does it give the population?" in llm_input.system_prompt
+        assert set(llm_input.llm_response_schema.model_fields) == {
+            "reasoning",
+            "names_capital",
+            "gives_population",
+        }
+
+    def test_raises_when_query_has_no_rubric(self, llm_provider_mock, experiment):
+        query = experiment["0"]
+        evaluator = RubricCoverageEvaluator.from_config(
+            config=RubricCoverageEvaluatorConfig(expert_in="geography", force=True),
+            llm_provider=llm_provider_mock,
+        )
+        with pytest.raises(ValueError, match="empty rubric"):
+            evaluator.evaluate(query, query.retrieved_docs["0"])
 
 
 class TestDomainExpertEvaluator:

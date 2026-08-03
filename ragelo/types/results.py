@@ -15,6 +15,7 @@ from ragelo.types.answer_formats import (
     RDNAMNoAspectsAnswer,
     RetrievalEvaluationAnswer,
     RubricAnswerFormat,
+    RubricCoverageAnswerFormat,
     RubricPointwiseAnswerFormat,
 )
 
@@ -57,17 +58,24 @@ class RetrievalEvaluatorResult(EvaluatorResult):
     """
 
     did: Annotated[str, SkipJsonSchema] = Field(description="The document ID to which the result corresponds.")
-    answer: RetrievalEvaluationAnswer | None = None
+    answer: RetrievalEvaluationAnswer | RubricCoverageAnswerFormat | None = None
 
     @model_validator(mode="before")
     @classmethod
     def validate_answer_type(cls, data: Any) -> Any:
-        """Ensure answer is deserialized as the correct subclass type."""
+        """Ensure answer is deserialized as the correct subclass type.
+
+        `RubricCoverageAnswerFormat` declares every field `RetrievalEvaluationAnswer` does, so it is
+        selected on the presence of `criteria_addressed` rather than by attempting the strict type
+        first; validating it as the base type would silently drop the addressed criteria.
+        """
         if isinstance(data, dict) and "answer" in data and data["answer"] is not None:
             answer_data = data["answer"]
             if isinstance(answer_data, dict) and not isinstance(answer_data, BaseModel):
-                # Deserialize as RetrievalEvaluationAnswer by default
-                data["answer"] = RetrievalEvaluationAnswer.model_validate(answer_data)
+                if "criteria_addressed" in answer_data:
+                    data["answer"] = RubricCoverageAnswerFormat.model_validate(answer_data)
+                else:
+                    data["answer"] = RetrievalEvaluationAnswer.model_validate(answer_data)
         return data
 
     @property
