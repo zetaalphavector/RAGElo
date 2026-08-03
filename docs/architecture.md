@@ -1,0 +1,92 @@
+# Architecture
+
+RAGElo separates evaluation into three layers. The split follows the TREC lineage
+(`trec_eval` → `pytrec_eval` → `ir_measures`), where a judgment is inert data and a metric is a
+pure function of qrels and runs, with no notion of who produced the labels.
+
+1. **Artifacts** — the data an evaluation is grounded in: queries, and the rubric a complete answer
+   must satisfy. Owned, versioned and reviewed by a human. A judge must never be able to
+   regenerate the artifact it is scored against, or the evaluation reduces to two LLM approaches
+   agreeing with each other.
+2. **Judges** — read artifacts, ask an LLM, and write a typed judgment onto an evaluable. A judge's
+   identity is its name, so adding one should be cheap.
+3. **Measures** — turn judgments into numbers. They know about qrels and runs, never about which
+   judge produced them.
+
+Each crossing between layers is a declared contract rather than an inference, so that adding a
+judge does not ripple into the metrics layer.
+
+```mermaid
+flowchart TB
+    subgraph artifacts["Layer 1 · Artifacts — data a human owns and reviews"]
+        query["Query<br/>qid · query · metadata"]
+        rubric["Query.rubric — a Criterion list<br/>criterion_name · short_question<br/>evidence · weight"]
+        query --- rubric
+    end
+
+    subgraph judges["Layer 2 · Judges — LLM machinery"]
+        retrieval["BaseRetrievalEvaluator<br/>reasoner · domain_expert · RDNAM<br/>few_shot · custom_prompt · rubric_coverage"]
+        answer["BaseAnswerEvaluator<br/>pairwise · rubric_pointwise<br/>rubric_pairwise · custom_prompt"]
+        format["answer_format<br/>the schema asked of the LLM"]
+        stored["Document.evaluations keyed by evaluator name<br/>EvaluatorResult.answer<br/>discriminated by the answer_format tag"]
+        retrieval --> format
+        answer --> format
+        retrieval --> stored
+        answer --> stored
+    end
+
+    subgraph measures["Layer 3 · Measures — pure functions of qrels and runs"]
+        flat["get_qrels<br/>qid → did → relevance"]
+        subtopic["get_rubric_qrels<br/>Qrel with iteration = subtopic"]
+        runs["get_runs<br/>agent → qid → did → score"]
+        agg["evaluate_retrieval<br/>is_coverage_measure routes each metric<br/>ir_measures.calc_aggregate"]
+        flat --> agg
+        subtopic --> agg
+        runs --> agg
+    end
+
+    rubric -->|"judges read it, never invent it"| retrieval
+    rubric --> answer
+    stored -->|"GradedJudgment.relevance"| flat
+    stored -->|"SubtopicJudgment.subtopics"| subtopic
+```
+
+## The contracts
+
+| crossing | contract | why it is not an inference |
+|---|---|---|
+| artifact → judge | `Query.rubric` | A rubric on the query is persisted, reviewable, and shared by every judge that grades against it, rather than being private to one evaluator instance. |
+| judge → LLM | `answer_format` on the evaluator | A result class is shared by every judge writing to the same evaluable, so its `answer` union says what it can *store*. Deriving the request schema from that union's first member would let a reordering change what the LLM is asked for. |
+| judge → storage | the `answer_format` tag plus `Field(discriminator=...)` | Structural matching cannot separate formats where one declares a superset of another's fields, and it fails silently by dropping the surplus. |
+| judgment → measure | `GradedJudgment` / `SubtopicJudgment` | The metrics layer asks a judgment what it contributes. A judge with a new payload needs no change in `get_qrels` or `get_rubric_qrels`. |
+
+`ragelo/measures.py` holds the boundary to `ir_measures`: measure resolution, classification of which
+measures read subtopic qrels, and construction of qrel and run rows. `ir_measures` is optional, so
+that module is the only place that imports it.
+
+### Coverage measures need subtopic qrels
+
+`StRecall`, `alpha_nDCG`, `NRBP` and `nNRBP` score how much of a query's information need a ranking
+collectively covers. They need to know which criterion each document addresses, which flat qrels
+cannot express: those hold one relevance value per document. `get_rubric_qrels` puts the criterion
+name in the `iteration` field, which is where `ir_measures` looks for a subtopic id. Encoding it in
+the query id instead produces `WARNING: All queries have only 1 subtopic!` and invalid numbers.
+
+These measures also require `pip install 'ragelo[eval]'`, which pulls `ir-measures[pyndeval]`;
+without `pyndeval` they appear in the `ir_measures` registry but are unsupported.
+
+## Where the layers still leak
+
+- **Aggregation inside a judge.** `RubricPointwiseEvaluator._process_answer` computes
+  `average_score`, and `evaluate_async` then multiplies it back out by the criterion weights to fold
+  in the evidence-recall and citation-quality criteria. An average is a measure, so inverting one to
+  recover an intermediate is layer 3 logic running inside layer 2.
+- **Rubrics generated into an evaluator, not onto the query.** The two rubric answer evaluators build
+  criteria into an in-memory `criteria_cache`, so a generated rubric is not persisted, cannot be
+  reviewed, and is not visible to other judges. `config.rubrics` seeds that cache; `Query.rubric` is
+  the layer 1 home it should be written to.
+- **No artifact-preparation phase.** Both rubric evaluators override `evaluate_async` — which the
+  contributor guide says to do "almost never" — because there is nowhere to prepare a query's
+  artifacts before judging begins.
+- **`RDNAMEvaluator` mutates `self.result_type`** inside `_process_answer` to choose its output class,
+  while `_run_evaluations` fans out concurrent coroutines against the same evaluator object.
