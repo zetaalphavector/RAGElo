@@ -14,9 +14,10 @@ from tenacity import RetryError
 from ragelo.evaluators.base_evaluator import BaseEvaluator, T_Config
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
 from ragelo.types import LLMInputPrompt, Query, RetrievalEvaluatorResult
+from ragelo.types.answer_formats import EvaluationAnswer, RetrievalEvaluationAnswer
 from ragelo.types.configurations import BaseRetrievalEvaluatorConfig
 from ragelo.types.evaluables import Document, Evaluable
-from ragelo.types.evaluator_utils import default_answer_type
+from ragelo.types.evaluator_utils import answer_format_for
 from ragelo.types.types import RetrievalEvaluatorTypes, _result_type_registry
 from ragelo.utils import call_async_fn
 
@@ -34,6 +35,7 @@ class BaseRetrievalEvaluator(BaseEvaluator[T_Config, RetrievalEvaluatorResult]):
     config: T_Config
     evaluable_name: str = "Retrieved document"
     result_type: type[RetrievalEvaluatorResult] = RetrievalEvaluatorResult
+    answer_format: type[EvaluationAnswer] = RetrievalEvaluationAnswer
 
     def __init__(self, config: T_Config, llm_provider: BaseLLMProvider):
         super().__init__(config, llm_provider)
@@ -135,15 +137,17 @@ class BaseRetrievalEvaluator(BaseEvaluator[T_Config, RetrievalEvaluatorResult]):
         return tuples_to_eval
 
     def _resolve_response_schema(self, prompt: LLMInputPrompt) -> type[BaseModel]:
-        """Prefer a per-call schema, then the config's, then the result_type's `answer` annotation.
+        """The schema the LLM is asked to produce, most specific source first.
 
         Evaluators whose response shape depends on the query (a rubric with one field per criterion)
-        set `llm_response_schema` on the prompt they build.
+        set `llm_response_schema` on the prompt they build; the rest declare `answer_format`.
         """
         schema = prompt.llm_response_schema or self.config.llm_response_schema
         if isinstance(schema, type) and issubclass(schema, BaseModel):
             return schema
-        return default_answer_type(self.result_type)
+        if self.config.result_type:
+            return self.config.result_type
+        return answer_format_for(self, BaseRetrievalEvaluator)
 
     def _build_message(self, query: Query, document: Document) -> LLMInputPrompt:
         context = {"query": query, "document": document}

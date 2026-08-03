@@ -11,10 +11,16 @@ from pydantic import BaseModel
 from ragelo.evaluators.base_evaluator import BaseEvaluator, T_Result
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
 from ragelo.types import AnswerEvaluatorResult, LLMInputPrompt, PairwiseGameEvaluatorResult, Query
-from ragelo.types.answer_formats import PairwiseEvaluationAnswer, PairwiseWinner, RubricAnswerFormat
+from ragelo.types.answer_formats import (
+    AnswerEvaluationAnswer,
+    EvaluationAnswer,
+    PairwiseEvaluationAnswer,
+    PairwiseWinner,
+    RubricAnswerFormat,
+)
 from ragelo.types.configurations import BaseAnswerEvaluatorConfig, PairwiseEvaluatorConfig
 from ragelo.types.evaluables import AgentAnswer, Document, Evaluable, PairwiseGame
-from ragelo.types.evaluator_utils import default_answer_type
+from ragelo.types.evaluator_utils import answer_format_for
 from ragelo.types.types import AnswerEvaluatorTypes, _result_type_registry
 from ragelo.utils import call_async_fn, get_placeholders_and_tags
 
@@ -30,6 +36,7 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
     config: T_AnswerConfig
     evaluable_name: str = "Agent Answer"
     _warned_queries: set[str] = set()
+    answer_format: type[EvaluationAnswer] = AnswerEvaluationAnswer
     result_type: type[T_Result] = AnswerEvaluatorResult  # type: ignore[assignment]
 
     def evaluate(
@@ -295,7 +302,9 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
             if isinstance(schema, type):
                 return schema
             return None
-        return default_answer_type(self.result_type)
+        if self.config.result_type:
+            return self.config.result_type
+        return answer_format_for(self, BaseAnswerEvaluator)
 
     def _get_all_evaluables(self, query: Query) -> list[Evaluable]:
         if self.config.pairwise:

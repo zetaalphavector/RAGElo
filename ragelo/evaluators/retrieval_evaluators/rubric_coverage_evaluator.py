@@ -34,6 +34,7 @@ class RubricCoverageEvaluator(BaseRetrievalEvaluator[RubricCoverageEvaluatorConf
     """
 
     config: RubricCoverageEvaluatorConfig
+    answer_format = RubricCoverageAnswerFormat
 
     system_prompt = string_to_template("""
         You are an impartial expert document annotator and a domain expert in {{ expert_in }}.{% if company %} You are annotating for {{ company }}.{% endif %}

@@ -80,12 +80,16 @@ class RDNAMEvaluator(BaseRetrievalEvaluator[RDNAMEvaluatorConfig]):
         self._role = self.config.annotator_role if self.config.annotator_role else ""
         if self.config.use_aspects and self.config.use_multiple_annotators:
             self.result_type = RDNAMMUltipleAnnotatorsResult
+            self.answer_format = RDNAMMultipleAnnotatorsAnswer
         elif self.config.use_aspects:
             self.result_type = RDNAMEvaluatorResult
+            self.answer_format = RDNAMEvaluationAnswer
         elif self.config.use_multiple_annotators:
             self.result_type = RDNAMMultipleAnnotatorsNoAspectsResult
+            self.answer_format = RDNAMMultipleAnnotatorsNoAspectsAnswer
         else:
             self.result_type = RDNAMNoAspectsResult
+            self.answer_format = RDNAMNoAspectsAnswer
 
     def _build_message(self, query: Query, document: Document) -> LLMInputPrompt:
         context = {

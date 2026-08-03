@@ -196,12 +196,33 @@ Two things found on the way, both pre-existing:
   path that builds a schema dict from those models would have crashed. Fixed to `SkipJsonSchema[T]`.
 - Both bases derived the LLM request schema by unwrapping the *storage* union and taking the first
   member. So the union's member order silently decided what the LLM was asked to produce, and
-  reordering it for legacy-matching purposes changed behaviour. Extracted as
-  `default_answer_type`, which names the coupling and removes the duplicated unwrapping. **This is
-  the layer confusion again** — the storage union should not be the source of the request schema.
-  Worth its own step; folded into step 4's scope note rather than fixed here.
+  reordering it for legacy-matching purposes changed behaviour. **Fixed** — see below.
 
 Ordering constraint discovered: the annotation's first member is the evaluator's own format (it
 decides the request schema), while legacy structural matching needs most-constrained-first. These
 are different orders, so the legacy order is passed explicitly to the shim rather than inferred
 from the annotation.
+
+
+**Request schema decoupled from the storage union.** Evaluators now declare `answer_format`, the
+format they ask the LLM to produce, and `_resolve_response_schema` resolves in one order:
+`prompt.llm_response_schema` -> `config.llm_response_schema` -> `config.result_type` ->
+`answer_format`. A result class is shared by every judge writing to the same evaluable, so its
+`answer` union says what it can *store*; which member is first was an ordering accident that
+decided a judge's behaviour.
+
+Declared on both bases, on `PairwiseAnswerEvaluator` (covering the four pairwise variants), on
+`RubricCoverageEvaluator`, and per-config in `RDNAMEvaluator.__init__` next to where it already
+picks `result_type`. Locked by a test that permutes the union and asserts the requested schema is
+unchanged; verified to fail with the old derivation restored.
+
+Backwards compatibility is one shim, `answer_format_for`, reached only by an evaluator that swaps
+`result_type` for a custom class without declaring a format — how the two used to be kept in step.
+It derives as before and raises `DeprecationWarning` naming the attribute to add. Anything else
+returns the declaration, so union order no longer reaches the LLM.
+
+Side benefit: RDNAM's request schema is now chosen once in `__init__` rather than read off
+`self.result_type`, which it mutates from inside concurrent coroutines (`_process_answer`, lines
+147 and 165). The race is not fixed — `_process_answer` still rewrites `result_type` to select the
+output class — but the request side no longer participates, leaving a smaller and nameable bug for
+step 4.

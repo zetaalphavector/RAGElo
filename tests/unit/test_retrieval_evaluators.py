@@ -22,7 +22,7 @@ from ragelo.types.answer_formats import (
     RetrievalEvaluationAnswer,
     RubricCoverageAnswerFormat,
 )
-from ragelo.types.configurations import RubricCoverageEvaluatorConfig
+from ragelo.types.configurations import ReasonerEvaluatorConfig, RubricCoverageEvaluatorConfig
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.results import RetrievalEvaluatorResult
 from ragelo.utils import string_to_template
@@ -247,6 +247,37 @@ class TestAnswerFormatSchemas:
         schema_fields = set(answer_format.model_json_schema()["properties"])
         assert hidden.isdisjoint(schema_fields)
         assert hidden < set(answer_format.model_fields)
+
+
+class TestRequestedAnswerFormat:
+    def test_union_member_order_does_not_decide_the_requested_schema(self, llm_provider_mock_retrieval, experiment):
+        """A result class is shared by every judge writing to the same evaluable, so its `answer`
+        union lists what it can store, in no particular order. The schema asked of the LLM comes
+        from the evaluator's `answer_format`, so reordering the union must not change it."""
+        evaluator = ReasonerEvaluator.from_config(
+            config=ReasonerEvaluatorConfig(force=True), llm_provider=llm_provider_mock_retrieval
+        )
+        original = RetrievalEvaluatorResult.model_fields["answer"].annotation
+
+        try:
+            RetrievalEvaluatorResult.model_fields["answer"].annotation = (
+                RubricCoverageAnswerFormat | RetrievalEvaluationAnswer | None
+            )
+            evaluator.evaluate(experiment["0"], experiment["0"].retrieved_docs["0"])
+        finally:
+            RetrievalEvaluatorResult.model_fields["answer"].annotation = original
+
+        requested = llm_provider_mock_retrieval.async_call_mocker.call_args_list[0][0][1]
+        assert requested is RetrievalEvaluationAnswer
+
+    def test_evaluator_declaring_its_own_format_is_asked_for_that_format(self, llm_provider_mock, experiment):
+        query = experiment["0"]
+        query.rubric = [Criterion(criterion_name="c", short_question="q")]
+        evaluator = RubricCoverageEvaluator.from_config(
+            config=RubricCoverageEvaluatorConfig(expert_in="geography", force=True),
+            llm_provider=llm_provider_mock,
+        )
+        assert evaluator.answer_format is RubricCoverageAnswerFormat
 
 
 class TestRubricCoverageEvaluator:

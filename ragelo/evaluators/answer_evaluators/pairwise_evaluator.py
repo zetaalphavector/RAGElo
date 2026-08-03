@@ -1,4 +1,5 @@
 from ragelo.evaluators.answer_evaluators.base_answer_evaluator import AnswerEvaluatorFactory, BaseAnswerEvaluator
+from ragelo.types.answer_formats import EvaluationAnswer, PairwiseEvaluationAnswer
 from ragelo.types.configurations import PairwiseEvaluatorConfig
 from ragelo.types.evaluables import ChatMessage, PairwiseGame
 from ragelo.types.formats import LLMInputPrompt
@@ -13,6 +14,7 @@ class PairwiseAnswerEvaluator(BaseAnswerEvaluator[PairwiseEvaluatorConfig, Pairw
     """An evaluator that evaluates RAG-based answers pairwise, with document reasoning and citations."""
 
     config: PairwiseEvaluatorConfig
+    answer_format: type[EvaluationAnswer] = PairwiseEvaluationAnswer
     result_type = PairwiseGameEvaluatorResult
     user_prompt_document = "[{did}] {doc}"
     user_prompt_annotation = "[{did}] {annotation}"
