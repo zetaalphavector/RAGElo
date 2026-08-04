@@ -6,13 +6,16 @@ from pydantic import BaseModel, Field, create_model
 
 from ragelo.evaluators.answer_evaluators.base_answer_evaluator import AnswerEvaluatorFactory
 from ragelo.evaluators.answer_evaluators.builtin_criteria import (
+    citation_quality_criterion,
+    citation_quality_score,
     evaluate_citation_quality,
     evaluate_evidence_recall,
+    evidence_recall_criterion,
     get_evidence_snippets,
 )
 from ragelo.evaluators.answer_evaluators.pairwise_evaluator import PairwiseAnswerEvaluator
 from ragelo.evaluators.answer_evaluators.rubric_evaluator_mixin import RubricEvaluatorMixin
-from ragelo.types.answer_formats import Criterion, CriterionEvaluation, RubricAnswerFormat
+from ragelo.types.answer_formats import Criterion, CriterionEvaluation, PairwiseCriterionWinner, RubricAnswerFormat
 from ragelo.types.configurations import RubricPairwiseEvaluatorConfig
 from ragelo.types.evaluables import Evaluable, PairwiseGame
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
@@ -182,66 +185,32 @@ class RubricPairwiseEvaluator(RubricEvaluatorMixin, PairwiseAnswerEvaluator):
 
     def _process_answer(self, llm_response: LLMResponseType, query: Query) -> LLMResponseType:
         response_dict = llm_response.parsed_answer.model_dump()
-        preserve_d = self.config.preserve_d
-        agent_a_wins = 0.0
-        agent_b_wins = 0.0
-        equally_good = 0.0
-        equally_bad = 0.0
-        total_confidence = 0.0
         criteria: list[CriterionEvaluation] = []
-
         for crit, response in response_dict.items():
             crit_obj = [x for x in self._rubric_for(query) if x.criterion_name == crit][0]
-            weight = crit_obj.weight if crit_obj.weight is not None else 1.0
             if len(response["winner"]) > 1:
                 response["winner"] = response["winner"][-1]
-            if not preserve_d and response["winner"] == "D":
+            if not self.config.preserve_d and response["winner"] == "D":
                 response["winner"] = "C"
-            agent_a_assessment = response.get("agent_a_assessment", "")
-            agent_b_assessment = response.get("agent_b_assessment", "")
-            winner_reasoning = response.get("winner_reasoning", response.get("reasoning", ""))
-            confidence = response.get("confidence", 1.0)
-            total_confidence += confidence
-            criterion = CriterionEvaluation(
-                criterion=crit_obj,
-                agent_a_assessment=agent_a_assessment,
-                agent_b_assessment=agent_b_assessment,
-                winner_reasoning=winner_reasoning,
-                winner=response["winner"],
-                score_a=response.get("score_a", 0.0),
-                score_b=response.get("score_b", 0.0),
-                loser_fix=response.get("loser_fix", ""),
-                failure_tags=response.get("failure_tags", []),
-                confidence=confidence,
-                missing_evidence_doc_ids=response.get("missing_evidence_doc_ids", []),
-                missing_evidence_snippets=response.get("missing_evidence_snippets", []),
+            criteria.append(
+                CriterionEvaluation(
+                    criterion=crit_obj,
+                    agent_a_assessment=response.get("agent_a_assessment", ""),
+                    agent_b_assessment=response.get("agent_b_assessment", ""),
+                    winner_reasoning=response.get("winner_reasoning", response.get("reasoning", "")),
+                    winner=response["winner"],
+                    score_a=response.get("score_a", 0.0),
+                    score_b=response.get("score_b", 0.0),
+                    loser_fix=response.get("loser_fix", ""),
+                    failure_tags=response.get("failure_tags", []),
+                    confidence=response.get("confidence", 1.0),
+                    missing_evidence_doc_ids=response.get("missing_evidence_doc_ids", []),
+                    missing_evidence_snippets=response.get("missing_evidence_snippets", []),
+                )
             )
-            criteria.append(criterion)
-            if response["winner"] == "A":
-                agent_a_wins += weight
-            elif response["winner"] == "B":
-                agent_b_wins += weight
-            elif response["winner"] == "C":
-                equally_good += weight
-            else:
-                equally_bad += weight
-        winner = "A" if agent_a_wins > agent_b_wins else "B" if agent_a_wins < agent_b_wins else "C"
-        n_criteria = len(criteria) or 1
-        parsed_answer = RubricAnswerFormat(
-            criteria=criteria,
-            agent_a_wins=agent_a_wins,
-            agent_b_wins=agent_b_wins,
-            equally_good=equally_good,
-            equally_bad=equally_bad,
-            winner=winner,
-            margin=agent_a_wins - agent_b_wins,
-            mean_confidence=total_confidence / n_criteria,
-            rubric_fingerprint=query.rubric_fingerprint,
-        )
-
         return LLMResponseType(
             raw_answer=llm_response.raw_answer,
-            parsed_answer=parsed_answer,
+            parsed_answer=RubricAnswerFormat(criteria=criteria, rubric_fingerprint=query.rubric_fingerprint),
         )
 
     async def evaluate_async(
@@ -267,53 +236,57 @@ class RubricPairwiseEvaluator(RubricEvaluatorMixin, PairwiseAnswerEvaluator):
 
         agent_a_text = evaluable.agent_a_answer.final_response
         agent_b_text = evaluable.agent_b_answer.final_response
-        snippets = get_evidence_snippets(query, self.config.evidence_snippets)
-        relevant_doc_ids = list(query.retrieved_docs.keys())
-        agent_a_wins = answer_format.agent_a_wins
-        agent_b_wins = answer_format.agent_b_wins
-        equally_good = answer_format.equally_good
+        criteria = list(answer_format.criteria)
         updates: dict = {}
 
         if self.config.evidence_recall:
+            snippets = get_evidence_snippets(query, self.config.evidence_snippets)
             recall_a = await evaluate_evidence_recall(self.llm_provider, agent_a_text, snippets)
             recall_b = await evaluate_evidence_recall(self.llm_provider, agent_b_text, snippets)
             updates["evidence_recall_a"] = recall_a
             updates["evidence_recall_b"] = recall_b
-            weight = self.config.evidence_recall_weight
-            if recall_a.recall > recall_b.recall:
-                agent_a_wins += weight
-            elif recall_b.recall > recall_a.recall:
-                agent_b_wins += weight
-            else:
-                equally_good += weight
+            criteria.append(
+                self.__side_by_side_criterion(
+                    evidence_recall_criterion(self.config.evidence_recall_weight),
+                    recall_a.recall,
+                    recall_b.recall,
+                    f"[[A]] includes {recall_a.snippets_found} of {recall_a.total_snippets} evidence snippets, "
+                    f"[[B]] includes {recall_b.snippets_found} of {recall_b.total_snippets}.",
+                )
+            )
 
         if self.config.citation_quality:
+            relevant_doc_ids = list(query.retrieved_docs.keys())
             cq_a = await evaluate_citation_quality(self.llm_provider, agent_a_text, relevant_doc_ids)
             cq_b = await evaluate_citation_quality(self.llm_provider, agent_b_text, relevant_doc_ids)
             updates["citation_quality_a"] = cq_a
             updates["citation_quality_b"] = cq_b
-            score_a = (cq_a.claims_with_citations_ratio + cq_a.citations_with_excerpts_ratio) / 2.0
-            score_b = (cq_b.claims_with_citations_ratio + cq_b.citations_with_excerpts_ratio) / 2.0
-            weight = self.config.citation_quality_weight
-            if score_a > score_b:
-                agent_a_wins += weight
-            elif score_b > score_a:
-                agent_b_wins += weight
-            else:
-                equally_good += weight
+            score_a = citation_quality_score(cq_a)
+            score_b = citation_quality_score(cq_b)
+            criteria.append(
+                self.__side_by_side_criterion(
+                    citation_quality_criterion(self.config.citation_quality_weight),
+                    score_a,
+                    score_b,
+                    f"[[A]] scores {score_a:.2f} on citation quality, [[B]] scores {score_b:.2f}.",
+                )
+            )
 
-        winner = "A" if agent_a_wins > agent_b_wins else "B" if agent_a_wins < agent_b_wins else "C"
-        updates.update(
-            {
-                "agent_a_wins": agent_a_wins,
-                "agent_b_wins": agent_b_wins,
-                "equally_good": equally_good,
-                "winner": winner,
-                "margin": agent_a_wins - agent_b_wins,
-            }
+        updates["criteria"] = criteria
+        return result.model_copy(update={"answer": answer_format.model_copy(update=updates)})
+
+    @staticmethod
+    def __side_by_side_criterion(
+        criterion: Criterion, score_a: float, score_b: float, reasoning: str
+    ) -> CriterionEvaluation:
+        winner: PairwiseCriterionWinner = "A" if score_a > score_b else "B" if score_b > score_a else "C"
+        return CriterionEvaluation(
+            criterion=criterion,
+            winner=winner,
+            winner_reasoning=reasoning,
+            score_a=score_a,
+            score_b=score_b,
         )
-        updated_answer = answer_format.model_copy(update=updates)
-        return result.model_copy(update={"answer": updated_answer})
 
 
 def _truncate_snippets(snippets: list[str], max_chars: int) -> list[str]:

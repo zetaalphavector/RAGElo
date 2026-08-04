@@ -23,6 +23,7 @@ from ragelo.types.answer_formats import (
     ClaimEvaluation,
     Criterion,
     CriterionEvaluation,
+    CriterionEvaluationPointwise,
     EvidenceRecallSchema,
     EvidenceSnippetEvaluation,
     PairwiseEvaluationAnswer,
@@ -683,13 +684,6 @@ class TestPairwiseAnswerCanonicalization:
                     confidence=0.8,
                 ),
             ],
-            agent_a_wins=0.25,
-            agent_b_wins=0.0,
-            equally_good=0.0,
-            equally_bad=0.0,
-            winner="A",
-            margin=0.25,
-            mean_confidence=0.85,
         )
         # Reversed direction (already canonicalized to A-vs-B perspective):
         # disagrees with forward on `accuracy`, agrees on `clarity`. Weighted aggregate
@@ -718,22 +712,18 @@ class TestPairwiseAnswerCanonicalization:
                     confidence=1.0,
                 ),
             ],
-            agent_a_wins=0.05,
-            agent_b_wins=0.20,
-            equally_good=0.0,
-            equally_bad=0.0,
-            winner="B",
-            margin=-0.15,
-            mean_confidence=0.85,
         )
 
         merged = forward.merge_with_canonicalized(reversed_canonical)
 
-        # Top-level aggregates are averaged and consistent with each other.
-        assert merged.agent_a_wins == pytest.approx(0.15)
-        assert merged.agent_b_wins == pytest.approx(0.10)
+        # Aggregates follow from the merged criteria: clarity stays A (weight 0.05), accuracy
+        # collapses to a tie (weight 0.2), so no criterion is won by B.
+        assert merged.agent_a_wins == pytest.approx(0.05)
+        assert merged.agent_b_wins == pytest.approx(0.0)
+        assert merged.equally_good == pytest.approx(0.2)
         assert merged.margin == pytest.approx(0.05)
         assert merged.winner == "A"
+        assert merged.mean_confidence == pytest.approx(0.85)
         # Per-criterion verdicts: disagreement collapses to "C", agreement is preserved.
         merged_by_name = {c.criterion.criterion_name: c for c in merged.criteria}
         assert merged_by_name["accuracy"].winner == "C"
@@ -1082,6 +1072,81 @@ class TestCriterion:
     def test_criterion_name_without_alphanumerics_is_rejected(self):
         with pytest.raises(ValidationError):
             Criterion(criterion_name="???", short_question="q")
+
+
+class TestDerivedAggregates:
+    """Aggregates are pure functions of the per-criterion judgments, not stored by the judge."""
+
+    def _pointwise(self, *fulfillments: tuple[float, float | None]) -> RubricPointwiseAnswerFormat:
+        return RubricPointwiseAnswerFormat(
+            criteria=[
+                CriterionEvaluationPointwise(
+                    criterion=Criterion(criterion_name=f"c{i}", short_question="?", weight=weight),
+                    reasoning="r",
+                    fulfillment=fulfillment,
+                )
+                for i, (fulfillment, weight) in enumerate(fulfillments)
+            ]
+        )
+
+    def test_pointwise_average_follows_the_criteria(self):
+        answer = self._pointwise((1.0, 3.0), (0.0, 1.0))
+        assert answer.average_score == pytest.approx(0.75)
+
+        dropped = answer.model_copy(update={"criteria": answer.criteria[:1]})
+        assert dropped.average_score == pytest.approx(1.0)
+
+    def test_pointwise_average_of_no_criteria_is_zero(self):
+        assert self._pointwise().average_score == 0.0
+
+    def test_pairwise_aggregates_follow_the_criteria(self):
+        answer = RubricAnswerFormat(
+            criteria=[
+                CriterionEvaluation(
+                    criterion=Criterion(criterion_name="a", short_question="?", weight=3.0),
+                    winner_reasoning="r",
+                    winner="A",
+                    confidence=0.6,
+                ),
+                CriterionEvaluation(
+                    criterion=Criterion(criterion_name="b", short_question="?"),
+                    winner_reasoning="r",
+                    winner="B",
+                    confidence=1.0,
+                ),
+                CriterionEvaluation(
+                    criterion=Criterion(criterion_name="c", short_question="?"),
+                    winner_reasoning="r",
+                    winner="D",
+                    confidence=0.8,
+                ),
+            ]
+        )
+        assert (answer.agent_a_wins, answer.agent_b_wins) == (3.0, 1.0)
+        assert (answer.equally_good, answer.equally_bad) == (0.0, 1.0)
+        assert answer.margin == 2.0
+        assert answer.winner == "A"
+        assert answer.mean_confidence == pytest.approx(0.8)
+
+    def test_an_aggregate_stored_by_an_older_version_is_recomputed(self):
+        """A payload written when the judge stored its own aggregate loads and recomputes it."""
+        payload = {
+            "answer_format": "rubric_pointwise",
+            "criteria": [
+                {
+                    "criterion": {"criterion_name": "c0", "short_question": "?", "evidence": [], "weight": None},
+                    "reasoning": "r",
+                    "fulfillment": True,
+                }
+            ],
+            "average_score": 0.123,
+        }
+        assert RubricPointwiseAnswerFormat.model_validate(payload).average_score == 1.0
+
+    def test_the_aggregates_survive_a_serialization_round_trip(self):
+        answer = self._pointwise((1.0, 3.0), (0.0, 1.0))
+        assert answer.model_dump()["average_score"] == pytest.approx(0.75)
+        assert RubricPointwiseAnswerFormat.model_validate(answer.model_dump()).average_score == pytest.approx(0.75)
 
 
 class TestRubricArtifact:
@@ -1441,6 +1506,11 @@ class TestBuiltinCriteriaPointwise:
         # average_score: (1.0 * 1.0 + (2/3) * 2.0) / (1.0 + 2.0) = (1.0 + 4/3) / 3.0
         expected = (1.0 + (2 / 3) * 2.0) / 3.0
         assert result.answer.average_score == pytest.approx(expected)
+        # The built-in scores by being a criterion, carrying its configured weight.
+        recall_criterion = [c for c in result.answer.criteria if c.criterion.criterion_name == "evidence_recall"]
+        assert len(recall_criterion) == 1
+        assert recall_criterion[0].criterion.weight == 2.0
+        assert recall_criterion[0].fulfillment == pytest.approx(2 / 3)
 
     def test_pointwise_citation_quality(self, llm_provider_mock, experiment):
         """Citation quality should evaluate claims/citations and contribute to average_score."""
@@ -1602,6 +1672,14 @@ class TestBuiltinCriteriaPairwise:
         # Regular criterion: C (tie, equally_good=1). Evidence recall: A wins (weight=1).
         assert result.answer.agent_a_wins == 1.0
         assert result.answer.winner == "A"
+        # The built-in wins by being a criterion, with its side scores recorded.
+        recall_criterion = [c for c in result.answer.criteria if c.criterion.criterion_name == "evidence_recall"]
+        assert len(recall_criterion) == 1
+        assert (recall_criterion[0].winner, recall_criterion[0].score_a, recall_criterion[0].score_b) == (
+            "A",
+            1.0,
+            0.5,
+        )
 
     def test_pairwise_evidence_recall_uses_terminal_conversation_response(self, llm_provider_mock, experiment):
         """Evidence recall should evaluate only the last assistant turn from a conversation answer."""

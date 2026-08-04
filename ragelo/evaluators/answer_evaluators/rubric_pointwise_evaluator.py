@@ -6,8 +6,11 @@ from pydantic import BaseModel, Field, create_model
 
 from ragelo.evaluators.answer_evaluators.base_answer_evaluator import AnswerEvaluatorFactory, BaseAnswerEvaluator
 from ragelo.evaluators.answer_evaluators.builtin_criteria import (
+    citation_quality_criterion,
+    citation_quality_score,
     evaluate_citation_quality,
     evaluate_evidence_recall,
+    evidence_recall_criterion,
     get_evidence_snippets,
 )
 from ragelo.evaluators.answer_evaluators.rubric_evaluator_mixin import RubricEvaluatorMixin
@@ -116,31 +119,23 @@ class RubricPointwiseEvaluator(
     def _process_answer(self, llm_response: LLMResponseType, query: Query) -> LLMResponseType:
         response_dict = llm_response.parsed_answer.model_dump()
         criteria: list[CriterionEvaluationPointwise] = []
-        weighted_sum = 0.0
-        total_weight = 0.0
         for crit, response in response_dict.items():
             crit_obj = [x for x in self._rubric_for(query) if x.criterion_name == crit][0]
-            weight = crit_obj.weight if crit_obj.weight is not None else 1.0
             if self.config.graduated_scoring:
-                raw_score = response["score"]
-                normalized = raw_score / self.config.max_score
-                fulfillment: bool | float = normalized
+                fulfillment: bool | float = response["score"] / self.config.max_score
             else:
                 fulfillment = response["fulfillment"]
-                normalized = float(fulfillment)
-            criterion = CriterionEvaluationPointwise(
-                criterion=crit_obj,
-                reasoning=response["reasoning"],
-                fulfillment=fulfillment,
+            criteria.append(
+                CriterionEvaluationPointwise(
+                    criterion=crit_obj,
+                    reasoning=response["reasoning"],
+                    fulfillment=fulfillment,
+                )
             )
-            criteria.append(criterion)
-            weighted_sum += normalized * weight
-            total_weight += weight
         return LLMResponseType(
             raw_answer=llm_response.raw_answer,
             parsed_answer=RubricPointwiseAnswerFormat(
                 criteria=criteria,
-                average_score=weighted_sum / total_weight if total_weight > 0 else 0.0,
                 rubric_fingerprint=query.rubric_fingerprint,
             ),
         )
@@ -163,37 +158,39 @@ class RubricPointwiseEvaluator(
         if not isinstance(answer_format, RubricPointwiseAnswerFormat):
             return result
 
-        weighted_sum = answer_format.average_score * sum(
-            (c.criterion.weight if c.criterion.weight is not None else 1.0) for c in answer_format.criteria
-        )
-        total_weight = sum(
-            (c.criterion.weight if c.criterion.weight is not None else 1.0) for c in answer_format.criteria
-        )
-
+        criteria = list(answer_format.criteria)
         evidence_recall_result = None
         citation_quality_result = None
 
         if self.config.evidence_recall:
             snippets = get_evidence_snippets(query, self.config.evidence_snippets)
             evidence_recall_result = await evaluate_evidence_recall(self.llm_provider, evaluable.text, snippets)
-            weighted_sum += evidence_recall_result.recall * self.config.evidence_recall_weight
-            total_weight += self.config.evidence_recall_weight
+            criteria.append(
+                CriterionEvaluationPointwise(
+                    criterion=evidence_recall_criterion(self.config.evidence_recall_weight),
+                    reasoning=f"{evidence_recall_result.snippets_found} of "
+                    f"{evidence_recall_result.total_snippets} evidence snippets are present in the answer.",
+                    fulfillment=evidence_recall_result.recall,
+                )
+            )
 
         if self.config.citation_quality:
-            relevant_doc_ids = list(query.retrieved_docs.keys())
             citation_quality_result = await evaluate_citation_quality(
-                self.llm_provider, evaluable.text, relevant_doc_ids
+                self.llm_provider, evaluable.text, list(query.retrieved_docs.keys())
             )
-            avg_citation_score = (
-                citation_quality_result.claims_with_citations_ratio
-                + citation_quality_result.citations_with_excerpts_ratio
-            ) / 2.0
-            weighted_sum += avg_citation_score * self.config.citation_quality_weight
-            total_weight += self.config.citation_quality_weight
+            criteria.append(
+                CriterionEvaluationPointwise(
+                    criterion=citation_quality_criterion(self.config.citation_quality_weight),
+                    reasoning=f"{citation_quality_result.claims_with_citations_ratio:.2f} of claims carry a "
+                    f"citation and {citation_quality_result.citations_with_excerpts_ratio:.2f} of citations "
+                    "carry a relevant excerpt.",
+                    fulfillment=citation_quality_score(citation_quality_result),
+                )
+            )
 
         updated_answer = answer_format.model_copy(
             update={
-                "average_score": weighted_sum / total_weight if total_weight > 0 else 0.0,
+                "criteria": criteria,
                 "evidence_recall": evidence_recall_result,
                 "citation_quality": citation_quality_result,
             }

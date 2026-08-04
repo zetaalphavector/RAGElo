@@ -65,6 +65,19 @@ flowchart TB
 | judge → LLM | `answer_format` on the evaluator | A result class is shared by every judge writing to the same evaluable, so its `answer` union says what it can *store*. Deriving the request schema from that union's first member would let a reordering change what the LLM is asked for. |
 | judge → storage | the `answer_format` tag plus `Field(discriminator=...)` | Structural matching cannot separate formats where one declares a superset of another's fields, and it fails silently by dropping the surplus. |
 | judgment → measure | `GradedJudgment` / `SubtopicJudgment` | The metrics layer asks a judgment what it contributes. A judge with a new payload needs no change in `get_qrels` or `get_rubric_qrels`. |
+| judgment → aggregate | computed fields on the rubric answer formats | `average_score`, `agent_a_wins`, `winner` and `margin` are pure functions of the per-criterion verdicts, so a judge cannot store an aggregate that contradicts the criteria it recorded. They still serialize, so consumers read them as before. |
+
+### Aggregates are derived, not judged
+
+A judge records one verdict per criterion and nothing else. Everything above that (`average_score`
+for pointwise, the win totals, `winner`, `margin` and `mean_confidence` for pairwise) is a
+`@computed_field` over `criteria`.
+
+That makes an inconsistent judgment unrepresentable, and it is what lets the built-in
+evidence-recall and citation-quality checks be ordinary criteria carrying their configured weight,
+rather than corrections applied to a finished score. `model_copy(update={"average_score": ...})` is
+silently ignored on a computed field, so the only way to move an aggregate is to change the
+criteria.
 
 `ragelo/measures.py` holds the boundary to `ir_measures`: measure resolution, classification of which
 measures read subtopic qrels, and construction of qrel and run rows. `ir_measures` is optional, so
@@ -83,10 +96,6 @@ without `pyndeval` they appear in the `ir_measures` registry but are unsupported
 
 ## Where the layers still leak
 
-- **Aggregation inside a judge.** `RubricPointwiseEvaluator._process_answer` computes
-  `average_score`, and `evaluate_async` then multiplies it back out by the criterion weights to fold
-  in the evidence-recall and citation-quality criteria. An average is a measure, so inverting one to
-  recover an intermediate is layer 3 logic running inside layer 2.
 - **No artifact-preparation phase.** Both rubric evaluators override `evaluate_async` — which the
   contributor guide says to do "almost never" — to generate a missing rubric before judging. Running
   `RubricGenerator.generate_experiment` first makes the override dead weight, but nothing yet

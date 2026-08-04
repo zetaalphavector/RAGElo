@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Literal, Protocol, runtime_checkable
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, computed_field, field_validator
 from pydantic.json_schema import SkipJsonSchema
 from typing_extensions import Self
 
@@ -283,6 +283,10 @@ class Criterion(BaseModel):
         "Higher values give more weight in the final score. If not provided, all criteria are weighted equally.",
     )
 
+    @property
+    def effective_weight(self) -> float:
+        return 1.0 if self.weight is None else self.weight
+
     @field_validator("criterion_name", mode="after")
     @classmethod
     def normalize_criterion_name(cls, name: str) -> str:
@@ -430,17 +434,6 @@ class RubricAnswerFormat(EvaluationAnswer):
         default=None, description="Fingerprint of the rubric this judgment was made against."
     )
     criteria: list[CriterionEvaluation] = Field(..., description="The criteria used for evaluating the answer quality")
-    agent_a_wins: float = Field(..., description="The weighted score of criteria that agent A wins")
-    agent_b_wins: float = Field(..., description="The weighted score of criteria that agent B wins")
-    equally_good: float = Field(
-        ..., description="The weighted score of criteria that agent A and agent B are equally good"
-    )
-    equally_bad: float = Field(
-        ..., description="The weighted score of criteria that agent A and agent B are equally bad"
-    )
-    winner: PairwiseWinner = Field(..., description="The winner of the pairwise comparison")
-    margin: float = Field(default=0.0, description="agent_a_wins minus agent_b_wins (signed)")
-    mean_confidence: float = Field(default=1.0, description="Average confidence across all criteria")
     evidence_recall_a: EvidenceRecallResult | None = Field(
         default=None, description="Evidence recall result for agent A"
     )
@@ -454,14 +447,52 @@ class RubricAnswerFormat(EvaluationAnswer):
         default=None, description="Citation quality result for agent B"
     )
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def agent_a_wins(self) -> float:
+        return self.__weight_of("A")
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def agent_b_wins(self) -> float:
+        return self.__weight_of("B")
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def equally_good(self) -> float:
+        return self.__weight_of("C")
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def equally_bad(self) -> float:
+        return self.__weight_of("D")
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def margin(self) -> float:
+        return self.agent_a_wins - self.agent_b_wins
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def winner(self) -> PairwiseWinner:
+        if self.margin > 0:
+            return "A"
+        return "B" if self.margin < 0 else "C"
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def mean_confidence(self) -> float:
+        if not self.criteria:
+            return 1.0
+        return sum(c.confidence for c in self.criteria) / len(self.criteria)
+
+    def __weight_of(self, winner: PairwiseCriterionWinner) -> float:
+        return sum(c.criterion.effective_weight for c in self.criteria if c.winner == winner)
+
     def swap_perspective(self) -> Self:
         return self.model_copy(
             update={
                 "criteria": [criterion.swap_perspective() for criterion in self.criteria],
-                "agent_a_wins": self.agent_b_wins,
-                "agent_b_wins": self.agent_a_wins,
-                "winner": swap_pairwise_winner(self.winner),
-                "margin": -self.margin,
                 "evidence_recall_a": self.evidence_recall_b,
                 "evidence_recall_b": self.evidence_recall_a,
                 "citation_quality_a": self.citation_quality_b,
@@ -472,29 +503,12 @@ class RubricAnswerFormat(EvaluationAnswer):
     def merge_with_canonicalized(self, other: Self) -> Self:
         """Merge this rubric answer with another in the same A-vs-B perspective.
 
-        Used to reconcile bidirectional pairwise judgments after the reversed
-        evaluation has been canonicalized via :py:meth:`swap_perspective`.
-        Aggregate scores (``agent_a_wins``, ``agent_b_wins``, ``equally_good``,
-        ``equally_bad``, ``mean_confidence``) are averaged across both
-        directions; ``margin`` and ``winner`` are recomputed from the merged
-        aggregates so they remain consistent with each other and with the
-        per-criterion verdicts. Per-criterion records are merged by
-        ``criterion_name`` via :py:meth:`CriterionEvaluation.merge_with_canonicalized`;
-        criteria that appear in only one direction are kept as-is. Free-text
-        fields are kept from ``self`` (the forward direction).
+        Used to reconcile bidirectional pairwise judgments after the reversed evaluation has been
+        canonicalized via :py:meth:`swap_perspective`. Per-criterion records are merged by
+        ``criterion_name`` via :py:meth:`CriterionEvaluation.merge_with_canonicalized`; criteria
+        that appear in only one direction are kept as-is. Free-text fields are kept from ``self``
+        (the forward direction). The aggregates follow from the merged criteria.
         """
-        merged_a_wins = (self.agent_a_wins + other.agent_a_wins) / 2.0
-        merged_b_wins = (self.agent_b_wins + other.agent_b_wins) / 2.0
-        merged_equally_good = (self.equally_good + other.equally_good) / 2.0
-        merged_equally_bad = (self.equally_bad + other.equally_bad) / 2.0
-        merged_margin = merged_a_wins - merged_b_wins
-        if merged_margin > 0:
-            merged_winner: PairwiseWinner = "A"
-        elif merged_margin < 0:
-            merged_winner = "B"
-        else:
-            merged_winner = "C"
-
         other_by_name = {c.criterion.criterion_name: c for c in other.criteria}
         merged_criteria: list[CriterionEvaluation] = []
         for crit in self.criteria:
@@ -503,19 +517,7 @@ class RubricAnswerFormat(EvaluationAnswer):
                 merged_criteria.append(crit)
             else:
                 merged_criteria.append(crit.merge_with_canonicalized(counterpart))
-
-        return self.model_copy(
-            update={
-                "criteria": merged_criteria,
-                "agent_a_wins": merged_a_wins,
-                "agent_b_wins": merged_b_wins,
-                "equally_good": merged_equally_good,
-                "equally_bad": merged_equally_bad,
-                "winner": merged_winner,
-                "margin": merged_margin,
-                "mean_confidence": (self.mean_confidence + other.mean_confidence) / 2.0,
-            }
-        )
+        return self.model_copy(update={"criteria": merged_criteria})
 
 
 class CriterionEvaluationPointwise(BaseModel):
@@ -532,11 +534,19 @@ class RubricPointwiseAnswerFormat(EvaluationAnswer):
     criteria: list[CriterionEvaluationPointwise] = Field(
         ..., description="The criteria used for evaluating the answer quality"
     )
-    average_score: float = Field(..., description="The average score of the criteria")
     evidence_recall: EvidenceRecallResult | None = Field(default=None, description="Evidence recall evaluation result")
     citation_quality: CitationQualityResult | None = Field(
         default=None, description="Citation quality evaluation result"
     )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def average_score(self) -> float:
+        total_weight = sum(c.criterion.effective_weight for c in self.criteria)
+        if total_weight == 0:
+            return 0.0
+        weighted = sum(float(c.fulfillment) * c.criterion.effective_weight for c in self.criteria)
+        return weighted / total_weight
 
 
 class RubricSchema(BaseModel):

@@ -8,6 +8,7 @@ from ragelo.types.answer_formats import (
     CitationQualityResult,
     CitationQualitySchema,
     ClaimEvaluation,
+    Criterion,
     EvidenceRecallResult,
     EvidenceRecallSchema,
     EvidenceSnippetEvaluation,
@@ -131,3 +132,23 @@ async def evaluate_citation_quality(
         claims_with_citations_ratio=claims_with_citations / total_claims if total_claims > 0 else 0.0,
         citations_with_excerpts_ratio=citations_with_excerpts / total_citations if total_citations > 0 else 0.0,
     )
+
+
+def evidence_recall_criterion(weight: float) -> Criterion:
+    return Criterion(
+        criterion_name="evidence_recall",
+        short_question="Does the answer include the evidence available in the retrieved documents?",
+        weight=weight,
+    )
+
+
+def citation_quality_criterion(weight: float) -> Criterion:
+    return Criterion(
+        criterion_name="citation_quality",
+        short_question="Are the answer's claims supported by citations with relevant excerpts?",
+        weight=weight,
+    )
+
+
+def citation_quality_score(result: CitationQualityResult) -> float:
+    return (result.claims_with_citations_ratio + result.citations_with_excerpts_ratio) / 2.0
