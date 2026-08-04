@@ -17,6 +17,8 @@ from ragelo.types.results import EvaluatorResult, RetrievalEvaluatorResult
 
 logger = logging.getLogger(__name__)
 
+ACCUMULATED_FIELDS = frozenset({"retrieved_docs", "answers", "pairwise_games"})
+
 
 class Query(BaseModel):
     """A user query that can have retrieved documents and agent answers.
@@ -61,6 +63,12 @@ class Query(BaseModel):
             except ValueError:
                 raise ValueError("qid must be a string or convertible to a string")
         return v
+
+    def absorb_artifacts(self, declared: Self) -> None:
+        """Updates the fields of the Query with the fields from another Query, while keeping evaluables."""
+        for name in type(self).model_fields:
+            if name != "qid" and name not in ACCUMULATED_FIELDS:
+                setattr(self, name, getattr(declared, name))
 
     def add_metadata(self, metadata: dict[str, Any] | None):
         """Adds metadata to the query that may be templated in the prompt.

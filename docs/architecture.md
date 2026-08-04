@@ -60,12 +60,31 @@ flowchart TB
 | crossing | contract | why it is not an inference |
 |---|---|---|
 | artifact → judge | `Query.rubric` | A rubric on the query is persisted, reviewable, and shared by every judge that grades against it, rather than being private to one evaluator instance. |
+| caller → experiment | `Experiment.add_query` absorbing artifacts | Re-adding a query updates the caller-declared fields (`query`, `metadata`, `reference_answer`, `rubric`) and keeps the evaluables and judgements the experiment accumulated. Otherwise a caller re-declaring artifacts each run has to choose between being ignored and discarding paid-for judgements. |
 | generator → artifact | `prepare_experiment` / `prepare_query` writing `Query.rubric` | Artifact production is a phase that completes before any judging starts, so a rubric cannot be invented halfway through a run, and every judgment in a run is made against the same one. |
 | artifact → judgment | `RubricJudgment.rubric_fingerprint` | A rubric judgment is only meaningful against the rubric it was made against. Recording which one lets an edit to a single query's rubric re-judge that query and nothing else, instead of forcing `force=True` over the whole experiment. |
 | judge → LLM | `answer_format` on the evaluator | A result class is shared by every judge writing to the same evaluable, so its `answer` union says what it can *store*. Deriving the request schema from that union's first member would let a reordering change what the LLM is asked for. |
 | judge → storage | the `answer_format` tag plus `Field(discriminator=...)` | Structural matching cannot separate formats where one declares a superset of another's fields, and it fails silently by dropping the surplus. |
 | judgment → measure | `GradedJudgment` / `SubtopicJudgment` | The metrics layer asks a judgment what it contributes. A judge with a new payload needs no change in `get_qrels` or `get_rubric_qrels`. |
 | judgment → aggregate | computed fields on the rubric answer formats | `average_score`, `agent_a_wins`, `winner` and `margin` are pure functions of the per-criterion verdicts, so a judge cannot store an aggregate that contradicts the criteria it recorded. They still serialize, so consumers read them as before. |
+
+### Declaring a query twice is normal
+
+A harness re-declares its queries on every run: same ids, same texts, possibly edited reference
+answers or rubrics, against an experiment that already holds a pool and its judgements. So
+`Query.absorb_artifacts` splits the model in two. The experiment owns `ACCUMULATED_FIELDS`,
+`retrieved_docs` / `answers` / `pairwise_games` and the evaluations on them, which cost money and
+survive being re-added; the caller owns every other field and re-declares it wholesale.
+`force=True` still replaces everything, and warns with a count of what it drops.
+
+Naming the accumulated set rather than the artifact set is the load-bearing choice. Artifacts are
+open-ended, gaining `rubric` and then `reference_answer` in consecutive steps, so a list of fields
+to copy would go stale exactly the way the loader did when it dropped `Query.rubric` and
+`Document.retrieved_by`. The evaluable containers are closed, so a new artifact field is absorbed
+without anyone remembering to add it.
+
+This mirrors `Query.add_retrieved_doc`, which has always merged `retrieved_by` into an existing
+document rather than replacing it.
 
 ### Artifact production is a phase, not a side effect
 

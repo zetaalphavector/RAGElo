@@ -186,18 +186,19 @@ class Experiment:
         query_id: str | None = None,
         metadata: dict | None = None,
         force: bool = False,
-        exist_ok: bool = False,
         should_save: bool = True,
     ) -> str:
         """
-        Adds a query to the collection of queries.
+        Adds a query to the collection of queries. Re-adding an existing query updates its
+        artifacts and keeps its accumulated evaluables.
         Args:
             query (Query | str): The query to be added. It can be an instance of the Query class or a string.
             query_id (str | None, optional): The identifier for the query.
                 If not provided, a default ID will be generated.
             metadata (dict | None, optional): Additional metadata for the query. Defaults to None.
-            force (bool, optional): Whether to overwrite the query if it already exists. Defaults to False.
-            exist_ok (bool, optional): Whether to raise an error if the query already exists. Defaults to False.
+            force (bool, optional): Replace an existing query outright, discarding its retrieved
+                documents, answers, games and their evaluations. Defaults to False, which updates
+                the caller-declared fields and keeps everything the experiment accumulated.
             should_save (bool, optional): Whether to persist the experiment state after adding the query.
                 Defaults to True.
         """
@@ -214,17 +215,20 @@ class Experiment:
         else:
             query_obj = Query(qid=query_id, query=query, metadata=metadata)
             query_id = query_obj.qid
-        if query_id in self.queries and not force:
-            if not exist_ok:
-                logger.info(f'Query with ID "{query_id}" already exists. Use force=True to overwrite')
-            else:
-                return query_id
-            return query_id
-        if query_id in self.queries and force:
-            logger.info(f'Query with ID "{query_id}" already exists, but force was set to True. Overwriting.')
-        if query_id in self.queries and exist_ok:
-            return query_id
-        self.queries[query_id] = query_obj
+        stored = self.queries.get(query_id)
+        if stored is not None and not force:
+            stored.absorb_artifacts(query_obj)
+        elif stored is not None:
+            accumulated = len(stored.retrieved_docs) + len(stored.answers) + len(stored.pairwise_games)
+            if accumulated:
+                logger.warning(
+                    f'Replacing query "{query_id}" with force=True discards {accumulated} retrieved '
+                    "documents, answers and games, and every evaluation on them. Omit force to keep "
+                    "them and update the query, metadata, reference answer and rubric instead."
+                )
+            self.queries[query_id] = query_obj
+        else:
+            self.queries[query_id] = query_obj
         if should_save:
             self.save()
         return query_id

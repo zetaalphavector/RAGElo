@@ -15,7 +15,7 @@ from ragelo.types.answer_formats import (
     RubricPointwiseAnswerFormat,
 )
 from ragelo.types.evaluables import AgentAnswer, ChatMessage, Document
-from ragelo.types.query import Query
+from ragelo.types.query import ACCUMULATED_FIELDS, Query
 from ragelo.types.results import (
     AnswerEvaluationAnswer,
     AnswerEvaluatorResult,
@@ -58,10 +58,77 @@ class TestExperiment:
         assert qid2 == "test2"
         assert empty_experiment[qid2].query == "Test query 2"
 
-        # Test force parameter
-        empty_experiment.add_query("New query", qid, force=False)
+        # Re-adding an existing query updates the declared fields
+        empty_experiment.add_query("New query", qid)
+        assert empty_experiment[qid].query == "New query"
         empty_experiment.add_query("Forced query", qid, force=True)
         assert empty_experiment[qid].query == "Forced query"
+
+    def test_re_adding_a_query_keeps_its_evaluables_and_updates_its_artifacts(self, empty_experiment):
+        """Artifacts are re-declared every run; documents and their judgements are paid for once."""
+        empty_experiment.add_query(Query(qid="q0", query="What is the capital of Brazil?", metadata={"run": 1}))
+        empty_experiment.add_retrieved_doc(
+            Document(qid="q0", did="d0", text="Brasilia is the capital."), agent="agent1", score=1.0
+        )
+        empty_experiment.add_evaluation(
+            eval_tuple=(empty_experiment["q0"], empty_experiment["q0"].retrieved_docs["d0"]),
+            evaluation=RetrievalEvaluatorResult(
+                qid="q0",
+                did="d0",
+                evaluator_name="reasoner",
+                answer=RetrievalEvaluationAnswer(reasoning="relevant", score=2),
+            ),
+        )
+
+        empty_experiment.add_query(
+            Query(
+                qid="q0",
+                query="What is the capital of Brazil?",
+                metadata={"run": 2},
+                reference_answer="Brasilia.",
+                rubric=[Criterion(criterion_name="names_capital", short_question="Names it?")],
+            )
+        )
+
+        query = empty_experiment["q0"]
+        assert query.metadata == {"run": 2}
+        assert query.reference_answer == "Brasilia."
+        assert [c.criterion_name for c in query.rubric] == ["names_capital"]
+        assert list(query.retrieved_docs) == ["d0"]
+        assert query.retrieved_docs["d0"].retrieved_by == {"agent1": 1.0}
+        assert query.retrieved_docs["d0"].evaluations["reasoner"].answer.score == 2
+
+    def test_every_declared_field_is_absorbed(self, empty_experiment):
+        """Covers fields added after this test was written, which an enumerated list cannot."""
+        distinct = {
+            "query": "a different question",
+            "metadata": {"changed": True},
+            "reference_answer": "a different answer",
+            "rubric": [Criterion(criterion_name="added_later", short_question="Absorbed?")],
+        }
+        declarable = set(Query.model_fields) - ACCUMULATED_FIELDS - {"qid"}
+        assert declarable == set(distinct), (
+            f"Query gained or lost a declarable field: {declarable ^ set(distinct)}. Give it a "
+            "distinct value here so absorb_artifacts is proven to carry it."
+        )
+
+        empty_experiment.add_query(Query(qid="q0", query="original"))
+        empty_experiment.add_query(Query(qid="q0", **distinct))
+
+        stored = empty_experiment["q0"]
+        for name, value in distinct.items():
+            assert getattr(stored, name) == value, f"{name} was not absorbed"
+
+    def test_force_replaces_a_query_and_drops_what_it_accumulated(self, empty_experiment, caplog):
+        empty_experiment.add_query(Query(qid="q0", query="What is the capital of Brazil?"))
+        empty_experiment.add_retrieved_doc(
+            Document(qid="q0", did="d0", text="Brasilia is the capital."), agent="agent1", score=1.0
+        )
+
+        empty_experiment.add_query(Query(qid="q0", query="Replaced"), force=True)
+
+        assert empty_experiment["q0"].retrieved_docs == {}
+        assert "discards 1 retrieved documents" in caplog.text
 
     def test_add_retrieved_doc(self, empty_experiment):
         """Test adding retrieved documents manually"""
