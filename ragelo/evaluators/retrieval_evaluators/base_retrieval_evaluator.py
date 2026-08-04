@@ -82,7 +82,7 @@ class BaseRetrievalEvaluator(BaseEvaluator[T_Config, RetrievalEvaluatorResult]):
         evaluator_name = str(self.config.evaluator_name)
         if evaluator_name in document.evaluations and not self.config.force:
             cached_eval = document.evaluations[evaluator_name]
-            if isinstance(cached_eval, RetrievalEvaluatorResult):
+            if isinstance(cached_eval, RetrievalEvaluatorResult) and self._is_cached_result_valid(query, cached_eval):
                 return cached_eval
 
         llm_input = self._build_message(query, document)

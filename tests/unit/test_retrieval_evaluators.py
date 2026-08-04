@@ -28,6 +28,10 @@ from ragelo.types.results import RetrievalEvaluatorResult
 from ragelo.utils import string_to_template
 
 
+def _schema_flags(schema) -> list[str]:
+    return [name for name in schema.model_fields if name != "reasoning"]
+
+
 class RetrievalEvaluator(BaseRetrievalEvaluator):
     def _build_message(self, query: Query, document: Document) -> LLMInputPrompt:
         return LLMInputPrompt(user_message=f"Query: {query.query}\nDocument: {document.text}")
@@ -326,6 +330,48 @@ class TestRubricCoverageEvaluator:
         )
         with pytest.raises(ValueError, match="empty rubric"):
             evaluator.evaluate(query, query.retrieved_docs["0"])
+
+    def test_editing_the_rubric_invalidates_that_querys_cached_judgements(self, llm_provider_mock, experiment):
+        query = experiment["0"]
+        query.rubric = self._rubric()
+        llm_provider_mock.async_call_mocker.side_effect = lambda input, schema: LLMResponseType(
+            raw_answer="{}",
+            parsed_answer=schema(reasoning="Addresses both.", **dict.fromkeys(_schema_flags(schema), True)),
+        )
+        evaluator = RubricCoverageEvaluator.from_config(
+            config=RubricCoverageEvaluatorConfig(expert_in="geography"),
+            llm_provider=llm_provider_mock,
+        )
+        document = query.retrieved_docs["0"]
+        query.add_evaluation(document, evaluator.evaluate(query, document))
+        assert llm_provider_mock.async_call_mocker.call_count == 1
+
+        evaluator.evaluate(query, document)
+        assert llm_provider_mock.async_call_mocker.call_count == 1, "the same rubric must reuse the judgement"
+
+        query.rubric = [*self._rubric(), Criterion(criterion_name="dates_it", short_question="Does it give a date?")]
+        evaluator.evaluate(query, document)
+        assert llm_provider_mock.async_call_mocker.call_count == 2, "an edited rubric must re-judge"
+
+    def test_a_judgement_made_before_fingerprints_existed_is_reused(self, llm_provider_mock, experiment):
+        query = experiment["0"]
+        query.rubric = self._rubric()
+        evaluator = RubricCoverageEvaluator.from_config(
+            config=RubricCoverageEvaluatorConfig(expert_in="geography"),
+            llm_provider=llm_provider_mock,
+        )
+        query.add_evaluation(
+            query.retrieved_docs["0"],
+            RetrievalEvaluatorResult(
+                qid="0",
+                did="0",
+                evaluator_name="rubric_coverage",
+                answer=RubricCoverageAnswerFormat(reasoning="No fingerprint on this one.", score=1),
+            ),
+        )
+
+        evaluator.evaluate(query, query.retrieved_docs["0"])
+        assert llm_provider_mock.async_call_mocker.call_count == 0
 
 
 class TestDomainExpertEvaluator:

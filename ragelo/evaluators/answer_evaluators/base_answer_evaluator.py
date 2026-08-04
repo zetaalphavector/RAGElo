@@ -322,13 +322,13 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
             if self.config.pairwise:
                 for g in q.pairwise_games.values():
                     all_tuples += 1
-                    if evaluator_name not in g.evaluations or self.config.force:
+                    if self.__needs_evaluation(q, g, evaluator_name):
                         tuples_to_eval.append((q, g))
 
             else:
                 for a in q.answers.values():
                     all_tuples += 1
-                    if evaluator_name not in a.evaluations or self.config.force:
+                    if self.__needs_evaluation(q, a, evaluator_name):
                         tuples_to_eval.append((q, a))
 
         if len(tuples_to_eval) == 0 and all_tuples > 0:
@@ -385,6 +385,11 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
             for agent_a, agent_b in games:
                 query.add_pairwise_game(agent_a, agent_b)
         experiment.save()
+
+    def __needs_evaluation(self, query: Query, evaluable: Evaluable, evaluator_name: str) -> bool:
+        if self.config.force or evaluator_name not in evaluable.evaluations:
+            return True
+        return not self._is_cached_result_valid(query, evaluable.evaluations[evaluator_name])
 
     def _filter_documents(self, query: Query) -> list[Document]:
         # Check if we will actually include documents in any prompt

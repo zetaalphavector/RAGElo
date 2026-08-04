@@ -838,11 +838,10 @@ class TestRubricPairwiseEvaluator:
         llm_provider_mock.async_call_mocker = AsyncMock(side_effect=responses)
 
         evaluator = RubricPairwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
-        assert "0" in evaluator.criteria_cache
-        assert "1" in evaluator.criteria_cache
 
         query = experiment["0"]
         result = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
+        assert query.rubric == rubrics["0"]
         assert isinstance(result, PairwiseGameEvaluatorResult)
         assert result.answer is not None
         assert isinstance(result.answer, RubricAnswerFormat)
@@ -917,7 +916,7 @@ class TestRubricPairwiseEvaluator:
 
         game = PairwiseGame(qid=query.qid, agent_a_answer=answer_a, agent_b_answer=answer_b)
         conversation_context = evaluator._get_shared_conversation_context(game)
-        asyncio.run(evaluator._build_criteria(query, list(query.retrieved_docs.values()), conversation_context))
+        asyncio.run(evaluator._prepare_rubric(query, conversation_context))
 
         criteria_call = llm_provider_mock.async_call_mocker.call_args_list[0][0][0]
         assert "[Conversation Context]" in criteria_call.user_message
@@ -971,8 +970,7 @@ class TestRubricPairwiseEvaluator:
 
         config = RubricPairwiseEvaluatorConfig(expert_in="AI", force=True)
         evaluator = RubricPairwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
-        schema = self._make_rubric_schema()
-        model = evaluator._build_evaluation_schema(schema)
+        model = evaluator._build_evaluation_schema(self._make_criteria())
         assert issubclass(model, BaseModel)
         assert "accuracy" in model.model_fields
         assert "completeness" in model.model_fields
@@ -992,12 +990,9 @@ class TestRubricPairwiseEvaluator:
 
         # A wins accuracy (weight=5), B wins completeness and clarity (weight=1 each)
         eval_response = self._make_evaluation_response(["A", "B", "B"])
-        # Patch criteria cache with weighted criteria
-        evaluator.criteria_cache["0"] = RubricSchema(criteria=criteria)
-        evaluator.answer_schema_cache["0"] = evaluator._build_evaluation_schema(RubricSchema(criteria=criteria))
-
         llm_response: LLMResponseType = LLMResponseType(raw_answer="test", parsed_answer=eval_response)
         query = experiment["0"]
+        query.rubric = criteria
         processed = evaluator._process_answer(llm_response, query)
         answer = processed.parsed_answer
         assert isinstance(answer, RubricAnswerFormat)
@@ -1089,6 +1084,82 @@ class TestCriterion:
             Criterion(criterion_name="???", short_question="q")
 
 
+class TestRubricArtifact:
+    """The rubric an answer is graded against is generated once and persisted on the query."""
+
+    def _make_criteria(self):
+        return [
+            Criterion(criterion_name="accuracy", evidence=["doc1"], short_question="Is the answer accurate?"),
+            Criterion(criterion_name="completeness", evidence=["doc2"], short_question="Is the answer complete?"),
+        ]
+
+    def test_a_generated_rubric_lands_on_the_query(self, llm_provider_mock, experiment):
+        criteria = self._make_criteria()
+        eval_schema = create_model(
+            "EvaluationSchema",
+            **{
+                c.criterion_name: create_model(
+                    c.criterion_name,
+                    reasoning=(str, Field(description="reasoning")),
+                    fulfillment=(bool, Field(description="fulfillment")),
+                )
+                for c in criteria
+            },
+        )  # type: ignore[call-overload]
+        llm_provider_mock.async_call_mocker = AsyncMock(
+            side_effect=[
+                LLMResponseType(raw_answer="rubric", parsed_answer=RubricSchema(criteria=criteria)),
+                LLMResponseType(
+                    raw_answer="eval",
+                    parsed_answer=eval_schema(
+                        accuracy={"reasoning": "yes", "fulfillment": True},
+                        completeness={"reasoning": "no", "fulfillment": False},
+                    ),
+                ),
+            ]
+        )
+        evaluator = RubricPointwiseEvaluator.from_config(
+            config=RubricPointwiseEvaluatorConfig(expert_in="AI", force=True),
+            llm_provider=llm_provider_mock,
+        )
+        query = experiment["0"]
+
+        result = evaluator.evaluate(query, query.answers["agent1"])
+
+        assert [c.criterion_name for c in query.rubric] == ["accuracy", "completeness"]
+        assert isinstance(result.answer, RubricPointwiseAnswerFormat)
+        assert result.answer.rubric_fingerprint == query.rubric_fingerprint
+        generation_prompt = llm_provider_mock.async_call_mocker.call_args_list[0][0][0]
+        for document in query.retrieved_docs.values():
+            assert document.text in generation_prompt.user_message
+
+    def test_an_answer_judged_against_an_edited_rubric_is_re_evaluated(self, llm_provider_mock, experiment):
+        evaluator = RubricPointwiseEvaluator.from_config(
+            config=RubricPointwiseEvaluatorConfig(expert_in="AI"),
+            llm_provider=llm_provider_mock,
+        )
+        query = experiment["0"]
+        query.rubric = self._make_criteria()
+        answer = query.answers["agent1"]
+        query.add_evaluation(
+            answer,
+            AnswerEvaluatorResult(
+                qid=query.qid,
+                agent="agent1",
+                evaluator_name="rubric_pointwise",
+                answer=RubricPointwiseAnswerFormat(
+                    criteria=[],
+                    average_score=1.0,
+                    rubric_fingerprint=query.rubric_fingerprint,
+                ),
+            ),
+        )
+        assert answer not in [e for _, e in evaluator._get_tuples_to_evaluate(experiment)]
+
+        query.rubric = [*query.rubric, Criterion(criterion_name="clarity", short_question="Clear?")]
+        assert answer in [e for _, e in evaluator._get_tuples_to_evaluate(experiment)]
+
+
 class TestRubricPointwiseEvaluator:
     """Tests for RubricPointwiseEvaluator."""
 
@@ -1107,10 +1178,8 @@ class TestRubricPointwiseEvaluator:
         config = RubricPointwiseEvaluatorConfig(expert_in="AI", force=True)
         evaluator = RubricPointwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
 
-        # Manually populate criteria cache
         criteria = self._make_criteria()
-        rubric = RubricSchema(criteria=criteria)
-        evaluator.criteria_cache["0"] = rubric
+        experiment["0"].rubric = criteria
 
         EvalSchema = create_model(
             "EvaluationSchema",
@@ -1171,12 +1240,11 @@ class TestRubricPointwiseEvaluator:
         )
 
         evaluator = RubricPointwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
-        assert "0" in evaluator.criteria_cache
-        assert "1" in evaluator.criteria_cache
 
         query = experiment["0"]
         answer = query.answers["agent1"]
         result = evaluator.evaluate(query, answer)
+        assert query.rubric == rubrics["0"]
         assert isinstance(result, AnswerEvaluatorResult)
         assert isinstance(result.answer, RubricPointwiseAnswerFormat)
         assert result.answer.average_score == 0.5
@@ -1199,9 +1267,7 @@ class TestRubricPointwiseEvaluator:
         config = RubricPointwiseEvaluatorConfig(expert_in="AI", force=True)
         evaluator = RubricPointwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
 
-        rubric = RubricSchema(criteria=criteria)
-        evaluator.criteria_cache["0"] = rubric
-        evaluator.answer_schema_cache["0"] = evaluator._build_evaluation_schema(rubric)
+        experiment["0"].rubric = criteria
 
         EvalSchema = create_model(
             "EvaluationSchema",
@@ -1236,9 +1302,7 @@ class TestRubricPointwiseEvaluator:
         config = RubricPointwiseEvaluatorConfig(expert_in="AI", force=True, graduated_scoring=True, max_score=5)
         evaluator = RubricPointwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
 
-        rubric = RubricSchema(criteria=criteria)
-        evaluator.criteria_cache["0"] = rubric
-        evaluator.answer_schema_cache["0"] = evaluator._build_evaluation_schema(rubric)
+        experiment["0"].rubric = criteria
 
         EvalSchema = create_model(
             "EvaluationSchema",
@@ -1278,9 +1342,7 @@ class TestRubricPointwiseEvaluator:
         config = RubricPointwiseEvaluatorConfig(expert_in="AI", force=True, graduated_scoring=True, max_score=10)
         evaluator = RubricPointwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
 
-        rubric = RubricSchema(criteria=criteria)
-        evaluator.criteria_cache["0"] = rubric
-        evaluator.answer_schema_cache["0"] = evaluator._build_evaluation_schema(rubric)
+        experiment["0"].rubric = criteria
 
         EvalSchema = create_model(
             "EvaluationSchema",
@@ -1451,9 +1513,9 @@ class TestBuiltinCriteriaPointwise:
             Criterion(criterion_name="c1", evidence=["ev1", "ev2"], short_question="Q1?"),
             Criterion(criterion_name="c2", evidence=["ev3"], short_question="Q2?"),
         ]
-        rubric_cache = {"0": RubricSchema(criteria=criteria)}
         query = experiment["0"]
-        snippets = get_evidence_snippets(query, None, rubric_cache)
+        query.rubric = criteria
+        snippets = get_evidence_snippets(query, None)
         assert snippets == ["ev1", "ev2", "ev3"]
 
 
@@ -1817,10 +1879,17 @@ class TestPRFixVerification:
         assert "criteria.evidence" in pointwise_source
         assert "criteria.supporting_documents" not in pointwise_source
 
-        # Also check the graduated system prompt for pointwise
-        graduated_source: str = getattr(RubricPointwiseEvaluator.graduated_system_prompt, "_ragelo_source")
-        assert "criteria.evidence" in graduated_source
-        assert "criteria.supporting_documents" not in graduated_source
+        criterion = Criterion(criterion_name="c", evidence=["doc_1"], short_question="Good?")
+        for graduated_scoring in (False, True):
+            rendered = RubricPointwiseEvaluator.system_prompt.render(
+                expert_in="testing",
+                company=None,
+                rubric=[criterion],
+                graduated_scoring=graduated_scoring,
+                max_score=5,
+            )
+            assert "doc_1" in rendered
+            assert ("score from 0 to 5" in rendered) is graduated_scoring
 
     def test_rubric_template_renders_evidence_values(self, llm_provider_mock):
         """Verify that the evidence field actually renders into the prompt output."""
@@ -1831,11 +1900,9 @@ class TestPRFixVerification:
             evidence=["doc_1", "doc_2"],
             short_question="Is the answer good?",
         )
-        rubric = RubricSchema(criteria=[criterion])
-
         rendered = RubricPairwiseEvaluator.system_prompt.render(
             expert_in="testing",
-            criteria=rubric,
+            rubric=[criterion],
             company=None,
             include_evidence=False,
             is_conversation=False,

@@ -109,6 +109,29 @@ pairwise = get_answer_evaluator(
 pairwise.evaluate_experiment(experiment)
 ```
 
+The rubric lives on the query (`query.rubric`), so it is saved with the experiment, can be reviewed or edited between runs, and is shared by every evaluator that grades against it, including the `rubric_coverage` retrieval evaluator. Each judgment records which rubric it was made against, so editing one query's rubric re-judges that query and leaves the rest cached.
+
+#### Generating the rubric yourself
+
+Generating rubrics as a separate pass lets you inspect and edit them before anything is graded against them:
+
+```python
+from ragelo import get_rubric_generator
+
+generator = get_rubric_generator(
+    llm_provider="openai",
+    expert_in="Machine Learning",
+    n_criteria=5,
+    source="reference_answer",  # or "documents" (the default)
+)
+generator.generate_experiment(experiment)   # writes query.rubric for every query without one
+
+for criterion in experiment["q0"].rubric:
+    print(criterion.criterion_name, criterion.short_question, criterion.weight)
+```
+
+`source="documents"` derives the criteria from the query's retrieved documents, so the rubric is bounded by what retrieval found. `source="reference_answer"` decomposes `query.reference_answer` instead, which keeps the criteria out of reach of the systems being scored. You can also write `query.rubric` by hand, or pass `rubrics={qid: [Criterion(...)]}` to an evaluator's config.
+
 #### Criteria weights
 
 When the LLM generates criteria it may optionally assign a **weight** (a positive float) to each criterion. Weights are normalized at scoring time so their absolute scale does not matter. If no weight is generated, all criteria are weighted equally.
@@ -146,7 +169,7 @@ pointwise = get_answer_evaluator(
 )
 ```
 
-Evidence snippets are resolved in priority order: `evidence_snippets` config → `Criterion.evidence` fields from the generated rubric → text of relevant documents in the query.
+Evidence snippets are resolved in priority order: `evidence_snippets` config → `Criterion.evidence` fields on `query.rubric` → text of relevant documents in the query.
 
 **Citation quality** — evaluates whether the answer supports claims with citations and includes relevant excerpts:
 

@@ -68,27 +68,15 @@ CITATION_QUALITY_USER_PROMPT = string_to_template(
 )
 
 
-def get_evidence_snippets(
-    query: Query,
-    config_snippets: dict[str, list[str]] | None,
-    criteria_cache: dict | None = None,
-) -> list[str]:
+def get_evidence_snippets(query: Query, config_snippets: dict[str, list[str]] | None) -> list[str]:
     if config_snippets and query.qid in config_snippets:
         return config_snippets[query.qid]
 
-    if criteria_cache and query.qid in criteria_cache:
-        rubric = criteria_cache[query.qid]
-        all_evidence: list[str] = []
-        for criterion in rubric.criteria:
-            all_evidence.extend(criterion.evidence)
-        if all_evidence:
-            return all_evidence
+    rubric_evidence = [snippet for criterion in query.rubric for snippet in criterion.evidence]
+    if rubric_evidence:
+        return rubric_evidence
 
-    snippets = []
-    for doc in query.retrieved_docs.values():
-        if doc.text:
-            snippets.append(doc.text)
-    return snippets
+    return [doc.text for doc in query.retrieved_docs.values() if doc.text]
 
 
 async def evaluate_evidence_recall(

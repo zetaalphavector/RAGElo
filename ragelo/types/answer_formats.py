@@ -70,6 +70,13 @@ class GradedJudgment(Protocol):
 
 
 @runtime_checkable
+class RubricJudgment(Protocol):
+    """A judgment made against a query's rubric."""
+
+    rubric_fingerprint: str | None
+
+
+@runtime_checkable
 class SubtopicJudgment(Protocol):
     """A judgment that contributes subtopic labels to diversity qrels.
 
@@ -419,6 +426,9 @@ class CitationQualitySchema(BaseModel):
 
 class RubricAnswerFormat(EvaluationAnswer):
     answer_format: SkipJsonSchema[Literal["rubric_pairwise"]] = "rubric_pairwise"
+    rubric_fingerprint: SkipJsonSchema[str | None] = Field(
+        default=None, description="Fingerprint of the rubric this judgment was made against."
+    )
     criteria: list[CriterionEvaluation] = Field(..., description="The criteria used for evaluating the answer quality")
     agent_a_wins: float = Field(..., description="The weighted score of criteria that agent A wins")
     agent_b_wins: float = Field(..., description="The weighted score of criteria that agent B wins")
@@ -516,6 +526,9 @@ class CriterionEvaluationPointwise(BaseModel):
 
 class RubricPointwiseAnswerFormat(EvaluationAnswer):
     answer_format: SkipJsonSchema[Literal["rubric_pointwise"]] = "rubric_pointwise"
+    rubric_fingerprint: SkipJsonSchema[str | None] = Field(
+        default=None, description="Fingerprint of the rubric this judgment was made against."
+    )
     criteria: list[CriterionEvaluationPointwise] = Field(
         ..., description="The criteria used for evaluating the answer quality"
     )
@@ -540,6 +553,9 @@ class RubricCoverageAnswerFormat(EvaluationAnswer):
     """
 
     answer_format: SkipJsonSchema[Literal["rubric_coverage"]] = "rubric_coverage"
+    rubric_fingerprint: SkipJsonSchema[str | None] = Field(
+        default=None, description="Fingerprint of the rubric this judgment was made against."
+    )
 
     reasoning: str = Field(description="A concise explanation of which criteria the document addresses.")
     criteria_addressed: list[str] = Field(

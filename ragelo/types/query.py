@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import warnings
 from collections.abc import Iterator
@@ -26,6 +28,8 @@ class Query(BaseModel):
             retrieval-evaluation literature as a nugget bank. Shared by every evaluator that grades
             against it: `rubric_coverage` over retrieved documents, `rubric_pointwise` and
             `rubric_pairwise` over agent answers.
+        reference_answer Optional[str]: A known-correct answer to the query, for judges and rubric
+            generators that grade against a gold answer.
         retrieved_docs dict[str, Document]: A dictionary of retrieved documents, where the key is the document ID.
         answers list[AgentAnswer]: The list of agent answers.
         pairwise_games list[PairwiseGame]: The list games to be played between agent's answers.
@@ -36,9 +40,18 @@ class Query(BaseModel):
     query: str
     metadata: dict[str, Any] | None = None
     rubric: list[Criterion] = []
+    reference_answer: str | None = None
     retrieved_docs: dict[str, Document] = {}
     answers: dict[str, AgentAnswer] = {}
     pairwise_games: dict[str, PairwiseGame] = {}
+
+    @property
+    def rubric_fingerprint(self) -> str | None:
+        """Identifies the current rubric, so judgments made against an edited one can be spotted."""
+        if not self.rubric:
+            return None
+        criteria = sorted(json.dumps(c.model_dump(), sort_keys=True) for c in self.rubric)
+        return hashlib.sha256("\n".join(criteria).encode()).hexdigest()[:16]
 
     @field_validator("qid", mode="before")
     def qid_into_string(cls, v):

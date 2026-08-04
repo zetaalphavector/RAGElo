@@ -111,5 +111,6 @@ class RubricCoverageEvaluator(BaseRetrievalEvaluator[RubricCoverageEvaluatorConf
                 reasoning=response.get("reasoning", ""),
                 criteria_addressed=addressed,
                 score=len(addressed),
+                rubric_fingerprint=query.rubric_fingerprint,
             ),
         )

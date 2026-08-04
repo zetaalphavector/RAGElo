@@ -10,6 +10,7 @@ from pydantic import BaseModel, create_model
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.presenters import render_failed_evaluations
+from ragelo.types.answer_formats import RubricJudgment
 from ragelo.types.configurations import BaseEvaluatorConfig
 from ragelo.types.evaluables import Evaluable
 from ragelo.types.formats import LLMResponseType
@@ -176,6 +177,17 @@ class BaseEvaluator(ABC, Generic[T_Config, T_Result]):
     @abstractmethod
     def _get_tuples_to_evaluate(self, experiment: Experiment) -> Sequence[tuple[Query, Evaluable]]:
         raise NotImplementedError
+
+    def _is_cached_result_valid(self, query: Query, cached: EvaluatorResult) -> bool:
+        """Whether a stored judgment can be reused instead of re-judging the evaluable.
+
+        A rubric judgment is only meaningful against the rubric it was made against, so editing one
+        query's rubric invalidates that query's judgments and nothing else.
+        """
+        answer = cached.answer
+        if not isinstance(answer, RubricJudgment) or answer.rubric_fingerprint is None:
+            return True
+        return answer.rubric_fingerprint == query.rubric_fingerprint
 
     def _process_answer(self, llm_response: LLMResponseType[BaseModel], query: Query) -> LLMResponseType[BaseModel]:
         """Processes the raw answer returned by the LLM. Should be implemented by the subclass if needed."""
