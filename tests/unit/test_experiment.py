@@ -5,6 +5,7 @@ import shutil
 import pytest
 
 from ragelo import Experiment, get_agent_ranker, get_answer_evaluator, get_llm_provider, get_retrieval_evaluator
+from ragelo.measures import UNADDRESSED_DOC_PREFIX
 from ragelo.types.answer_formats import (
     Criterion,
     CriterionEvaluation,
@@ -419,6 +420,57 @@ class TestExperiment:
         assert results["agent1"]["StRecall@10"] == 0.5
         assert results["agent2"]["StRecall@10"] == 1.0
         assert "R@10" in results["agent1"]
+
+    def test_a_criterion_nothing_addresses_still_counts_against_coverage(self, experiment):
+        """The denominator is the rubric, not the criteria retrieval happened to find."""
+        pytest.importorskip("pyndeval")
+        query = experiment["0"]
+        query.rubric = [
+            Criterion(criterion_name="names_capital", short_question="Names the capital?"),
+            Criterion(criterion_name="nothing_addresses_this", short_question="Names the population?"),
+        ]
+        document = query.retrieved_docs["0"]
+        document.retrieved_by = {"agent1": 1.0}
+        experiment.add_evaluation(
+            eval_tuple=(query, document),
+            evaluation=RetrievalEvaluatorResult(
+                qid="0",
+                did="0",
+                evaluator_name="rubric_coverage",
+                answer=RubricCoverageAnswerFormat(reasoning="judged", criteria_addressed=["names_capital"], score=1),
+            ),
+        )
+
+        qrels = experiment.get_rubric_qrels()
+        assert {q.iteration for q in qrels} == {"names_capital", "nothing_addresses_this"}
+        placeholder = [q for q in qrels if q.iteration == "nothing_addresses_this"]
+        assert len(placeholder) == 1
+        assert placeholder[0].doc_id.startswith(UNADDRESSED_DOC_PREFIX)
+        assert placeholder[0].doc_id not in query.retrieved_docs
+
+        results = experiment.evaluate_retrieval(metrics=["StRecall@10"], relevance_threshold=0)
+        assert results["agent1"]["StRecall@10"] == 0.5
+
+    def test_a_query_whose_rubric_is_wholly_unaddressed_scores_zero(self, experiment):
+        """It must score 0 rather than dropping out of the aggregate."""
+        pytest.importorskip("pyndeval")
+        for qid in ("0", "1"):
+            experiment[qid].rubric = [Criterion(criterion_name=f"unmet_{qid}", short_question="?")]
+        query = experiment["0"]
+        document = query.retrieved_docs["0"]
+        document.retrieved_by = {"agent1": 1.0}
+        experiment.add_evaluation(
+            eval_tuple=(query, document),
+            evaluation=RetrievalEvaluatorResult(
+                qid="0",
+                did="0",
+                evaluator_name="rubric_coverage",
+                answer=RubricCoverageAnswerFormat(reasoning="judged", criteria_addressed=[], score=0),
+            ),
+        )
+
+        results = experiment.evaluate_retrieval(metrics=["StRecall@10"], relevance_threshold=0)
+        assert results["agent1"]["StRecall@10"] == 0.0
 
     def test_add_retrieval_evaluation(self, experiment, retrieval_evaluation, caplog):
         """Test adding retrieval evaluation"""

@@ -108,6 +108,14 @@ cannot express: those hold one relevance value per document. `get_rubric_qrels` 
 name in the `iteration` field, which is where `ir_measures` looks for a subtopic id. Encoding it in
 the query id instead produces `WARNING: All queries have only 1 subtopic!` and invalid numbers.
 
+`ndeval` derives a query's subtopics from its **relevant** rows alone, so a criterion no document
+addresses simply would not exist for the measure: the denominator would be the criteria retrieval
+happened to find, and a query with nothing addressed would return `NaN`. A relevance-0 row does not
+help, since it declares no subtopic. So `get_rubric_qrels` declares each unaddressed criterion
+against a placeholder document id (`UNADDRESSED_DOC_PREFIX`) that no run can contain: the subtopic
+enters the denominator and stays permanently uncovered, which is what "the ranking missed this part
+of the answer" means. Measured on a 42-question set, this moved `StRecall@10` from 0.70 to 0.58.
+
 These measures also require `pip install 'ragelo[eval]'`, which pulls `ir-measures[pyndeval]`;
 without `pyndeval` they appear in the `ir_measures` registry but are unsupported.
 

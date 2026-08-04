@@ -21,6 +21,8 @@ except ImportError:
 
 DIVERSITY_MODULE = "ir_measures.measures.diversity"
 
+UNADDRESSED_DOC_PREFIX = "__ragelo_unaddressed__"
+
 _IMPORT_ERROR = (
     "ir_measures is not installed. Please install it with `pip install 'ragelo[eval]'`. "
     "Coverage measures additionally need `pip install 'ir-measures[pyndeval]'`."

@@ -15,7 +15,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Sequence
 
-from ragelo.measures import is_coverage_measure, make_qrel, make_run, parse_measure
+from ragelo.measures import UNADDRESSED_DOC_PREFIX, is_coverage_measure, make_qrel, make_run, parse_measure
 from ragelo.presenters import render_evaluation, render_retrieval_summary
 from ragelo.types.answer_formats import SubtopicJudgment
 from ragelo.types.evaluables import AgentAnswer, Document, Evaluable
@@ -490,6 +490,13 @@ class Experiment:
 
         Only judgements from a `rubric_coverage` evaluator contribute, since only those record
         which criteria a document addresses.
+
+        A criterion nothing addresses is declared against an unretrievable placeholder document.
+        `ndeval` derives a query's subtopics from its *relevant* rows only, so a criterion with no
+        relevant document would otherwise not exist as far as the measure is concerned: the
+        denominator would be the criteria retrieval happened to find rather than the whole rubric,
+        and a query with no addressed criterion would drop out of the aggregate entirely. A
+        relevance-0 row does not work for this, as it declares no subtopic.
         Args:
             retrieval_evaluator_name (str | None): The name of the retrieval evaluator to read the addressed
                 criteria from. If None, any evaluation carrying addressed criteria is used.
@@ -499,15 +506,27 @@ class Experiment:
 
         qrels = []
         for qid, query in self.queries.items():
+            addressed: set[str] = set()
             for did, document in query.retrieved_docs.items():
                 for name, evaluation in document.evaluations.items():
                     if retrieval_evaluator_name is not None and name != retrieval_evaluator_name:
                         continue
-                    answer = getattr(evaluation, "answer", None)
+                    answer = evaluation.answer
                     if not isinstance(answer, SubtopicJudgment):
                         continue
                     for subtopic in answer.subtopics():
+                        addressed.add(subtopic)
                         qrels.append(make_qrel(qid, did, 1, subtopic=subtopic))
+            for criterion in query.rubric:
+                if criterion.criterion_name not in addressed:
+                    qrels.append(
+                        make_qrel(
+                            qid,
+                            f"{UNADDRESSED_DOC_PREFIX}{criterion.criterion_name}",
+                            1,
+                            subtopic=criterion.criterion_name,
+                        )
+                    )
         if not qrels:
             logger.warning(
                 "No addressed rubric criteria found. Coverage measures need judgements from a "
