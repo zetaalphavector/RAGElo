@@ -168,6 +168,20 @@ class AgentAnswer(Evaluable[AnswerEvaluatorResult]):
     text: str | None = None
     conversation: list[ChatMessage] | None = None
 
+    @field_validator("conversation", mode="before")
+    @classmethod
+    def accept_sender_content_pairs(cls, conversation: Any) -> Any:
+        if not conversation:
+            return conversation
+        return [
+            (
+                message
+                if isinstance(message, (dict, ChatMessage))
+                else ChatMessage(sender=message[0], content=message[1])
+            )
+            for message in conversation
+        ]
+
     @property
     def rendered_text(self) -> str:
         if self.text is not None:
@@ -240,7 +254,11 @@ class PairwiseGame(Evaluable[PairwiseGameEvaluatorResult]):
                 DeprecationWarning,
                 stacklevel=2,
             )
-        agent_answers = sorted([agent_a_answer, agent_b_answer], reverse=reversed_order, key=lambda x: x.agent)
+        agent_answers = sorted(
+            [agent_a_answer, agent_b_answer],
+            reverse=reversed_order,
+            key=lambda answer: answer["agent"] if isinstance(answer, dict) else answer.agent,
+        )
         values["agent_a_answer"] = agent_answers[0]
         values["agent_b_answer"] = agent_answers[1]
         values["reversed"] = False

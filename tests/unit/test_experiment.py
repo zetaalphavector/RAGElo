@@ -316,6 +316,39 @@ class TestExperiment:
 
         assert qrels["0"] == {"0": 2, "1": 0.0}
 
+    def test_a_failed_save_leaves_the_previous_experiment_loadable(self, tmp_path, base_experiment_config, mocker):
+        """A save that dies partway must not destroy what was already on disk."""
+        save_path = tmp_path / "exp.json"
+        base_experiment_config["save_on_disk"] = True
+        base_experiment_config["save_path"] = str(save_path)
+        experiment = Experiment(**base_experiment_config)
+        experiment.save()
+        good = save_path.read_text()
+
+        mocker.patch("json.dump", side_effect=OSError("disk full"))
+        with pytest.raises(OSError):
+            experiment.save()
+
+        assert save_path.read_text() == good
+        assert json.loads(save_path.read_text())["queries"]
+
+    def test_retrieved_by_survives_a_save_load_cycle(self, tmp_path, base_experiment_config):
+        """Without the agents that retrieved each document, `get_runs()` is empty and
+        `evaluate_retrieval` scores nothing — silently, since there is no agent to report on. A
+        reloaded experiment must therefore still know its runs, or resuming one cannot be scored.
+        """
+        save_path = tmp_path / "exp.json"
+        base_experiment_config["save_on_disk"] = True
+        base_experiment_config["save_path"] = str(save_path)
+        experiment = Experiment(**base_experiment_config)
+        experiment["0"].retrieved_docs["0"].retrieved_by = {"agent1": 2.0, "agent2": 1.0}
+        experiment.save()
+
+        loaded = Experiment(experiment_name="test_experiment", save_path=str(save_path), save_on_disk=True)
+
+        assert loaded["0"].retrieved_docs["0"].retrieved_by == {"agent1": 2.0, "agent2": 1.0}
+        assert set(loaded.get_runs()) >= {"agent1", "agent2"}
+
     def test_rubric_and_coverage_evaluation_round_trip(self, tmp_path, base_experiment_config):
         """The rubric and the criteria a document addresses must both survive a save/load cycle.
 

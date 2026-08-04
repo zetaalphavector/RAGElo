@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import rich
 
 from ragelo.types.results import (
@@ -9,6 +11,8 @@ from ragelo.types.results import (
     PairwiseGameEvaluatorResult,
     RetrievalEvaluatorResult,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _render_elo_tournament(evaluation: EloTournamentResult, rich_print: bool = True):
@@ -91,6 +95,10 @@ def render_retrieval_summary(
     rich_print: bool = True,
 ):
     if not results:
+        logger.warning(
+            "No retrieval scores to report: no agent retrieved any document. Documents carry the "
+            "agents that retrieved them in `retrieved_by`, so this is what an empty run looks like."
+        )
         return
     key_metric = metrics[0]
     max_agent_len = max([len(agent) for agent in results.keys()]) + 3

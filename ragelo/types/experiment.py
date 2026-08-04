@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any, Literal, Sequence
 from ragelo.measures import is_coverage_measure, make_qrel, make_run, parse_measure
 from ragelo.presenters import render_evaluation, render_retrieval_summary
 from ragelo.types.answer_formats import SubtopicJudgment
-from ragelo.types.evaluables import AgentAnswer, ChatMessage, Document, Evaluable
+from ragelo.types.evaluables import AgentAnswer, Document, Evaluable
 from ragelo.types.evaluator_utils import resolve_evaluator_result_type
 from ragelo.types.query import Query
 from ragelo.types.results import (
@@ -632,8 +632,10 @@ class Experiment:
         output_dict["experiment_name"] = self.experiment_name
         output_dict["elo_tournaments"] = [tournament.model_dump() for tournament in self.elo_tournaments]
 
-        with output_path.open("w") as f:
+        temp_path = output_path.with_name(f"{output_path.name}.tmp")
+        with temp_path.open("w") as f:
             json.dump(output_dict, f, indent=4, ensure_ascii=False)
+        temp_path.replace(output_path)
 
     def save_result(self, result: EvaluatorResult | EloTournamentResult):
         """
@@ -930,52 +932,7 @@ class Experiment:
 
         queries_data = data.get("queries", {})
         for qid, q_data in queries_data.items():
-            q_object = Query(
-                qid=qid,
-                query=q_data["query"],
-                metadata=q_data.get("metadata"),
-                rubric=q_data.get("rubric", []),
-            )
-            for did, doc_data in q_data.get("retrieved_docs", {}).items():
-                doc_object = Document(
-                    qid=qid,
-                    did=did,
-                    text=doc_data["text"],
-                    metadata=doc_data.get("metadata"),
-                )
-                q_object.add_retrieved_doc(doc_object)
-            for agent, answer_data in q_data.get("answers", {}).items():
-                text = answer_data.get("text")
-                conversation_data = answer_data.get("conversation")
-                if conversation_data is None:
-                    conversation = None
-                else:
-                    conversation = []
-                    for message in conversation_data:
-                        if isinstance(message, dict):
-                            conversation.append(ChatMessage(sender=message["sender"], content=message["content"]))
-                        else:
-                            sender, content = message
-                            conversation.append(ChatMessage(sender=sender, content=content))
-                answer_object = AgentAnswer(
-                    qid=qid,
-                    agent=agent,
-                    text=text,
-                    metadata=answer_data.get("metadata"),
-                    conversation=conversation,
-                )
-                q_object.add_agent_answer(answer_object)
-            # Load pairwise games
-            pairwise_games_data = q_data.get("pairwise_games", {})
-            if isinstance(pairwise_games_data, dict):
-                for game_id, game_data in pairwise_games_data.items():
-                    # Reconstruct the pairwise game from saved data
-                    agent_a = game_data.get("agent_a_answer", {}).get("agent")
-                    agent_b = game_data.get("agent_b_answer", {}).get("agent")
-                    if agent_a and agent_b:
-                        # Simply create the game - answers are already loaded
-                        q_object.add_pairwise_game(agent_a, agent_b)
-            self.queries[qid] = q_object
+            self.queries[qid] = Query.model_validate({**q_data, "qid": qid})
 
         self._load_results_from_cache(self.evaluations_cache_path)
 
