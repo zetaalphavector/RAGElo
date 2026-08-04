@@ -1,4 +1,3 @@
-import asyncio
 import warnings
 from unittest.mock import AsyncMock
 
@@ -904,9 +903,9 @@ class TestRubricPairwiseEvaluator:
             ],
         )
 
-        game = PairwiseGame(qid=query.qid, agent_a_answer=answer_a, agent_b_answer=answer_b)
-        conversation_context = evaluator._get_shared_conversation_context(game)
-        asyncio.run(evaluator._prepare_rubric(query, conversation_context))
+        query.add_agent_answer(answer_a, force=True)
+        query.add_agent_answer(answer_b, force=True)
+        evaluator.prepare_query(query)
 
         criteria_call = llm_provider_mock.async_call_mocker.call_args_list[0][0][0]
         assert "[Conversation Context]" in criteria_call.user_message
@@ -1171,16 +1170,18 @@ class TestRubricArtifact:
                 for c in criteria
             },
         )  # type: ignore[call-overload]
+        judgement = LLMResponseType(
+            raw_answer="eval",
+            parsed_answer=eval_schema(
+                accuracy={"reasoning": "yes", "fulfillment": True},
+                completeness={"reasoning": "no", "fulfillment": False},
+            ),
+        )
         llm_provider_mock.async_call_mocker = AsyncMock(
             side_effect=[
                 LLMResponseType(raw_answer="rubric", parsed_answer=RubricSchema(criteria=criteria)),
-                LLMResponseType(
-                    raw_answer="eval",
-                    parsed_answer=eval_schema(
-                        accuracy={"reasoning": "yes", "fulfillment": True},
-                        completeness={"reasoning": "no", "fulfillment": False},
-                    ),
-                ),
+                judgement,
+                judgement,
             ]
         )
         evaluator = RubricPointwiseEvaluator.from_config(
@@ -1189,14 +1190,68 @@ class TestRubricArtifact:
         )
         query = experiment["0"]
 
-        result = evaluator.evaluate(query, query.answers["agent1"])
+        evaluator.evaluate_all_evaluables(query)
 
         assert [c.criterion_name for c in query.rubric] == ["accuracy", "completeness"]
-        assert isinstance(result.answer, RubricPointwiseAnswerFormat)
-        assert result.answer.rubric_fingerprint == query.rubric_fingerprint
+        judged = query.answers["agent1"].evaluations["rubric_pointwise"]
+        assert isinstance(judged.answer, RubricPointwiseAnswerFormat)
+        assert judged.answer.rubric_fingerprint == query.rubric_fingerprint
+        # One rubric generated for the query, then one judgement per answer.
         generation_prompt = llm_provider_mock.async_call_mocker.call_args_list[0][0][0]
         for document in query.retrieved_docs.values():
             assert document.text in generation_prompt.user_message
+        assert llm_provider_mock.async_call_mocker.call_count == 1 + len(query.answers)
+
+    def test_every_rubric_is_generated_before_any_judging_starts(self, llm_provider_mock, experiment):
+        criteria = self._make_criteria()
+        eval_schema = create_model(
+            "EvaluationSchema",
+            **{
+                c.criterion_name: create_model(
+                    c.criterion_name,
+                    reasoning=(str, Field(description="reasoning")),
+                    fulfillment=(bool, Field(description="fulfillment")),
+                )
+                for c in criteria
+            },
+        )  # type: ignore[call-overload]
+        phases: list[str] = []
+
+        async def respond(llm_input, response_schema):
+            if response_schema is RubricSchema:
+                phases.append("generate")
+                return LLMResponseType(raw_answer="rubric", parsed_answer=RubricSchema(criteria=criteria))
+            phases.append("judge")
+            return LLMResponseType(
+                raw_answer="eval",
+                parsed_answer=eval_schema(
+                    accuracy={"reasoning": "yes", "fulfillment": True},
+                    completeness={"reasoning": "no", "fulfillment": False},
+                ),
+            )
+
+        llm_provider_mock.async_call_mocker = AsyncMock(side_effect=respond)
+        evaluator = RubricPointwiseEvaluator.from_config(
+            config=RubricPointwiseEvaluatorConfig(expert_in="AI", force=True),
+            llm_provider=llm_provider_mock,
+        )
+
+        evaluator.evaluate_experiment(experiment)
+
+        n_queries = len(list(experiment))
+        assert phases[:n_queries] == ["generate"] * n_queries
+        assert set(phases[n_queries:]) == {"judge"}
+        assert all(q.rubric for q in experiment)
+
+    def test_judging_a_rubricless_query_directly_says_how_to_get_a_rubric(self, llm_provider_mock, experiment):
+        evaluator = RubricPointwiseEvaluator.from_config(
+            config=RubricPointwiseEvaluatorConfig(expert_in="AI", force=True),
+            llm_provider=llm_provider_mock,
+        )
+        query = experiment["0"]
+        with pytest.raises(RuntimeError, match="prepare_query"):
+            evaluator.evaluate(query, query.answers["agent1"])
+        assert llm_provider_mock.async_call_mocker.call_count == 0
 
     def test_an_answer_judged_against_an_edited_rubric_is_re_evaluated(self, llm_provider_mock, experiment):
         evaluator = RubricPointwiseEvaluator.from_config(
@@ -1894,8 +1949,10 @@ class TestConversationSupportInPairwiseEvaluators:
             ],
         )
         answer_b = AgentAnswer(qid="0", agent="agent2", text="Text answer")
-        game = PairwiseGame(qid="0", agent_a_answer=answer_a, agent_b_answer=answer_b)
-        context = evaluator._get_shared_conversation_context(game)
+        query = Query(qid="0", query="Q2")
+        query.add_agent_answer(answer_a)
+        query.add_agent_answer(answer_b)
+        context = evaluator._get_conversation_context(query)
         assert len(context) == 3
         assert context[-1].content == "Q2"
 

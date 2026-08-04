@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from typing import Literal, Type
+from typing import Literal, Type, cast
 
 from pydantic import BaseModel, Field, create_model
 
-from ragelo.evaluators.answer_evaluators.base_answer_evaluator import AnswerEvaluatorFactory
+from ragelo.evaluators.answer_evaluators.base_answer_evaluator import AnswerEvaluatorFactory, T_AnswerResult
 from ragelo.evaluators.answer_evaluators.builtin_criteria import (
     citation_quality_criterion,
     citation_quality_score,
@@ -17,10 +17,9 @@ from ragelo.evaluators.answer_evaluators.pairwise_evaluator import PairwiseAnswe
 from ragelo.evaluators.answer_evaluators.rubric_evaluator_mixin import RubricEvaluatorMixin
 from ragelo.types.answer_formats import Criterion, CriterionEvaluation, PairwiseCriterionWinner, RubricAnswerFormat
 from ragelo.types.configurations import RubricPairwiseEvaluatorConfig
-from ragelo.types.evaluables import Evaluable, PairwiseGame
+from ragelo.types.evaluables import ChatMessage, Evaluable, PairwiseGame
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.query import Query
-from ragelo.types.results import AnswerEvaluatorResult, PairwiseGameEvaluatorResult
 from ragelo.types.types import AnswerEvaluatorTypes
 from ragelo.utils import string_to_template
 
@@ -213,25 +212,14 @@ class RubricPairwiseEvaluator(RubricEvaluatorMixin, PairwiseAnswerEvaluator):
             parsed_answer=RubricAnswerFormat(criteria=criteria, rubric_fingerprint=query.rubric_fingerprint),
         )
 
-    async def evaluate_async(
-        self, eval_sample: tuple[Query, Evaluable]
-    ) -> AnswerEvaluatorResult | PairwiseGameEvaluatorResult:
-        query, evaluable = eval_sample
-        if isinstance(evaluable, PairwiseGame):
-            await self._prepare_rubric(query, self._get_shared_conversation_context(evaluable))
+    def _rubric_conversation_context(self, query: Query) -> list[ChatMessage]:
+        return self._get_conversation_context(query)
 
-        result = await super().evaluate_async(eval_sample)
-        if not isinstance(result, PairwiseGameEvaluatorResult) or result.answer is None or result.exception:
-            return result
-
-        if not isinstance(evaluable, PairwiseGame):
-            return result
-
-        answer_format = result.answer
-        if not isinstance(answer_format, RubricAnswerFormat):
-            return result
-
+    async def _augment_judgment(self, result: T_AnswerResult, query: Query, evaluable: Evaluable) -> T_AnswerResult:
         if not self.config.evidence_recall and not self.config.citation_quality:
+            return result
+        answer_format = result.answer
+        if not isinstance(answer_format, RubricAnswerFormat) or not isinstance(evaluable, PairwiseGame):
             return result
 
         agent_a_text = evaluable.agent_a_answer.final_response
@@ -273,7 +261,7 @@ class RubricPairwiseEvaluator(RubricEvaluatorMixin, PairwiseAnswerEvaluator):
             )
 
         updates["criteria"] = criteria
-        return result.model_copy(update={"answer": answer_format.model_copy(update=updates)})
+        return cast(T_AnswerResult, result.model_copy(update={"answer": answer_format.model_copy(update=updates)}))
 
     @staticmethod
     def __side_by_side_criterion(

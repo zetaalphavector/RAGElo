@@ -66,6 +66,7 @@ class BaseEvaluator(ABC, Generic[T_Config, T_Result]):
                 If None, the number of threads defined in the config will be used.
         """
         n_threads = n_threads or self.config.n_processes
+        self.prepare_experiment(experiment)
         call_async_fn(self._evaluate_experiment_async, experiment, n_threads)
 
     def evaluate_all_evaluables(self, query: Query, n_threads: int | None = None):
@@ -75,6 +76,7 @@ class BaseEvaluator(ABC, Generic[T_Config, T_Result]):
             n_threads: Maximum concurrent LLM calls. Defaults to ``config.n_processes``.
         """
         n_threads = n_threads or self.config.n_processes
+        self.prepare_query(query)
         call_async_fn(self._evaluate_all_evaluables_async, query, n_threads)
 
     async def _evaluate_all_evaluables_async(self, query: Query, n_threads: int):
@@ -96,6 +98,17 @@ class BaseEvaluator(ABC, Generic[T_Config, T_Result]):
         pbar.close()
         if self.config.show_results:
             render_failed_evaluations(evaluations, failed, self.config.rich_print)
+
+    def prepare_experiment(self, experiment: Experiment) -> None:
+        """Produce the artifacts this evaluator grades against, before any judging starts."""
+        for query in experiment:
+            self.prepare_query(query)
+
+    def prepare_query(self, query: Query) -> None:
+        """Produce a single query's artifacts. Evaluators that grade against data they can generate
+        override this; the rest need nothing.
+        """
+        return None
 
     @abstractmethod
     def _get_all_evaluables(self, query: Query) -> list[Evaluable]:

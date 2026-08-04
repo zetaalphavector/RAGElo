@@ -60,12 +60,29 @@ flowchart TB
 | crossing | contract | why it is not an inference |
 |---|---|---|
 | artifact → judge | `Query.rubric` | A rubric on the query is persisted, reviewable, and shared by every judge that grades against it, rather than being private to one evaluator instance. |
-| generator → artifact | `RubricGenerator.generate_experiment` writing `Query.rubric` | Generation is a separate pass over the experiment, so a rubric can be inspected and edited between being written and being graded against. |
+| generator → artifact | `prepare_experiment` / `prepare_query` writing `Query.rubric` | Artifact production is a phase that completes before any judging starts, so a rubric cannot be invented halfway through a run, and every judgment in a run is made against the same one. |
 | artifact → judgment | `RubricJudgment.rubric_fingerprint` | A rubric judgment is only meaningful against the rubric it was made against. Recording which one lets an edit to a single query's rubric re-judge that query and nothing else, instead of forcing `force=True` over the whole experiment. |
 | judge → LLM | `answer_format` on the evaluator | A result class is shared by every judge writing to the same evaluable, so its `answer` union says what it can *store*. Deriving the request schema from that union's first member would let a reordering change what the LLM is asked for. |
 | judge → storage | the `answer_format` tag plus `Field(discriminator=...)` | Structural matching cannot separate formats where one declares a superset of another's fields, and it fails silently by dropping the surplus. |
 | judgment → measure | `GradedJudgment` / `SubtopicJudgment` | The metrics layer asks a judgment what it contributes. A judge with a new payload needs no change in `get_qrels` or `get_rubric_qrels`. |
 | judgment → aggregate | computed fields on the rubric answer formats | `average_score`, `agent_a_wins`, `winner` and `margin` are pure functions of the per-criterion verdicts, so a judge cannot store an aggregate that contradicts the criteria it recorded. They still serialize, so consumers read them as before. |
+
+### Artifact production is a phase, not a side effect
+
+`evaluate_experiment` and `evaluate_all_evaluables` run `prepare_experiment` / `prepare_query`
+before judging. `BaseEvaluator` declares both as no-ops; an evaluator that grades against data it
+can generate overrides them, and the rubric evaluators do so by delegating to `RubricGenerator`.
+
+The ordering is the point. Generation used to happen inside `evaluate_async`, so the first
+evaluable to reach a query created the rubric that the rest were graded against, concurrently with
+judging. Now every rubric exists, is persisted and can be edited before the first judgment is
+asked for. Judging one evaluable directly, without the phase, raises and names the ways to supply a
+rubric rather than quietly generating one.
+
+Per-evaluable work that genuinely needs its own LLM calls has its own hook, `_augment_judgment`,
+reached only after the evaluable has been judged successfully. That is how the built-in
+evidence-recall and citation-quality criteria attach. Neither rubric evaluator overrides
+`evaluate_async` any more, so neither can bypass the judgment cache or swallow an exception.
 
 ### Aggregates are derived, not judged
 
@@ -96,10 +113,6 @@ without `pyndeval` they appear in the `ir_measures` registry but are unsupported
 
 ## Where the layers still leak
 
-- **No artifact-preparation phase.** Both rubric evaluators override `evaluate_async` — which the
-  contributor guide says to do "almost never" — to generate a missing rubric before judging. Running
-  `RubricGenerator.generate_experiment` first makes the override dead weight, but nothing yet
-  requires that order, so the lazy path has to stay.
 - **The built-in judge prompts ignore `Query.reference_answer`.** A gold answer reaches `reasoner`
   and `domain_expert` only through a `{{ query.metadata.<key> }}` convention in a custom prompt.
 - **`RDNAMEvaluator` mutates `self.result_type`** inside `_process_answer` to choose its output class,

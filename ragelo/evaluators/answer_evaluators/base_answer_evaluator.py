@@ -27,6 +27,7 @@ from ragelo.utils import call_async_fn, get_placeholders_and_tags
 logger = logging.getLogger(__name__)
 
 T_AnswerConfig = TypeVar("T_AnswerConfig", bound=BaseAnswerEvaluatorConfig)
+T_AnswerResult = TypeVar("T_AnswerResult", bound=AnswerEvaluatorResult | PairwiseGameEvaluatorResult)
 
 if TYPE_CHECKING:
     from ragelo.types.experiment import Experiment
@@ -166,13 +167,14 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
             exc = str(e) + f"\nRaw answer: {raw_answer}"
             logger.warning(f"Failed to generate answer for qid: {query.qid} and agent: {answer.agent}: {exc}")
 
-        return AnswerEvaluatorResult(
+        result = AnswerEvaluatorResult(
             qid=query.qid,
             agent=answer.agent,
             evaluator_name=evaluator_name,
             answer=parsed_answer,  # type: ignore[arg-type]
             exception=exc,
         )
+        return await self.__augment_if_judged(result, query, answer)
 
     async def __evaluate_single_game(self, query: Query, game: PairwiseGame) -> PairwiseGameEvaluatorResult:
         evaluator_name = str(self.config.evaluator_name)
@@ -268,7 +270,7 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
 
         exc = a_vs_b_result.exception or b_vs_a_result.exception
 
-        return PairwiseGameEvaluatorResult(
+        result = PairwiseGameEvaluatorResult(
             qid=query.qid,
             agent_a=game.agent_a_answer.agent,
             agent_b=game.agent_b_answer.agent,
@@ -278,6 +280,18 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
             a_vs_b_result=a_vs_b_result,
             b_vs_a_result=b_vs_a_result,
         )
+        return await self.__augment_if_judged(result, query, game)
+
+    async def __augment_if_judged(self, result: T_AnswerResult, query: Query, evaluable: Evaluable) -> T_AnswerResult:
+        if result.answer is None or result.exception:
+            return result
+        return await self._augment_judgment(result, query, evaluable)
+
+    async def _augment_judgment(self, result: T_AnswerResult, query: Query, evaluable: Evaluable) -> T_AnswerResult:
+        """Extend a judgment with checks that need their own LLM calls. Only reached once the
+        evaluable has been judged successfully.
+        """
+        return result
 
     def _canonicalize_pairwise_answer(
         self,

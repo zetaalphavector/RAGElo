@@ -100,14 +100,27 @@ class RubricGenerator:
         n_threads: int | None = None,
         force: bool = False,
         should_save: bool = True,
+        conversation_contexts: dict[str, list[ChatMessage]] | None = None,
     ) -> None:
         """Writes `query.rubric` for every query in the experiment that does not have one."""
         n_threads = n_threads or self.config.n_processes
-        call_async_fn(self._generate_experiment_async, experiment, n_threads, force or self.config.force)
+        call_async_fn(
+            self._generate_experiment_async,
+            experiment,
+            n_threads,
+            force or self.config.force,
+            conversation_contexts or {},
+        )
         if should_save:
             experiment.save()
 
-    async def _generate_experiment_async(self, experiment: Experiment, n_threads: int, force: bool) -> None:
+    async def _generate_experiment_async(
+        self,
+        experiment: Experiment,
+        n_threads: int,
+        force: bool,
+        conversation_contexts: dict[str, list[ChatMessage]],
+    ) -> None:
         queries = [q for q in experiment if force or not q.rubric]
         if not queries:
             logger.info(f"All {len(list(experiment))} queries already have a rubric.")
@@ -123,7 +136,7 @@ class RubricGenerator:
         async def generate_one(query: Query) -> None:
             async with semaphore:
                 try:
-                    query.rubric = await self.generate_async(query)
+                    query.rubric = await self.generate_async(query, conversation_contexts.get(query.qid))
                 except Exception as e:
                     logger.warning(f"Failed to generate a rubric for query {query.qid}: {e}")
                 pbar.update()

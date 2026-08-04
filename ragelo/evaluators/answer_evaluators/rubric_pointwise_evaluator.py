@@ -1,10 +1,14 @@
 from __future__ import annotations
 
-from typing import Type
+from typing import Type, cast
 
 from pydantic import BaseModel, Field, create_model
 
-from ragelo.evaluators.answer_evaluators.base_answer_evaluator import AnswerEvaluatorFactory, BaseAnswerEvaluator
+from ragelo.evaluators.answer_evaluators.base_answer_evaluator import (
+    AnswerEvaluatorFactory,
+    BaseAnswerEvaluator,
+    T_AnswerResult,
+)
 from ragelo.evaluators.answer_evaluators.builtin_criteria import (
     citation_quality_criterion,
     citation_quality_score,
@@ -19,7 +23,7 @@ from ragelo.types.configurations import RubricPointwiseEvaluatorConfig
 from ragelo.types.evaluables import AgentAnswer, Evaluable
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.query import Query
-from ragelo.types.results import AnswerEvaluatorResult, PairwiseGameEvaluatorResult
+from ragelo.types.results import AnswerEvaluatorResult
 from ragelo.types.types import AnswerEvaluatorTypes
 from ragelo.utils import string_to_template
 
@@ -140,22 +144,13 @@ class RubricPointwiseEvaluator(
             ),
         )
 
-    async def evaluate_async(
-        self, eval_sample: tuple[Query, Evaluable]
-    ) -> AnswerEvaluatorResult | PairwiseGameEvaluatorResult:
-        query, evaluable = eval_sample
-        if isinstance(evaluable, AgentAnswer):
-            await self._prepare_rubric(query)
-
-        result = await super().evaluate_async(eval_sample)
-        if not isinstance(result, AnswerEvaluatorResult) or result.answer is None or result.exception:
+    async def _augment_judgment(self, result: T_AnswerResult, query: Query, evaluable: Evaluable) -> T_AnswerResult:
+        if not self.config.evidence_recall and not self.config.citation_quality:
             return result
-
-        if not isinstance(evaluable, AgentAnswer) or not evaluable.text:
-            return result
-
         answer_format = result.answer
         if not isinstance(answer_format, RubricPointwiseAnswerFormat):
+            return result
+        if not isinstance(evaluable, AgentAnswer) or not evaluable.text:
             return result
 
         criteria = list(answer_format.criteria)
@@ -195,4 +190,4 @@ class RubricPointwiseEvaluator(
                 "citation_quality": citation_quality_result,
             }
         )
-        return result.model_copy(update={"answer": updated_answer})
+        return cast(T_AnswerResult, result.model_copy(update={"answer": updated_answer}))

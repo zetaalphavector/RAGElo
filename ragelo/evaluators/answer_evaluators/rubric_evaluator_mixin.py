@@ -9,6 +9,7 @@ from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.types.answer_formats import Criterion
 from ragelo.types.configurations import RubricEvaluatorConfigBase, RubricGeneratorConfig
 from ragelo.types.evaluables import ChatMessage
+from ragelo.types.experiment import Experiment
 from ragelo.types.query import Query
 
 
@@ -39,21 +40,31 @@ class RubricEvaluatorMixin:
             query.rubric = self.config.rubrics[query.qid]
         return query.rubric
 
-    async def _prepare_rubric(
-        self, query: Query, conversation_context: list[ChatMessage] | None = None
-    ) -> list[Criterion]:
+    def prepare_experiment(self, experiment: Experiment) -> None:
+        contexts = {}
+        for query in experiment:
+            self._rubric_for(query)
+            context = self._rubric_conversation_context(query)
+            if context:
+                contexts[query.qid] = context
+        self.rubric_generator.generate_experiment(experiment, conversation_contexts=contexts)
+
+    def prepare_query(self, query: Query) -> None:
         if not self._rubric_for(query):
-            query.rubric = await self.rubric_generator.generate_async(query, conversation_context)
-        return query.rubric
+            query.rubric = self.rubric_generator.generate(query, self._rubric_conversation_context(query))
+
+    def _rubric_conversation_context(self, query: Query) -> list[ChatMessage]:
+        return []
 
     def _rubric_schema(self, query: Query) -> Type[BaseModel]:
         """The per-query response schema, one field per criterion, memoized per distinct rubric."""
         fingerprint = query.rubric_fingerprint
         if fingerprint is None:
             raise RuntimeError(
-                f"Query {query.qid} has no rubric to grade against. Rubrics are generated in "
-                "evaluate_async(); supply one on query.rubric or via config.rubrics to build a "
-                "prompt without it."
+                f"Query {query.qid} has no rubric to grade against. Rubrics are produced by "
+                "prepare_experiment() / prepare_query(), which evaluate_experiment() and "
+                "evaluate_all_evaluables() run for you. Judging a single evaluable directly needs "
+                "query.rubric set, config.rubrics, or a RubricGenerator run first."
             )
         if fingerprint not in self.answer_schema_cache:
             self.answer_schema_cache[fingerprint] = self._build_evaluation_schema(query.rubric)

@@ -110,8 +110,9 @@ class PairwiseAnswerEvaluator(BaseAnswerEvaluator[PairwiseEvaluatorConfig, Pairw
             return conversation
         return conversation[: last_user_idx + 1]
 
-    def _get_shared_conversation_context(self, game: PairwiseGame) -> list[ChatMessage]:
-        for answer in (game.agent_a_answer, game.agent_b_answer):
+    def _get_conversation_context(self, query: Query) -> list[ChatMessage]:
+        """The turns leading up to the question, shared by every agent answering this query."""
+        for answer in query.answers.values():
             if answer.conversation:
                 return self._get_conversation_prefix(answer.conversation)
         return []
