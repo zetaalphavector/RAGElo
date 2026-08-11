@@ -44,9 +44,13 @@ flowchart TB
         subtopic["get_rubric_qrels<br/>Qrel with iteration = subtopic"]
         runs["get_runs<br/>agent → qid → did → score"]
         agg["evaluate_retrieval<br/>is_coverage_measure routes each metric<br/>ir_measures.calc_aggregate"]
+        cmp["compare_retrieval<br/>paired per-query deltas<br/>sign-flip permutation p-value"]
         flat --> agg
         subtopic --> agg
         runs --> agg
+        flat --> cmp
+        subtopic --> cmp
+        runs --> cmp
     end
 
     rubric -->|"judges read it, never invent it"| retrieval
@@ -61,6 +65,7 @@ flowchart TB
 |---|---|---|
 | artifact → judge | `Query.rubric` | A rubric on the query is persisted, reviewable, and shared by every judge that grades against it, rather than being private to one evaluator instance. |
 | caller → experiment | `Experiment.add_query` absorbing artifacts | Re-adding a query updates the caller-declared fields (`query`, `metadata`, `reference_answer`, `rubric`) and keeps the evaluables and judgements the experiment accumulated. Otherwise a caller re-declaring artifacts each run has to choose between being ignored and discarding paid-for judgements. |
+| retriever → experiment | the `Retriever` protocol returning `RetrievedDocument`s | `run_retrievers` records the mapping key as the agent name and pools by `did`, so one judgement serves every system that surfaced the document. A `did` arriving with different text raises rather than silently merging two corpora. |
 | generator → artifact | `prepare_experiment` / `prepare_query` writing `Query.rubric` | Artifact production is a phase that completes before any judging starts, so a rubric cannot be invented halfway through a run, and every judgment in a run is made against the same one. |
 | artifact → judgment | `RubricJudgment.rubric_fingerprint` | A rubric judgment is only meaningful against the rubric it was made against. Recording which one lets an edit to a single query's rubric re-judge that query and nothing else, instead of forcing `force=True` over the whole experiment. |
 | judge → LLM | `answer_format` on the evaluator | A result class is shared by every judge writing to the same evaluable, so its `answer` union says what it can *store*. Deriving the request schema from that union's first member would let a reordering change what the LLM is asked for. |
@@ -88,9 +93,11 @@ document rather than replacing it.
 
 The same reload is what makes a pooled experiment resumable. `retrieved_docs` holds what *any*
 system retrieved, and each document's `retrieved_by` maps system to score, so `Query.retrieval_systems`
-tells a caller which systems it has already pooled. A harness searches only the rest, which is what
-lets a new retrieval system cost the documents no existing one found rather than a fresh run. It also
-means one judgement serves every system that surfaced that document.
+tells a caller which systems it has already pooled. `Experiment.run_retrievers` is the harness loop
+built on that: handed named `Retriever`s, it fetches only the (query, system) pairs not yet pooled
+and saves after each fetch, so a new retrieval system costs the documents no existing one found
+rather than a fresh run, and an interrupted run resumes where it stopped. It also means one
+judgement serves every system that surfaced that document.
 
 ### Artifact production is a phase, not a side effect
 
@@ -143,6 +150,18 @@ of the answer" means. Measured on a 42-question set, this moved `StRecall@10` fr
 
 These measures also require `pip install 'ragelo[eval]'`, which pulls `ir-measures[pyndeval]`;
 without `pyndeval` they appear in the `ir_measures` registry but are unsupported.
+
+### Comparison is paired, not two aggregates
+
+`evaluate_retrieval` reports each agent's aggregate, which says which number is bigger but not
+whether the difference is real. `compare_retrieval` reads the same qrels and runs, fixes one query
+domain per metric (every judged query for flat measures, every rubric-carrying query for coverage
+ones), counts a query missing from a run as 0, and reports per-query deltas, win/tie/loss counts
+and a two-sided sign-flip permutation p-value computed in numpy. The zero-fill is what makes the
+comparison paired: both systems are scored over the same denominator, at the cost of means that can
+differ slightly from `calc_aggregate`, which averages only over the queries a run scored. On
+`MetricComparison`, `delta` and the win/tie/loss counts are computed fields over `per_query_delta`,
+so the summary cannot contradict the per-query record it ships with.
 
 ## Where the layers still leak
 
