@@ -58,9 +58,9 @@ class EloRanker(AgentRanker[EloAgentRankerConfig]):
             results = self.run_tournament()
             for agent, score in results.items():
                 agent_scores[agent] = agent_scores.get(agent, []) + [score]
-        for a in agent_scores:
-            self.std_dev[a] = float(np.std(agent_scores[a]))
-            self.agents_scores[a] = float(np.mean(agent_scores[a]))
+        for a, scores in agent_scores.items():
+            self.std_dev[a] = float(np.std(scores))
+            self.agents_scores[a] = float(np.mean(scores))
 
         result = EloTournamentResult(
             agents=list(self.agents_scores.keys()),
@@ -348,7 +348,7 @@ class EloRanker(AgentRanker[EloAgentRankerConfig]):
                 try:
                     answer_text, docs = await agent_callable(fetch_qid, queries_by_id[fetch_qid].query)
                     return fetch_qid, str(answer_text), docs
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 - collected and re-raised as one RuntimeError
                     logger.warning(f"Failed to get answer for new agent on qid={fetch_qid}: {e}")
                     return fetch_qid, None, None
 
@@ -367,14 +367,14 @@ class EloRanker(AgentRanker[EloAgentRankerConfig]):
                                 experiment.add_retrieved_doc(
                                     str(d), query_id=query.qid, doc_id=str(d), agent=new_agent, exist_ok=True
                                 )
-                        except Exception as e:
+                        except Exception as e:  # noqa: BLE001
                             logger.debug(f"Skipping doc add for qid={qid}: {e}")
                 try:
                     experiment.add_agent_answer(
                         AgentAnswer(qid=qid, agent=new_agent, text=answer_text),
                         exist_ok=True,
                     )
-                except Exception as e:
+                except Exception as e:  # noqa BLE001
                     logger.warning(f"Failed to add new agent answer for qid={qid}: {e}")
 
         # Phase 3: Run retrieval evaluations for candidate queries
@@ -462,9 +462,7 @@ class EloRanker(AgentRanker[EloAgentRankerConfig]):
                         should_print=False,
                     )
 
-                if winner == "A" and game_agent_a == new_agent:
-                    observed_success_sum += 1.0
-                elif winner == "B" and game_agent_b == new_agent:
+                if winner == "A" and game_agent_a == new_agent or winner == "B" and game_agent_b == new_agent:
                     observed_success_sum += 1.0
                 elif winner == "C":
                     observed_success_sum += 0.5

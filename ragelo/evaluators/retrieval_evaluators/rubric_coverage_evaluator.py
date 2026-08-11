@@ -58,7 +58,7 @@ class RubricCoverageEvaluator(RubricEvaluatorMixin, BaseRetrievalEvaluator[Rubri
         Question: {{ criterion.short_question }}
         --------------------------------
         {% endfor %}
-        """)  # noqa: E501
+        """)
 
     user_prompt = string_to_template("""
         [User Question]

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from jinja2 import Template
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
@@ -36,16 +36,16 @@ class BaseConfig(BaseModel):
 
 class BaseEvaluatorConfig(BaseConfig):
     model_config = ConfigDict(arbitrary_types_allowed=True, populate_by_name=True)
-    evaluator_name: Optional[str | AnswerEvaluatorTypes] = Field(
+    evaluator_name: str | AnswerEvaluatorTypes | None = Field(
         default=None,
         description="The name of the evaluator to use.",
     )
 
-    system_prompt: Optional[Template | str] = Field(
+    system_prompt: Template | str | None = Field(
         default=None,
         description="The system prompt to use for the evaluator.",
     )
-    user_prompt: Optional[Template] = Field(
+    user_prompt: Template | None = Field(
         default=None,
         description=(
             "The user prompt to use for the evaluator. Should contain at least "
@@ -60,13 +60,13 @@ class BaseEvaluatorConfig(BaseConfig):
         ),
     )
 
-    llm_response_schema: Optional[type[BaseModel] | dict[str, Any]] = Field(
+    llm_response_schema: type[BaseModel] | dict[str, Any] | None = Field(
         default=None,
         description="The response schema for the LLM. Overrides the default schema derived from result_type.",
     )
 
     @field_validator("system_prompt", "user_prompt", mode="before")
-    def check_system_prompt_and_user_prompt(cls, v: Optional[str | Template]) -> Optional[Template]:
+    def check_system_prompt_and_user_prompt(cls, v: str | Template | None) -> Template | None:
         if isinstance(v, str):
             return string_to_template(v)
         return v

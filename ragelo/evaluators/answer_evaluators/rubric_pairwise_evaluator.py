@@ -81,7 +81,7 @@ class RubricPairwiseEvaluator(RubricEvaluatorMixin, PairwiseAnswerEvaluator):
         Short Question: {{criteria.short_question}}
         --------------------------------
         {% endfor %}
-        """  # noqa: E501
+        """
     )
 
     user_prompt = string_to_template("""

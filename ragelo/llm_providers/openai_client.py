@@ -36,6 +36,7 @@ class OpenAIProvider(BaseLLMProvider):
 
     @retry(
         wait=wait_random_exponential(min=1, max=120),
+        reraise=True,
         stop=stop_after_attempt(3),
         before_sleep=before_sleep_log(logger=logger, log_level=logging.INFO),
     )
@@ -148,4 +149,4 @@ class OpenAIProvider(BaseLLMProvider):
                 organization=openai_config.org,
             )
         else:
-            raise Exception(f"Unknown OpenAI api type: {openai_config.api_type}")
+            raise ValueError(f"Unknown OpenAI api type: {openai_config.api_type}")

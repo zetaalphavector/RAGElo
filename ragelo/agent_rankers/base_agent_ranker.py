@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Generic, TypeVar, cast, get_type_hints
+from collections.abc import Callable
+from typing import Any, ClassVar, Generic, TypeVar, cast, get_type_hints
 
 from ragelo.types import Experiment, PairwiseGameEvaluatorResult
 from ragelo.types.configurations.agent_ranker_configs import AgentRankerConfig
@@ -62,7 +63,7 @@ class AgentRanker(Generic[T_RankerConfig]):
 
 
 class AgentRankerFactory:
-    registry: dict[AgentRankerTypes, type[AgentRanker[Any]]] = {}
+    registry: ClassVar[dict[AgentRankerTypes, type[AgentRanker[Any]]]] = {}
 
     @classmethod
     def register(cls, name: AgentRankerTypes) -> Callable[[type[T_Ranker]], type[T_Ranker]]:

@@ -3,10 +3,10 @@ from __future__ import annotations
 import asyncio
 import re
 import warnings
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
 from concurrent.futures import ThreadPoolExecutor
 from textwrap import dedent
-from typing import Any, Coroutine
+from typing import Any
 
 from jinja2 import Template
 from tqdm import TqdmExperimentalWarning
@@ -60,7 +60,7 @@ def get_placeholders_and_tags(template: Template) -> set[str]:
         return set()
 
     # Extract simple placeholders like {{ foo.bar }}
-    placeholders = set(m.group(1) for m in re.finditer(r"{{\s*([a-zA-Z_][\w\.]*)\s*}}", source))
+    placeholders = {m.group(1) for m in re.finditer(r"{{\s*([a-zA-Z_][\w\.]*)\s*}}", source)}
 
     # Extract variables mentioned inside Jinja tags, e.g. {% for x in items %}
     # This needs to handle whitespace and trim markers ({%- ... -%}).

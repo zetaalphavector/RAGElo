@@ -59,7 +59,7 @@ class PairwiseAnswerEvaluator(BaseAnswerEvaluator[PairwiseEvaluatorConfig, Pairw
         - Put side-specific evidence into the structured strengths and weaknesses fields.
         - Keep winner_reasoning concise and focused on the deciding factor.
 
-        After providing your explanation, output your final verdict by strictly following this format: "A" if assistant A is better, "B" if assistant B is better, or "C" for a tie.""")  # noqa: E501
+        After providing your explanation, output your final verdict by strictly following this format: "A" if assistant A is better, "B" if assistant B is better, or "C" for a tie.""")
 
     user_prompt = string_to_template("""
         [User Question]
@@ -96,7 +96,7 @@ class PairwiseAnswerEvaluator(BaseAnswerEvaluator[PairwiseEvaluatorConfig, Pairw
         {% else -%}
             {{ game.agent_b_answer.text }}
         {% endif -%}
-        [The End of {% if game.agent_b_answer.conversation %}Conversation with{% else %}Answer from{% endif %} Assistant B]""")  # noqa: E501
+        [The End of {% if game.agent_b_answer.conversation %}Conversation with{% else %}Answer from{% endif %} Assistant B]""")
 
     @staticmethod
     def _get_conversation_prefix(conversation: list[ChatMessage] | None) -> list[ChatMessage]:

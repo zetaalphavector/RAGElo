@@ -14,12 +14,12 @@ from ragelo.evaluators.answer_evaluators.rubric_pointwise_evaluator import Rubri
 __all__ = [
     "AnswerEvaluatorFactory",
     "BaseAnswerEvaluator",
-    "CustomPromptEvaluator",
-    "CustomPairwiseEvaluator",
-    "PairwiseDomainExpertEvaluator",
-    "PairwiseAnswerEvaluator",
-    "get_answer_evaluator",
     "ChatPairwiseEvaluator",
+    "CustomPairwiseEvaluator",
+    "CustomPromptEvaluator",
+    "PairwiseAnswerEvaluator",
+    "PairwiseDomainExpertEvaluator",
     "RubricPairwiseEvaluator",
     "RubricPointwiseEvaluator",
+    "get_answer_evaluator",
 ]

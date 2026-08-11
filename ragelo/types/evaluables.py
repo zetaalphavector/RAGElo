@@ -99,10 +99,11 @@ class Document(Evaluable[RetrievalEvaluatorResult]):
         document: Self | str,
         qid: str | None = None,
         did: str | None = None,
-        retrieved_by: dict[str, float] = {},
+        retrieved_by: dict[str, float] | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> Self:
         """Assembles a Document object from a string or a Document object."""
+        retrieved_by = retrieved_by or {}
         if isinstance(document, str):
             if qid is None:
                 raise ValueError("qid must be provided if document is a string")
@@ -122,9 +123,10 @@ class Document(Evaluable[RetrievalEvaluatorResult]):
         document: Self | str,
         qid: str | None = None,
         did: str | None = None,
-        retrieved_by: dict[str, float] = {},
+        retrieved_by: dict[str, float] | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> Self:
+        retrieved_by = retrieved_by or {}
         warnings.warn("assemble_document() is deprecated, use build() instead", DeprecationWarning, stacklevel=2)
         return cls.build(document, qid, did=did, retrieved_by=retrieved_by, metadata=metadata)
 
@@ -140,7 +142,7 @@ class Document(Evaluable[RetrievalEvaluatorResult]):
         documents: list,
         qid: str,
         metadata: list[dict[str, Any]] | list[None] | None = None,
-    ) -> dict[str, "Document"]:
+    ) -> dict[str, Document]:
         """Assembles a list of Document objects from a list of strings or Document objects."""
         assembled_docs: dict[str, Document] = {}
         if metadata and len(documents) != len(metadata):
@@ -221,7 +223,7 @@ class AgentAnswer(Evaluable[AnswerEvaluatorResult]):
         qid: str,
         agent: str | None = None,
         metadata: dict[str, Any] | None = None,
-    ) -> "AgentAnswer":
+    ) -> AgentAnswer:
         """Assembles an AgentAnswer object from a string or an AgentAnswer object."""
         if isinstance(answer, str):
             if agent is None:
