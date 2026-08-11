@@ -1,9 +1,8 @@
-import asyncio
 import warnings
 from unittest.mock import AsyncMock
 
 import pytest
-from pydantic import BaseModel, Field, create_model
+from pydantic import BaseModel, Field, ValidationError, create_model
 
 from ragelo import get_answer_evaluator
 from ragelo.evaluators.answer_evaluators import (
@@ -23,6 +22,7 @@ from ragelo.types.answer_formats import (
     ClaimEvaluation,
     Criterion,
     CriterionEvaluation,
+    CriterionEvaluationPointwise,
     EvidenceRecallSchema,
     EvidenceSnippetEvaluation,
     PairwiseEvaluationAnswer,
@@ -51,7 +51,7 @@ def test_get_by_name(llm_provider_mock):
         "custom_pairwise",
         llm_provider=llm_provider_mock,
         system_prompt="system prompt",
-        user_prompt="Query: {{ query.query }} Answer agent a: {{ game.agent_a_answer.text }} Answer agent b: {{ game.agent_b_answer.text }}",  # noqa: E501
+        user_prompt="Query: {{ query.query }} Answer agent a: {{ game.agent_a_answer.text }} Answer agent b: {{ game.agent_b_answer.text }}",
     )
     assert isinstance(custom_pairwise_evaluator, CustomPairwiseEvaluator)
     domain_expert_evaluator = get_answer_evaluator(
@@ -683,13 +683,6 @@ class TestPairwiseAnswerCanonicalization:
                     confidence=0.8,
                 ),
             ],
-            agent_a_wins=0.25,
-            agent_b_wins=0.0,
-            equally_good=0.0,
-            equally_bad=0.0,
-            winner="A",
-            margin=0.25,
-            mean_confidence=0.85,
         )
         # Reversed direction (already canonicalized to A-vs-B perspective):
         # disagrees with forward on `accuracy`, agrees on `clarity`. Weighted aggregate
@@ -718,22 +711,18 @@ class TestPairwiseAnswerCanonicalization:
                     confidence=1.0,
                 ),
             ],
-            agent_a_wins=0.05,
-            agent_b_wins=0.20,
-            equally_good=0.0,
-            equally_bad=0.0,
-            winner="B",
-            margin=-0.15,
-            mean_confidence=0.85,
         )
 
         merged = forward.merge_with_canonicalized(reversed_canonical)
 
-        # Top-level aggregates are averaged and consistent with each other.
-        assert merged.agent_a_wins == pytest.approx(0.15)
-        assert merged.agent_b_wins == pytest.approx(0.10)
+        # Aggregates follow from the merged criteria: clarity stays A (weight 0.05), accuracy
+        # collapses to a tie (weight 0.2), so no criterion is won by B.
+        assert merged.agent_a_wins == pytest.approx(0.05)
+        assert merged.agent_b_wins == pytest.approx(0.0)
+        assert merged.equally_good == pytest.approx(0.2)
         assert merged.margin == pytest.approx(0.05)
         assert merged.winner == "A"
+        assert merged.mean_confidence == pytest.approx(0.85)
         # Per-criterion verdicts: disagreement collapses to "C", agreement is preserved.
         merged_by_name = {c.criterion.criterion_name: c for c in merged.criteria}
         assert merged_by_name["accuracy"].winner == "C"
@@ -788,7 +777,7 @@ class TestRubricPairwiseEvaluator:
                     score_a=(float, Field(default=0.5)),
                     score_b=(float, Field(default=0.5)),
                     loser_fix=(str, Field(default="")),
-                    failure_tags=(list[str], Field(default_factory=lambda: [])),
+                    failure_tags=(list[str], Field(default_factory=list)),
                     confidence=(float, Field(default=0.9)),
                 )
                 for c in criteria
@@ -838,11 +827,10 @@ class TestRubricPairwiseEvaluator:
         llm_provider_mock.async_call_mocker = AsyncMock(side_effect=responses)
 
         evaluator = RubricPairwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
-        assert "0" in evaluator.criteria_cache
-        assert "1" in evaluator.criteria_cache
 
         query = experiment["0"]
         result = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
+        assert query.rubric == rubrics["0"]
         assert isinstance(result, PairwiseGameEvaluatorResult)
         assert result.answer is not None
         assert isinstance(result.answer, RubricAnswerFormat)
@@ -915,9 +903,9 @@ class TestRubricPairwiseEvaluator:
             ],
         )
 
-        game = PairwiseGame(qid=query.qid, agent_a_answer=answer_a, agent_b_answer=answer_b)
-        conversation_context = evaluator._get_shared_conversation_context(game)
-        asyncio.run(evaluator._build_criteria(query, list(query.retrieved_docs.values()), conversation_context))
+        query.add_agent_answer(answer_a, force=True)
+        query.add_agent_answer(answer_b, force=True)
+        evaluator.prepare_query(query)
 
         criteria_call = llm_provider_mock.async_call_mocker.call_args_list[0][0][0]
         assert "[Conversation Context]" in criteria_call.user_message
@@ -971,8 +959,7 @@ class TestRubricPairwiseEvaluator:
 
         config = RubricPairwiseEvaluatorConfig(expert_in="AI", force=True)
         evaluator = RubricPairwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
-        schema = self._make_rubric_schema()
-        model = evaluator._build_evaluation_schema(schema)
+        model = evaluator._build_evaluation_schema(self._make_criteria())
         assert issubclass(model, BaseModel)
         assert "accuracy" in model.model_fields
         assert "completeness" in model.model_fields
@@ -992,12 +979,9 @@ class TestRubricPairwiseEvaluator:
 
         # A wins accuracy (weight=5), B wins completeness and clarity (weight=1 each)
         eval_response = self._make_evaluation_response(["A", "B", "B"])
-        # Patch criteria cache with weighted criteria
-        evaluator.criteria_cache["0"] = RubricSchema(criteria=criteria)
-        evaluator.answer_schema_cache["0"] = evaluator._build_evaluation_schema(RubricSchema(criteria=criteria))
-
         llm_response: LLMResponseType = LLMResponseType(raw_answer="test", parsed_answer=eval_response)
         query = experiment["0"]
+        query.rubric = criteria
         processed = evaluator._process_answer(llm_response, query)
         answer = processed.parsed_answer
         assert isinstance(answer, RubricAnswerFormat)
@@ -1069,6 +1053,233 @@ class TestRubricPairwiseEvaluator:
         assert swapped.criteria[0].score_b == answer.criteria[0].score_a
 
 
+class TestCriterion:
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ("accuracy", "accuracy"),
+            ("Names the capital?", "Names_the_capital"),
+            ("  cheque-cancellation  ", "cheque_cancellation"),
+            ("2 step approval", "c_2_step_approval"),
+        ],
+    )
+    def test_criterion_name_is_normalized_to_an_identifier(self, raw, expected):
+        """The name is used as a response-schema field name and as a diversity-qrels subtopic id."""
+        assert Criterion(criterion_name=raw, short_question="q").criterion_name == expected
+        assert expected.isidentifier()
+
+    def test_criterion_name_without_alphanumerics_is_rejected(self):
+        with pytest.raises(ValidationError):
+            Criterion(criterion_name="???", short_question="q")
+
+
+class TestDerivedAggregates:
+    """Aggregates are pure functions of the per-criterion judgments, not stored by the judge."""
+
+    def _pointwise(self, *fulfillments: tuple[float, float | None]) -> RubricPointwiseAnswerFormat:
+        return RubricPointwiseAnswerFormat(
+            criteria=[
+                CriterionEvaluationPointwise(
+                    criterion=Criterion(criterion_name=f"c{i}", short_question="?", weight=weight),
+                    reasoning="r",
+                    fulfillment=fulfillment,
+                )
+                for i, (fulfillment, weight) in enumerate(fulfillments)
+            ]
+        )
+
+    def test_pointwise_average_follows_the_criteria(self):
+        answer = self._pointwise((1.0, 3.0), (0.0, 1.0))
+        assert answer.average_score == pytest.approx(0.75)
+
+        dropped = answer.model_copy(update={"criteria": answer.criteria[:1]})
+        assert dropped.average_score == pytest.approx(1.0)
+
+    def test_pointwise_average_of_no_criteria_is_zero(self):
+        assert self._pointwise().average_score == 0.0
+
+    def test_pairwise_aggregates_follow_the_criteria(self):
+        answer = RubricAnswerFormat(
+            criteria=[
+                CriterionEvaluation(
+                    criterion=Criterion(criterion_name="a", short_question="?", weight=3.0),
+                    winner_reasoning="r",
+                    winner="A",
+                    confidence=0.6,
+                ),
+                CriterionEvaluation(
+                    criterion=Criterion(criterion_name="b", short_question="?"),
+                    winner_reasoning="r",
+                    winner="B",
+                    confidence=1.0,
+                ),
+                CriterionEvaluation(
+                    criterion=Criterion(criterion_name="c", short_question="?"),
+                    winner_reasoning="r",
+                    winner="D",
+                    confidence=0.8,
+                ),
+            ]
+        )
+        assert (answer.agent_a_wins, answer.agent_b_wins) == (3.0, 1.0)
+        assert (answer.equally_good, answer.equally_bad) == (0.0, 1.0)
+        assert answer.margin == 2.0
+        assert answer.winner == "A"
+        assert answer.mean_confidence == pytest.approx(0.8)
+
+    def test_an_aggregate_stored_by_an_older_version_is_recomputed(self):
+        """A payload written when the judge stored its own aggregate loads and recomputes it."""
+        payload = {
+            "answer_format": "rubric_pointwise",
+            "criteria": [
+                {
+                    "criterion": {"criterion_name": "c0", "short_question": "?", "evidence": [], "weight": None},
+                    "reasoning": "r",
+                    "fulfillment": True,
+                }
+            ],
+            "average_score": 0.123,
+        }
+        assert RubricPointwiseAnswerFormat.model_validate(payload).average_score == 1.0
+
+    def test_the_aggregates_survive_a_serialization_round_trip(self):
+        answer = self._pointwise((1.0, 3.0), (0.0, 1.0))
+        assert answer.model_dump()["average_score"] == pytest.approx(0.75)
+        assert RubricPointwiseAnswerFormat.model_validate(answer.model_dump()).average_score == pytest.approx(0.75)
+
+
+class TestRubricArtifact:
+    """The rubric an answer is graded against is generated once and persisted on the query."""
+
+    def _make_criteria(self):
+        return [
+            Criterion(criterion_name="accuracy", evidence=["doc1"], short_question="Is the answer accurate?"),
+            Criterion(criterion_name="completeness", evidence=["doc2"], short_question="Is the answer complete?"),
+        ]
+
+    def test_a_generated_rubric_lands_on_the_query(self, llm_provider_mock, experiment):
+        criteria = self._make_criteria()
+        eval_schema = create_model(
+            "EvaluationSchema",
+            **{
+                c.criterion_name: create_model(
+                    c.criterion_name,
+                    reasoning=(str, Field(description="reasoning")),
+                    fulfillment=(bool, Field(description="fulfillment")),
+                )
+                for c in criteria
+            },
+        )  # type: ignore[call-overload]
+        judgement = LLMResponseType(
+            raw_answer="eval",
+            parsed_answer=eval_schema(
+                accuracy={"reasoning": "yes", "fulfillment": True},
+                completeness={"reasoning": "no", "fulfillment": False},
+            ),
+        )
+        llm_provider_mock.async_call_mocker = AsyncMock(
+            side_effect=[
+                LLMResponseType(raw_answer="rubric", parsed_answer=RubricSchema(criteria=criteria)),
+                judgement,
+                judgement,
+            ]
+        )
+        evaluator = RubricPointwiseEvaluator.from_config(
+            config=RubricPointwiseEvaluatorConfig(expert_in="AI", force=True),
+            llm_provider=llm_provider_mock,
+        )
+        query = experiment["0"]
+
+        evaluator.evaluate_all_evaluables(query)
+
+        assert [c.criterion_name for c in query.rubric] == ["accuracy", "completeness"]
+        judged = query.answers["agent1"].evaluations["rubric_pointwise"]
+        assert isinstance(judged.answer, RubricPointwiseAnswerFormat)
+        assert judged.answer.rubric_fingerprint == query.rubric_fingerprint
+        # One rubric generated for the query, then one judgement per answer.
+        generation_prompt = llm_provider_mock.async_call_mocker.call_args_list[0][0][0]
+        for document in query.retrieved_docs.values():
+            assert document.text in generation_prompt.user_message
+        assert llm_provider_mock.async_call_mocker.call_count == 1 + len(query.answers)
+
+    def test_every_rubric_is_generated_before_any_judging_starts(self, llm_provider_mock, experiment):
+        criteria = self._make_criteria()
+        eval_schema = create_model(
+            "EvaluationSchema",
+            **{
+                c.criterion_name: create_model(
+                    c.criterion_name,
+                    reasoning=(str, Field(description="reasoning")),
+                    fulfillment=(bool, Field(description="fulfillment")),
+                )
+                for c in criteria
+            },
+        )  # type: ignore[call-overload]
+        phases: list[str] = []
+
+        async def respond(llm_input, response_schema):
+            if response_schema is RubricSchema:
+                phases.append("generate")
+                return LLMResponseType(raw_answer="rubric", parsed_answer=RubricSchema(criteria=criteria))
+            phases.append("judge")
+            return LLMResponseType(
+                raw_answer="eval",
+                parsed_answer=eval_schema(
+                    accuracy={"reasoning": "yes", "fulfillment": True},
+                    completeness={"reasoning": "no", "fulfillment": False},
+                ),
+            )
+
+        llm_provider_mock.async_call_mocker = AsyncMock(side_effect=respond)
+        evaluator = RubricPointwiseEvaluator.from_config(
+            config=RubricPointwiseEvaluatorConfig(expert_in="AI", force=True),
+            llm_provider=llm_provider_mock,
+        )
+
+        evaluator.evaluate_experiment(experiment)
+
+        n_queries = len(list(experiment))
+        assert phases[:n_queries] == ["generate"] * n_queries
+        assert set(phases[n_queries:]) == {"judge"}
+        assert all(q.rubric for q in experiment)
+
+    def test_judging_a_rubricless_query_directly_says_how_to_get_a_rubric(self, llm_provider_mock, experiment):
+        evaluator = RubricPointwiseEvaluator.from_config(
+            config=RubricPointwiseEvaluatorConfig(expert_in="AI", force=True),
+            llm_provider=llm_provider_mock,
+        )
+        query = experiment["0"]
+        with pytest.raises(RuntimeError, match="prepare_query"):
+            evaluator.evaluate(query, query.answers["agent1"])
+        assert llm_provider_mock.async_call_mocker.call_count == 0
+
+    def test_an_answer_judged_against_an_edited_rubric_is_re_evaluated(self, llm_provider_mock, experiment):
+        evaluator = RubricPointwiseEvaluator.from_config(
+            config=RubricPointwiseEvaluatorConfig(expert_in="AI"),
+            llm_provider=llm_provider_mock,
+        )
+        query = experiment["0"]
+        query.rubric = self._make_criteria()
+        answer = query.answers["agent1"]
+        query.add_evaluation(
+            answer,
+            AnswerEvaluatorResult(
+                qid=query.qid,
+                agent="agent1",
+                evaluator_name="rubric_pointwise",
+                answer=RubricPointwiseAnswerFormat(
+                    criteria=[],
+                    average_score=1.0,
+                    rubric_fingerprint=query.rubric_fingerprint,
+                ),
+            ),
+        )
+        assert answer not in [e for _, e in evaluator._get_tuples_to_evaluate(experiment)]
+
+        query.rubric = [*query.rubric, Criterion(criterion_name="clarity", short_question="Clear?")]
+        assert answer in [e for _, e in evaluator._get_tuples_to_evaluate(experiment)]
+
+
 class TestRubricPointwiseEvaluator:
     """Tests for RubricPointwiseEvaluator."""
 
@@ -1087,10 +1298,8 @@ class TestRubricPointwiseEvaluator:
         config = RubricPointwiseEvaluatorConfig(expert_in="AI", force=True)
         evaluator = RubricPointwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
 
-        # Manually populate criteria cache
         criteria = self._make_criteria()
-        rubric = RubricSchema(criteria=criteria)
-        evaluator.criteria_cache["0"] = rubric
+        experiment["0"].rubric = criteria
 
         EvalSchema = create_model(
             "EvaluationSchema",
@@ -1151,12 +1360,11 @@ class TestRubricPointwiseEvaluator:
         )
 
         evaluator = RubricPointwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
-        assert "0" in evaluator.criteria_cache
-        assert "1" in evaluator.criteria_cache
 
         query = experiment["0"]
         answer = query.answers["agent1"]
         result = evaluator.evaluate(query, answer)
+        assert query.rubric == rubrics["0"]
         assert isinstance(result, AnswerEvaluatorResult)
         assert isinstance(result.answer, RubricPointwiseAnswerFormat)
         assert result.answer.average_score == 0.5
@@ -1179,9 +1387,7 @@ class TestRubricPointwiseEvaluator:
         config = RubricPointwiseEvaluatorConfig(expert_in="AI", force=True)
         evaluator = RubricPointwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
 
-        rubric = RubricSchema(criteria=criteria)
-        evaluator.criteria_cache["0"] = rubric
-        evaluator.answer_schema_cache["0"] = evaluator._build_evaluation_schema(rubric)
+        experiment["0"].rubric = criteria
 
         EvalSchema = create_model(
             "EvaluationSchema",
@@ -1216,9 +1422,7 @@ class TestRubricPointwiseEvaluator:
         config = RubricPointwiseEvaluatorConfig(expert_in="AI", force=True, graduated_scoring=True, max_score=5)
         evaluator = RubricPointwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
 
-        rubric = RubricSchema(criteria=criteria)
-        evaluator.criteria_cache["0"] = rubric
-        evaluator.answer_schema_cache["0"] = evaluator._build_evaluation_schema(rubric)
+        experiment["0"].rubric = criteria
 
         EvalSchema = create_model(
             "EvaluationSchema",
@@ -1258,9 +1462,7 @@ class TestRubricPointwiseEvaluator:
         config = RubricPointwiseEvaluatorConfig(expert_in="AI", force=True, graduated_scoring=True, max_score=10)
         evaluator = RubricPointwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
 
-        rubric = RubricSchema(criteria=criteria)
-        evaluator.criteria_cache["0"] = rubric
-        evaluator.answer_schema_cache["0"] = evaluator._build_evaluation_schema(rubric)
+        experiment["0"].rubric = criteria
 
         EvalSchema = create_model(
             "EvaluationSchema",
@@ -1359,6 +1561,11 @@ class TestBuiltinCriteriaPointwise:
         # average_score: (1.0 * 1.0 + (2/3) * 2.0) / (1.0 + 2.0) = (1.0 + 4/3) / 3.0
         expected = (1.0 + (2 / 3) * 2.0) / 3.0
         assert result.answer.average_score == pytest.approx(expected)
+        # The built-in scores by being a criterion, carrying its configured weight.
+        recall_criterion = [c for c in result.answer.criteria if c.criterion.criterion_name == "evidence_recall"]
+        assert len(recall_criterion) == 1
+        assert recall_criterion[0].criterion.weight == 2.0
+        assert recall_criterion[0].fulfillment == pytest.approx(2 / 3)
 
     def test_pointwise_citation_quality(self, llm_provider_mock, experiment):
         """Citation quality should evaluate claims/citations and contribute to average_score."""
@@ -1431,9 +1638,9 @@ class TestBuiltinCriteriaPointwise:
             Criterion(criterion_name="c1", evidence=["ev1", "ev2"], short_question="Q1?"),
             Criterion(criterion_name="c2", evidence=["ev3"], short_question="Q2?"),
         ]
-        rubric_cache = {"0": RubricSchema(criteria=criteria)}
         query = experiment["0"]
-        snippets = get_evidence_snippets(query, None, rubric_cache)
+        query.rubric = criteria
+        snippets = get_evidence_snippets(query, None)
         assert snippets == ["ev1", "ev2", "ev3"]
 
 
@@ -1520,6 +1727,14 @@ class TestBuiltinCriteriaPairwise:
         # Regular criterion: C (tie, equally_good=1). Evidence recall: A wins (weight=1).
         assert result.answer.agent_a_wins == 1.0
         assert result.answer.winner == "A"
+        # The built-in wins by being a criterion, with its side scores recorded.
+        recall_criterion = [c for c in result.answer.criteria if c.criterion.criterion_name == "evidence_recall"]
+        assert len(recall_criterion) == 1
+        assert (recall_criterion[0].winner, recall_criterion[0].score_a, recall_criterion[0].score_b) == (
+            "A",
+            1.0,
+            0.5,
+        )
 
     def test_pairwise_evidence_recall_uses_terminal_conversation_response(self, llm_provider_mock, experiment):
         """Evidence recall should evaluate only the last assistant turn from a conversation answer."""
@@ -1734,8 +1949,10 @@ class TestConversationSupportInPairwiseEvaluators:
             ],
         )
         answer_b = AgentAnswer(qid="0", agent="agent2", text="Text answer")
-        game = PairwiseGame(qid="0", agent_a_answer=answer_a, agent_b_answer=answer_b)
-        context = evaluator._get_shared_conversation_context(game)
+        query = Query(qid="0", query="Q2")
+        query.add_agent_answer(answer_a)
+        query.add_agent_answer(answer_b)
+        context = evaluator._get_conversation_context(query)
         assert len(context) == 3
         assert context[-1].content == "Q2"
 
@@ -1789,18 +2006,25 @@ class TestPRFixVerification:
         from ragelo.evaluators.answer_evaluators.rubric_pointwise_evaluator import RubricPointwiseEvaluator
 
         # Check that the system_prompt template contains 'criteria.evidence' (the correct field)
-        pairwise_source: str = getattr(RubricPairwiseEvaluator.system_prompt, "_ragelo_source")
+        pairwise_source: str = RubricPairwiseEvaluator.system_prompt._ragelo_source
         assert "criteria.evidence" in pairwise_source
         assert "criteria.supporting_documents" not in pairwise_source
 
-        pointwise_source: str = getattr(RubricPointwiseEvaluator.system_prompt, "_ragelo_source")
+        pointwise_source: str = RubricPointwiseEvaluator.system_prompt._ragelo_source
         assert "criteria.evidence" in pointwise_source
         assert "criteria.supporting_documents" not in pointwise_source
 
-        # Also check the graduated system prompt for pointwise
-        graduated_source: str = getattr(RubricPointwiseEvaluator.graduated_system_prompt, "_ragelo_source")
-        assert "criteria.evidence" in graduated_source
-        assert "criteria.supporting_documents" not in graduated_source
+        criterion = Criterion(criterion_name="c", evidence=["doc_1"], short_question="Good?")
+        for graduated_scoring in (False, True):
+            rendered = RubricPointwiseEvaluator.system_prompt.render(
+                expert_in="testing",
+                company=None,
+                rubric=[criterion],
+                graduated_scoring=graduated_scoring,
+                max_score=5,
+            )
+            assert "doc_1" in rendered
+            assert ("score from 0 to 5" in rendered) is graduated_scoring
 
     def test_rubric_template_renders_evidence_values(self, llm_provider_mock):
         """Verify that the evidence field actually renders into the prompt output."""
@@ -1811,11 +2035,9 @@ class TestPRFixVerification:
             evidence=["doc_1", "doc_2"],
             short_question="Is the answer good?",
         )
-        rubric = RubricSchema(criteria=[criterion])
-
         rendered = RubricPairwiseEvaluator.system_prompt.render(
             expert_in="testing",
-            criteria=rubric,
+            rubric=[criterion],
             company=None,
             include_evidence=False,
             is_conversation=False,
@@ -1851,8 +2073,8 @@ class TestPRFixVerification:
         pairwise_config = RubricPairwiseEvaluatorConfig(expert_in="test")
         pointwise_config = RubricPointwiseEvaluatorConfig(expert_in="test")
 
-        assert pairwise_config.evidence_recall == pointwise_config.evidence_recall == False  # noqa: E712
-        assert pairwise_config.citation_quality == pointwise_config.citation_quality == False  # noqa: E712
+        assert pairwise_config.evidence_recall == pointwise_config.evidence_recall == False
+        assert pairwise_config.citation_quality == pointwise_config.citation_quality == False
         assert pairwise_config.evidence_recall_weight == pointwise_config.evidence_recall_weight == 1.0
         assert pairwise_config.citation_quality_weight == pointwise_config.citation_quality_weight == 1.0
         assert pairwise_config.n_criteria == pointwise_config.n_criteria == 5

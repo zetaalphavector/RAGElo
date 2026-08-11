@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from typing import Optional
-
 from jinja2 import Template
 from pydantic import BaseModel, Field, field_validator
 
 from ragelo.types.configurations.base_configs import BaseEvaluatorConfig
+from ragelo.types.configurations.generator_configs import RubricConfigMixin
 from ragelo.types.types import RetrievalEvaluatorTypes
 from ragelo.utils import get_placeholders_and_tags, string_to_template
 
@@ -26,13 +25,13 @@ class FewShotExample(BaseModel):
 
 
 class BaseRetrievalEvaluatorConfig(BaseEvaluatorConfig):
-    user_prompt: Optional[Template] = Field(
+    user_prompt: Template | None = Field(
         default=None,
         description="The user prompt to use for the evaluator. Should contain at least a {{ query.query }} and a {{ document.text }} placeholder for the query and the document text.",  # noqa: E501
     )
 
     @field_validator("user_prompt", mode="after")
-    def validate_user_prompt(cls, prompt: Optional[Template]) -> Optional[Template]:
+    def validate_user_prompt(cls, prompt: Template | None) -> Template | None:
         if prompt is None:
             return prompt
         if isinstance(prompt, str):
@@ -68,9 +67,13 @@ class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     )
 
 
+class RubricCoverageEvaluatorConfig(RubricConfigMixin, BaseRetrievalEvaluatorConfig):
+    evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.RUBRIC_COVERAGE
+
+
 class CustomPromptEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.CUSTOM_PROMPT
-    user_prompt: Optional[Template] = Field(
+    user_prompt: Template | None = Field(
         default=...,
         description=(
             "The user prompt to be used to evaluate the documents. "

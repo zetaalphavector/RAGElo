@@ -3,6 +3,7 @@
 from ragelo.agent_rankers.base_agent_ranker import get_agent_ranker
 from ragelo.evaluators.answer_evaluators import AnswerEvaluatorFactory, get_answer_evaluator
 from ragelo.evaluators.retrieval_evaluators import RetrievalEvaluatorFactory, get_retrieval_evaluator
+from ragelo.generators import RubricGenerator, get_rubric_generator
 from ragelo.llm_providers.base_llm_provider import get_llm_provider
 from ragelo.logger import configure_logging
 from ragelo.retrievers import RetrievedDocument, Retriever
@@ -17,11 +18,13 @@ __all__ = [
     "RetrievalEvaluatorFactory",
     "RetrievedDocument",
     "Retriever",
+    "RubricGenerator",
     "configure_logging",
     "get_agent_ranker",
     "get_answer_evaluator",
     "get_llm_provider",
     "get_retrieval_evaluator",
+    "get_rubric_generator",
 ]
 
 __version__ = "0.1.0"

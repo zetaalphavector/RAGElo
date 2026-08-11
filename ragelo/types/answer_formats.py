@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import re
-from typing import Annotated, Literal
+from typing import Literal, Protocol, runtime_checkable
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field, field_validator
 from pydantic.json_schema import SkipJsonSchema
 from typing_extensions import Self
 
@@ -57,14 +57,52 @@ def swap_pairwise_labels(text: str) -> str:
     return pattern.sub(lambda match: swaps[match.group(0)], text)
 
 
-class EvaluationAnswer(BaseModel):
-    """Base class for LLM-generated evaluation content (without metadata)."""
+@runtime_checkable
+class GradedJudgment(Protocol):
+    """A judgment that contributes a relevance label to qrels.
 
-    pass
+    The metrics layer consumes this rather than reaching into a concrete answer format, so a judge
+    with a new payload needs no change there. `None` means the judgment carries no usable label and
+    the document is left unjudged.
+    """
+
+    def relevance(self) -> float | int | None: ...
+
+
+@runtime_checkable
+class RubricJudgment(Protocol):
+    """A judgment made against a query's rubric."""
+
+    rubric_fingerprint: str | None
+
+
+@runtime_checkable
+class SubtopicJudgment(Protocol):
+    """A judgment that contributes subtopic labels to diversity qrels.
+
+    A query's subtopics are the facets a complete answer must cover, so a document addressing only
+    some of them is partial coverage. Coverage measures need one qrel per addressed subtopic.
+    """
+
+    def subtopics(self) -> list[str]: ...
+
+
+class EvaluationAnswer(BaseModel):
+    """Base class for LLM-generated evaluation content (without metadata).
+
+    `answer_format` tags the concrete format so that the unions on `EvaluatorResult` subclasses
+    can be discriminated instead of inferred from which fields happen to validate. It is hidden
+    from the JSON schema, so the LLM is never asked for it, and defaults to empty on formats
+    defined outside the library, which fall back to structural matching on load.
+    """
+
+    answer_format: SkipJsonSchema[str] = ""
 
 
 class RetrievalEvaluationAnswer(EvaluationAnswer):
     """Output format for evaluating the relevance of a document to a question."""
+
+    answer_format: SkipJsonSchema[Literal["retrieval_relevance"]] = "retrieval_relevance"
 
     reasoning: str = Field(
         ...,
@@ -76,9 +114,14 @@ class RetrievalEvaluationAnswer(EvaluationAnswer):
         "and 2 for highly relevant.",
     )
 
+    def relevance(self) -> float | int | None:
+        return self.score
+
 
 class AnswerEvaluationAnswer(EvaluationAnswer):
     """Output format for evaluating the quality of an answer to a question."""
+
+    answer_format: SkipJsonSchema[Literal["answer_quality"]] = "answer_quality"
 
     reasoning: str = Field(
         ...,
@@ -96,6 +139,8 @@ class AnswerEvaluationAnswer(EvaluationAnswer):
 
 class PairwiseEvaluationAnswer(EvaluationAnswer):
     """Output format for evaluating the quality of answers from two agents to the same question."""
+
+    answer_format: SkipJsonSchema[Literal["pairwise"]] = "pairwise"
 
     answer_a_strengths: list[str] = Field(
         default_factory=list,
@@ -152,7 +197,11 @@ class PairwiseEvaluationAnswer(EvaluationAnswer):
 class RDNAMEvaluationAnswer(RetrievalEvaluationAnswer):
     """LLM-generated evaluation for RDNAM retrieval tasks."""
 
-    reasoning: Annotated[str, SkipJsonSchema] = ""
+    # Narrowing the discriminator in a subclass is intended: an RDNAM payload must not
+    # identify itself as the base relevance format.
+    answer_format: SkipJsonSchema[Literal["rdnam"]] = "rdnam"  # type: ignore[assignment]
+
+    reasoning: SkipJsonSchema[str] = ""
     score: float = Field(
         ...,
         description="An number between 0 and 2 representing the score of the document.",
@@ -169,7 +218,11 @@ class RDNAMEvaluationAnswer(RetrievalEvaluationAnswer):
 class RDNAMNoAspectsAnswer(RetrievalEvaluationAnswer):
     """Output format for evaluating the relevance of a document to a question."""
 
-    reasoning: Annotated[str, SkipJsonSchema] = ""
+    # Narrowing the discriminator in a subclass is intended: an RDNAM payload must not
+    # identify itself as the base relevance format.
+    answer_format: SkipJsonSchema[Literal["rdnam_no_aspects"]] = "rdnam_no_aspects"  # type: ignore[assignment]
+
+    reasoning: SkipJsonSchema[str] = ""
     score: float = Field(
         ...,
         description="An number between 0 and 2 representing the overall score of the document.",
@@ -179,8 +232,12 @@ class RDNAMNoAspectsAnswer(RetrievalEvaluationAnswer):
 class RDNAMMultipleAnnotatorsAnswer(RetrievalEvaluationAnswer):
     """Output format for evaluating the relevance of a document to a question by simulating 5 annotators."""
 
-    score: Annotated[float | int, SkipJsonSchema] = 0.0
-    reasoning: Annotated[str, SkipJsonSchema] = ""
+    # Narrowing the discriminator in a subclass is intended: an RDNAM payload must not
+    # identify itself as the base relevance format.
+    answer_format: SkipJsonSchema[Literal["rdnam_multiple_annotators"]] = "rdnam_multiple_annotators"  # type: ignore[assignment]
+
+    score: SkipJsonSchema[float | int] = 0.0
+    reasoning: SkipJsonSchema[str] = ""
     annotator_1: RDNAMEvaluationAnswer
     annotator_2: RDNAMEvaluationAnswer
     annotator_3: RDNAMEvaluationAnswer
@@ -191,8 +248,14 @@ class RDNAMMultipleAnnotatorsAnswer(RetrievalEvaluationAnswer):
 class RDNAMMultipleAnnotatorsNoAspectsAnswer(RetrievalEvaluationAnswer):
     """Output format for evaluating the relevance of a document to a question by simulating 5 annotators."""
 
-    score: Annotated[float | int, SkipJsonSchema] = 0.0
-    reasoning: Annotated[str, SkipJsonSchema] = ""
+    # Narrowing the discriminator in a subclass is intended: an RDNAM payload must not
+    # identify itself as the base relevance format.
+    answer_format: SkipJsonSchema[Literal["rdnam_multiple_annotators_no_aspects"]] = (
+        "rdnam_multiple_annotators_no_aspects"  # type: ignore[assignment]
+    )
+
+    score: SkipJsonSchema[float | int] = 0.0
+    reasoning: SkipJsonSchema[str] = ""
     annotator_1: RDNAMNoAspectsAnswer
     annotator_2: RDNAMNoAspectsAnswer
     annotator_3: RDNAMNoAspectsAnswer
@@ -202,11 +265,14 @@ class RDNAMMultipleAnnotatorsNoAspectsAnswer(RetrievalEvaluationAnswer):
 
 class Criterion(BaseModel):
     criterion_name: str = Field(
-        description="The name of the criterion to be used to evaluate the quality of the responses."
+        description="The name of the criterion to be used to evaluate the quality of the responses. "
+        "Normalized to a valid Python identifier, as it is used as a response-schema field name "
+        "and as a subtopic id in diversity qrels."
     )
     evidence: list[str] = Field(
+        default_factory=list,
         description="The list of documents IDs or snippets that support the criterion. "
-        "If no documents support the criterion, leave this list empty."
+        "If no documents support the criterion, leave this list empty.",
     )
     short_question: str = Field(
         description="A short, yes/no question that can be used to evaluate the quality of the responses."
@@ -216,6 +282,20 @@ class Criterion(BaseModel):
         description="The relative importance of this criterion. "
         "Higher values give more weight in the final score. If not provided, all criteria are weighted equally.",
     )
+
+    @property
+    def effective_weight(self) -> float:
+        return 1.0 if self.weight is None else self.weight
+
+    @field_validator("criterion_name", mode="after")
+    @classmethod
+    def normalize_criterion_name(cls, name: str) -> str:
+        normalized = re.sub(r"\W+", "_", name.strip()).strip("_")
+        if normalized and normalized[0].isdigit():
+            normalized = f"c_{normalized}"
+        if not normalized:
+            raise ValueError(f"criterion_name {name!r} has no alphanumeric characters to build an identifier from")
+        return normalized
 
 
 class CriterionEvaluation(BaseModel):
@@ -349,18 +429,11 @@ class CitationQualitySchema(BaseModel):
 
 
 class RubricAnswerFormat(EvaluationAnswer):
+    answer_format: SkipJsonSchema[Literal["rubric_pairwise"]] = "rubric_pairwise"
+    rubric_fingerprint: SkipJsonSchema[str | None] = Field(
+        default=None, description="Fingerprint of the rubric this judgment was made against."
+    )
     criteria: list[CriterionEvaluation] = Field(..., description="The criteria used for evaluating the answer quality")
-    agent_a_wins: float = Field(..., description="The weighted score of criteria that agent A wins")
-    agent_b_wins: float = Field(..., description="The weighted score of criteria that agent B wins")
-    equally_good: float = Field(
-        ..., description="The weighted score of criteria that agent A and agent B are equally good"
-    )
-    equally_bad: float = Field(
-        ..., description="The weighted score of criteria that agent A and agent B are equally bad"
-    )
-    winner: PairwiseWinner = Field(..., description="The winner of the pairwise comparison")
-    margin: float = Field(default=0.0, description="agent_a_wins minus agent_b_wins (signed)")
-    mean_confidence: float = Field(default=1.0, description="Average confidence across all criteria")
     evidence_recall_a: EvidenceRecallResult | None = Field(
         default=None, description="Evidence recall result for agent A"
     )
@@ -374,14 +447,52 @@ class RubricAnswerFormat(EvaluationAnswer):
         default=None, description="Citation quality result for agent B"
     )
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def agent_a_wins(self) -> float:
+        return self.__weight_of("A")
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def agent_b_wins(self) -> float:
+        return self.__weight_of("B")
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def equally_good(self) -> float:
+        return self.__weight_of("C")
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def equally_bad(self) -> float:
+        return self.__weight_of("D")
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def margin(self) -> float:
+        return self.agent_a_wins - self.agent_b_wins
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def winner(self) -> PairwiseWinner:
+        if self.margin > 0:
+            return "A"
+        return "B" if self.margin < 0 else "C"
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def mean_confidence(self) -> float:
+        if not self.criteria:
+            return 1.0
+        return sum(c.confidence for c in self.criteria) / len(self.criteria)
+
+    def __weight_of(self, winner: PairwiseCriterionWinner) -> float:
+        return sum(c.criterion.effective_weight for c in self.criteria if c.winner == winner)
+
     def swap_perspective(self) -> Self:
         return self.model_copy(
             update={
                 "criteria": [criterion.swap_perspective() for criterion in self.criteria],
-                "agent_a_wins": self.agent_b_wins,
-                "agent_b_wins": self.agent_a_wins,
-                "winner": swap_pairwise_winner(self.winner),
-                "margin": -self.margin,
                 "evidence_recall_a": self.evidence_recall_b,
                 "evidence_recall_b": self.evidence_recall_a,
                 "citation_quality_a": self.citation_quality_b,
@@ -392,29 +503,12 @@ class RubricAnswerFormat(EvaluationAnswer):
     def merge_with_canonicalized(self, other: Self) -> Self:
         """Merge this rubric answer with another in the same A-vs-B perspective.
 
-        Used to reconcile bidirectional pairwise judgments after the reversed
-        evaluation has been canonicalized via :py:meth:`swap_perspective`.
-        Aggregate scores (``agent_a_wins``, ``agent_b_wins``, ``equally_good``,
-        ``equally_bad``, ``mean_confidence``) are averaged across both
-        directions; ``margin`` and ``winner`` are recomputed from the merged
-        aggregates so they remain consistent with each other and with the
-        per-criterion verdicts. Per-criterion records are merged by
-        ``criterion_name`` via :py:meth:`CriterionEvaluation.merge_with_canonicalized`;
-        criteria that appear in only one direction are kept as-is. Free-text
-        fields are kept from ``self`` (the forward direction).
+        Used to reconcile bidirectional pairwise judgments after the reversed evaluation has been
+        canonicalized via :py:meth:`swap_perspective`. Per-criterion records are merged by
+        ``criterion_name`` via :py:meth:`CriterionEvaluation.merge_with_canonicalized`; criteria
+        that appear in only one direction are kept as-is. Free-text fields are kept from ``self``
+        (the forward direction). The aggregates follow from the merged criteria.
         """
-        merged_a_wins = (self.agent_a_wins + other.agent_a_wins) / 2.0
-        merged_b_wins = (self.agent_b_wins + other.agent_b_wins) / 2.0
-        merged_equally_good = (self.equally_good + other.equally_good) / 2.0
-        merged_equally_bad = (self.equally_bad + other.equally_bad) / 2.0
-        merged_margin = merged_a_wins - merged_b_wins
-        if merged_margin > 0:
-            merged_winner: PairwiseWinner = "A"
-        elif merged_margin < 0:
-            merged_winner = "B"
-        else:
-            merged_winner = "C"
-
         other_by_name = {c.criterion.criterion_name: c for c in other.criteria}
         merged_criteria: list[CriterionEvaluation] = []
         for crit in self.criteria:
@@ -423,19 +517,7 @@ class RubricAnswerFormat(EvaluationAnswer):
                 merged_criteria.append(crit)
             else:
                 merged_criteria.append(crit.merge_with_canonicalized(counterpart))
-
-        return self.model_copy(
-            update={
-                "criteria": merged_criteria,
-                "agent_a_wins": merged_a_wins,
-                "agent_b_wins": merged_b_wins,
-                "equally_good": merged_equally_good,
-                "equally_bad": merged_equally_bad,
-                "winner": merged_winner,
-                "margin": merged_margin,
-                "mean_confidence": (self.mean_confidence + other.mean_confidence) / 2.0,
-            }
-        )
+        return self.model_copy(update={"criteria": merged_criteria})
 
 
 class CriterionEvaluationPointwise(BaseModel):
@@ -445,15 +527,54 @@ class CriterionEvaluationPointwise(BaseModel):
 
 
 class RubricPointwiseAnswerFormat(EvaluationAnswer):
+    answer_format: SkipJsonSchema[Literal["rubric_pointwise"]] = "rubric_pointwise"
+    rubric_fingerprint: SkipJsonSchema[str | None] = Field(
+        default=None, description="Fingerprint of the rubric this judgment was made against."
+    )
     criteria: list[CriterionEvaluationPointwise] = Field(
         ..., description="The criteria used for evaluating the answer quality"
     )
-    average_score: float = Field(..., description="The average score of the criteria")
     evidence_recall: EvidenceRecallResult | None = Field(default=None, description="Evidence recall evaluation result")
     citation_quality: CitationQualityResult | None = Field(
         default=None, description="Citation quality evaluation result"
     )
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def average_score(self) -> float:
+        total_weight = sum(c.criterion.effective_weight for c in self.criteria)
+        if total_weight == 0:
+            return 0.0
+        weighted = sum(float(c.fulfillment) * c.criterion.effective_weight for c in self.criteria)
+        return weighted / total_weight
+
 
 class RubricSchema(BaseModel):
     criteria: list[Criterion] = Field(description="The criteria to be used to evaluate the quality of the responses.")
+
+
+class RubricCoverageAnswerFormat(EvaluationAnswer):
+    """Output format for judging which of a query's rubric criteria a retrieved document addresses.
+
+    The LLM answers one criterion at a time through a per-query response schema, so
+    `criteria_addressed` is assembled by the evaluator rather than free-listed by the LLM.
+    `score` is the number of criteria addressed, which makes the flat qrels read as a graded
+    relevance label while `criteria_addressed` feeds subtopic qrels for coverage measures.
+    """
+
+    answer_format: SkipJsonSchema[Literal["rubric_coverage"]] = "rubric_coverage"
+    rubric_fingerprint: SkipJsonSchema[str | None] = Field(
+        default=None, description="Fingerprint of the rubric this judgment was made against."
+    )
+
+    reasoning: str = Field(description="A concise explanation of which criteria the document addresses.")
+    criteria_addressed: list[str] = Field(
+        default_factory=list, description="The names of the rubric criteria this document addresses."
+    )
+    score: SkipJsonSchema[float | int] = 0
+
+    def relevance(self) -> float | int | None:
+        return self.score
+
+    def subtopics(self) -> list[str]:
+        return self.criteria_addressed

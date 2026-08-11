@@ -3,23 +3,31 @@ from __future__ import annotations
 import itertools
 import logging
 import random
-from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any, Callable, TypeVar, get_type_hints
+from collections.abc import Callable, Sequence
+from typing import TYPE_CHECKING, Any, ClassVar, TypeVar, get_type_hints
 
 from pydantic import BaseModel
 
 from ragelo.evaluators.base_evaluator import BaseEvaluator, T_Result
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
 from ragelo.types import AnswerEvaluatorResult, LLMInputPrompt, PairwiseGameEvaluatorResult, Query
-from ragelo.types.answer_formats import PairwiseEvaluationAnswer, PairwiseWinner, RubricAnswerFormat
+from ragelo.types.answer_formats import (
+    AnswerEvaluationAnswer,
+    EvaluationAnswer,
+    PairwiseEvaluationAnswer,
+    PairwiseWinner,
+    RubricAnswerFormat,
+)
 from ragelo.types.configurations import BaseAnswerEvaluatorConfig, PairwiseEvaluatorConfig
 from ragelo.types.evaluables import AgentAnswer, Document, Evaluable, PairwiseGame
+from ragelo.types.evaluator_utils import answer_format_for
 from ragelo.types.types import AnswerEvaluatorTypes, _result_type_registry
 from ragelo.utils import call_async_fn, get_placeholders_and_tags
 
 logger = logging.getLogger(__name__)
 
 T_AnswerConfig = TypeVar("T_AnswerConfig", bound=BaseAnswerEvaluatorConfig)
+T_AnswerResult = TypeVar("T_AnswerResult", bound=AnswerEvaluatorResult | PairwiseGameEvaluatorResult)
 
 if TYPE_CHECKING:
     from ragelo.types.experiment import Experiment
@@ -28,7 +36,8 @@ if TYPE_CHECKING:
 class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
     config: T_AnswerConfig
     evaluable_name: str = "Agent Answer"
-    _warned_queries: set[str] = set()
+    _warned_queries: ClassVar[set[str]] = set()
+    answer_format: type[EvaluationAnswer] = AnswerEvaluationAnswer
     result_type: type[T_Result] = AnswerEvaluatorResult  # type: ignore[assignment]
 
     def evaluate(
@@ -131,7 +140,7 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
 
         query, evaluable = eval_sample
         if not isinstance(evaluable, (AgentAnswer, PairwiseGame)):
-            raise ValueError(f"can't evaluate a {type(evaluable).__name__} in an Answer Evaluator")
+            raise TypeError(f"can't evaluate a {type(evaluable).__name__} in an Answer Evaluator")
         if isinstance(evaluable, PairwiseGame):
             return await self.__evaluate_game(query, evaluable)
         return await self.__evaluate_answer(query, evaluable)
@@ -154,17 +163,18 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
             llm_response = self._process_answer(llm_response, query)
             parsed_answer = llm_response.parsed_answer
             raw_answer = llm_response.raw_answer
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - captured on the result as `exception`
             exc = str(e) + f"\nRaw answer: {raw_answer}"
             logger.warning(f"Failed to generate answer for qid: {query.qid} and agent: {answer.agent}: {exc}")
 
-        return AnswerEvaluatorResult(
+        result = AnswerEvaluatorResult(
             qid=query.qid,
             agent=answer.agent,
             evaluator_name=evaluator_name,
             answer=parsed_answer,  # type: ignore[arg-type]
             exception=exc,
         )
+        return await self.__augment_if_judged(result, query, answer)
 
     async def __evaluate_single_game(self, query: Query, game: PairwiseGame) -> PairwiseGameEvaluatorResult:
         evaluator_name = str(self.config.evaluator_name)
@@ -180,7 +190,7 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
             llm_response = self._process_answer(llm_response, query)
             parsed_answer = llm_response.parsed_answer
             raw_answer = llm_response.raw_answer
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - captured on the result as `exception`
             exc = str(e) + f"\nRaw answer: {raw_answer}"
             logger.warning(
                 f"Failed to evaluate game for qid: {query.qid} "
@@ -260,7 +270,7 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
 
         exc = a_vs_b_result.exception or b_vs_a_result.exception
 
-        return PairwiseGameEvaluatorResult(
+        result = PairwiseGameEvaluatorResult(
             qid=query.qid,
             agent_a=game.agent_a_answer.agent,
             agent_b=game.agent_b_answer.agent,
@@ -270,6 +280,18 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
             a_vs_b_result=a_vs_b_result,
             b_vs_a_result=b_vs_a_result,
         )
+        return await self.__augment_if_judged(result, query, game)
+
+    async def __augment_if_judged(self, result: T_AnswerResult, query: Query, evaluable: Evaluable) -> T_AnswerResult:
+        if result.answer is None or result.exception:
+            return result
+        return await self._augment_judgment(result, query, evaluable)
+
+    async def _augment_judgment(self, result: T_AnswerResult, query: Query, evaluable: Evaluable) -> T_AnswerResult:
+        """Extend a judgment with checks that need their own LLM calls. Only reached once the
+        evaluable has been judged successfully.
+        """
+        return result
 
     def _canonicalize_pairwise_answer(
         self,
@@ -294,17 +316,9 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
             if isinstance(schema, type):
                 return schema
             return None
-        # Fall back to extracting from result_type
-        answer_field = self.result_type.model_fields.get("answer")
-        if not answer_field or not answer_field.annotation:
-            return None
-        answer_type = answer_field.annotation
-        if hasattr(answer_type, "__args__"):
-            answer_type = next(
-                (arg for arg in answer_type.__args__ if arg is not type(None)),
-                answer_type,
-            )
-        return answer_type
+        if self.config.result_type:
+            return self.config.result_type
+        return answer_format_for(self, BaseAnswerEvaluator)
 
     def _get_all_evaluables(self, query: Query) -> list[Evaluable]:
         if self.config.pairwise:
@@ -322,13 +336,13 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
             if self.config.pairwise:
                 for g in q.pairwise_games.values():
                     all_tuples += 1
-                    if evaluator_name not in g.evaluations or self.config.force:
+                    if self.__needs_evaluation(q, g, evaluator_name):
                         tuples_to_eval.append((q, g))
 
             else:
                 for a in q.answers.values():
                     all_tuples += 1
-                    if evaluator_name not in a.evaluations or self.config.force:
+                    if self.__needs_evaluation(q, a, evaluator_name):
                         tuples_to_eval.append((q, a))
 
         if len(tuples_to_eval) == 0 and all_tuples > 0:
@@ -341,7 +355,7 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
         documents = self._filter_documents(query)
         context = {"query": query, "answer": answer, "documents": documents}
         user_message = self.user_prompt.render(**context)
-        system_prompt = self.system_prompt.render(**context)
+        system_prompt = self.system_prompt.render(**context) if self.system_prompt else None
         return LLMInputPrompt(
             system_prompt=system_prompt,
             user_message=user_message,
@@ -352,7 +366,7 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
         documents = self._filter_documents(query)
         context = {"query": query, "game": game, "documents": documents}
         user_message = self.user_prompt.render(**context)
-        system_prompt = self.system_prompt.render(**context)
+        system_prompt = self.system_prompt.render(**context) if self.system_prompt else None
         return LLMInputPrompt(
             system_prompt=system_prompt,
             user_message=user_message,
@@ -370,7 +384,7 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
         if not self.config.pairwise:
             return
         if not isinstance(self.config, PairwiseEvaluatorConfig):
-            raise ValueError("Trying to add pairwise games to a non-pairwise evaluator")
+            raise TypeError("Trying to add pairwise games to a non-pairwise evaluator")
         for query in experiment:
             query_agents = list(query.answers.keys())
             pairs = list(itertools.combinations(query_agents, 2))
@@ -386,11 +400,17 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
                 query.add_pairwise_game(agent_a, agent_b)
         experiment.save()
 
+    def __needs_evaluation(self, query: Query, evaluable: Evaluable, evaluator_name: str) -> bool:
+        if self.config.force or evaluator_name not in evaluable.evaluations:
+            return True
+        return not self._is_cached_result_valid(query, evaluable.evaluations[evaluator_name])
+
     def _filter_documents(self, query: Query) -> list[Document]:
         # Check if we will actually include documents in any prompt
         system_placeholders: set[str] = set()
         user_placeholders: set[str] = set()
-        system_placeholders = get_placeholders_and_tags(self.system_prompt)
+        if self.system_prompt:
+            system_placeholders = get_placeholders_and_tags(self.system_prompt)
         if self.user_prompt:
             user_placeholders = get_placeholders_and_tags(self.user_prompt)
         all_placeholders = system_placeholders | user_placeholders
@@ -405,14 +425,14 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
             return []
 
         documents = []
-        for did, d in query.retrieved_docs.items():
+        for d in query.retrieved_docs.values():
             if self.config.document_relevance_threshold is not None:
                 # Skip documents with relevance below the threshold
                 if not d.evaluations:
                     continue
                 # Get the first available retrieval evaluation
                 score = None
-                for _, evaluation in d.evaluations.items():
+                for evaluation in d.evaluations.values():
                     if hasattr(evaluation, "answer"):
                         answer = evaluation.answer
                         if isinstance(answer, dict):
@@ -435,18 +455,17 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
             if self.config.document_filter is not None and not self.config.document_filter(d):
                 continue
             documents.append(d)
-        if len(documents) == 0:
-            if query.qid not in self._warned_queries:
-                logger.warning(
-                    f"No relevant documents were retrieved for the query {query.qid}. "
-                    "No documents will be provided to the Answer Evaluator."
-                )
-                self._warned_queries.add(query.qid)
+        if len(documents) == 0 and query.qid not in self._warned_queries:
+            logger.warning(
+                f"No relevant documents were retrieved for the query {query.qid}. "
+                "No documents will be provided to the Answer Evaluator."
+            )
+            self._warned_queries.add(query.qid)
         return documents
 
 
 class AnswerEvaluatorFactory:
-    registry: dict[AnswerEvaluatorTypes, type[BaseAnswerEvaluator]] = {}
+    registry: ClassVar[dict[AnswerEvaluatorTypes, type[BaseAnswerEvaluator]]] = {}
 
     @classmethod
     def register(cls, name: AnswerEvaluatorTypes) -> Callable:
@@ -462,7 +481,7 @@ class AnswerEvaluatorFactory:
     @classmethod
     def get_evaluator_result_type(
         cls, evaluator_name: AnswerEvaluatorTypes
-    ) -> type[AnswerEvaluatorResult] | type[PairwiseGameEvaluatorResult]:
+    ) -> type[AnswerEvaluatorResult | PairwiseGameEvaluatorResult]:
         """Gets the answer evaluator result type for a specific evaluator type.
 
         Args:
@@ -544,7 +563,7 @@ def get_answer_evaluator(
 
 def get_answer_evaluator_result_type(
     evaluator_name: AnswerEvaluatorTypes | str,
-) -> type[AnswerEvaluatorResult] | type[PairwiseGameEvaluatorResult]:
+) -> type[AnswerEvaluatorResult | PairwiseGameEvaluatorResult]:
     """Gets the answer evaluator result type for a specific evaluator type.
 
     Args:

@@ -8,6 +8,7 @@ from ragelo.types.answer_formats import (
     CitationQualityResult,
     CitationQualitySchema,
     ClaimEvaluation,
+    Criterion,
     EvidenceRecallResult,
     EvidenceRecallSchema,
     EvidenceSnippetEvaluation,
@@ -68,27 +69,15 @@ CITATION_QUALITY_USER_PROMPT = string_to_template(
 )
 
 
-def get_evidence_snippets(
-    query: Query,
-    config_snippets: dict[str, list[str]] | None,
-    criteria_cache: dict | None = None,
-) -> list[str]:
+def get_evidence_snippets(query: Query, config_snippets: dict[str, list[str]] | None) -> list[str]:
     if config_snippets and query.qid in config_snippets:
         return config_snippets[query.qid]
 
-    if criteria_cache and query.qid in criteria_cache:
-        rubric = criteria_cache[query.qid]
-        all_evidence: list[str] = []
-        for criterion in rubric.criteria:
-            all_evidence.extend(criterion.evidence)
-        if all_evidence:
-            return all_evidence
+    rubric_evidence = [snippet for criterion in query.rubric for snippet in criterion.evidence]
+    if rubric_evidence:
+        return rubric_evidence
 
-    snippets = []
-    for doc in query.retrieved_docs.values():
-        if doc.text:
-            snippets.append(doc.text)
-    return snippets
+    return [doc.text for doc in query.retrieved_docs.values() if doc.text]
 
 
 async def evaluate_evidence_recall(
@@ -143,3 +132,23 @@ async def evaluate_citation_quality(
         claims_with_citations_ratio=claims_with_citations / total_claims if total_claims > 0 else 0.0,
         citations_with_excerpts_ratio=citations_with_excerpts / total_citations if total_citations > 0 else 0.0,
     )
+
+
+def evidence_recall_criterion(weight: float) -> Criterion:
+    return Criterion(
+        criterion_name="evidence_recall",
+        short_question="Does the answer include the evidence available in the retrieved documents?",
+        weight=weight,
+    )
+
+
+def citation_quality_criterion(weight: float) -> Criterion:
+    return Criterion(
+        criterion_name="citation_quality",
+        short_question="Are the answer's claims supported by citations with relevant excerpts?",
+        weight=weight,
+    )
+
+
+def citation_quality_score(result: CitationQualityResult) -> float:
+    return (result.claims_with_citations_ratio + result.citations_with_excerpts_ratio) / 2.0

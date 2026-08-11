@@ -13,6 +13,15 @@ from ragelo import (
     get_llm_provider,
     get_retrieval_evaluator,
 )
+from ragelo.measures import UNADDRESSED_DOC_PREFIX
+from ragelo.types.answer_formats import (
+    Criterion,
+    CriterionEvaluation,
+    CriterionEvaluationPointwise,
+    RubricAnswerFormat,
+    RubricCoverageAnswerFormat,
+    RubricPointwiseAnswerFormat,
+)
 from ragelo.types.evaluables import AgentAnswer, ChatMessage, Document
 from ragelo.types.query import Query
 from ragelo.types.results import (
@@ -77,12 +86,14 @@ class TestExperiment:
         assert empty_experiment[qid].query == "Forced query"
 
     def test_re_declaring_a_query_keeps_the_stored_one_and_its_evaluables(self, empty_experiment):
-        """A harness re-declares plain queries every run; the pool and its judgements are paid for once."""
+        """A harness re-declares plain queries every run; the pool, rubric and judgements are paid for once."""
         empty_experiment.add_query(
             Query(
                 qid="q0",
                 query="What is the capital of Brazil?",
                 metadata={"run": 1},
+                reference_answer="Brasilia.",
+                rubric=[Criterion(criterion_name="names_capital", short_question="Names it?")],
             )
         )
         empty_experiment.add_retrieved_doc(
@@ -103,6 +114,8 @@ class TestExperiment:
         query = empty_experiment["q0"]
         assert query.query == "What is the capital of Brazil?"
         assert query.metadata == {"run": 1}
+        assert query.reference_answer == "Brasilia."
+        assert [c.criterion_name for c in query.rubric] == ["names_capital"]
         assert query.retrieved_docs["d0"].evaluations["reasoner"].answer.score == 2
 
     def test_retrieval_systems_reports_what_has_already_been_pooled(self, empty_experiment):
@@ -234,29 +247,12 @@ class TestExperiment:
         # Verify contents
         assert len(loaded_experiment) == len(experiment)
         assert list(loaded_experiment.keys()) == list(experiment.keys())
-        for qid in experiment.keys():
+        for qid in experiment.keys():  # noqa: SIM118
             assert loaded_experiment[qid].query == experiment[qid].query
             assert len(loaded_experiment[qid].retrieved_docs) == len(experiment[qid].retrieved_docs)
             assert len(loaded_experiment[qid].answers) == len(experiment[qid].answers)
             for did, doc in experiment[qid].retrieved_docs.items():
                 assert loaded_experiment[qid].retrieved_docs[did].retrieved_by == doc.retrieved_by
-
-    def test_retrieved_by_survives_a_save_load_cycle(self, tmp_path, base_experiment_config):
-        """Without the agents that retrieved each document, `get_runs()` is empty and
-        `evaluate_retrieval` scores nothing — silently, since there is no agent to report on. A
-        reloaded experiment must therefore still know its runs, or resuming one cannot be scored.
-        """
-        save_path = tmp_path / "exp.json"
-        base_experiment_config["save_on_disk"] = True
-        base_experiment_config["save_path"] = str(save_path)
-        experiment = Experiment(**base_experiment_config)
-        experiment["0"].retrieved_docs["0"].retrieved_by = {"agent1": 2.0, "agent2": 1.0}
-        experiment.save()
-
-        loaded = Experiment(experiment_name="test_experiment", save_path=str(save_path), save_on_disk=True)
-
-        assert loaded["0"].retrieved_docs["0"].retrieved_by == {"agent1": 2.0, "agent2": 1.0}
-        assert set(loaded.get_runs()) >= {"agent1", "agent2"}
 
     def test_save_and_load_retrieval_result_with_colliding_evaluator_name(self, tmp_path):
         """Regression: persisted RetrievalEvaluatorResult must reload as RetrievalEvaluatorResult
@@ -401,6 +397,161 @@ class TestExperiment:
         assert qrels["0"] == {"0": 2, "1": 0}
         # ir_measures/pytrec_eval rejects float qrels, so both the kept and zeroed labels must be int.
         assert all(type(relevance) is int for relevance in qrels["0"].values())
+
+    def test_a_failed_save_leaves_the_previous_experiment_loadable(self, tmp_path, base_experiment_config, mocker):
+        """A save that dies partway must not destroy what was already on disk."""
+        save_path = tmp_path / "exp.json"
+        base_experiment_config["save_on_disk"] = True
+        base_experiment_config["save_path"] = str(save_path)
+        experiment = Experiment(**base_experiment_config)
+        experiment.save()
+        good = save_path.read_text()
+
+        mocker.patch("json.dump", side_effect=OSError("disk full"))
+        with pytest.raises(OSError):
+            experiment.save()
+
+        assert save_path.read_text() == good
+        assert json.loads(save_path.read_text())["queries"]
+
+    def test_retrieved_by_survives_a_save_load_cycle(self, tmp_path, base_experiment_config):
+        """Without the agents that retrieved each document, `get_runs()` is empty and
+        `evaluate_retrieval` scores nothing — silently, since there is no agent to report on. A
+        reloaded experiment must therefore still know its runs, or resuming one cannot be scored.
+        """
+        save_path = tmp_path / "exp.json"
+        base_experiment_config["save_on_disk"] = True
+        base_experiment_config["save_path"] = str(save_path)
+        experiment = Experiment(**base_experiment_config)
+        experiment["0"].retrieved_docs["0"].retrieved_by = {"agent1": 2.0, "agent2": 1.0}
+        experiment.save()
+
+        loaded = Experiment(experiment_name="test_experiment", save_path=str(save_path), save_on_disk=True)
+
+        assert loaded["0"].retrieved_docs["0"].retrieved_by == {"agent1": 2.0, "agent2": 1.0}
+        assert set(loaded.get_runs()) >= {"agent1", "agent2"}
+
+    def test_rubric_and_coverage_evaluation_round_trip(self, tmp_path, base_experiment_config):
+        """The rubric and the criteria a document addresses must both survive a save/load cycle.
+
+        Recomputing coverage at a different depth reads the addressed criteria back from disk, so
+        losing them to the base answer type would force re-judging the whole experiment.
+        """
+        save_path = tmp_path / "exp.json"
+        base_experiment_config["save_on_disk"] = True
+        base_experiment_config["save_path"] = str(save_path)
+        experiment = Experiment(**base_experiment_config)
+        experiment["0"].rubric = [Criterion(criterion_name="names_capital", short_question="Names the capital?")]
+        experiment.add_evaluation(
+            eval_tuple=(experiment["0"], experiment["0"].retrieved_docs["0"]),
+            evaluation=RetrievalEvaluatorResult(
+                qid="0",
+                did="0",
+                evaluator_name="rubric_coverage",
+                answer=RubricCoverageAnswerFormat(
+                    reasoning="Names the capital.", criteria_addressed=["names_capital"], score=1
+                ),
+            ),
+        )
+        experiment.save()
+
+        loaded = Experiment(experiment_name="test_experiment", save_path=str(save_path), save_on_disk=True)
+
+        assert [c.criterion_name for c in loaded["0"].rubric] == ["names_capital"]
+        answer = loaded["0"].retrieved_docs["0"].evaluations["rubric_coverage"].answer
+        assert isinstance(answer, RubricCoverageAnswerFormat)
+        assert answer.criteria_addressed == ["names_capital"]
+
+    def test_evaluate_retrieval_routes_coverage_measures_over_subtopic_qrels(self, experiment):
+        """Coverage measures must read the rubric qrels, where each criterion is a subtopic.
+
+        agent1 retrieves a document addressing only one of the two criteria; agent2 also retrieves
+        one addressing the other, so only agent2 reaches full coverage. A measure computed over the
+        flat qrels cannot make that distinction.
+        """
+        pytest.importorskip("pyndeval")
+        query = experiment["0"]
+        query.rubric = [
+            Criterion(criterion_name="names_capital", short_question="Names the capital?"),
+            Criterion(criterion_name="names_former_capital", short_question="Names the former capital?"),
+        ]
+        addressed_by_doc = {"0": ["names_capital"], "1": ["names_former_capital"]}
+        for did, criteria in addressed_by_doc.items():
+            document = query.retrieved_docs[did]
+            document.retrieved_by = {"agent2": 1.0} if did == "1" else {"agent1": 1.0, "agent2": 2.0}
+            experiment.add_evaluation(
+                eval_tuple=(query, document),
+                evaluation=RetrievalEvaluatorResult(
+                    qid="0",
+                    did=did,
+                    evaluator_name="rubric_coverage",
+                    answer=RubricCoverageAnswerFormat(
+                        reasoning="judged", criteria_addressed=criteria, score=len(criteria)
+                    ),
+                ),
+            )
+
+        qrels = experiment.get_rubric_qrels()
+        assert {(q.query_id, q.doc_id, q.iteration) for q in qrels} == {
+            ("0", "0", "names_capital"),
+            ("0", "1", "names_former_capital"),
+        }
+
+        results = experiment.evaluate_retrieval(metrics=["StRecall@10", "R@10"], relevance_threshold=0)
+        assert results["agent1"]["StRecall@10"] == 0.5
+        assert results["agent2"]["StRecall@10"] == 1.0
+        assert "R@10" in results["agent1"]
+
+    def test_a_criterion_nothing_addresses_still_counts_against_coverage(self, experiment):
+        """The denominator is the rubric, not the criteria retrieval happened to find."""
+        pytest.importorskip("pyndeval")
+        query = experiment["0"]
+        query.rubric = [
+            Criterion(criterion_name="names_capital", short_question="Names the capital?"),
+            Criterion(criterion_name="nothing_addresses_this", short_question="Names the population?"),
+        ]
+        document = query.retrieved_docs["0"]
+        document.retrieved_by = {"agent1": 1.0}
+        experiment.add_evaluation(
+            eval_tuple=(query, document),
+            evaluation=RetrievalEvaluatorResult(
+                qid="0",
+                did="0",
+                evaluator_name="rubric_coverage",
+                answer=RubricCoverageAnswerFormat(reasoning="judged", criteria_addressed=["names_capital"], score=1),
+            ),
+        )
+
+        qrels = experiment.get_rubric_qrels()
+        assert {q.iteration for q in qrels} == {"names_capital", "nothing_addresses_this"}
+        placeholder = [q for q in qrels if q.iteration == "nothing_addresses_this"]
+        assert len(placeholder) == 1
+        assert placeholder[0].doc_id.startswith(UNADDRESSED_DOC_PREFIX)
+        assert placeholder[0].doc_id not in query.retrieved_docs
+
+        results = experiment.evaluate_retrieval(metrics=["StRecall@10"], relevance_threshold=0)
+        assert results["agent1"]["StRecall@10"] == 0.5
+
+    def test_a_query_whose_rubric_is_wholly_unaddressed_scores_zero(self, experiment):
+        """It must score 0 rather than dropping out of the aggregate."""
+        pytest.importorskip("pyndeval")
+        for qid in ("0", "1"):
+            experiment[qid].rubric = [Criterion(criterion_name=f"unmet_{qid}", short_question="?")]
+        query = experiment["0"]
+        document = query.retrieved_docs["0"]
+        document.retrieved_by = {"agent1": 1.0}
+        experiment.add_evaluation(
+            eval_tuple=(query, document),
+            evaluation=RetrievalEvaluatorResult(
+                qid="0",
+                did="0",
+                evaluator_name="rubric_coverage",
+                answer=RubricCoverageAnswerFormat(reasoning="judged", criteria_addressed=[], score=0),
+            ),
+        )
+
+        results = experiment.evaluate_retrieval(metrics=["StRecall@10"], relevance_threshold=0)
+        assert results["agent1"]["StRecall@10"] == 0.0
 
     def test_add_retrieval_evaluation(self, experiment, retrieval_evaluation, caplog):
         """Test adding retrieval evaluation"""
@@ -945,6 +1096,35 @@ class TestExperiment:
         with pytest.raises(ValueError, match="Agents with runs"):
             empty_experiment.compare_retrieval("keyword", "unknown", metrics=["P@1"])
 
+    def test_compare_retrieval_routes_coverage_measures_over_subtopic_qrels(self, experiment):
+        pytest.importorskip("pyndeval")
+        query = experiment["0"]
+        query.rubric = [
+            Criterion(criterion_name="names_capital", short_question="Names the capital?"),
+            Criterion(criterion_name="names_former_capital", short_question="Names the former capital?"),
+        ]
+        addressed_by_doc = {"0": ["names_capital"], "1": ["names_former_capital"]}
+        for did, criteria in addressed_by_doc.items():
+            document = query.retrieved_docs[did]
+            document.retrieved_by = {"agent2": 1.0} if did == "1" else {"agent1": 1.0, "agent2": 2.0}
+            experiment.add_evaluation(
+                eval_tuple=(query, document),
+                evaluation=RetrievalEvaluatorResult(
+                    qid="0",
+                    did=did,
+                    evaluator_name="rubric_coverage",
+                    answer=RubricCoverageAnswerFormat(
+                        reasoning="judged", criteria_addressed=criteria, score=len(criteria)
+                    ),
+                ),
+            )
+
+        result = experiment.compare_retrieval("agent1", "agent2", metrics=["StRecall@10"])
+
+        comparison = result.metrics["StRecall@10"]
+        assert (comparison.mean_a, comparison.mean_b) == (0.5, 1.0)
+        assert comparison.per_query_delta == {"0": 0.5}
+
 
 class TestExperimentSerialization:
     """Tests for experiment serialization and deserialization with nested answer schemas."""
@@ -993,6 +1173,93 @@ class TestExperimentSerialization:
         assert loaded_result.answer.reasoning == answer_evaluation.answer.reasoning
         assert loaded_result.qid == answer_evaluation.qid
         assert loaded_result.agent == answer_evaluation.agent
+
+    @pytest.mark.parametrize(
+        "payload,expected",
+        [
+            ({"reasoning": "r", "score": 2}, AnswerEvaluationAnswer),
+            (
+                {
+                    "criteria": [
+                        {
+                            "criterion": {"criterion_name": "accuracy", "short_question": "Is it accurate?"},
+                            "reasoning": "r",
+                            "fulfillment": True,
+                        }
+                    ],
+                    "average_score": 1.0,
+                },
+                RubricPointwiseAnswerFormat,
+            ),
+        ],
+    )
+    def test_reloads_answers_saved_before_the_discriminator_existed(self, payload, expected):
+        """Experiments saved by an earlier version carry no `answer_format`, so they are matched
+        structurally. Without this, every previously saved evaluation would fail to load."""
+        reloaded = AnswerEvaluatorResult.model_validate(
+            {"qid": "0", "agent": "agent1", "evaluator_name": "whichever", "answer": payload}
+        )
+
+        assert isinstance(reloaded.answer, expected)
+
+    def test_round_trip_rubric_pointwise_evaluation(self):
+        """A rubric answer must not reload as the base AnswerEvaluationAnswer.
+
+        `AnswerEvaluatorResult.answer` is an untagged union, discriminated only by attempting the
+        strict type first. Were that branch made permissive, every saved rubric evaluation would
+        reload as an untyped bag with `criteria` as raw dicts, and the pointwise evaluator's
+        weighting would break with no error at load time.
+        """
+        result = AnswerEvaluatorResult(
+            qid="0",
+            agent="agent1",
+            evaluator_name="rubric_pointwise",
+            answer=RubricPointwiseAnswerFormat(
+                criteria=[
+                    CriterionEvaluationPointwise(
+                        criterion=Criterion(criterion_name="accuracy", short_question="Is it accurate?", weight=2.0),
+                        reasoning="states the right figure",
+                        fulfillment=True,
+                    )
+                ],
+                average_score=1.0,
+            ),
+        )
+
+        reloaded = AnswerEvaluatorResult.model_validate(json.loads(result.model_dump_json()))
+
+        assert isinstance(reloaded.answer, RubricPointwiseAnswerFormat)
+        assert reloaded.answer.criteria[0].criterion.criterion_name == "accuracy"
+        assert reloaded.answer.criteria[0].criterion.weight == 2.0
+
+    def test_round_trip_rubric_pairwise_evaluation(self):
+        """Same untagged-union hazard on the pairwise side, with a different fallback type."""
+        result = PairwiseGameEvaluatorResult(
+            qid="0",
+            agent_a="agent1",
+            agent_b="agent2",
+            evaluator_name="rubric_pairwise",
+            answer=RubricAnswerFormat(
+                criteria=[
+                    CriterionEvaluation(
+                        criterion=Criterion(criterion_name="accuracy", short_question="Is it accurate?"),
+                        winner_reasoning="[[A]] cites the figure",
+                        winner="A",
+                    )
+                ],
+                agent_a_wins=1.0,
+                agent_b_wins=0.0,
+                equally_good=0.0,
+                equally_bad=0.0,
+                winner="A",
+            ),
+        )
+
+        reloaded = PairwiseGameEvaluatorResult.model_validate(json.loads(result.model_dump_json()))
+
+        assert isinstance(reloaded.answer, RubricAnswerFormat)
+        assert reloaded.answer.criteria[0].winner == "A"
+        assert reloaded.winner == "A"
 
     def test_round_trip_pairwise_evaluation(self, tmp_path, pairwise_answer_evaluation):
         """Test round-trip serialization for pairwise evaluation."""
