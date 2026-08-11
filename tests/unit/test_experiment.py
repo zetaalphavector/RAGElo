@@ -98,6 +98,19 @@ class TestExperiment:
         assert query.retrieved_docs["d0"].retrieved_by == {"agent1": 1.0}
         assert query.retrieved_docs["d0"].evaluations["reasoner"].answer.score == 2
 
+    def test_retrieval_systems_reports_what_has_already_been_pooled(self, empty_experiment):
+        empty_experiment.add_query(Query(qid="q0", query="What is the capital of Brazil?"))
+        assert empty_experiment["q0"].retrieval_systems == set()
+
+        empty_experiment.add_retrieved_doc(Document(qid="q0", did="d0", text="Brasilia."), agent="keyword", score=2.0)
+        empty_experiment.add_retrieved_doc(
+            Document(qid="q0", did="d0", text="Brasilia."), agent="knn", score=1.0, exist_ok=True
+        )
+        empty_experiment.add_retrieved_doc(Document(qid="q0", did="d1", text="Rio."), agent="knn", score=0.5)
+
+        assert empty_experiment["q0"].retrieval_systems == {"keyword", "knn"}
+        assert empty_experiment["q0"].retrieved_docs["d0"].retrieved_by == {"keyword": 2.0, "knn": 1.0}
+
     def test_every_declared_field_is_absorbed(self, empty_experiment):
         """Covers fields added after this test was written, which an enumerated list cannot."""
         distinct = {

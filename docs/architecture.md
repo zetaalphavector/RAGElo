@@ -86,6 +86,12 @@ without anyone remembering to add it.
 This mirrors `Query.add_retrieved_doc`, which has always merged `retrieved_by` into an existing
 document rather than replacing it.
 
+The same reload is what makes a pooled experiment resumable. `retrieved_docs` holds what *any*
+system retrieved, and each document's `retrieved_by` maps system to score, so `Query.retrieval_systems`
+tells a caller which systems it has already pooled. A harness searches only the rest, which is what
+lets a new retrieval system cost the documents no existing one found rather than a fresh run. It also
+means one judgement serves every system that surfaced that document.
+
 ### Artifact production is a phase, not a side effect
 
 `evaluate_experiment` and `evaluate_all_evaluables` run `prepare_experiment` / `prepare_query`

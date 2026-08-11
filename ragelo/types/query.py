@@ -55,6 +55,11 @@ class Query(BaseModel):
         criteria = sorted(json.dumps(c.model_dump(), sort_keys=True) for c in self.rubric)
         return hashlib.sha256("\n".join(criteria).encode()).hexdigest()[:16]
 
+    @property
+    def retrieval_systems(self) -> set[str]:
+        """All retrievers that retrieved documents for this query"""
+        return {agent for document in self.retrieved_docs.values() for agent in document.retrieved_by}
+
     @field_validator("qid", mode="before")
     def qid_into_string(cls, v):
         if not isinstance(v, str):
