@@ -324,6 +324,8 @@ The mapping key becomes the agent name. Documents are pooled by `did`, so a docu
 
 `compare_retrieval` pairs the runs on a fixed query set per metric (a query missing from a run counts as 0), reports per-query win/tie/loss counts, and computes a two-sided sign-flip permutation p-value over the per-query differences. Because of the zero-fill, its means can differ slightly from `evaluate_retrieval`, which averages only over the queries a run scored. The returned `RetrievalComparisonResult` carries `per_query_delta` for every metric, so the biggest wins and losses are one `sorted()` away.
 
+A run can also be extracted once and reused: `experiment.get_run_files(output_dir="runs/")` writes one JSON run file per system (ranked lists with text inline, the serialization of `RunFile`), and `FileRetriever.from_run_file(path)` serves one back as a retriever, so a saved baseline can be compared against a live system, or two saved runs against each other, without index access. When the two sides search different corpora and their ids would collide, wrap either in `NamespacedRetriever(retriever, "prefix")`.
+
 ### 🎮 Interactive Elo ranking
 
 Instead of running a full tournament, you can rank agents incrementally — run individual games or onboard a brand-new agent with minimal matches:
