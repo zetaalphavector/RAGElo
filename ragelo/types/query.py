@@ -217,7 +217,7 @@ class Query(BaseModel):
             retrieval_evaluator_name str: The name of the retrieval evaluator to use to get the relevance
                 of the documents.
         """
-        qrels = {}
+        qrels: dict[str, float] = {}
         if len(self.retrieved_docs) == 0:
             logger.warning(f"Query {self.qid} does not have any retrieved documents. Returning empty qrels.")
         docs_without_relevance = 0
@@ -249,7 +249,8 @@ class Query(BaseModel):
                 docs_without_relevance += 1
                 continue
 
-            qrels[did] = 0.0 if score < relevance_threshold else score
+            # Relevance labels must be integers: pytrec_eval rejects float qrels.
+            qrels[did] = int(score) if score >= relevance_threshold else 0
         if docs_without_relevance > 0:
             logger.warning(f"Query {self.qid} has {docs_without_relevance} documents without relevance.")
         if docs_without_relevance == len(self.retrieved_docs):

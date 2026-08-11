@@ -389,12 +389,14 @@ class TestExperiment:
         Dropping them instead would leave them unjudged, which changes `Judged@k` while leaving
         `nDCG@k` untouched.
         """
-        self._score_document(experiment, "0", 2, "reasoner")
+        self._score_document(experiment, "0", 2.0, "reasoner")
         self._score_document(experiment, "1", 1, "reasoner")
 
         qrels = experiment.get_qrels(relevance_threshold=2, retrieval_evaluator_name="reasoner")
 
-        assert qrels["0"] == {"0": 2, "1": 0.0}
+        assert qrels["0"] == {"0": 2, "1": 0}
+        # ir_measures/pytrec_eval rejects float qrels, so both the kept and zeroed labels must be int.
+        assert all(type(relevance) is int for relevance in qrels["0"].values())
 
     def test_a_failed_save_leaves_the_previous_experiment_loadable(self, tmp_path, base_experiment_config, mocker):
         """A save that dies partway must not destroy what was already on disk."""
