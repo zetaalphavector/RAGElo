@@ -6,7 +6,11 @@ a flag here and every helper raises a helpful ImportError when it is missing.
 
 from __future__ import annotations
 
+from collections import defaultdict
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
+
+import numpy as np
 
 if TYPE_CHECKING:
     from ir_measures import Qrel, ScoredDoc
@@ -79,7 +83,7 @@ def _parse_value(value: str) -> Any:
     return value
 
 
-def make_qrel(query_id: str, doc_id: str, relevance: int, subtopic: str | None = None) -> "Qrel":
+def make_qrel(query_id: str, doc_id: str, relevance: int, subtopic: str | None = None) -> Qrel:
     """Build one qrel row, optionally scoped to a subtopic.
 
     `ir_measures` carries the subtopic id in the `iteration` field, which is the only qrels shape
@@ -92,10 +96,35 @@ def make_qrel(query_id: str, doc_id: str, relevance: int, subtopic: str | None =
     return ir_measures.Qrel(query_id, doc_id, relevance, iteration=subtopic)
 
 
-def make_run(run: dict[str, dict[str, float]]) -> list["ScoredDoc"]:
+def make_run(run: dict[str, dict[str, float]]) -> list[ScoredDoc]:
     if not _IR_MEASURES_AVAILABLE:
         raise ImportError(_IMPORT_ERROR)
     return [ir_measures.ScoredDoc(qid, did, score) for qid, docs in run.items() for did, score in docs.items()]
+
+
+def calc_per_query(
+    measures: list[Measure],
+    qrels: dict[str, dict[str, float]] | list[Qrel],
+    run: dict[str, dict[str, float]] | list[ScoredDoc],
+) -> dict[str, dict[str, float]]:
+    """Per-query scores as `{metric: {query_id: value}}`, covering only the queries in the run."""
+    if not _IR_MEASURES_AVAILABLE:
+        raise ImportError(_IMPORT_ERROR)
+    scores: dict[str, dict[str, float]] = defaultdict(dict)
+    for metric in ir_measures.iter_calc(measures, qrels, run):
+        scores[str(metric.measure)][metric.query_id] = metric.value
+    return dict(scores)
+
+
+def paired_permutation_pvalue(deltas: Sequence[float], n_permutations: int = 10_000, seed: int = 42) -> float:
+    """Two-sided sign-flip permutation test over paired per-query score differences."""
+    values = np.asarray(deltas, dtype=float)
+    if values.size == 0 or not values.any():
+        return 1.0
+    observed = abs(values.mean())
+    signs = np.random.default_rng(seed).choice((-1.0, 1.0), size=(n_permutations, values.size))
+    permuted = np.abs((signs * values).mean(axis=1))
+    return float((1 + (permuted >= observed).sum()) / (n_permutations + 1))
 
 
 def is_coverage_measure(measure: Measure) -> bool:

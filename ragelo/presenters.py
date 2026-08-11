@@ -9,6 +9,7 @@ from ragelo.types.results import (
     EloTournamentResult,
     EvaluatorResult,
     PairwiseGameEvaluatorResult,
+    RetrievalComparisonResult,
     RetrievalEvaluatorResult,
 )
 
@@ -40,7 +41,7 @@ def _render_answer_evaluation(evaluation: AnswerEvaluatorResult, rich_print: boo
         print(f"Query ID: {evaluation.qid}")
         print(f"Agent: {evaluation.agent}")
         print(f"Parsed Answer: {answer}")
-        print("")
+        print()
 
 
 def _render_pairwise_game_evaluation(evaluation: PairwiseGameEvaluatorResult, rich_print: bool = True):
@@ -56,7 +57,7 @@ def _render_pairwise_game_evaluation(evaluation: PairwiseGameEvaluatorResult, ri
         print(f"Agent A: {evaluation.agent_a}")
         print(f"Agent B: {evaluation.agent_b}")
         print(f"Parsed Answer: {answer}")
-        print("")
+        print()
 
 
 def _render_retrieval_evaluation(evaluation: RetrievalEvaluatorResult, rich_print: bool = True):
@@ -70,7 +71,7 @@ def _render_retrieval_evaluation(evaluation: RetrievalEvaluatorResult, rich_prin
         print(f"Query ID: {evaluation.qid}")
         print(f"Document ID: {evaluation.did}")
         print(f"Parsed Answer: {answer}")
-        print("")
+        print()
 
 
 def render_evaluation(
@@ -101,7 +102,7 @@ def render_retrieval_summary(
         )
         return
     key_metric = metrics[0]
-    max_agent_len = max([len(agent) for agent in results.keys()]) + 3
+    max_agent_len = max([len(agent) for agent in results]) + 3
     max_metric_len = max([len(metric) for metric in metrics])
     sorted_agents = sorted(results.items(), key=lambda x: x[1][key_metric], reverse=True)
     if rich_print:
@@ -117,8 +118,35 @@ def render_retrieval_summary(
             row += "\t".join([f"{scores[metric]:<{max_metric_len},.4f}" for metric in metrics])
             rich.print(row)
         return
-    # Plain print
     print(results)
+
+
+def render_retrieval_comparison(result: RetrievalComparisonResult, rich_print: bool = True):
+    if not result.metrics:
+        return
+    metric_width = max(len(name) for name in result.metrics) + 3
+    agent_width = max(len(result.agent_a), len(result.agent_b), 8) + 3
+    header = (
+        f"{'Metric':<{metric_width}}{result.agent_a:<{agent_width}}{result.agent_b:<{agent_width}}"
+        f"{'delta':<10}{'W/T/L':<12}{'p-value':<10}"
+    )
+    rows = [
+        f"{name:<{metric_width}}{comparison.mean_a:<{agent_width}.4f}{comparison.mean_b:<{agent_width}.4f}"
+        f"{comparison.delta:<+10.4f}{comparison.wins}/{comparison.ties}/{comparison.losses:<8}"
+        f"{comparison.p_value:<10.4f}"
+        for name, comparison in result.metrics.items()
+    ]
+    if rich_print:
+        rich.print(f"---[bold cyan] Retrieval Comparison: {result.agent_a} vs {result.agent_b} [/bold cyan]---")
+        rich.print(f"[dim]delta and W/T/L read as {result.agent_b} minus {result.agent_a}[/dim]")
+        rich.print(f"[bold magenta]{header}[/bold magenta]")
+        for row in rows:
+            rich.print(row)
+        return
+    print(f"--- Retrieval Comparison: {result.agent_a} vs {result.agent_b} ---")
+    print(header)
+    for row in rows:
+        print(row)
 
 
 def render_failed_evaluations(total_evaluations: int, failed_evaluations: int, rich_print: bool = True):

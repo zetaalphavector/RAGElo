@@ -2,7 +2,7 @@ import pytest
 
 ir_measures = pytest.importorskip("ir_measures")
 
-from ragelo.measures import is_coverage_measure, make_qrel, make_run, parse_measure  # noqa: E402
+from ragelo.measures import is_coverage_measure, make_qrel, make_run, paired_permutation_pvalue, parse_measure
 
 
 class TestParseMeasure:
@@ -46,6 +46,18 @@ class TestCoverageClassification:
     )
     def test_only_diversity_measures_read_subtopic_qrels(self, metric, expected):
         assert is_coverage_measure(parse_measure(metric)) is expected
+
+
+class TestPairedPermutationPvalue:
+    def test_no_observed_difference_is_never_significant(self):
+        assert paired_permutation_pvalue([]) == 1.0
+        assert paired_permutation_pvalue([0.0] * 10) == 1.0
+
+    def test_consistent_gains_are_significant(self):
+        assert paired_permutation_pvalue([0.1] * 20) < 0.05
+
+    def test_noise_is_not_significant(self):
+        assert paired_permutation_pvalue([0.3, -0.28, 0.05, -0.07, 0.01, -0.02]) > 0.05
 
 
 class TestQrelConstruction:

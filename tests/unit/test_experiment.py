@@ -1015,6 +1015,77 @@ class TestExperiment:
         assert empty_experiment["q0"].retrieval_systems == {"keyword"}
         assert empty_experiment["q1"].retrieval_systems == {"keyword", "knn"}
 
+    def test_compare_retrieval_reports_paired_differences(self, empty_experiment):
+        pytest.importorskip("ir_measures")
+        rankings = {
+            ("q0", "keyword"): ["rel", "junk"],
+            ("q0", "knn"): ["rel", "junk"],
+            ("q1", "keyword"): ["junk", "rel"],
+            ("q1", "knn"): ["rel", "junk"],
+        }
+        for qid in ("q0", "q1"):
+            empty_experiment.add_query(Query(qid=qid, query=f"question {qid}"))
+        for (qid, agent), dids in rankings.items():
+            for rank, did in enumerate(dids):
+                empty_experiment.add_retrieved_doc(
+                    Document(qid=qid, did=f"{qid}-{did}", text=did),
+                    agent=agent,
+                    score=1 / (rank + 1),
+                    exist_ok=True,
+                )
+        for qid in ("q0", "q1"):
+            for did, score in ((f"{qid}-rel", 1), (f"{qid}-junk", 0)):
+                document = empty_experiment[qid].retrieved_docs[did]
+                empty_experiment.add_evaluation(
+                    (empty_experiment[qid], document),
+                    RetrievalEvaluatorResult(
+                        qid=qid,
+                        did=did,
+                        evaluator_name="reasoner",
+                        answer=RetrievalEvaluationAnswer(reasoning="judged", score=score),
+                    ),
+                )
+
+        result = empty_experiment.compare_retrieval("keyword", "knn", metrics=["P@1"])
+
+        comparison = result.metrics["P@1"]
+        assert (comparison.mean_a, comparison.mean_b, comparison.delta) == (0.5, 1.0, 0.5)
+        assert comparison.per_query_delta == {"q0": 0.0, "q1": 1.0}
+        assert (comparison.wins, comparison.ties, comparison.losses) == (1, 1, 0)
+        assert comparison.p_value == 1.0
+
+        with pytest.raises(ValueError, match="Agents with runs"):
+            empty_experiment.compare_retrieval("keyword", "unknown", metrics=["P@1"])
+
+    def test_compare_retrieval_routes_coverage_measures_over_subtopic_qrels(self, experiment):
+        pytest.importorskip("pyndeval")
+        query = experiment["0"]
+        query.rubric = [
+            Criterion(criterion_name="names_capital", short_question="Names the capital?"),
+            Criterion(criterion_name="names_former_capital", short_question="Names the former capital?"),
+        ]
+        addressed_by_doc = {"0": ["names_capital"], "1": ["names_former_capital"]}
+        for did, criteria in addressed_by_doc.items():
+            document = query.retrieved_docs[did]
+            document.retrieved_by = {"agent2": 1.0} if did == "1" else {"agent1": 1.0, "agent2": 2.0}
+            experiment.add_evaluation(
+                eval_tuple=(query, document),
+                evaluation=RetrievalEvaluatorResult(
+                    qid="0",
+                    did=did,
+                    evaluator_name="rubric_coverage",
+                    answer=RubricCoverageAnswerFormat(
+                        reasoning="judged", criteria_addressed=criteria, score=len(criteria)
+                    ),
+                ),
+            )
+
+        result = experiment.compare_retrieval("agent1", "agent2", metrics=["StRecall@10"])
+
+        comparison = result.metrics["StRecall@10"]
+        assert (comparison.mean_a, comparison.mean_b) == (0.5, 1.0)
+        assert comparison.per_query_delta == {"0": 0.5}
+
 
 class TestExperimentSerialization:
     """Tests for experiment serialization and deserialization with nested answer schemas."""
