@@ -1,6 +1,7 @@
 import json
 import os
 import shutil
+from collections.abc import Mapping
 
 import pytest
 
@@ -34,7 +35,7 @@ from ragelo.types.results import (
 
 
 class FakeRetriever:
-    def __init__(self, runs: dict[str, list[RetrievedDocument] | Exception]):
+    def __init__(self, runs: Mapping[str, list[RetrievedDocument] | Exception]):
         self.runs = runs
         self.calls: list[str] = []
 
@@ -861,8 +862,8 @@ class TestExperiment:
         """Test adding queries from CSV"""
         empty_experiment.add_queries_from_csv("tests/data/queries.csv")
         assert len(empty_experiment) == 2
-        assert "0" in empty_experiment.keys()
-        assert "1" in empty_experiment.keys()
+        assert "0" in empty_experiment
+        assert "1" in empty_experiment
 
     def test_add_documents_from_csv(self, empty_experiment):
         """Test adding documents from CSV"""
@@ -950,6 +951,64 @@ class TestExperiment:
         assert os.path.exists("ragelo_cache/A_really_cool_RAGElo_experiment_results.jsonl")
         os.remove("ragelo_cache/A_really_cool_RAGElo_experiment.json")
         os.remove("ragelo_cache/A_really_cool_RAGElo_experiment_results.jsonl")
+
+    @pytest.mark.requires_openai
+    def test_readme_retrieval_comparison_example(self):
+        """Test the README retrieval comparison example"""
+        pytest.importorskip("ir_measures")
+        for leftover in (
+            "ragelo_cache/keyword_vs_hybrid.json",
+            "ragelo_cache/keyword_vs_hybrid_results.jsonl",
+        ):
+            if os.path.exists(leftover):
+                os.remove(leftover)
+
+        corpus = {
+            "keyword": [
+                RetrievedDocument(did="d0", text="Brasília is the capital of Brazil", score=12.3),
+                RetrievedDocument(did="d1", text="Rio de Janeiro used to be the capital of Brazil.", score=8.1),
+            ],
+            "hybrid": [
+                RetrievedDocument(did="d0", text="Brasília is the capital of Brazil", score=0.93),
+                RetrievedDocument(did="d2", text="Lyon is the second largest city in France.", score=0.88),
+            ],
+        }
+
+        class SearchClient:  # anything with this method satisfies ragelo.Retriever
+            def __init__(self, endpoint: str):
+                self.endpoint = endpoint
+
+            async def retrieve(self, query, top_k):
+                return corpus[self.endpoint][:top_k]
+
+        experiment = Experiment(experiment_name="keyword_vs_hybrid")
+        experiment.add_query("What is the capital of Brazil?", query_id="q0")
+
+        experiment.run_retrievers(
+            {"keyword": SearchClient("keyword"), "hybrid": SearchClient("hybrid")},
+            top_k=50,
+            n_threads=8,
+        )
+
+        assert experiment["q0"].retrieval_systems == {"keyword", "hybrid"}
+        assert experiment["q0"].retrieved_docs["d0"].retrieved_by == {"keyword": 12.3, "hybrid": 0.93}
+
+        llm_provider = get_llm_provider("openai", model="gpt-4.1-nano")
+        evaluator = get_retrieval_evaluator("reasoner", llm_provider=llm_provider)
+        evaluator.evaluate_experiment(experiment)
+
+        result = experiment.compare_retrieval("keyword", "hybrid", metrics=["nDCG@10", "R@50"])
+
+        assert set(result.metrics) == {"nDCG@10", "R@50"}
+        for comparison in result.metrics.values():
+            assert set(comparison.per_query_delta) == {"q0"}
+            assert comparison.wins + comparison.ties + comparison.losses == 1
+            assert 0.0 <= comparison.p_value <= 1.0
+
+        assert os.path.exists("ragelo_cache/keyword_vs_hybrid.json")
+        assert os.path.exists("ragelo_cache/keyword_vs_hybrid_results.jsonl")
+        os.remove("ragelo_cache/keyword_vs_hybrid.json")
+        os.remove("ragelo_cache/keyword_vs_hybrid_results.jsonl")
 
     def test_run_retrievers_pools_ranked_documents(self, empty_experiment):
         empty_experiment.add_query(Query(qid="q0", query="What is the capital of Brazil?"))

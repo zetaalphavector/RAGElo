@@ -88,6 +88,7 @@ class Experiment:
         __len__(): Returns the number of queries.
         __iter__(): Returns an iterator over the queries.
         __getitem__(key: str) -> Query: Gets a query by its key.
+        __contains__(key: str) -> bool: Whether a query with this ID exists.
         keys(): Returns the keys (query_ids) of all queries.
     """
 
@@ -1191,6 +1192,9 @@ class Experiment:
 
     def __getitem__(self, key: str) -> Query:
         return self.queries[key]
+
+    def __contains__(self, key: str) -> bool:
+        return key in self.queries
 
     def keys(self):
         return self.queries.keys()
