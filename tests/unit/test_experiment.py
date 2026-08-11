@@ -50,8 +50,8 @@ class FakeRetriever:
 class TestExperiment:
     def test_experiment_initialization(self, experiment):
         assert len(experiment) == 2
-        assert "0" in experiment.keys()
-        assert "1" in experiment.keys()
+        assert "0" in experiment
+        assert "1" in experiment
 
         # Check queries were loaded correctly
         assert experiment["0"].query == "What is the capital of Brazil?"
@@ -269,7 +269,7 @@ class TestExperiment:
         # Verify contents
         assert len(loaded_experiment) == len(experiment)
         assert list(loaded_experiment.keys()) == list(experiment.keys())
-        for qid in experiment.keys():
+        for qid in experiment.keys():  # noqa: SIM118
             assert loaded_experiment[qid].query == experiment[qid].query
             assert len(loaded_experiment[qid].retrieved_docs) == len(experiment[qid].retrieved_docs)
             assert len(loaded_experiment[qid].answers) == len(experiment[qid].answers)
