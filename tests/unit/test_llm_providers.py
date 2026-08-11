@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from pydantic import SecretStr, ValidationError
-from tenacity import RetryError
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.llm_providers.openai_client import OpenAIProvider
@@ -204,7 +203,7 @@ class TestOpenAIProvider:
         assert call_args[1]["input"] == messages
 
     def test_invalid_json_in_json_mode_raises_error(self, openai_provider_json_mode, flexible_openai_client_mock):
-        """Test that invalid JSON in json_mode raises a RetryError (wrapping ValueError)."""
+        """Test that invalid JSON in json_mode raises the parse ValueError once retries exhaust."""
 
         # Mock to return invalid JSON
         def create_invalid_json(*args, **kwargs):
@@ -214,22 +213,19 @@ class TestOpenAIProvider:
 
         flexible_openai_client_mock.responses.create.side_effect = create_invalid_json
 
-        # Execute & Assert - the retry decorator wraps ValueError in RetryError
-        with pytest.raises(RetryError) as exc_info:
+        # Execute & Assert - retries exhaust and reraise the underlying ValueError
+        with pytest.raises(ValueError) as exc_info:
             openai_provider_json_mode(
                 LLMInputPrompt(user_message="Test"),
                 response_schema=RetrievalEvaluationAnswer,
             )
 
-        # Check that the underlying exception was a ValueError about JSON parsing
-        assert exc_info.value.last_attempt.exception() is not None
-        underlying_error = str(exc_info.value.last_attempt.exception())
-        assert "Failed to parse raw JSON answer" in underlying_error
+        assert "Failed to parse raw JSON answer" in str(exc_info.value)
 
     def test_missing_required_field_in_json_mode_raises_error(
         self, openai_provider_json_mode, flexible_openai_client_mock
     ):
-        """Test that JSON missing required fields raises a RetryError (wrapping ValueError)."""
+        """Test that JSON missing required fields raises the parse ValueError once retries exhaust."""
 
         # Mock to return JSON missing required fields
         def create_incomplete_json(*args, **kwargs):
@@ -239,22 +235,19 @@ class TestOpenAIProvider:
 
         flexible_openai_client_mock.responses.create.side_effect = create_incomplete_json
 
-        # Execute & Assert - the retry decorator wraps ValueError in RetryError
-        with pytest.raises(RetryError) as exc_info:
+        # Execute & Assert - retries exhaust and reraise the underlying ValueError
+        with pytest.raises(ValueError) as exc_info:
             openai_provider_json_mode(
                 LLMInputPrompt(user_message="Test"),
                 response_schema=RetrievalEvaluationAnswer,
             )
 
-        # Check that the underlying exception was a ValueError about missing field
-        assert exc_info.value.last_attempt.exception() is not None
-        underlying_error = str(exc_info.value.last_attempt.exception())
-        assert "Failed to parse raw JSON answer" in underlying_error
+        assert "Failed to parse raw JSON answer" in str(exc_info.value)
 
     def test_wrong_type_from_structured_mode_raises_error(
         self, openai_provider_structured, flexible_openai_client_mock
     ):
-        """Test that wrong type from structured mode raises a RetryError (wrapping ValueError)."""
+        """Test that wrong type from structured mode raises the parse ValueError once retries exhaust."""
 
         # Mock to return wrong type
         def parse_wrong_type(*args, **kwargs):
@@ -265,17 +258,14 @@ class TestOpenAIProvider:
 
         flexible_openai_client_mock.responses.parse.side_effect = parse_wrong_type
 
-        # Execute & Assert - the retry decorator wraps ValueError in RetryError
-        with pytest.raises(RetryError) as exc_info:
+        # Execute & Assert - retries exhaust and reraise the underlying ValueError
+        with pytest.raises(ValueError) as exc_info:
             openai_provider_structured(
                 LLMInputPrompt(user_message="Test"),
                 response_schema=RetrievalEvaluationAnswer,
             )
 
-        # Check that the underlying exception was a ValueError about type mismatch
-        assert exc_info.value.last_attempt.exception() is not None
-        underlying_error = str(exc_info.value.last_attempt.exception())
-        assert "OpenAI failed to parse response" in underlying_error
+        assert "OpenAI failed to parse response" in str(exc_info.value)
 
     def test_temperature_set_to_none_for_reasoning_models(self, monkeypatch):
         """Test that temperature is set to None for reasoning models (gpt-5, o-series)."""
@@ -484,20 +474,19 @@ class TestInstructorProvider:
         call_args = instructor_client_mock.create.call_args
         assert call_args[1]["messages"] == messages
 
-    def test_api_error_raises_retry_error(self, instructor_provider, instructor_client_mock):
-        """Test that an API failure raises RetryError wrapping ValueError."""
+    def test_api_error_reraises_the_underlying_error(self, instructor_provider, instructor_client_mock):
+        """Test that an API failure raises the underlying ValueError once retries exhaust."""
         pytest.importorskip("instructor")
         instructor_client_mock.create.side_effect = RuntimeError("Connection refused")
 
-        with pytest.raises(RetryError) as exc_info:
+        with pytest.raises(ValueError) as exc_info:
             instructor_provider(
                 LLMInputPrompt(user_message="Test"),
                 response_schema=RetrievalEvaluationAnswer,
             )
 
-        underlying = str(exc_info.value.last_attempt.exception())
-        assert "Instructor request failed" in underlying
-        assert "Connection refused" in underlying
+        assert "Instructor request failed" in str(exc_info.value)
+        assert "Connection refused" in str(exc_info.value)
 
     def test_unknown_provider_raises_value_error(self):
         """Test that an unrecognized provider/model string raises ValueError at instantiation."""

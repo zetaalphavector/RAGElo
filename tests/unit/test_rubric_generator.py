@@ -38,6 +38,19 @@ class TestRubricGenerator:
             assert f"[[{did}]]" in prompt.user_message
             assert document.text in prompt.user_message
 
+    def test_documents_source_shows_only_the_best_scored_documents(self, llm_provider_mock, experiment):
+        _responds_with_criteria(llm_provider_mock)
+        generator = RubricGenerator(RubricGeneratorConfig(expert_in="geography", documents_limit=1), llm_provider_mock)
+        query = experiment["0"]
+        query.retrieved_docs["0"].retrieved_by = {"agent1": 1.0}
+        query.retrieved_docs["1"].retrieved_by = {"agent1": 2.0}
+
+        generator.generate(query)
+
+        prompt = llm_provider_mock.async_call_mocker.call_args_list[0][0][0]
+        assert "[[1]]" in prompt.user_message
+        assert "[[0]]" not in prompt.user_message
+
     def test_generates_from_the_reference_answer_without_showing_the_documents(self, llm_provider_mock, experiment):
         _responds_with_criteria(llm_provider_mock)
         generator = RubricGenerator(

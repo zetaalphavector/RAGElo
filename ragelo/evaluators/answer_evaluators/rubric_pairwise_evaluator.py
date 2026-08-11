@@ -14,7 +14,7 @@ from ragelo.evaluators.answer_evaluators.builtin_criteria import (
     get_evidence_snippets,
 )
 from ragelo.evaluators.answer_evaluators.pairwise_evaluator import PairwiseAnswerEvaluator
-from ragelo.evaluators.answer_evaluators.rubric_evaluator_mixin import RubricEvaluatorMixin
+from ragelo.evaluators.rubric_evaluator_mixin import RubricEvaluatorMixin
 from ragelo.types.answer_formats import Criterion, CriterionEvaluation, PairwiseCriterionWinner, RubricAnswerFormat
 from ragelo.types.configurations import RubricPairwiseEvaluatorConfig
 from ragelo.types.evaluables import ChatMessage, Evaluable, PairwiseGame

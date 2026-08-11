@@ -8,6 +8,7 @@ from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     BaseRetrievalEvaluator,
     RetrievalEvaluatorFactory,
 )
+from ragelo.evaluators.rubric_evaluator_mixin import RubricEvaluatorMixin
 from ragelo.types.answer_formats import Criterion, RubricCoverageAnswerFormat
 from ragelo.types.configurations import RubricCoverageEvaluatorConfig
 from ragelo.types.evaluables import Document
@@ -18,13 +19,14 @@ from ragelo.utils import string_to_template
 
 
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.RUBRIC_COVERAGE)
-class RubricCoverageEvaluator(BaseRetrievalEvaluator[RubricCoverageEvaluatorConfig]):
+class RubricCoverageEvaluator(RubricEvaluatorMixin, BaseRetrievalEvaluator[RubricCoverageEvaluatorConfig]):
     """A retrieval evaluator that asks, per criterion, whether a document addresses it.
 
     Where a relevance evaluator asks for one holistic score, this decomposes the judgement into
     the query's rubric (`query.rubric`) and asks the LLM to verify each criterion separately, so
-    the judgement is inspectable criterion by criterion. The rubric is data supplied on the
-    query, never invented by this evaluator, which is what keeps the criteria auditable.
+    the judgement is inspectable criterion by criterion. The rubric is an artifact settled before
+    judging starts: supplied on the query, seeded from `config.rubrics`, or generated in the
+    prepare phase from `config.rubric_source` (the pooled documents or the reference answer).
 
     The result carries the addressed criteria, letting the same judgement feed both flat qrels
     (`score` = how many criteria the document addresses) and subtopic qrels for coverage
@@ -85,11 +87,7 @@ class RubricCoverageEvaluator(BaseRetrievalEvaluator[RubricCoverageEvaluatorConf
         )
 
     def _build_message(self, query: Query, document: Document) -> LLMInputPrompt:
-        if not query.rubric:
-            raise ValueError(
-                f"Query {query.qid} has an empty rubric. The {self.config.evaluator_name} evaluator grades "
-                "documents against the criteria on query.rubric, so every query needs at least one."
-            )
+        schema = self._rubric_schema(query)
         return LLMInputPrompt(
             system_prompt=self.system_prompt.render(
                 expert_in=self.config.expert_in,
@@ -97,7 +95,7 @@ class RubricCoverageEvaluator(BaseRetrievalEvaluator[RubricCoverageEvaluatorConf
                 rubric=query.rubric,
             ),
             user_message=self.user_prompt.render(query=query, document=document),
-            llm_response_schema=self._build_evaluation_schema(query.rubric),
+            llm_response_schema=schema,
         )
 
     def _process_answer(self, llm_response: LLMResponseType, query: Query) -> LLMResponseType:

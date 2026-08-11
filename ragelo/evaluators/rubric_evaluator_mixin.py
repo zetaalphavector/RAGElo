@@ -5,16 +5,16 @@ from pydantic import BaseModel
 from ragelo.generators.rubric_generator import RubricGenerator
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.types.answer_formats import Criterion
-from ragelo.types.configurations import RubricEvaluatorConfigBase, RubricGeneratorConfig
+from ragelo.types.configurations import RubricConfigMixin, RubricGeneratorConfig
 from ragelo.types.evaluables import ChatMessage
 from ragelo.types.experiment import Experiment
 from ragelo.types.query import Query
 
 
 class RubricEvaluatorMixin:
-    """Rubric plumbing shared by the evaluators that grade an answer against `query.rubric`."""
+    """Rubric plumbing shared by the evaluators that grade an evaluable against `query.rubric`."""
 
-    config: RubricEvaluatorConfigBase
+    config: RubricConfigMixin
     llm_provider: BaseLLMProvider
 
     def __init__(self, *args, rubric_generator: RubricGenerator | None = None, **kwargs):
@@ -25,6 +25,9 @@ class RubricEvaluatorMixin:
                 expert_in=self.config.expert_in,
                 company=self.config.company,
                 n_criteria=self.config.n_criteria,
+                source=self.config.rubric_source,
+                documents_limit=self.config.rubric_documents_limit,
+                n_processes=self.config.n_processes,
             ),
             self.llm_provider,
         )

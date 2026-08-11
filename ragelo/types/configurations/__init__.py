@@ -11,7 +11,7 @@ from ragelo.types.configurations.answer_evaluator_configs import (
 )
 from ragelo.types.configurations.base_configs import BaseConfig, BaseEvaluatorConfig
 from ragelo.types.configurations.cli_configs import CLIConfig
-from ragelo.types.configurations.generator_configs import RubricGeneratorConfig, RubricSource
+from ragelo.types.configurations.generator_configs import RubricConfigMixin, RubricGeneratorConfig, RubricSource
 from ragelo.types.configurations.llm_provider_configs import (
     InstructorConfiguration,
     LLMProviderConfig,
@@ -49,6 +49,7 @@ __all__ = [
     "PairwiseEvaluatorConfig",
     "RDNAMEvaluatorConfig",
     "ReasonerEvaluatorConfig",
+    "RubricConfigMixin",
     "RubricCoverageEvaluatorConfig",
     "RubricEvaluatorConfigBase",
     "RubricGeneratorConfig",

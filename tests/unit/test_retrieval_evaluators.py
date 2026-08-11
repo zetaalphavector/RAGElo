@@ -21,6 +21,7 @@ from ragelo.types.answer_formats import (
     RDNAMNoAspectsAnswer,
     RetrievalEvaluationAnswer,
     RubricCoverageAnswerFormat,
+    RubricSchema,
 )
 from ragelo.types.configurations import ReasonerEvaluatorConfig, RubricCoverageEvaluatorConfig
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
@@ -322,14 +323,57 @@ class TestRubricCoverageEvaluator:
             "gives_population",
         }
 
-    def test_raises_when_query_has_no_rubric(self, llm_provider_mock, experiment):
+    def test_judging_directly_without_a_rubric_raises_instead_of_generating(self, llm_provider_mock, experiment):
         query = experiment["0"]
         evaluator = RubricCoverageEvaluator.from_config(
             config=RubricCoverageEvaluatorConfig(expert_in="geography", force=True),
             llm_provider=llm_provider_mock,
         )
-        with pytest.raises(ValueError, match="empty rubric"):
+        with pytest.raises(RuntimeError, match="no rubric to grade against"):
             evaluator.evaluate(query, query.retrieved_docs["0"])
+
+    def test_evaluate_experiment_generates_the_rubric_from_the_pooled_documents(self, llm_provider_mock, experiment):
+        def generate_then_judge(input, response_schema):
+            if response_schema is RubricSchema:
+                parsed = RubricSchema(criteria=self._rubric())
+            else:
+                parsed = response_schema(
+                    reasoning="Addresses everything.",
+                    **dict.fromkeys(_schema_flags(response_schema), True),
+                )
+            return LLMResponseType(raw_answer=parsed.model_dump_json(), parsed_answer=parsed)
+
+        llm_provider_mock.async_call_mocker.side_effect = generate_then_judge
+        evaluator = RubricCoverageEvaluator.from_config(
+            config=RubricCoverageEvaluatorConfig(expert_in="geography"),
+            llm_provider=llm_provider_mock,
+        )
+
+        evaluator.evaluate_experiment(experiment)
+
+        generation_input, generation_schema = llm_provider_mock.async_call_mocker.call_args_list[0][0]
+        assert generation_schema is RubricSchema
+        assert "[[0]]" in generation_input.user_message
+        for query in experiment:
+            assert [c.criterion_name for c in query.rubric] == ["names_capital", "gives_population"]
+            for document in query.retrieved_docs.values():
+                assert document.evaluations["rubric_coverage"].answer.score == 2
+
+    def test_evaluate_experiment_fails_loud_when_the_rubric_source_is_missing(self, llm_provider_mock, experiment):
+        llm_provider_mock.async_call_mocker.side_effect = lambda input, schema: LLMResponseType(
+            raw_answer="rubric", parsed_answer=RubricSchema(criteria=self._rubric())
+        )
+        experiment["0"].reference_answer = "Brasilia, since 1960."
+        evaluator = RubricCoverageEvaluator.from_config(
+            config=RubricCoverageEvaluatorConfig(expert_in="geography", rubric_source="reference_answer"),
+            llm_provider=llm_provider_mock,
+        )
+
+        with pytest.raises(RuntimeError, match="1 queries have no rubric"):
+            evaluator.evaluate_experiment(experiment)
+
+        assert experiment["0"].rubric, "the query with a reference answer must keep its generated rubric"
+        assert not experiment["1"].rubric
 
     def test_editing_the_rubric_invalidates_that_querys_cached_judgements(self, llm_provider_mock, experiment):
         query = experiment["0"]

@@ -6,8 +6,9 @@ from typing import Any
 from jinja2 import Template
 from pydantic import BaseModel, Field, field_validator
 
-from ragelo.types.answer_formats import Criterion, RubricAnswerFormat, RubricPointwiseAnswerFormat
+from ragelo.types.answer_formats import RubricAnswerFormat, RubricPointwiseAnswerFormat
 from ragelo.types.configurations.base_configs import BaseEvaluatorConfig
+from ragelo.types.configurations.generator_configs import RubricConfigMixin
 from ragelo.types.evaluables import Document
 from ragelo.types.types import AnswerEvaluatorTypes
 from ragelo.utils import get_placeholders_and_tags
@@ -120,16 +121,7 @@ class PairwiseDomainExpertEvaluatorConfig(PairwiseEvaluatorConfig):
     )
 
 
-class RubricEvaluatorConfigBase(PairwiseDomainExpertEvaluatorConfig):
-    n_criteria: int = Field(default=5, description="The number of criteria to use for the evaluator.")
-    rubrics: dict[str, list[Criterion]] | None = Field(
-        default=None,
-        description=(
-            "The cache of criteria for the evaluator. Maps a query_id to a list of Criterion objects. "
-            "If provided, the evaluator will skip creating the rubric based on the retrieved documents "
-            "and use this instead."
-        ),
-    )
+class RubricEvaluatorConfigBase(RubricConfigMixin, PairwiseDomainExpertEvaluatorConfig):
     evidence_recall: bool = Field(default=False, description="Enable evidence recall scoring as a built-in criterion.")
     citation_quality: bool = Field(
         default=False, description="Enable citation quality scoring as a built-in criterion."

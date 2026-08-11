@@ -104,7 +104,7 @@ class RubricGenerator:
     ) -> None:
         """Writes `query.rubric` for every query in the experiment that does not have one."""
         n_threads = n_threads or self.config.n_processes
-        call_async_fn(
+        failures: list[tuple[str, Exception]] = call_async_fn(
             self._generate_experiment_async,
             experiment,
             n_threads,
@@ -113,6 +113,12 @@ class RubricGenerator:
         )
         if should_save:
             experiment.save()
+        if failures:
+            qid, error = failures[0]
+            raise RuntimeError(
+                f"{len(failures)} queries have no rubric, first: {qid}: {error!r}. "
+                "Generated rubrics are saved, so re-running only retries these."
+            )
 
     async def _generate_experiment_async(
         self,
@@ -120,11 +126,11 @@ class RubricGenerator:
         n_threads: int,
         force: bool,
         conversation_contexts: dict[str, list[ChatMessage]],
-    ) -> None:
+    ) -> list[tuple[str, Exception]]:
         queries = [q for q in experiment if force or not q.rubric]
         if not queries:
             logger.info(f"All {len(list(experiment))} queries already have a rubric.")
-            return
+            return []
         pbar = get_pbar(
             len(queries),
             self.config.rich_print,
@@ -132,17 +138,20 @@ class RubricGenerator:
             disable=not self.config.use_progress_bar,
         )
         semaphore = asyncio.Semaphore(n_threads)
+        failures: list[tuple[str, Exception]] = []
 
         async def generate_one(query: Query) -> None:
             async with semaphore:
                 try:
                     query.rubric = await self.generate_async(query, conversation_contexts.get(query.qid))
-                except Exception as e:  # noqa: BLE001
+                except Exception as e:  # noqa: BLE001 - collected and re-raised as one RuntimeError
                     logger.warning(f"Failed to generate a rubric for query {query.qid}: {e}")
+                    failures.append((query.qid, e))
                 pbar.update()
 
         await asyncio.gather(*(generate_one(q) for q in queries))
         pbar.close()
+        return failures
 
     def _build_message(self, query: Query, conversation_context: list[ChatMessage] | None) -> LLMInputPrompt:
         context: dict[str, Any] = {
@@ -167,7 +176,11 @@ class RubricGenerator:
                 )
             system_prompt = self.documents_system_prompt
             user_prompt = self.documents_user_prompt
-            context["documents"] = list(query.retrieved_docs.values())
+            context["documents"] = sorted(
+                query.retrieved_docs.values(),
+                key=lambda document: max(document.retrieved_by.values(), default=0.0),
+                reverse=True,
+            )[: self.config.documents_limit]
             context["conversation_context"] = conversation_context or []
         return LLMInputPrompt(
             system_prompt=system_prompt.render(**context),

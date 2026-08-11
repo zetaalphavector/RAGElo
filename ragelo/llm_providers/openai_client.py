@@ -36,6 +36,7 @@ class OpenAIProvider(BaseLLMProvider):
 
     @retry(
         wait=wait_random_exponential(min=1, max=120),
+        reraise=True,
         stop=stop_after_attempt(3),
         before_sleep=before_sleep_log(logger=logger, log_level=logging.INFO),
     )

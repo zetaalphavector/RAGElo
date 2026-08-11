@@ -17,7 +17,7 @@ from ragelo.evaluators.answer_evaluators.builtin_criteria import (
     evidence_recall_criterion,
     get_evidence_snippets,
 )
-from ragelo.evaluators.answer_evaluators.rubric_evaluator_mixin import RubricEvaluatorMixin
+from ragelo.evaluators.rubric_evaluator_mixin import RubricEvaluatorMixin
 from ragelo.types.answer_formats import Criterion, CriterionEvaluationPointwise, RubricPointwiseAnswerFormat
 from ragelo.types.configurations import RubricPointwiseEvaluatorConfig
 from ragelo.types.evaluables import AgentAnswer, Evaluable

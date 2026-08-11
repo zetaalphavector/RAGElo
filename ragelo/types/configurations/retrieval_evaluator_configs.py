@@ -4,6 +4,7 @@ from jinja2 import Template
 from pydantic import BaseModel, Field, field_validator
 
 from ragelo.types.configurations.base_configs import BaseEvaluatorConfig
+from ragelo.types.configurations.generator_configs import RubricConfigMixin
 from ragelo.types.types import RetrievalEvaluatorTypes
 from ragelo.utils import get_placeholders_and_tags, string_to_template
 
@@ -66,13 +67,8 @@ class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     )
 
 
-class RubricCoverageEvaluatorConfig(BaseRetrievalEvaluatorConfig):
+class RubricCoverageEvaluatorConfig(RubricConfigMixin, BaseRetrievalEvaluatorConfig):
     evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.RUBRIC_COVERAGE
-    expert_in: str = Field(description="What the LLM should mimic being an expert in.")
-    company: str | None = Field(
-        default=None,
-        description="Name of the company or organization that the user that submitted the query works for.",
-    )
 
 
 class CustomPromptEvaluatorConfig(BaseRetrievalEvaluatorConfig):
