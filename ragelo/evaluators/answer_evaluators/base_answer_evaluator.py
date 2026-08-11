@@ -4,7 +4,7 @@ import itertools
 import logging
 import random
 from collections.abc import Callable, Sequence
-from typing import TYPE_CHECKING, Any, TypeVar, get_type_hints
+from typing import TYPE_CHECKING, Any, ClassVar, TypeVar, get_type_hints
 
 from pydantic import BaseModel
 
@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
     config: T_AnswerConfig
     evaluable_name: str = "Agent Answer"
-    _warned_queries: set[str] = set()
+    _warned_queries: ClassVar[set[str]] = set()
     answer_format: type[EvaluationAnswer] = AnswerEvaluationAnswer
     result_type: type[T_Result] = AnswerEvaluatorResult  # type: ignore[assignment]
 
@@ -140,7 +140,7 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
 
         query, evaluable = eval_sample
         if not isinstance(evaluable, (AgentAnswer, PairwiseGame)):
-            raise ValueError(f"can't evaluate a {type(evaluable).__name__} in an Answer Evaluator")
+            raise TypeError(f"can't evaluate a {type(evaluable).__name__} in an Answer Evaluator")
         if isinstance(evaluable, PairwiseGame):
             return await self.__evaluate_game(query, evaluable)
         return await self.__evaluate_answer(query, evaluable)
@@ -163,7 +163,7 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
             llm_response = self._process_answer(llm_response, query)
             parsed_answer = llm_response.parsed_answer
             raw_answer = llm_response.raw_answer
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - captured on the result as `exception`
             exc = str(e) + f"\nRaw answer: {raw_answer}"
             logger.warning(f"Failed to generate answer for qid: {query.qid} and agent: {answer.agent}: {exc}")
 
@@ -190,7 +190,7 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
             llm_response = self._process_answer(llm_response, query)
             parsed_answer = llm_response.parsed_answer
             raw_answer = llm_response.raw_answer
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - captured on the result as `exception`
             exc = str(e) + f"\nRaw answer: {raw_answer}"
             logger.warning(
                 f"Failed to evaluate game for qid: {query.qid} "
@@ -384,7 +384,7 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
         if not self.config.pairwise:
             return
         if not isinstance(self.config, PairwiseEvaluatorConfig):
-            raise ValueError("Trying to add pairwise games to a non-pairwise evaluator")
+            raise TypeError("Trying to add pairwise games to a non-pairwise evaluator")
         for query in experiment:
             query_agents = list(query.answers.keys())
             pairs = list(itertools.combinations(query_agents, 2))
@@ -425,14 +425,14 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
             return []
 
         documents = []
-        for did, d in query.retrieved_docs.items():
+        for d in query.retrieved_docs.values():
             if self.config.document_relevance_threshold is not None:
                 # Skip documents with relevance below the threshold
                 if not d.evaluations:
                     continue
                 # Get the first available retrieval evaluation
                 score = None
-                for _, evaluation in d.evaluations.items():
+                for evaluation in d.evaluations.values():
                     if hasattr(evaluation, "answer"):
                         answer = evaluation.answer
                         if isinstance(answer, dict):
@@ -455,18 +455,17 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
             if self.config.document_filter is not None and not self.config.document_filter(d):
                 continue
             documents.append(d)
-        if len(documents) == 0:
-            if query.qid not in self._warned_queries:
-                logger.warning(
-                    f"No relevant documents were retrieved for the query {query.qid}. "
-                    "No documents will be provided to the Answer Evaluator."
-                )
-                self._warned_queries.add(query.qid)
+        if len(documents) == 0 and query.qid not in self._warned_queries:
+            logger.warning(
+                f"No relevant documents were retrieved for the query {query.qid}. "
+                "No documents will be provided to the Answer Evaluator."
+            )
+            self._warned_queries.add(query.qid)
         return documents
 
 
 class AnswerEvaluatorFactory:
-    registry: dict[AnswerEvaluatorTypes, type[BaseAnswerEvaluator]] = {}
+    registry: ClassVar[dict[AnswerEvaluatorTypes, type[BaseAnswerEvaluator]]] = {}
 
     @classmethod
     def register(cls, name: AnswerEvaluatorTypes) -> Callable:

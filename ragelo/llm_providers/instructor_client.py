@@ -77,7 +77,7 @@ class InstructorProvider(BaseLLMProvider):
             raise ValueError(f"Instructor request failed for Instructor with model '{self.config.model}': {e}") from e
 
         if not isinstance(parsed_answer, response_schema):
-            raise ValueError(
+            raise TypeError(
                 f"Instructor response could not be parsed into the expected schema {response_schema}. "
                 f"Received response: {parsed_answer}"
             )

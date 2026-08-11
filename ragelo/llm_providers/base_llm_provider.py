@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from abc import ABC, abstractmethod
-from typing import TypeVar, get_type_hints
+from typing import ClassVar, TypeVar, get_type_hints
 
 from pydantic import BaseModel
 
@@ -57,7 +57,7 @@ class BaseLLMProvider(ABC):
 
 
 class LLMProviderFactory:
-    registry: dict[LLMProviderTypes, type[BaseLLMProvider]] = {}
+    registry: ClassVar[dict[LLMProviderTypes, type[BaseLLMProvider]]] = {}
 
     @classmethod
     def register(cls, name: LLMProviderTypes):

@@ -124,7 +124,7 @@ class RubricPointwiseEvaluator(
         response_dict = llm_response.parsed_answer.model_dump()
         criteria: list[CriterionEvaluationPointwise] = []
         for crit, response in response_dict.items():
-            crit_obj = [x for x in self._rubric_for(query) if x.criterion_name == crit][0]
+            crit_obj = next(x for x in self._rubric_for(query) if x.criterion_name == crit)
             if self.config.graduated_scoring:
                 fulfillment: bool | float = response["score"] / self.config.max_score
             else:

@@ -148,4 +148,4 @@ class OpenAIProvider(BaseLLMProvider):
                 organization=openai_config.org,
             )
         else:
-            raise Exception(f"Unknown OpenAI api type: {openai_config.api_type}")
+            raise ValueError(f"Unknown OpenAI api type: {openai_config.api_type}")

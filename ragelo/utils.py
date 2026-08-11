@@ -60,7 +60,7 @@ def get_placeholders_and_tags(template: Template) -> set[str]:
         return set()
 
     # Extract simple placeholders like {{ foo.bar }}
-    placeholders = set(m.group(1) for m in re.finditer(r"{{\s*([a-zA-Z_][\w\.]*)\s*}}", source))
+    placeholders = {m.group(1) for m in re.finditer(r"{{\s*([a-zA-Z_][\w\.]*)\s*}}", source)}
 
     # Extract variables mentioned inside Jinja tags, e.g. {% for x in items %}
     # This needs to handle whitespace and trim markers ({%- ... -%}).
