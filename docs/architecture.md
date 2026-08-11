@@ -64,7 +64,7 @@ flowchart TB
 | crossing | contract | why it is not an inference |
 |---|---|---|
 | artifact → judge | `Query.rubric` | A rubric on the query is persisted, reviewable, and shared by every judge that grades against it, rather than being private to one evaluator instance. |
-| caller → experiment | `Experiment.add_query` absorbing artifacts | Re-adding a query updates the caller-declared fields (`query`, `metadata`, `reference_answer`, `rubric`) and keeps the evaluables and judgements the experiment accumulated. Otherwise a caller re-declaring artifacts each run has to choose between being ignored and discarding paid-for judgements. |
+| caller → experiment | `Experiment.add_query` idempotence | Re-adding an existing query keeps the stored query and everything accumulated on it (documents, rubric, evaluations); `force=True` replaces it. A harness can re-declare its query set every run without discarding paid-for judgements or keeping documents retrieved for a since-edited query. |
 | retriever → experiment | the `Retriever` protocol returning `RetrievedDocument`s | `run_retrievers` records the mapping key as the agent name and pools by `did`, so one judgement serves every system that surfaced the document. A `did` arriving with different text raises rather than silently merging two corpora. |
 | generator → artifact | `prepare_experiment` / `prepare_query` writing `Query.rubric` | Artifact production is a phase that completes before any judging starts, so a rubric cannot be invented halfway through a run, and every judgment in a run is made against the same one. |
 | artifact → judgment | `RubricJudgment.rubric_fingerprint` | A rubric judgment is only meaningful against the rubric it was made against. Recording which one lets an edit to a single query's rubric re-judge that query and nothing else, instead of forcing `force=True` over the whole experiment. |
@@ -75,18 +75,16 @@ flowchart TB
 
 ### Declaring a query twice is normal
 
-A harness re-declares its queries on every run: same ids, same texts, possibly edited reference
-answers or rubrics, against an experiment that already holds a pool and its judgements. So
-`Query.absorb_artifacts` splits the model in two. The experiment owns `ACCUMULATED_FIELDS`,
-`retrieved_docs` / `answers` / `pairwise_games` and the evaluations on them, which cost money and
-survive being re-added; the caller owns every other field and re-declares it wholesale.
-`force=True` still replaces everything, and warns with a count of what it drops.
+A harness re-declares its queries on every run, against an experiment that may already hold a pool
+and its judgements. So `add_query` is idempotent: re-adding an existing query keeps the stored one
+and everything accumulated on it (documents, rubric, answers, games, evaluations), and ignores the
+re-declaration. `force=True` replaces the query outright and warns with a count of what it drops.
 
-Naming the accumulated set rather than the artifact set is the load-bearing choice. Artifacts are
-open-ended, gaining `rubric` and then `reference_answer` in consecutive steps, so a list of fields
-to copy would go stale exactly the way the loader did when it dropped `Query.rubric` and
-`Document.retrieved_by`. The evaluable containers are closed, so a new artifact field is absorbed
-without anyone remembering to add it.
+Keeping the stored query rather than merging fields is the deliberate choice. A rubric the
+experiment generated and the judgements made against it cost money, and the pooled documents were
+retrieved for the stored query's text; a caller re-declaring a plain query (no rubric, edited
+text) that merged into the stored one would either discard the generated rubric or leave documents
+retrieved for a different question. So changing an input means a new experiment, not a mutated one.
 
 This mirrors `Query.add_retrieved_doc`, which has always merged `retrieved_by` into an existing
 document rather than replacing it.
