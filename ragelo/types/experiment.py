@@ -6,6 +6,7 @@ For most use cases, this class should be the main entry point to interact with R
 
 from __future__ import annotations
 
+import asyncio
 import csv
 import json
 import logging
@@ -13,7 +14,7 @@ import os
 import warnings
 from collections import defaultdict
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Sequence
+from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence
 
 from ragelo.measures import UNADDRESSED_DOC_PREFIX, is_coverage_measure, make_qrel, make_run, parse_measure
 from ragelo.presenters import render_evaluation, render_retrieval_summary
@@ -28,9 +29,12 @@ from ragelo.types.results import (
     PairwiseGameEvaluatorResult,
     RetrievalEvaluatorResult,
 )
+from ragelo.utils import call_async_fn, get_pbar
 
 if TYPE_CHECKING:
     from ir_measures import Qrel
+
+    from ragelo.retrievers import RetrievedDocument, Retriever
 
 logger = logging.getLogger(__name__)
 
@@ -297,6 +301,70 @@ class Experiment:
         self.queries[query_id].add_retrieved_doc(doc, score, agent, force, exist_ok)
         if should_save:
             self.save()
+
+    def run_retrievers(self, retrievers: Mapping[str, Retriever], top_k: int, n_threads: int = 1) -> None:
+        """Pools each retriever's documents into every query, with its mapping key as the agent name.
+
+        Skips pairs already in `retrieval_systems` and saves per fetch, so a re-run only fetches
+        what is missing. Failed fetches raise RuntimeError once everything else is pooled.
+        """
+        call_async_fn(self.__run_retrievers_async, retrievers, top_k, n_threads)
+
+    async def __run_retrievers_async(self, retrievers: Mapping[str, Retriever], top_k: int, n_threads: int) -> None:
+        semaphore = asyncio.Semaphore(n_threads)
+
+        async def fetch(query: Query, name: str, retriever: Retriever):
+            async with semaphore:
+                try:
+                    return query, name, list(await retriever.retrieve(query, top_k))
+                except Exception as error:
+                    return query, name, error
+
+        tasks = [
+            asyncio.ensure_future(fetch(query, name, retriever))
+            for query in self
+            for name, retriever in retrievers.items()
+            if name not in query.retrieval_systems
+        ]
+        pbar = get_pbar(len(tasks), self.rich_print, desc="Retrieving")
+        failures: list[tuple[str, str, Exception]] = []
+        try:
+            for future in asyncio.as_completed(tasks):
+                query, name, result = await future
+                pbar.update()
+                if isinstance(result, Exception):
+                    failures.append((query.qid, name, result))
+                    logger.error(f"Retriever {name} failed for query {query.qid}: {result}")
+                    continue
+                self.__add_run(query, name, result)
+                self.save()
+        finally:
+            pbar.close()
+            for task in tasks:
+                task.cancel()
+        if failures:
+            qid, name, error = failures[0]
+            raise RuntimeError(
+                f"{len(failures)} of {len(tasks)} retrieve calls failed, first: {name} on query {qid}: {error!r}. "
+                "Successful calls are saved, so re-running retries only the failed ones."
+            )
+
+    def __add_run(self, query: Query, agent: str, docs: list[RetrievedDocument]) -> None:
+        for rank, doc in enumerate(docs):
+            pooled = query.retrieved_docs.get(doc.did)
+            if pooled is not None and pooled.text != doc.text:
+                raise ValueError(
+                    f"Retriever {agent} returned document {doc.did} for query {query.qid} with text that "
+                    "differs from the pooled copy. Retrievers searching different corpora must namespace "
+                    "their document IDs."
+                )
+            score = doc.score if doc.score is not None else 1 / (rank + 1)
+            query.add_retrieved_doc(
+                Document(qid=query.qid, did=doc.did, text=doc.text, metadata=doc.metadata),
+                score=score,
+                agent=agent,
+                exist_ok=True,
+            )
 
     def add_agent_answers(self, answers: list[AgentAnswer], force: bool = False, exist_ok: bool = False) -> int:
         added = 0

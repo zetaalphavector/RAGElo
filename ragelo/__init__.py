@@ -6,6 +6,7 @@ from ragelo.evaluators.retrieval_evaluators import RetrievalEvaluatorFactory, ge
 from ragelo.generators import RubricGenerator, get_rubric_generator
 from ragelo.llm_providers.base_llm_provider import get_llm_provider
 from ragelo.logger import configure_logging
+from ragelo.retrievers import RetrievedDocument, Retriever
 from ragelo.types import AgentAnswer, Document, Experiment, Query
 
 __all__ = [
@@ -22,6 +23,8 @@ __all__ = [
     "Document",
     "Query",
     "Experiment",
+    "Retriever",
+    "RetrievedDocument",
 ]
 
 __version__ = "0.1.0"

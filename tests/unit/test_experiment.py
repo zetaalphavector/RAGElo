@@ -4,7 +4,14 @@ import shutil
 
 import pytest
 
-from ragelo import Experiment, get_agent_ranker, get_answer_evaluator, get_llm_provider, get_retrieval_evaluator
+from ragelo import (
+    Experiment,
+    RetrievedDocument,
+    get_agent_ranker,
+    get_answer_evaluator,
+    get_llm_provider,
+    get_retrieval_evaluator,
+)
 from ragelo.measures import UNADDRESSED_DOC_PREFIX
 from ragelo.types.answer_formats import (
     Criterion,
@@ -24,6 +31,19 @@ from ragelo.types.results import (
     RetrievalEvaluationAnswer,
     RetrievalEvaluatorResult,
 )
+
+
+class FakeRetriever:
+    def __init__(self, runs: dict[str, list[RetrievedDocument] | Exception]):
+        self.runs = runs
+        self.calls: list[str] = []
+
+    async def retrieve(self, query: Query, top_k: int) -> list[RetrievedDocument]:
+        self.calls.append(query.qid)
+        run = self.runs[query.qid]
+        if isinstance(run, Exception):
+            raise run
+        return run[:top_k]
 
 
 class TestExperiment:
@@ -930,6 +950,70 @@ class TestExperiment:
         assert os.path.exists("ragelo_cache/A_really_cool_RAGElo_experiment_results.jsonl")
         os.remove("ragelo_cache/A_really_cool_RAGElo_experiment.json")
         os.remove("ragelo_cache/A_really_cool_RAGElo_experiment_results.jsonl")
+
+    def test_run_retrievers_pools_ranked_documents(self, empty_experiment):
+        empty_experiment.add_query(Query(qid="q0", query="What is the capital of Brazil?"))
+        keyword = FakeRetriever(
+            {
+                "q0": [
+                    RetrievedDocument(did="d0", text="Brasilia.", score=2.0),
+                    RetrievedDocument(did="d1", text="Rio."),
+                ]
+            }
+        )
+        knn = FakeRetriever({"q0": [RetrievedDocument(did="d0", text="Brasilia.", score=0.9)]})
+
+        empty_experiment.run_retrievers({"keyword": keyword, "knn": knn}, top_k=10)
+
+        query = empty_experiment["q0"]
+        assert query.retrieval_systems == {"keyword", "knn"}
+        assert query.retrieved_docs["d0"].retrieved_by == {"keyword": 2.0, "knn": 0.9}
+        assert query.retrieved_docs["d1"].retrieved_by == {"keyword": 1 / 2}
+
+    def test_run_retrievers_skips_already_pooled_systems(self, empty_experiment):
+        empty_experiment.add_query(Query(qid="q0", query="What is the capital of Brazil?"))
+        empty_experiment.add_query(Query(qid="q1", query="What is the capital of France?"))
+        empty_experiment.add_retrieved_doc(Document(qid="q0", did="d0", text="Brasilia."), agent="keyword", score=1.0)
+        runs = {
+            "q0": [RetrievedDocument(did="d0", text="Brasilia.")],
+            "q1": [RetrievedDocument(did="d1", text="Paris.")],
+        }
+        keyword, knn = FakeRetriever(runs), FakeRetriever(runs)
+
+        empty_experiment.run_retrievers({"keyword": keyword, "knn": knn}, top_k=10)
+
+        assert keyword.calls == ["q1"]
+        assert sorted(knn.calls) == ["q0", "q1"]
+
+    def test_run_retrievers_rejects_a_pooled_did_with_different_text(self, empty_experiment):
+        empty_experiment.add_query(Query(qid="q0", query="What is the capital of Brazil?"))
+        empty_experiment.add_retrieved_doc(Document(qid="q0", did="d0", text="Brasilia."), agent="keyword", score=1.0)
+        knn = FakeRetriever({"q0": [RetrievedDocument(did="d0", text="Rio.")]})
+
+        with pytest.raises(ValueError, match="namespace"):
+            empty_experiment.run_retrievers({"knn": knn}, top_k=10)
+
+    def test_run_retrievers_keeps_successes_when_a_fetch_fails(self, empty_experiment):
+        empty_experiment.add_query(Query(qid="q0", query="What is the capital of Brazil?"))
+        empty_experiment.add_query(Query(qid="q1", query="What is the capital of France?"))
+        keyword = FakeRetriever(
+            {
+                "q0": [RetrievedDocument(did="d0", text="Brasilia.")],
+                "q1": [RetrievedDocument(did="d1", text="Paris.")],
+            }
+        )
+        knn = FakeRetriever(
+            {
+                "q0": ConnectionError("search is down"),
+                "q1": [RetrievedDocument(did="d1", text="Paris.")],
+            }
+        )
+
+        with pytest.raises(RuntimeError, match="1 of 4 retrieve calls failed"):
+            empty_experiment.run_retrievers({"keyword": keyword, "knn": knn}, top_k=10)
+
+        assert empty_experiment["q0"].retrieval_systems == {"keyword"}
+        assert empty_experiment["q1"].retrieval_systems == {"keyword", "knn"}
 
 
 class TestExperimentSerialization:
