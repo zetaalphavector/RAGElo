@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Type
-
 from pydantic import BaseModel
 
 from ragelo.generators.rubric_generator import RubricGenerator
@@ -21,7 +19,7 @@ class RubricEvaluatorMixin:
 
     def __init__(self, *args, rubric_generator: RubricGenerator | None = None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.answer_schema_cache: dict[str, Type[BaseModel]] = {}
+        self.answer_schema_cache: dict[str, type[BaseModel]] = {}
         self.rubric_generator = rubric_generator or RubricGenerator(
             RubricGeneratorConfig(
                 expert_in=self.config.expert_in,
@@ -31,7 +29,7 @@ class RubricEvaluatorMixin:
             self.llm_provider,
         )
 
-    def _build_evaluation_schema(self, rubric: list[Criterion]) -> Type[BaseModel]:
+    def _build_evaluation_schema(self, rubric: list[Criterion]) -> type[BaseModel]:
         raise NotImplementedError
 
     def _rubric_for(self, query: Query) -> list[Criterion]:
@@ -56,7 +54,7 @@ class RubricEvaluatorMixin:
     def _rubric_conversation_context(self, query: Query) -> list[ChatMessage]:
         return []
 
-    def _rubric_schema(self, query: Query) -> Type[BaseModel]:
+    def _rubric_schema(self, query: Query) -> type[BaseModel]:
         """The per-query response schema, one field per criterion, memoized per distinct rubric."""
         fingerprint = query.rubric_fingerprint
         if fingerprint is None:

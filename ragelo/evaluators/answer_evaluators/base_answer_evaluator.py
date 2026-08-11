@@ -3,8 +3,8 @@ from __future__ import annotations
 import itertools
 import logging
 import random
-from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any, Callable, TypeVar, get_type_hints
+from collections.abc import Callable, Sequence
+from typing import TYPE_CHECKING, Any, TypeVar, get_type_hints
 
 from pydantic import BaseModel
 
@@ -482,7 +482,7 @@ class AnswerEvaluatorFactory:
     @classmethod
     def get_evaluator_result_type(
         cls, evaluator_name: AnswerEvaluatorTypes
-    ) -> type[AnswerEvaluatorResult] | type[PairwiseGameEvaluatorResult]:
+    ) -> type[AnswerEvaluatorResult | PairwiseGameEvaluatorResult]:
         """Gets the answer evaluator result type for a specific evaluator type.
 
         Args:
@@ -564,7 +564,7 @@ def get_answer_evaluator(
 
 def get_answer_evaluator_result_type(
     evaluator_name: AnswerEvaluatorTypes | str,
-) -> type[AnswerEvaluatorResult] | type[PairwiseGameEvaluatorResult]:
+) -> type[AnswerEvaluatorResult | PairwiseGameEvaluatorResult]:
     """Gets the answer evaluator result type for a specific evaluator type.
 
     Args:

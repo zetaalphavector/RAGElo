@@ -17,7 +17,7 @@ __all__ = [
     "FewShotEvaluator",
     "RDNAMEvaluator",
     "ReasonerEvaluator",
-    "RubricCoverageEvaluator",
     "RetrievalEvaluatorFactory",
+    "RubricCoverageEvaluator",
     "get_retrieval_evaluator",
 ]

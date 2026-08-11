@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Generic, TypeVar, cast, get_type_hints
+from collections.abc import Callable
+from typing import Any, Generic, TypeVar, cast, get_type_hints
 
 from ragelo.types import Experiment, PairwiseGameEvaluatorResult
 from ragelo.types.configurations.agent_ranker_configs import AgentRankerConfig

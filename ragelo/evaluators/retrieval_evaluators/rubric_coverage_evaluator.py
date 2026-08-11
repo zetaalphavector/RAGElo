@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Type
-
 from pydantic import BaseModel, Field, create_model
 
 from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
@@ -58,7 +56,7 @@ class RubricCoverageEvaluator(BaseRetrievalEvaluator[RubricCoverageEvaluatorConf
         Question: {{ criterion.short_question }}
         --------------------------------
         {% endfor %}
-        """)  # noqa: E501
+        """)
 
     user_prompt = string_to_template("""
         [User Question]
@@ -69,7 +67,7 @@ class RubricCoverageEvaluator(BaseRetrievalEvaluator[RubricCoverageEvaluatorConf
         {% endif %}{{ document.text }}
         """)
 
-    def _build_evaluation_schema(self, rubric: list[Criterion]) -> Type[BaseModel]:
+    def _build_evaluation_schema(self, rubric: list[Criterion]) -> type[BaseModel]:
         criteria_models = {
             criterion.criterion_name: (
                 bool,

@@ -42,7 +42,7 @@ class BaseLLMProvider(ABC):
     def from_config(
         cls,
         config: LLMProviderConfig,
-    ) -> "BaseLLMProvider":
+    ) -> BaseLLMProvider:
         """Inits the LLM provider from a credentials file."""
         return cls(config)
 

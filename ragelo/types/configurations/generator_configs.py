@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import Field
 
@@ -11,7 +11,7 @@ RubricSource = Literal["documents", "reference_answer"]
 
 class RubricGeneratorConfig(BaseConfig):
     expert_in: str = Field(description="What the LLM should mimic being an expert in.")
-    company: Optional[str] = Field(
+    company: str | None = Field(
         default=None,
         description="Name of the company or organization that the user that "
         "submitted the query works for. that the domain belongs to. "

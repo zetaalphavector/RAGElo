@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal, Type, cast
+from typing import Literal, cast
 
 from pydantic import BaseModel, Field, create_model
 
@@ -81,7 +81,7 @@ class RubricPairwiseEvaluator(RubricEvaluatorMixin, PairwiseAnswerEvaluator):
         Short Question: {{criteria.short_question}}
         --------------------------------
         {% endfor %}
-        """  # noqa: E501
+        """
     )
 
     user_prompt = string_to_template("""
@@ -108,7 +108,7 @@ class RubricPairwiseEvaluator(RubricEvaluatorMixin, PairwiseAnswerEvaluator):
         {% endif %}
         [The End of Agent B's Answer]""")
 
-    def _build_evaluation_schema(self, rubric: list[Criterion]) -> Type[BaseModel]:
+    def _build_evaluation_schema(self, rubric: list[Criterion]) -> type[BaseModel]:
         include_evidence = self.config.include_evidence_in_evaluation
         rich_output = self.config.rich_pairwise_output
         preserve_d = self.config.preserve_d
@@ -186,7 +186,7 @@ class RubricPairwiseEvaluator(RubricEvaluatorMixin, PairwiseAnswerEvaluator):
         response_dict = llm_response.parsed_answer.model_dump()
         criteria: list[CriterionEvaluation] = []
         for crit, response in response_dict.items():
-            crit_obj = [x for x in self._rubric_for(query) if x.criterion_name == crit][0]
+            crit_obj = next(x for x in self._rubric_for(query) if x.criterion_name == crit)
             if len(response["winner"]) > 1:
                 response["winner"] = response["winner"][-1]
             if not self.config.preserve_d and response["winner"] == "D":

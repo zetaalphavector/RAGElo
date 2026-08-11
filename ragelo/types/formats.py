@@ -17,7 +17,7 @@ class LLMInputPrompt(BaseModel):
     llm_response_schema: type[BaseModel] | dict[str, Any] | None = None
 
     @model_validator(mode="after")
-    def check_at_least_one_is_set(self) -> "LLMInputPrompt":
+    def check_at_least_one_is_set(self) -> LLMInputPrompt:
         if not self.system_prompt and not self.user_message and not self.messages:
             raise ValueError("At least one of system_prompt, user_message, or messages must be set")
         if self.system_prompt and not self.messages and not self.user_message:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Type, cast
+from typing import cast
 
 from pydantic import BaseModel, Field, create_model
 
@@ -54,7 +54,7 @@ class RubricPointwiseEvaluator(
         Short Question: {{criteria.short_question}}
         --------------------------------
         {% endfor %}
-        """  # noqa: E501
+        """
     )
 
     user_prompt = string_to_template("""
@@ -65,7 +65,7 @@ class RubricPointwiseEvaluator(
             {{ answer.text }}
         """)
 
-    def _build_evaluation_schema(self, rubric: list[Criterion]) -> Type[BaseModel]:
+    def _build_evaluation_schema(self, rubric: list[Criterion]) -> type[BaseModel]:
         criteria_models = {}
         for criterion in rubric:
             if self.config.graduated_scoring:

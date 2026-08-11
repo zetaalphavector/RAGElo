@@ -108,7 +108,7 @@ class BaseEvaluator(ABC, Generic[T_Config, T_Result]):
         """Produce a single query's artifacts. Evaluators that grade against data they can generate
         override this; the rest need nothing.
         """
-        return None
+        return
 
     @abstractmethod
     def _get_all_evaluables(self, query: Query) -> list[Evaluable]:

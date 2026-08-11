@@ -3,10 +3,10 @@ from __future__ import annotations
 import asyncio
 import re
 import warnings
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
 from concurrent.futures import ThreadPoolExecutor
 from textwrap import dedent
-from typing import Any, Coroutine
+from typing import Any
 
 from jinja2 import Template
 from tqdm import TqdmExperimentalWarning

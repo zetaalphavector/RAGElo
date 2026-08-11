@@ -51,7 +51,7 @@ def test_get_by_name(llm_provider_mock):
         "custom_pairwise",
         llm_provider=llm_provider_mock,
         system_prompt="system prompt",
-        user_prompt="Query: {{ query.query }} Answer agent a: {{ game.agent_a_answer.text }} Answer agent b: {{ game.agent_b_answer.text }}",  # noqa: E501
+        user_prompt="Query: {{ query.query }} Answer agent a: {{ game.agent_a_answer.text }} Answer agent b: {{ game.agent_b_answer.text }}",
     )
     assert isinstance(custom_pairwise_evaluator, CustomPairwiseEvaluator)
     domain_expert_evaluator = get_answer_evaluator(
@@ -777,7 +777,7 @@ class TestRubricPairwiseEvaluator:
                     score_a=(float, Field(default=0.5)),
                     score_b=(float, Field(default=0.5)),
                     loser_fix=(str, Field(default="")),
-                    failure_tags=(list[str], Field(default_factory=lambda: [])),
+                    failure_tags=(list[str], Field(default_factory=list)),
                     confidence=(float, Field(default=0.9)),
                 )
                 for c in criteria
@@ -2006,11 +2006,11 @@ class TestPRFixVerification:
         from ragelo.evaluators.answer_evaluators.rubric_pointwise_evaluator import RubricPointwiseEvaluator
 
         # Check that the system_prompt template contains 'criteria.evidence' (the correct field)
-        pairwise_source: str = getattr(RubricPairwiseEvaluator.system_prompt, "_ragelo_source")
+        pairwise_source: str = RubricPairwiseEvaluator.system_prompt._ragelo_source
         assert "criteria.evidence" in pairwise_source
         assert "criteria.supporting_documents" not in pairwise_source
 
-        pointwise_source: str = getattr(RubricPointwiseEvaluator.system_prompt, "_ragelo_source")
+        pointwise_source: str = RubricPointwiseEvaluator.system_prompt._ragelo_source
         assert "criteria.evidence" in pointwise_source
         assert "criteria.supporting_documents" not in pointwise_source
 
@@ -2073,8 +2073,8 @@ class TestPRFixVerification:
         pairwise_config = RubricPairwiseEvaluatorConfig(expert_in="test")
         pointwise_config = RubricPointwiseEvaluatorConfig(expert_in="test")
 
-        assert pairwise_config.evidence_recall == pointwise_config.evidence_recall == False  # noqa: E712
-        assert pairwise_config.citation_quality == pointwise_config.citation_quality == False  # noqa: E712
+        assert pairwise_config.evidence_recall == pointwise_config.evidence_recall == False
+        assert pairwise_config.citation_quality == pointwise_config.citation_quality == False
         assert pairwise_config.evidence_recall_weight == pointwise_config.evidence_recall_weight == 1.0
         assert pairwise_config.citation_quality_weight == pointwise_config.citation_quality_weight == 1.0
         assert pairwise_config.n_criteria == pointwise_config.n_criteria == 5

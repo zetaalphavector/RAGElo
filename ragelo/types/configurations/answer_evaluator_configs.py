@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Optional, Type
+from collections.abc import Callable
+from typing import Any
 
 from jinja2 import Template
 from pydantic import BaseModel, Field, field_validator
@@ -28,20 +29,20 @@ class BaseAnswerEvaluatorConfig(BaseEvaluatorConfig):
         default=False,
         description="Whether or not to include the raw documents in the prompt",
     )
-    factors: Optional[str] = Field(
+    factors: str | None = Field(
         default=(
             "the correctness, helpfulness, completeness, accuracy, depth, and level of detail of their responses"
         ),
         description="A string containing the factors to be used when evaluating an answer.",
     )
-    document_filter: Optional[Callable[[Document], bool]] = Field(
+    document_filter: Callable[[Document], bool] | None = Field(
         default=None,
         description=(
             "A function to filter the documents. It should take a Document object and return a boolean "
             "indicating whether the document should be included in the prompt."
         ),
     )
-    document_relevance_threshold: Optional[int] = Field(
+    document_relevance_threshold: int | None = Field(
         default=None,
         description=(
             "The minimum relevance score for a document to be included in the prompt. "
@@ -81,7 +82,7 @@ class CustomPairwiseEvaluatorConfig(PairwiseEvaluatorConfig):
 
 class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
     evaluator_name: AnswerEvaluatorTypes = AnswerEvaluatorTypes.CUSTOM_PROMPT
-    system_prompt: Optional[Template] = Field(
+    system_prompt: Template | None = Field(
         default_factory=lambda: Template(
             "You are a helpful assistant tasked with evaluating the correctness of answers."
         ),
@@ -111,7 +112,7 @@ class CustomPromptAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
 class PairwiseDomainExpertEvaluatorConfig(PairwiseEvaluatorConfig):
     evaluator_name: AnswerEvaluatorTypes = AnswerEvaluatorTypes.DOMAIN_EXPERT
     expert_in: str = Field(description="What the LLM should mimic being an expert in.")
-    company: Optional[str] = Field(
+    company: str | None = Field(
         default=None,
         description="Name of the company or organization that the user that "
         "submitted the query works for. that the domain belongs to. "
@@ -121,7 +122,7 @@ class PairwiseDomainExpertEvaluatorConfig(PairwiseEvaluatorConfig):
 
 class RubricEvaluatorConfigBase(PairwiseDomainExpertEvaluatorConfig):
     n_criteria: int = Field(default=5, description="The number of criteria to use for the evaluator.")
-    rubrics: Optional[dict[str, list[Criterion]]] = Field(
+    rubrics: dict[str, list[Criterion]] | None = Field(
         default=None,
         description=(
             "The cache of criteria for the evaluator. Maps a query_id to a list of Criterion objects. "
@@ -133,7 +134,7 @@ class RubricEvaluatorConfigBase(PairwiseDomainExpertEvaluatorConfig):
     citation_quality: bool = Field(
         default=False, description="Enable citation quality scoring as a built-in criterion."
     )
-    evidence_snippets: Optional[dict[str, list[str]]] = Field(
+    evidence_snippets: dict[str, list[str]] | None = Field(
         default=None,
         description="Override evidence snippets per query ID. Maps qid to a list of text snippets.",
     )
@@ -147,7 +148,7 @@ class RubricEvaluatorConfigBase(PairwiseDomainExpertEvaluatorConfig):
 
 class RubricPairwiseEvaluatorConfig(RubricEvaluatorConfigBase):
     evaluator_name: AnswerEvaluatorTypes = AnswerEvaluatorTypes.RUBRIC_PAIRWISE
-    llm_response_schema: Optional[Type[BaseModel] | dict[str, Any]] = Field(
+    llm_response_schema: type[BaseModel] | dict[str, Any] | None = Field(
         default=RubricAnswerFormat,
         description="The response schema for the LLM.",
     )
@@ -172,7 +173,7 @@ class RubricPairwiseEvaluatorConfig(RubricEvaluatorConfigBase):
 
 class RubricPointwiseEvaluatorConfig(RubricEvaluatorConfigBase):
     evaluator_name: AnswerEvaluatorTypes = AnswerEvaluatorTypes.RUBRIC_POINTWISE
-    llm_response_schema: Optional[Type[BaseModel] | dict[str, Any]] = Field(
+    llm_response_schema: type[BaseModel] | dict[str, Any] | None = Field(
         default=RubricPointwiseAnswerFormat,
         description="The response schema for the LLM.",
     )

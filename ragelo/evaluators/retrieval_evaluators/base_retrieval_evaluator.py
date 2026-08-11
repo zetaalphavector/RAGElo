@@ -5,8 +5,8 @@ and returns a score or a label for each document."""
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any, Callable, get_type_hints
+from collections.abc import Callable, Sequence
+from typing import TYPE_CHECKING, Any, ClassVar, get_type_hints
 
 from pydantic import BaseModel
 from tenacity import RetryError
@@ -76,7 +76,7 @@ class BaseRetrievalEvaluator(BaseEvaluator[T_Config, RetrievalEvaluatorResult]):
         query, document = eval_sample
         if not isinstance(document, Document):
             type_name = type(document).__name__
-            raise ValueError(f"can't evaluate a {type_name} in a Retrieval Evaluator")
+            raise TypeError(f"can't evaluate a {type_name} in a Retrieval Evaluator")
 
         exc = None
         evaluator_name = str(self.config.evaluator_name)
@@ -97,7 +97,7 @@ class BaseRetrievalEvaluator(BaseEvaluator[T_Config, RetrievalEvaluatorResult]):
             llm_response = self._process_answer(llm_response, query)
             parsed_answer = llm_response.parsed_answer
             raw_answer = llm_response.raw_answer
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             if isinstance(e, RetryError):
                 exc = str(e) + "\nLLM Error: \n" + str(e.last_attempt.exception())
             elif raw_answer:
@@ -169,7 +169,7 @@ class BaseRetrievalEvaluator(BaseEvaluator[T_Config, RetrievalEvaluatorResult]):
 
 
 class RetrievalEvaluatorFactory:
-    registry: dict[RetrievalEvaluatorTypes, type[BaseRetrievalEvaluator]] = {}
+    registry: ClassVar[dict[RetrievalEvaluatorTypes, type[BaseRetrievalEvaluator]]] = {}
 
     @classmethod
     def register(cls, evaluator_name: RetrievalEvaluatorTypes) -> Callable:

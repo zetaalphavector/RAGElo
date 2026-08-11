@@ -35,7 +35,7 @@ class RubricGenerator:
         You should write {{ n_criteria }} criteria.
         If a criterion is supported by a document, you should include the document ID in the evidence list for that criterion.
         You may optionally assign a weight (a positive number) to each criterion to indicate its relative importance. More important criteria should have higher weights. If no weight is provided, all criteria are weighted equally.
-        """  # noqa: E501
+        """
     )
 
     documents_user_prompt = string_to_template("""
@@ -65,7 +65,7 @@ class RubricGenerator:
         Every criterion must be supported by the correct answer: do not add criteria for information it does not contain, and do not restate the same information as two criteria.
         If the correct answer attributes a piece of information to a source, include that source in the evidence list for the criterion.
         You may optionally assign a weight (a positive number) to each criterion to indicate its relative importance. More important criteria should have higher weights. If no weight is provided, all criteria are weighted equally.
-        """  # noqa: E501
+        """
     )
 
     reference_answer_user_prompt = string_to_template("""
@@ -91,7 +91,7 @@ class RubricGenerator:
         llm_response = await self.llm_provider.call_async(llm_input, response_schema=RubricSchema)
         rubric = llm_response.parsed_answer
         if not isinstance(rubric, RubricSchema):
-            raise ValueError(f"Expected a RubricSchema for query {query.qid}, got {type(rubric)}")
+            raise TypeError(f"Expected a RubricSchema for query {query.qid}, got {type(rubric)}")
         return rubric.criteria
 
     def generate_experiment(
@@ -137,7 +137,7 @@ class RubricGenerator:
             async with semaphore:
                 try:
                     query.rubric = await self.generate_async(query, conversation_contexts.get(query.qid))
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     logger.warning(f"Failed to generate a rubric for query {query.qid}: {e}")
                 pbar.update()
 

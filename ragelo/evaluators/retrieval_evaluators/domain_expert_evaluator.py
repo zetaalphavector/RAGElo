@@ -46,7 +46,7 @@ class DomainExpertEvaluator(BaseRetrievalEvaluator[DomainExpertEvaluatorConfig])
         Given the analysis above, assign a relevance score of 0, 1, or 2 to the retrieved document for this query, where:
         - 0: the document is not relevant to the query
         - 1: the document is somewhat relevant to the query
-        - 2: the document is highly relevant to the query""")  # noqa: E501
+        - 2: the document is highly relevant to the query""")
 
     user_prompt = string_to_template("""
         User query:
