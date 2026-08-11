@@ -34,6 +34,11 @@ class Query(BaseModel):
     answers: dict[str, AgentAnswer] = {}
     pairwise_games: dict[str, PairwiseGame] = {}
 
+    @property
+    def retrieval_systems(self) -> set[str]:
+        """All retrievers that retrieved documents for this query"""
+        return {agent for document in self.retrieved_docs.values() for agent in document.retrieved_by}
+
     @field_validator("qid", mode="before")
     def qid_into_string(cls, v):
         if not isinstance(v, str):
@@ -193,7 +198,7 @@ class Query(BaseModel):
             retrieval_evaluator_name str: The name of the retrieval evaluator to use to get the relevance
                 of the documents.
         """
-        qrels = {}
+        qrels: dict[str, float] = {}
         if len(self.retrieved_docs) == 0:
             logger.warning(f"Query {self.qid} does not have any retrieved documents. Returning empty qrels.")
         docs_without_relevance = 0
@@ -227,11 +232,12 @@ class Query(BaseModel):
                 docs_without_relevance += 1
                 continue
 
-            qrels[did] = 0.0 if score < relevance_threshold else score
+            # Relevance labels must be integers: pytrec_eval rejects float qrels.
+            qrels[did] = int(score) if score >= relevance_threshold else 0
         if docs_without_relevance > 0:
             logger.warning(f"Query {self.qid} has {docs_without_relevance} documents without relevance.")
         if docs_without_relevance == len(self.retrieved_docs):
-            logger.error(f"Query {self.qid} has no documents without relevance.")
+            logger.error(f"Query {self.qid} has no documents with relevance.")
         return qrels
 
     def get_runs(self, agents: list[str] | None = None) -> dict[str, dict[str, dict[str, float]]]:

@@ -5,20 +5,23 @@ from ragelo.evaluators.answer_evaluators import AnswerEvaluatorFactory, get_answ
 from ragelo.evaluators.retrieval_evaluators import RetrievalEvaluatorFactory, get_retrieval_evaluator
 from ragelo.llm_providers.base_llm_provider import get_llm_provider
 from ragelo.logger import configure_logging
+from ragelo.retrievers import RetrievedDocument, Retriever
 from ragelo.types import AgentAnswer, Document, Experiment, Query
 
 __all__ = [
+    "AgentAnswer",
+    "AnswerEvaluatorFactory",
+    "Document",
+    "Experiment",
+    "Query",
+    "RetrievalEvaluatorFactory",
+    "RetrievedDocument",
+    "Retriever",
+    "configure_logging",
     "get_agent_ranker",
     "get_answer_evaluator",
-    "get_retrieval_evaluator",
     "get_llm_provider",
-    "configure_logging",
-    "AnswerEvaluatorFactory",
-    "RetrievalEvaluatorFactory",
-    "AgentAnswer",
-    "Document",
-    "Query",
-    "Experiment",
+    "get_retrieval_evaluator",
 ]
 
 __version__ = "0.1.0"

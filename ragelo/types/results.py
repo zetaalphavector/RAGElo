@@ -227,6 +227,41 @@ class EloTournamentResult(BaseModel):
     total_tournaments: int
 
 
+class MetricComparison(BaseModel):
+    """Paired comparison of two agents on one metric. Deltas, wins and losses read as agent_b minus agent_a."""
+
+    mean_a: float
+    mean_b: float
+    p_value: float
+    per_query_delta: dict[str, float]
+
+    @computed_field
+    @property
+    def delta(self) -> float:
+        return self.mean_b - self.mean_a
+
+    @computed_field
+    @property
+    def wins(self) -> int:
+        return sum(1 for delta in self.per_query_delta.values() if delta > 0)
+
+    @computed_field
+    @property
+    def ties(self) -> int:
+        return sum(1 for delta in self.per_query_delta.values() if delta == 0)
+
+    @computed_field
+    @property
+    def losses(self) -> int:
+        return sum(1 for delta in self.per_query_delta.values() if delta < 0)
+
+
+class RetrievalComparisonResult(BaseModel):
+    agent_a: str
+    agent_b: str
+    metrics: dict[str, MetricComparison]
+
+
 class RDNAMEvaluatorResult(RetrievalEvaluatorResult):
     """Specialized retrieval result for RDNAM (answer is typically RDNAMEvaluationAnswer)."""
 

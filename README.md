@@ -259,6 +259,46 @@ elo_ranker.run(experiment)
 
 The experiment is save as a JSON in `ragelo_cache/experiment_name.json`. 
 
+### ⚖️ Comparing two retrieval systems end-to-end
+
+To A/B test retrieval systems, wrap each one in the `Retriever` protocol: any object with an async `retrieve(query, top_k)` method returning ranked `RetrievedDocument`s. `Experiment.run_retrievers` pools whatever they return, a retrieval evaluator judges the pool, and `compare_retrieval` reports the paired difference (metrics require `pip install 'ragelo[eval]'`):
+
+```python
+from ragelo import Experiment, RetrievedDocument, get_retrieval_evaluator
+
+class SearchClient:  # anything with this method satisfies ragelo.Retriever
+    def __init__(self, endpoint: str):
+        self.endpoint = endpoint
+
+    async def retrieve(self, query, top_k):
+        hits = await my_search_api(self.endpoint, query.query, top_k)
+        return [RetrievedDocument(did=hit.id, text=hit.text, score=hit.score) for hit in hits]
+
+experiment = Experiment(experiment_name="keyword_vs_hybrid")
+experiment.add_query("What is the capital of Brazil?", query_id="q0")
+
+experiment.run_retrievers(
+    {"keyword": SearchClient("https://keyword.example"), "hybrid": SearchClient("https://hybrid.example")},
+    top_k=50,
+    n_threads=8,
+)
+
+evaluator = get_retrieval_evaluator("reasoner", llm_provider="openai")
+evaluator.evaluate_experiment(experiment)
+
+experiment.compare_retrieval("keyword", "hybrid", metrics=["nDCG@10", "R@50"])
+# Output:
+    --- Retrieval Comparison: keyword vs hybrid ---
+    delta and W/T/L read as hybrid minus keyword
+    Metric     keyword    hybrid     delta      W/T/L       p-value
+    nDCG@10    0.5231     0.6118     +0.0887    12/3/5      0.0312
+    R@50       0.7104     0.7815     +0.0711    10/7/3      0.0489
+```
+
+The mapping key becomes the agent name. Documents are pooled by `did`, so a document both systems retrieve is judged once and the judgment serves both; systems searching different corpora must namespace their IDs. `run_retrievers` saves after every fetch and skips (query, retriever) pairs already pooled, so an interrupted run resumes where it stopped and adding a third system later only fetches what is new.
+
+`compare_retrieval` pairs the runs on a fixed query set per metric (a query missing from a run counts as 0), reports per-query win/tie/loss counts, and computes a two-sided sign-flip permutation p-value over the per-query differences. Because of the zero-fill, its means can differ slightly from `evaluate_retrieval`, which averages only over the queries a run scored. The returned `RetrievalComparisonResult` carries `per_query_delta` for every metric, so the biggest wins and losses are one `sorted()` away.
+
 ### 🎮 Interactive Elo ranking
 
 Instead of running a full tournament, you can rank agents incrementally — run individual games or onboard a brand-new agent with minimal matches:
