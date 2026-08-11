@@ -165,9 +165,9 @@ class Experiment:
                 self.save_path = Path("ragelo_cache") / f"{self.experiment_name}.json"
             if not self.evaluations_cache_path:
                 self.evaluations_cache_path = self.save_path.with_name(f"{self.experiment_name}_results.jsonl")
-            self.save_path.parent.mkdir(exist_ok=True)
+            self.save_path.parent.mkdir(parents=True, exist_ok=True)
             self.save_path.touch()
-            self.evaluations_cache_path.parent.mkdir(exist_ok=True)
+            self.evaluations_cache_path.parent.mkdir(parents=True, exist_ok=True)
             self.evaluations_cache_path.touch()
             if self.save_path.stat().st_size > 0:
                 self._load_from_cache(self.save_path)
