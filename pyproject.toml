@@ -83,8 +83,9 @@ exclude = ["docs/examples/notebooks", "*.ipynb"]
 line-length = 119
 fix = true
 
-[tool.ruff.lint]
-select = ["E", "F", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+"ragelo/cli/*" = ["B008"]
 
 [tool.ruff.lint.isort]
 combine-as-imports = true

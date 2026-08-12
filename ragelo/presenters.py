@@ -41,7 +41,7 @@ def _render_answer_evaluation(evaluation: AnswerEvaluatorResult, rich_print: boo
         print(f"Query ID: {evaluation.qid}")
         print(f"Agent: {evaluation.agent}")
         print(f"Parsed Answer: {answer}")
-        print("")
+        print()
 
 
 def _render_pairwise_game_evaluation(evaluation: PairwiseGameEvaluatorResult, rich_print: bool = True):
@@ -57,7 +57,7 @@ def _render_pairwise_game_evaluation(evaluation: PairwiseGameEvaluatorResult, ri
         print(f"Agent A: {evaluation.agent_a}")
         print(f"Agent B: {evaluation.agent_b}")
         print(f"Parsed Answer: {answer}")
-        print("")
+        print()
 
 
 def _render_retrieval_evaluation(evaluation: RetrievalEvaluatorResult, rich_print: bool = True):
@@ -71,7 +71,7 @@ def _render_retrieval_evaluation(evaluation: RetrievalEvaluatorResult, rich_prin
         print(f"Query ID: {evaluation.qid}")
         print(f"Document ID: {evaluation.did}")
         print(f"Parsed Answer: {answer}")
-        print("")
+        print()
 
 
 def render_evaluation(
@@ -118,7 +118,6 @@ def render_retrieval_summary(
             row += "\t".join([f"{scores[metric]:<{max_metric_len},.4f}" for metric in metrics])
             rich.print(row)
         return
-    # Plain print
     print(results)
 
 

@@ -46,6 +46,7 @@ class InstructorProvider(BaseLLMProvider):
 
     @retry(
         wait=wait_random_exponential(min=1, max=120),
+        reraise=True,
         stop=stop_after_attempt(3),
         before_sleep=before_sleep_log(logger=logger, log_level=logging.INFO),
     )
@@ -77,7 +78,7 @@ class InstructorProvider(BaseLLMProvider):
             raise ValueError(f"Instructor request failed for Instructor with model '{self.config.model}': {e}") from e
 
         if not isinstance(parsed_answer, response_schema):
-            raise ValueError(
+            raise TypeError(
                 f"Instructor response could not be parsed into the expected schema {response_schema}. "
                 f"Received response: {parsed_answer}"
             )

@@ -10,10 +10,10 @@ from ragelo.evaluators.retrieval_evaluators import (
 from ragelo.types.evaluator_utils import resolve_evaluator_result_type
 
 __all__ = [
-    "PairwiseAnswerEvaluator",
     "CustomPromptEvaluator",
     "DomainExpertEvaluator",
     "FewShotEvaluator",
+    "PairwiseAnswerEvaluator",
     "RDNAMEvaluator",
     "ReasonerEvaluator",
     "RetrievalEvaluatorFactory",

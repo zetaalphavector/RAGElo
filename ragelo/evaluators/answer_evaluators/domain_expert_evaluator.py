@@ -45,7 +45,7 @@ class PairwiseDomainExpertEvaluator(PairwiseAnswerEvaluator):
         ## Workflow
         First, you should analyze each of the two {% if is_conversation %}conversations{% else %}answers{% endif %}, explaining whether or not each of them correctly answers the user's question, based on the relevant documents retrieved and your expertise.
         Then, you should compare the two {% if is_conversation %}conversations{% else %}responses{% endif %} and provide a short explanation on their differences, explaining in which aspects each {% if is_conversation %}conversation{% else %}answer{% endif %} is better or worst than the other. 
-        After providing your explanation, output your final verdict by strictly following his format: "A" if assistant A is better, "B" if assistant B is better, or "C" for a tie.""")  # noqa: E501
+        After providing your explanation, output your final verdict by strictly following his format: "A" if assistant A is better, "B" if assistant B is better, or "C" for a tie.""")
 
     def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> LLMInputPrompt:
         documents = self._filter_documents(query)
