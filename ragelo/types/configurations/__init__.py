@@ -11,6 +11,7 @@ from ragelo.types.configurations.answer_evaluator_configs import (
 )
 from ragelo.types.configurations.base_configs import BaseConfig, BaseEvaluatorConfig
 from ragelo.types.configurations.cli_configs import CLIConfig
+from ragelo.types.configurations.generator_configs import RubricConfigMixin, RubricGeneratorConfig, RubricSource
 from ragelo.types.configurations.llm_provider_configs import (
     InstructorConfiguration,
     LLMProviderConfig,
@@ -24,30 +25,35 @@ from ragelo.types.configurations.retrieval_evaluator_configs import (
     FewShotEvaluatorConfig,
     RDNAMEvaluatorConfig,
     ReasonerEvaluatorConfig,
+    RubricCoverageEvaluatorConfig,
 )
 
 __all__ = [
-    "CLIConfig",
+    "AgentRankerConfig",
+    "BaseAnswerEvaluatorConfig",
     "BaseConfig",
     "BaseEvaluatorConfig",
-    "LLMProviderConfig",
-    "OpenAIConfiguration",
-    "OllamaConfiguration",
-    "InstructorConfiguration",
-    "AgentRankerConfig",
-    "EloAgentRankerConfig",
-    "BaseAnswerEvaluatorConfig",
+    "BaseRetrievalEvaluatorConfig",
+    "CLIConfig",
     "CustomPairwiseEvaluatorConfig",
     "CustomPromptAnswerEvaluatorConfig",
-    "PairwiseEvaluatorConfig",
-    "PairwiseDomainExpertEvaluatorConfig",
-    "BaseRetrievalEvaluatorConfig",
-    "FewShotEvaluatorConfig",
-    "RDNAMEvaluatorConfig",
-    "ReasonerEvaluatorConfig",
     "CustomPromptEvaluatorConfig",
     "DomainExpertEvaluatorConfig",
+    "EloAgentRankerConfig",
+    "FewShotEvaluatorConfig",
+    "InstructorConfiguration",
+    "LLMProviderConfig",
+    "OllamaConfiguration",
+    "OpenAIConfiguration",
+    "PairwiseDomainExpertEvaluatorConfig",
+    "PairwiseEvaluatorConfig",
+    "RDNAMEvaluatorConfig",
+    "ReasonerEvaluatorConfig",
+    "RubricConfigMixin",
+    "RubricCoverageEvaluatorConfig",
+    "RubricEvaluatorConfigBase",
+    "RubricGeneratorConfig",
     "RubricPairwiseEvaluatorConfig",
     "RubricPointwiseEvaluatorConfig",
-    "RubricEvaluatorConfigBase",
+    "RubricSource",
 ]

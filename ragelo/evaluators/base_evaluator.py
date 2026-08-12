@@ -10,6 +10,7 @@ from pydantic import BaseModel, create_model
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.presenters import render_failed_evaluations
+from ragelo.types.answer_formats import RubricJudgment
 from ragelo.types.configurations import BaseEvaluatorConfig
 from ragelo.types.evaluables import Evaluable
 from ragelo.types.formats import LLMResponseType
@@ -30,7 +31,7 @@ class BaseEvaluator(ABC, Generic[T_Config, T_Result]):
     """
 
     config: T_Config
-    system_prompt: Template
+    system_prompt: Template | None = None
     user_prompt: Template
     evaluable_name: str = "Evaluable"
     result_type: type[T_Result]
@@ -65,6 +66,7 @@ class BaseEvaluator(ABC, Generic[T_Config, T_Result]):
                 If None, the number of threads defined in the config will be used.
         """
         n_threads = n_threads or self.config.n_processes
+        self.prepare_experiment(experiment)
         call_async_fn(self._evaluate_experiment_async, experiment, n_threads)
 
     def evaluate_all_evaluables(self, query: Query, n_threads: int | None = None):
@@ -74,6 +76,7 @@ class BaseEvaluator(ABC, Generic[T_Config, T_Result]):
             n_threads: Maximum concurrent LLM calls. Defaults to ``config.n_processes``.
         """
         n_threads = n_threads or self.config.n_processes
+        self.prepare_query(query)
         call_async_fn(self._evaluate_all_evaluables_async, query, n_threads)
 
     async def _evaluate_all_evaluables_async(self, query: Query, n_threads: int):
@@ -95,6 +98,17 @@ class BaseEvaluator(ABC, Generic[T_Config, T_Result]):
         pbar.close()
         if self.config.show_results:
             render_failed_evaluations(evaluations, failed, self.config.rich_print)
+
+    def prepare_experiment(self, experiment: Experiment) -> None:
+        """Produce the artifacts this evaluator grades against, before any judging starts."""
+        for query in experiment:
+            self.prepare_query(query)
+
+    def prepare_query(self, query: Query) -> None:
+        """Produce a single query's artifacts. Evaluators that grade against data they can generate
+        override this; the rest need nothing.
+        """
+        return
 
     @abstractmethod
     def _get_all_evaluables(self, query: Query) -> list[Evaluable]:
@@ -176,6 +190,17 @@ class BaseEvaluator(ABC, Generic[T_Config, T_Result]):
     @abstractmethod
     def _get_tuples_to_evaluate(self, experiment: Experiment) -> Sequence[tuple[Query, Evaluable]]:
         raise NotImplementedError
+
+    def _is_cached_result_valid(self, query: Query, cached: EvaluatorResult) -> bool:
+        """Whether a stored judgment can be reused instead of re-judging the evaluable.
+
+        A rubric judgment is only meaningful against the rubric it was made against, so editing one
+        query's rubric invalidates that query's judgments and nothing else.
+        """
+        answer = cached.answer
+        if not isinstance(answer, RubricJudgment) or answer.rubric_fingerprint is None:
+            return True
+        return answer.rubric_fingerprint == query.rubric_fingerprint
 
     def _process_answer(self, llm_response: LLMResponseType[BaseModel], query: Query) -> LLMResponseType[BaseModel]:
         """Processes the raw answer returned by the LLM. Should be implemented by the subclass if needed."""

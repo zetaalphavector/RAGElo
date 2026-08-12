@@ -1,6 +1,8 @@
 import json
 from unittest.mock import AsyncMock
 
+import pytest
+
 from ragelo import get_retrieval_evaluator
 from ragelo.evaluators.retrieval_evaluators import (
     BaseRetrievalEvaluator,
@@ -9,17 +11,26 @@ from ragelo.evaluators.retrieval_evaluators import (
     FewShotEvaluator,
     RDNAMEvaluator,
     ReasonerEvaluator,
+    RubricCoverageEvaluator,
 )
 from ragelo.types import Document, Query
 from ragelo.types.answer_formats import (
+    Criterion,
     EvaluationAnswer,
     RDNAMEvaluationAnswer,
     RDNAMNoAspectsAnswer,
     RetrievalEvaluationAnswer,
+    RubricCoverageAnswerFormat,
+    RubricSchema,
 )
+from ragelo.types.configurations import ReasonerEvaluatorConfig, RubricCoverageEvaluatorConfig
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.results import RetrievalEvaluatorResult
 from ragelo.utils import string_to_template
+
+
+def _schema_flags(schema) -> list[str]:
+    return [name for name in schema.model_fields if name != "reasoning"]
 
 
 class RetrievalEvaluator(BaseRetrievalEvaluator):
@@ -184,9 +195,27 @@ class TestCustomPromptEvaluator:
         assert call_args[0][0][0].user_message == user_prompt
         assert call_args[0][0][0].system_prompt == system_prompt
 
+    def test_evaluates_without_a_system_prompt(
+        self, llm_provider_mock_retrieval, custom_prompt_retrieval_eval_config, experiment
+    ):
+        custom_prompt_retrieval_eval_config.system_prompt = None
+        query = experiment["0"]
+        doc = query.retrieved_docs["0"]
+
+        evaluator = CustomPromptEvaluator.from_config(
+            config=custom_prompt_retrieval_eval_config,
+            llm_provider=llm_provider_mock_retrieval,
+        )
+        response = evaluator.evaluate(query, doc)
+
+        assert response.answer.score == 2
+        llm_input = llm_provider_mock_retrieval.async_call_mocker.call_args_list[0][0][0]
+        assert llm_input.system_prompt is None
+        assert llm_input.user_message == evaluator.user_prompt.render(query=query, document=doc)
+
     def test_process_with_custom_fields(self, llm_provider_mock_retrieval, custom_prompt_retrieval_eval_config):
         custom_prompt_retrieval_eval_config.user_prompt = string_to_template(
-            "query: {{ query.query }} doc: {{ document.text }} q_metadata: {{ query.metadata.q_metadata }} d_metadata: {{ document.metadata.d_metadata }}"  # noqa: E501
+            "query: {{ query.query }} doc: {{ document.text }} q_metadata: {{ query.metadata.q_metadata }} d_metadata: {{ document.metadata.d_metadata }}"
         )
         evaluator = get_retrieval_evaluator(
             "custom_prompt",
@@ -203,6 +232,190 @@ class TestCustomPromptEvaluator:
             llm_provider_mock_retrieval.async_call_mocker.call_args_list[0][0][0].user_message
             == "query: this is a query doc: this is a document q_metadata: q_1 d_metadata: d_1"
         )
+
+
+class TestAnswerFormatSchemas:
+    @pytest.mark.parametrize(
+        "answer_format,hidden",
+        [
+            (RubricCoverageAnswerFormat, {"score"}),
+            (RDNAMEvaluationAnswer, {"reasoning"}),
+        ],
+    )
+    def test_internal_fields_are_hidden_from_the_llm_schema(self, answer_format, hidden):
+        """Fields the evaluator fills in itself must not be requested from the LLM.
+
+        `Annotated[T, SkipJsonSchema]` passes the class rather than a marker instance, which makes
+        `model_json_schema()` raise instead of hiding the field; `SkipJsonSchema[T]` is the form
+        that works.
+        """
+        schema_fields = set(answer_format.model_json_schema()["properties"])
+        assert hidden.isdisjoint(schema_fields)
+        assert hidden < set(answer_format.model_fields)
+
+
+class TestRequestedAnswerFormat:
+    def test_union_member_order_does_not_decide_the_requested_schema(self, llm_provider_mock_retrieval, experiment):
+        """A result class is shared by every judge writing to the same evaluable, so its `answer`
+        union lists what it can store, in no particular order. The schema asked of the LLM comes
+        from the evaluator's `answer_format`, so reordering the union must not change it."""
+        evaluator = ReasonerEvaluator.from_config(
+            config=ReasonerEvaluatorConfig(force=True), llm_provider=llm_provider_mock_retrieval
+        )
+        original = RetrievalEvaluatorResult.model_fields["answer"].annotation
+
+        try:
+            RetrievalEvaluatorResult.model_fields["answer"].annotation = (
+                RubricCoverageAnswerFormat | RetrievalEvaluationAnswer | None
+            )
+            evaluator.evaluate(experiment["0"], experiment["0"].retrieved_docs["0"])
+        finally:
+            RetrievalEvaluatorResult.model_fields["answer"].annotation = original
+
+        requested = llm_provider_mock_retrieval.async_call_mocker.call_args_list[0][0][1]
+        assert requested is RetrievalEvaluationAnswer
+
+    def test_evaluator_declaring_its_own_format_is_asked_for_that_format(self, llm_provider_mock, experiment):
+        query = experiment["0"]
+        query.rubric = [Criterion(criterion_name="c", short_question="q")]
+        evaluator = RubricCoverageEvaluator.from_config(
+            config=RubricCoverageEvaluatorConfig(expert_in="geography", force=True),
+            llm_provider=llm_provider_mock,
+        )
+        assert evaluator.answer_format is RubricCoverageAnswerFormat
+
+
+class TestRubricCoverageEvaluator:
+    def _rubric(self):
+        return [
+            Criterion(criterion_name="names_capital", short_question="Does it name the capital?"),
+            Criterion(criterion_name="gives_population", short_question="Does it give the population?"),
+        ]
+
+    def test_judges_each_criterion_and_scores_coverage(self, llm_provider_mock, experiment):
+        query = experiment["0"]
+        query.rubric = self._rubric()
+        document = query.retrieved_docs["0"]
+
+        def address_first_criterion_only(input, response_schema):
+            parsed = response_schema(
+                reasoning="Names the capital but says nothing about population.",
+                names_capital=True,
+                gives_population=False,
+            )
+            return LLMResponseType(raw_answer=parsed.model_dump_json(), parsed_answer=parsed)
+
+        llm_provider_mock.async_call_mocker.side_effect = address_first_criterion_only
+        evaluator = RubricCoverageEvaluator.from_config(
+            config=RubricCoverageEvaluatorConfig(expert_in="geography", force=True),
+            llm_provider=llm_provider_mock,
+        )
+
+        result = evaluator.evaluate(query, document)
+
+        assert result.answer.criteria_addressed == ["names_capital"]
+        assert result.answer.score == 1
+        llm_input = llm_provider_mock.async_call_mocker.call_args_list[0][0][0]
+        assert "Does it give the population?" in llm_input.system_prompt
+        assert set(llm_input.llm_response_schema.model_fields) == {
+            "reasoning",
+            "names_capital",
+            "gives_population",
+        }
+
+    def test_judging_directly_without_a_rubric_raises_instead_of_generating(self, llm_provider_mock, experiment):
+        query = experiment["0"]
+        evaluator = RubricCoverageEvaluator.from_config(
+            config=RubricCoverageEvaluatorConfig(expert_in="geography", force=True),
+            llm_provider=llm_provider_mock,
+        )
+        with pytest.raises(RuntimeError, match="no rubric to grade against"):
+            evaluator.evaluate(query, query.retrieved_docs["0"])
+
+    def test_evaluate_experiment_generates_the_rubric_from_the_pooled_documents(self, llm_provider_mock, experiment):
+        def generate_then_judge(input, response_schema):
+            if response_schema is RubricSchema:
+                parsed = RubricSchema(criteria=self._rubric())
+            else:
+                parsed = response_schema(
+                    reasoning="Addresses everything.",
+                    **dict.fromkeys(_schema_flags(response_schema), True),
+                )
+            return LLMResponseType(raw_answer=parsed.model_dump_json(), parsed_answer=parsed)
+
+        llm_provider_mock.async_call_mocker.side_effect = generate_then_judge
+        evaluator = RubricCoverageEvaluator.from_config(
+            config=RubricCoverageEvaluatorConfig(expert_in="geography"),
+            llm_provider=llm_provider_mock,
+        )
+
+        evaluator.evaluate_experiment(experiment)
+
+        generation_input, generation_schema = llm_provider_mock.async_call_mocker.call_args_list[0][0]
+        assert generation_schema is RubricSchema
+        assert "[[0]]" in generation_input.user_message
+        for query in experiment:
+            assert [c.criterion_name for c in query.rubric] == ["names_capital", "gives_population"]
+            for document in query.retrieved_docs.values():
+                assert document.evaluations["rubric_coverage"].answer.score == 2
+
+    def test_evaluate_experiment_fails_loud_when_the_rubric_source_is_missing(self, llm_provider_mock, experiment):
+        llm_provider_mock.async_call_mocker.side_effect = lambda input, schema: LLMResponseType(
+            raw_answer="rubric", parsed_answer=RubricSchema(criteria=self._rubric())
+        )
+        experiment["0"].reference_answer = "Brasilia, since 1960."
+        evaluator = RubricCoverageEvaluator.from_config(
+            config=RubricCoverageEvaluatorConfig(expert_in="geography", rubric_source="reference_answer"),
+            llm_provider=llm_provider_mock,
+        )
+
+        with pytest.raises(RuntimeError, match="1 queries have no rubric"):
+            evaluator.evaluate_experiment(experiment)
+
+        assert experiment["0"].rubric, "the query with a reference answer must keep its generated rubric"
+        assert not experiment["1"].rubric
+
+    def test_editing_the_rubric_invalidates_that_querys_cached_judgements(self, llm_provider_mock, experiment):
+        query = experiment["0"]
+        query.rubric = self._rubric()
+        llm_provider_mock.async_call_mocker.side_effect = lambda input, schema: LLMResponseType(
+            raw_answer="{}",
+            parsed_answer=schema(reasoning="Addresses both.", **dict.fromkeys(_schema_flags(schema), True)),
+        )
+        evaluator = RubricCoverageEvaluator.from_config(
+            config=RubricCoverageEvaluatorConfig(expert_in="geography"),
+            llm_provider=llm_provider_mock,
+        )
+        document = query.retrieved_docs["0"]
+        query.add_evaluation(document, evaluator.evaluate(query, document))
+        assert llm_provider_mock.async_call_mocker.call_count == 1
+
+        evaluator.evaluate(query, document)
+        assert llm_provider_mock.async_call_mocker.call_count == 1, "the same rubric must reuse the judgement"
+
+        query.rubric = [*self._rubric(), Criterion(criterion_name="dates_it", short_question="Does it give a date?")]
+        evaluator.evaluate(query, document)
+        assert llm_provider_mock.async_call_mocker.call_count == 2, "an edited rubric must re-judge"
+
+    def test_a_judgement_made_before_fingerprints_existed_is_reused(self, llm_provider_mock, experiment):
+        query = experiment["0"]
+        query.rubric = self._rubric()
+        evaluator = RubricCoverageEvaluator.from_config(
+            config=RubricCoverageEvaluatorConfig(expert_in="geography"),
+            llm_provider=llm_provider_mock,
+        )
+        query.add_evaluation(
+            query.retrieved_docs["0"],
+            RetrievalEvaluatorResult(
+                qid="0",
+                did="0",
+                evaluator_name="rubric_coverage",
+                answer=RubricCoverageAnswerFormat(reasoning="No fingerprint on this one.", score=1),
+            ),
+        )
+
+        evaluator.evaluate(query, query.retrieved_docs["0"])
+        assert llm_provider_mock.async_call_mocker.call_count == 0
 
 
 class TestDomainExpertEvaluator:
@@ -305,7 +518,7 @@ class TestReadmeExamples:
             You should pay extra attention to how **recent** a document is. A document older than 5 years is considered outdated.
 
             The answer should be evaluated according to its recency, truthfulness, and relevance to the user query.
-            """  # noqa: E501
+            """
         )
 
         user_prompt = string_to_template(

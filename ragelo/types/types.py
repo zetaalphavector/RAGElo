@@ -20,6 +20,7 @@ class RetrievalEvaluatorTypes(StrEnum):
     FEW_SHOT = "few_shot"
     RDNAM = "RDNAM"
     REASONER = "reasoner"
+    RUBRIC_COVERAGE = "rubric_coverage"
 
 
 class LLMProviderTypes(StrEnum):

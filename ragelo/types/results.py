@@ -15,8 +15,34 @@ from ragelo.types.answer_formats import (
     RDNAMNoAspectsAnswer,
     RetrievalEvaluationAnswer,
     RubricAnswerFormat,
+    RubricCoverageAnswerFormat,
     RubricPointwiseAnswerFormat,
 )
+
+
+def _resolve_legacy_answer(data: Any, members: tuple[type[EvaluationAnswer], ...]) -> Any:
+    """Tag a serialized answer written before `answer_format` existed.
+
+    Tagged payloads are handed to the discriminated union untouched. Untagged ones are matched
+    structurally against `members`, which must therefore be ordered most-constrained first: a
+    format that declares a superset of another's fields would otherwise validate as the looser one
+    and lose the surplus. Formats defined outside the library carry no tag and simply do not match,
+    leaving the payload for the field annotation to coerce.
+    """
+    if not isinstance(data, dict) or data.get("answer") is None:
+        return data
+    answer_data = data["answer"]
+    if not isinstance(answer_data, dict) or isinstance(answer_data, BaseModel):
+        return data
+    if answer_data.get("answer_format"):
+        return data
+    for member in members:
+        try:
+            data["answer"] = member.model_validate(answer_data)
+        except ValidationError:
+            continue
+        break
+    return data
 
 
 class EvaluatorResult(BaseModel):
@@ -28,11 +54,9 @@ class EvaluatorResult(BaseModel):
         answer: The LLM-generated evaluation content (without metadata).
     """
 
-    qid: Annotated[str, SkipJsonSchema] = Field(description="The query ID to which the result corresponds.")
-    evaluator_name: Annotated[str, SkipJsonSchema] = Field(
-        description="The name of the evaluator that produced this result."
-    )
-    exception: Annotated[str | None, SkipJsonSchema] = Field(
+    qid: SkipJsonSchema[str] = Field(description="The query ID to which the result corresponds.")
+    evaluator_name: SkipJsonSchema[str] = Field(description="The name of the evaluator that produced this result.")
+    exception: SkipJsonSchema[str | None] = Field(
         default=None, description="Any exception captured during evaluation."
     )
     answer: EvaluationAnswer | None = Field(default=None, description="The LLM-generated evaluation content.")
@@ -56,19 +80,15 @@ class RetrievalEvaluatorResult(EvaluatorResult):
         answer: The LLM-generated evaluation with score and reasoning (typically RetrievalEvaluationAnswer).
     """
 
-    did: Annotated[str, SkipJsonSchema] = Field(description="The document ID to which the result corresponds.")
-    answer: RetrievalEvaluationAnswer | None = None
+    did: SkipJsonSchema[str] = Field(description="The document ID to which the result corresponds.")
+    answer: (
+        Annotated[RetrievalEvaluationAnswer | RubricCoverageAnswerFormat, Field(discriminator="answer_format")] | None
+    ) = None
 
     @model_validator(mode="before")
     @classmethod
     def validate_answer_type(cls, data: Any) -> Any:
-        """Ensure answer is deserialized as the correct subclass type."""
-        if isinstance(data, dict) and "answer" in data and data["answer"] is not None:
-            answer_data = data["answer"]
-            if isinstance(answer_data, dict) and not isinstance(answer_data, BaseModel):
-                # Deserialize as RetrievalEvaluationAnswer by default
-                data["answer"] = RetrievalEvaluationAnswer.model_validate(answer_data)
-        return data
+        return _resolve_legacy_answer(data, (RubricCoverageAnswerFormat, RetrievalEvaluationAnswer))
 
     @property
     def score(self) -> float | int | None:
@@ -97,24 +117,15 @@ class AnswerEvaluatorResult(EvaluatorResult):
         answer: The LLM-generated evaluation with score and reasoning (typically AnswerEvaluationAnswer).
     """
 
-    agent: Annotated[str, SkipJsonSchema] = Field(description="The agent that provided the answer.")
-    answer: AnswerEvaluationAnswer | RubricPointwiseAnswerFormat | None = None
+    agent: SkipJsonSchema[str] = Field(description="The agent that provided the answer.")
+    answer: (
+        Annotated[AnswerEvaluationAnswer | RubricPointwiseAnswerFormat, Field(discriminator="answer_format")] | None
+    ) = None
 
     @model_validator(mode="before")
     @classmethod
     def validate_answer_type(cls, data: Any) -> Any:
-        """Ensure answer is deserialized as the correct subclass type."""
-        if isinstance(data, dict) and "answer" in data and data["answer"] is not None:
-            answer_data = data["answer"]
-            if isinstance(answer_data, dict) and not isinstance(answer_data, BaseModel):
-                try:
-                    data["answer"] = AnswerEvaluationAnswer.model_validate(answer_data)
-                except ValidationError:
-                    try:
-                        data["answer"] = RubricPointwiseAnswerFormat.model_validate(answer_data)
-                    except ValidationError:
-                        pass
-        return data
+        return _resolve_legacy_answer(data, (RubricPointwiseAnswerFormat, AnswerEvaluationAnswer))
 
     @property
     def score(self) -> int | None:
@@ -144,27 +155,18 @@ class PairwiseGameEvaluatorResult(EvaluatorResult):
         answer: The LLM-generated pairwise evaluation (typically PairwiseEvaluationAnswer).
     """
 
-    agent_a: Annotated[str, SkipJsonSchema]
-    agent_b: Annotated[str, SkipJsonSchema]
-    answer: PairwiseEvaluationAnswer | RubricAnswerFormat | None = None
+    agent_a: SkipJsonSchema[str]
+    agent_b: SkipJsonSchema[str]
+    answer: Annotated[PairwiseEvaluationAnswer | RubricAnswerFormat, Field(discriminator="answer_format")] | None = (
+        None
+    )
     a_vs_b_result: PairwiseGameEvaluatorResult | None = None
     b_vs_a_result: PairwiseGameEvaluatorResult | None = None
 
     @model_validator(mode="before")
     @classmethod
     def validate_answer_type(cls, data: Any) -> Any:
-        """Ensure answer is deserialized as the correct subclass type."""
-        if isinstance(data, dict) and "answer" in data and data["answer"] is not None:
-            answer_data = data["answer"]
-            if isinstance(answer_data, dict) and not isinstance(answer_data, BaseModel):
-                try:
-                    data["answer"] = PairwiseEvaluationAnswer.model_validate(answer_data)
-                except ValidationError:
-                    try:
-                        data["answer"] = RubricAnswerFormat.model_validate(answer_data)
-                    except ValidationError:
-                        pass
-        return data
+        return _resolve_legacy_answer(data, (RubricAnswerFormat, PairwiseEvaluationAnswer))
 
     @property
     def answer_a_analysis(self) -> str | None:
@@ -270,13 +272,7 @@ class RDNAMEvaluatorResult(RetrievalEvaluatorResult):
     @model_validator(mode="before")
     @classmethod
     def validate_answer_type(cls, data: Any) -> Any:
-        """Ensure answer is deserialized as RDNAMEvaluationAnswer."""
-        if isinstance(data, dict) and "answer" in data and data["answer"] is not None:
-            answer_data = data["answer"]
-            if isinstance(answer_data, dict) and not isinstance(answer_data, BaseModel):
-                # Deserialize as RDNAMEvaluationAnswer
-                data["answer"] = RDNAMEvaluationAnswer.model_validate(answer_data)
-        return data
+        return _resolve_legacy_answer(data, (RDNAMEvaluationAnswer,))
 
     @property
     def intent_match(self) -> float | None:
@@ -313,12 +309,7 @@ class RDNAMNoAspectsResult(RetrievalEvaluatorResult):
     @model_validator(mode="before")
     @classmethod
     def validate_answer_type(cls, data: Any) -> Any:
-        """Ensure answer is deserialized as RDNAMNoAspectsAnswer."""
-        if isinstance(data, dict) and "answer" in data and data["answer"] is not None:
-            answer_data = data["answer"]
-            if isinstance(answer_data, dict) and not isinstance(answer_data, BaseModel):
-                data["answer"] = RDNAMNoAspectsAnswer.model_validate(answer_data)
-        return data
+        return _resolve_legacy_answer(data, (RDNAMNoAspectsAnswer,))
 
     @property
     def score(self) -> float | None:
@@ -336,12 +327,7 @@ class RDNAMMUltipleAnnotatorsResult(RetrievalEvaluatorResult):
     @model_validator(mode="before")
     @classmethod
     def validate_answer_type(cls, data: Any) -> Any:
-        """Ensure answer is deserialized as RDNAMMultipleAnnotatorsAnswer."""
-        if isinstance(data, dict) and "answer" in data and data["answer"] is not None:
-            answer_data = data["answer"]
-            if isinstance(answer_data, dict) and not isinstance(answer_data, BaseModel):
-                data["answer"] = RDNAMMultipleAnnotatorsAnswer.model_validate(answer_data)
-        return data
+        return _resolve_legacy_answer(data, (RDNAMMultipleAnnotatorsAnswer,))
 
 
 class RDNAMMultipleAnnotatorsNoAspectsResult(RetrievalEvaluatorResult):
@@ -354,12 +340,7 @@ class RDNAMMultipleAnnotatorsNoAspectsResult(RetrievalEvaluatorResult):
     @model_validator(mode="before")
     @classmethod
     def validate_answer_type(cls, data: Any) -> Any:
-        """Ensure answer is deserialized as RDNAMMultipleAnnotatorsNoAspectsAnswer."""
-        if isinstance(data, dict) and "answer" in data and data["answer"] is not None:
-            answer_data = data["answer"]
-            if isinstance(answer_data, dict) and not isinstance(answer_data, BaseModel):
-                data["answer"] = RDNAMMultipleAnnotatorsNoAspectsAnswer.model_validate(answer_data)
-        return data
+        return _resolve_legacy_answer(data, (RDNAMMultipleAnnotatorsNoAspectsAnswer,))
 
 
 T_Result = TypeVar("T_Result", bound=EvaluatorResult)

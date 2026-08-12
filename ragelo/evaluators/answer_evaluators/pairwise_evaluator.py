@@ -1,4 +1,5 @@
 from ragelo.evaluators.answer_evaluators.base_answer_evaluator import AnswerEvaluatorFactory, BaseAnswerEvaluator
+from ragelo.types.answer_formats import EvaluationAnswer, PairwiseEvaluationAnswer
 from ragelo.types.configurations import PairwiseEvaluatorConfig
 from ragelo.types.evaluables import ChatMessage, PairwiseGame
 from ragelo.types.formats import LLMInputPrompt
@@ -13,6 +14,7 @@ class PairwiseAnswerEvaluator(BaseAnswerEvaluator[PairwiseEvaluatorConfig, Pairw
     """An evaluator that evaluates RAG-based answers pairwise, with document reasoning and citations."""
 
     config: PairwiseEvaluatorConfig
+    answer_format: type[EvaluationAnswer] = PairwiseEvaluationAnswer
     result_type = PairwiseGameEvaluatorResult
     user_prompt_document = "[{did}] {doc}"
     user_prompt_annotation = "[{did}] {annotation}"
@@ -108,8 +110,9 @@ class PairwiseAnswerEvaluator(BaseAnswerEvaluator[PairwiseEvaluatorConfig, Pairw
             return conversation
         return conversation[: last_user_idx + 1]
 
-    def _get_shared_conversation_context(self, game: PairwiseGame) -> list[ChatMessage]:
-        for answer in (game.agent_a_answer, game.agent_b_answer):
+    def _get_conversation_context(self, query: Query) -> list[ChatMessage]:
+        """The turns leading up to the question, shared by every agent answering this query."""
+        for answer in query.answers.values():
             if answer.conversation:
                 return self._get_conversation_prefix(answer.conversation)
         return []

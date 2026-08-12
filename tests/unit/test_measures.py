@@ -2,7 +2,7 @@ import pytest
 
 ir_measures = pytest.importorskip("ir_measures")
 
-from ragelo.measures import make_run, paired_permutation_pvalue, parse_measure  # noqa: E402
+from ragelo.measures import is_coverage_measure, make_qrel, make_run, paired_permutation_pvalue, parse_measure
 
 
 class TestParseMeasure:
@@ -32,6 +32,22 @@ class TestParseMeasure:
             parse_measure(metric)
 
 
+class TestCoverageClassification:
+    @pytest.mark.parametrize(
+        "metric,expected",
+        [
+            ("alpha_nDCG@20", True),
+            ("StRecall@50", True),
+            ("NRBP", True),
+            ("nDCG@10", False),
+            ("R@50", False),
+            ("Judged@10", False),
+        ],
+    )
+    def test_only_diversity_measures_read_subtopic_qrels(self, metric, expected):
+        assert is_coverage_measure(parse_measure(metric)) is expected
+
+
 class TestPairedPermutationPvalue:
     def test_no_observed_difference_is_never_significant(self):
         assert paired_permutation_pvalue([]) == 1.0
@@ -45,6 +61,11 @@ class TestPairedPermutationPvalue:
 
 
 class TestQrelConstruction:
+    def test_subtopic_travels_in_the_iteration_field(self):
+        """Coverage measures read the subtopic from `iteration`; a mangled query id does not work."""
+        assert make_qrel("q1", "d1", 1, subtopic="nugget_a").iteration == "nugget_a"
+        assert make_qrel("q1", "d1", 1).query_id == "q1"
+
     def test_make_run_flattens_the_nested_run_mapping(self):
         run = make_run({"q1": {"d1": 2.0, "d2": 1.0}, "q2": {"d3": 3.0}})
         assert {(d.query_id, d.doc_id, d.score) for d in run} == {

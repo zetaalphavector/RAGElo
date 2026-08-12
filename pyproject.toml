@@ -36,7 +36,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-eval = ["ir-measures>=0.3.4"]
+eval = ["ir-measures[pyndeval]>=0.4.3"]
 instructor = ["instructor>=1.0.0"]
 
 [dependency-groups]
@@ -50,7 +50,7 @@ dev = [
     "pytest-mock==3.12.0",
     "pre-commit>=4.0.0",
     "instructor>=1.0.0",
-    "ir-measures>=0.3.4",
+    "ir-measures[pyndeval]>=0.4.3",
 ]
 
 [project.scripts]

@@ -23,6 +23,10 @@ try:
 except ImportError:
     _IR_MEASURES_AVAILABLE = False
 
+DIVERSITY_MODULE = "ir_measures.measures.diversity"
+
+UNADDRESSED_DOC_PREFIX = "__ragelo_unaddressed__"
+
 _IMPORT_ERROR = (
     "ir_measures is not installed. Please install it with `pip install 'ragelo[eval]'`. "
     "Coverage measures additionally need `pip install 'ir-measures[pyndeval]'`."
@@ -79,6 +83,19 @@ def _parse_value(value: str) -> Any:
     return value
 
 
+def make_qrel(query_id: str, doc_id: str, relevance: int, subtopic: str | None = None) -> Qrel:
+    """Build one qrel row, optionally scoped to a subtopic.
+
+    `ir_measures` carries the subtopic id in the `iteration` field, which is the only qrels shape
+    that coverage measures can read.
+    """
+    if not _IR_MEASURES_AVAILABLE:
+        raise ImportError(_IMPORT_ERROR)
+    if subtopic is None:
+        return ir_measures.Qrel(query_id, doc_id, relevance)
+    return ir_measures.Qrel(query_id, doc_id, relevance, iteration=subtopic)
+
+
 def make_run(run: dict[str, dict[str, float]]) -> list[ScoredDoc]:
     if not _IR_MEASURES_AVAILABLE:
         raise ImportError(_IMPORT_ERROR)
@@ -108,3 +125,12 @@ def paired_permutation_pvalue(deltas: Sequence[float], n_permutations: int = 10_
     signs = np.random.default_rng(seed).choice((-1.0, 1.0), size=(n_permutations, values.size))
     permuted = np.abs((signs * values).mean(axis=1))
     return float((1 + (permuted >= observed).sum()) / (n_permutations + 1))
+
+
+def is_coverage_measure(measure: Measure) -> bool:
+    """Whether a measure scores information coverage over subtopics rather than document relevance.
+
+    Coverage measures (`alpha_nDCG`, `StRecall`, `NRBP`, ...) reward a ranking that collectively
+    addresses every subtopic of a query, so they read subtopic qrels rather than flat ones.
+    """
+    return type(measure).__module__ == DIVERSITY_MODULE

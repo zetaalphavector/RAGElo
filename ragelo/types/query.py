@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import warnings
 from collections.abc import Iterator
@@ -8,6 +10,7 @@ from typing import Any
 from pydantic import BaseModel, field_validator
 from typing_extensions import Self
 
+from ragelo.types.answer_formats import Criterion, GradedJudgment
 from ragelo.types.evaluables import AgentAnswer, Document, Evaluable, PairwiseGame
 from ragelo.types.evaluator_utils import resolve_evaluator_result_type
 from ragelo.types.results import EvaluatorResult, RetrievalEvaluatorResult
@@ -21,6 +24,12 @@ class Query(BaseModel):
         qid str: The query ID.
         query str: The query text.
         metadata Optional[dict[str, Any]]: Metadata that can be templated in the prompt.
+        rubric list[Criterion]: The criteria a complete answer to this query must satisfy, known in the
+            retrieval-evaluation literature as a nugget bank. Shared by every evaluator that grades
+            against it: `rubric_coverage` over retrieved documents, `rubric_pointwise` and
+            `rubric_pairwise` over agent answers.
+        reference_answer Optional[str]: A known-correct answer to the query, for judges and rubric
+            generators that grade against a gold answer.
         retrieved_docs dict[str, Document]: A dictionary of retrieved documents, where the key is the document ID.
         answers list[AgentAnswer]: The list of agent answers.
         pairwise_games list[PairwiseGame]: The list games to be played between agent's answers.
@@ -30,9 +39,19 @@ class Query(BaseModel):
     qid: str
     query: str
     metadata: dict[str, Any] | None = None
+    rubric: list[Criterion] = []
+    reference_answer: str | None = None
     retrieved_docs: dict[str, Document] = {}
     answers: dict[str, AgentAnswer] = {}
     pairwise_games: dict[str, PairwiseGame] = {}
+
+    @property
+    def rubric_fingerprint(self) -> str | None:
+        """Identifies the current rubric, so judgments made against an edited one can be spotted."""
+        if not self.rubric:
+            return None
+        criteria = sorted(json.dumps(c.model_dump(), sort_keys=True) for c in self.rubric)
+        return hashlib.sha256("\n".join(criteria).encode()).hexdigest()[:16]
 
     @property
     def retrieval_systems(self) -> set[str]:
@@ -219,16 +238,14 @@ class Query(BaseModel):
                 )
                 docs_without_relevance += 1
                 continue
-            evaluation = document.evaluations[retrieval_evaluator_name]
-            # Read flattened score
-            try:
-                score = getattr(evaluation, "score")
-            except AttributeError:
-                logger.warning(f"Evaluation {evaluation} does not have a score attribute.")
+            answer = getattr(document.evaluations[retrieval_evaluator_name], "answer", None)
+            if not isinstance(answer, GradedJudgment):
+                logger.warning(f"Evaluation {answer} does not contribute a relevance label.")
                 docs_without_relevance += 1
                 continue
-            if not isinstance(score, int) and not isinstance(score, float):
-                logger.warning(f"Score {score} is not an integer or a float.")
+            score = answer.relevance()
+            if not isinstance(score, (int, float)):
+                logger.warning(f"Relevance {score} is not an integer or a float.")
                 docs_without_relevance += 1
                 continue
 

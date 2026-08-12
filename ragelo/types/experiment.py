@@ -17,9 +17,18 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-from ragelo.measures import calc_per_query, paired_permutation_pvalue, parse_measure
+from ragelo.measures import (
+    UNADDRESSED_DOC_PREFIX,
+    calc_per_query,
+    is_coverage_measure,
+    make_qrel,
+    make_run,
+    paired_permutation_pvalue,
+    parse_measure,
+)
 from ragelo.presenters import render_evaluation, render_retrieval_comparison, render_retrieval_summary
-from ragelo.types.evaluables import AgentAnswer, ChatMessage, Document, Evaluable
+from ragelo.types.answer_formats import SubtopicJudgment
+from ragelo.types.evaluables import AgentAnswer, Document, Evaluable
 from ragelo.types.evaluator_utils import resolve_evaluator_result_type
 from ragelo.types.query import Query
 from ragelo.types.results import (
@@ -34,6 +43,8 @@ from ragelo.types.results import (
 from ragelo.utils import call_async_fn, get_pbar
 
 if TYPE_CHECKING:
+    from ir_measures import Qrel
+
     from ragelo.retrievers import RetrievedDocument, Retriever
 
 logger = logging.getLogger(__name__)
@@ -467,7 +478,7 @@ class Experiment:
 
     def evaluate_retrieval(
         self,
-        metrics: list[str] = ["Precision@10", "nDCG@10", "Judged@10"],
+        metrics: Sequence[str] = ["Precision@10", "nDCG@10", "Judged@10"],
         relevance_threshold: int = 0,
         retrieval_evaluator_name: str | None = None,
     ) -> dict[str, dict[str, float]]:
@@ -475,6 +486,9 @@ class Experiment:
         Evaluate the retrieval performance of agents using specified metrics.
         Args:
             metrics (list[str]): A list of metrics to use. defaults to ["Precision@10", "nDCG@10", "Judged@10"].
+                Coverage measures (`alpha_nDCG`, `alpha_DCG`, `StRecall`, `NRBP`, `nNRBP`) are computed over
+                the rubric qrels from `get_rubric_qrels()`; every other measure over the flat qrels from
+                `get_qrels()`. Coverage measures additionally require `pip install 'ir-measures[pyndeval]'`.
             relevance_threshold (int): The threshold above which a document is considered relevant (default is 0).
             retrieval_evaluator_name (str | None): The name of the retrieval evaluator to use to get the relevance
                 of the documents.
@@ -505,30 +519,43 @@ class Experiment:
 
         try:
             import ir_measures
-            from ir_measures import parse_measure
         except ImportError:
             raise ImportError("ir_measures is not installed. Please install it with `pip install ir-measures`")
+        measures = [parse_measure(metric) for metric in metrics]
+        metrics = [str(m) for m in measures]
+        flat_measures = [m for m in measures if not is_coverage_measure(m)]
+        coverage_measures = [m for m in measures if is_coverage_measure(m)]
+
         qrels = self.get_qrels(
             relevance_threshold=relevance_threshold,
             retrieval_evaluator_name=retrieval_evaluator_name,
         )
+        rubric_qrels = (
+            self.get_rubric_qrels(retrieval_evaluator_name=retrieval_evaluator_name) if coverage_measures else []
+        )
         runs = self.get_runs()
-        measures = []
-        for metric in metrics:
-            try:
-                measure = parse_measure(metric)
-            except NameError:
-                valid_metrics = list(ir_measures.measures.registry.keys())
-                raise ValueError(f"Metric {metric} not found. Valid metrics are: {valid_metrics}")
-            measures.append(measure)
-        metrics = [str(m) for m in measures]
         results = {}
         for agent, run in runs.items():
-            # Transform the keys of the results back to strings
-            results[agent] = {
-                str(k): v
-                for k, v in ir_measures.calc_aggregate(measures, qrels, run).items()  # type: ignore
-            }
+            scores: dict[str, float] = {}
+            if flat_measures:
+                # Transform the keys of the results back to strings
+                scores.update(
+                    {
+                        str(k): v
+                        for k, v in ir_measures.calc_aggregate(flat_measures, qrels, run).items()  # type: ignore
+                    }
+                )
+            if coverage_measures:
+                coverage_run = make_run(run)
+                scores.update(
+                    {
+                        str(k): v
+                        for k, v in ir_measures.calc_aggregate(  # type: ignore
+                            coverage_measures, rubric_qrels, coverage_run
+                        ).items()
+                    }
+                )
+            results[agent] = scores
 
         render_retrieval_summary(results, metrics, relevance_threshold, self.rich_print)
         return results
@@ -549,6 +576,8 @@ class Experiment:
         and win/tie/loss counts read as agent_b minus agent_a.
         """
         measures = [parse_measure(metric) for metric in metrics]
+        flat_measures = [m for m in measures if not is_coverage_measure(m)]
+        coverage_measures = [m for m in measures if is_coverage_measure(m)]
 
         runs = self.get_runs([agent_a, agent_b])
         unknown = [agent for agent in (agent_a, agent_b) if agent not in runs]
@@ -556,20 +585,33 @@ class Experiment:
             known = sorted({agent for query in self for agent in query.retrieval_systems})
             raise ValueError(f"No retrieved documents for {', '.join(unknown)}. Agents with runs: {known}")
 
-        qrels = self.get_qrels(
-            relevance_threshold=relevance_threshold, retrieval_evaluator_name=retrieval_evaluator_name
+        qrels: dict[str, dict[str, float]] = {}
+        flat_qids: set[str] = set()
+        if flat_measures:
+            qrels = self.get_qrels(
+                relevance_threshold=relevance_threshold, retrieval_evaluator_name=retrieval_evaluator_name
+            )
+            flat_qids = {qid for qid, judgements in qrels.items() if judgements}
+            if not flat_qids:
+                raise ValueError("No query has a judged document. Run a retrieval evaluator first.")
+        rubric_qrels = (
+            self.get_rubric_qrels(retrieval_evaluator_name=retrieval_evaluator_name) if coverage_measures else []
         )
-        qids = sorted(qid for qid, judgements in qrels.items() if judgements)
-        if not qids:
-            raise ValueError("No query has a judged document. Run a retrieval evaluator first.")
+        coverage_qids = {qrel.query_id for qrel in rubric_qrels}
+        if coverage_measures and not coverage_qids:
+            raise ValueError("No query has rubric judgements. Run a rubric_coverage evaluator first.")
 
         per_agent: dict[str, dict[str, dict[str, float]]] = {}
         for agent in (agent_a, agent_b):
-            per_agent[agent] = calc_per_query(measures, qrels, runs[agent])
+            scores = calc_per_query(flat_measures, qrels, runs[agent]) if flat_measures else {}
+            if coverage_measures:
+                scores.update(calc_per_query(coverage_measures, rubric_qrels, make_run(runs[agent])))
+            per_agent[agent] = scores
 
         comparisons: dict[str, MetricComparison] = {}
         for measure in measures:
             name = str(measure)
+            qids = sorted(coverage_qids if is_coverage_measure(measure) else flat_qids)
             scores_a = per_agent[agent_a].get(name, {})
             scores_b = per_agent[agent_b].get(name, {})
             deltas = {qid: scores_b.get(qid, 0.0) - scores_a.get(qid, 0.0) for qid in qids}
@@ -582,6 +624,65 @@ class Experiment:
         result = RetrievalComparisonResult(agent_a=agent_a, agent_b=agent_b, metrics=comparisons)
         render_retrieval_comparison(result, self.rich_print)
         return result
+
+    def get_rubric_qrels(
+        self,
+        retrieval_evaluator_name: str | None = None,
+    ) -> list[Qrel]:
+        """
+        Retrieve subtopic qrels, where each of a query's rubric criteria is one subtopic.
+
+        Coverage measures such as `StRecall` and `alpha_nDCG` reward a ranking that collectively
+        addresses all of a query's criteria and discount redundancy, so they need to know which
+        criterion each document addresses. The flat qrels from `get_qrels()` cannot express that:
+        they hold one relevance value per document. Here the criterion name travels in the
+        `iteration` field, which is where `ir_measures` expects a subtopic id.
+
+        Only judgements from a `rubric_coverage` evaluator contribute, since only those record
+        which criteria a document addresses.
+
+        A criterion nothing addresses is declared against an unretrievable placeholder document.
+        `ndeval` derives a query's subtopics from its *relevant* rows only, so a criterion with no
+        relevant document would otherwise not exist as far as the measure is concerned: the
+        denominator would be the criteria retrieval happened to find rather than the whole rubric,
+        and a query with no addressed criterion would drop out of the aggregate entirely. A
+        relevance-0 row does not work for this, as it declares no subtopic.
+        Args:
+            retrieval_evaluator_name (str | None): The name of the retrieval evaluator to read the addressed
+                criteria from. If None, any evaluation carrying addressed criteria is used.
+        Returns:
+            list[Qrel]: One qrel per (query, criterion, addressing document).
+        """
+
+        qrels = []
+        for qid, query in self.queries.items():
+            addressed: set[str] = set()
+            for did, document in query.retrieved_docs.items():
+                for name, evaluation in document.evaluations.items():
+                    if retrieval_evaluator_name is not None and name != retrieval_evaluator_name:
+                        continue
+                    answer = evaluation.answer
+                    if not isinstance(answer, SubtopicJudgment):
+                        continue
+                    for subtopic in answer.subtopics():
+                        addressed.add(subtopic)
+                        qrels.append(make_qrel(qid, did, 1, subtopic=subtopic))
+            for criterion in query.rubric:
+                if criterion.criterion_name not in addressed:
+                    qrels.append(
+                        make_qrel(
+                            qid,
+                            f"{UNADDRESSED_DOC_PREFIX}{criterion.criterion_name}",
+                            1,
+                            subtopic=criterion.criterion_name,
+                        )
+                    )
+        if not qrels:
+            logger.warning(
+                "No addressed rubric criteria found. Coverage measures need judgements from a "
+                "rubric_coverage evaluator."
+            )
+        return qrels
 
     def get_qrels(
         self,
@@ -613,8 +714,7 @@ class Experiment:
             with open(output_path, "w") as f:
                 if output_format.lower() == "trec":
                     for qid, qrel in qrels.items():
-                        for did, rel in qrel.items():
-                            f.write(f"{qid} Q0 {did} {rel}\n")
+                        f.writelines(f"{qid} Q0 {did} {rel}\n" for did, rel in qrel.items())
                 elif output_format.lower() == "json":
                     json.dump(qrels, f)
                 else:
@@ -700,8 +800,10 @@ class Experiment:
         output_dict["experiment_name"] = self.experiment_name
         output_dict["elo_tournaments"] = [tournament.model_dump() for tournament in self.elo_tournaments]
 
-        with output_path.open("w") as f:
+        temp_path = output_path.with_name(f"{output_path.name}.tmp")
+        with temp_path.open("w") as f:
             json.dump(output_dict, f, indent=4, ensure_ascii=False)
+        temp_path.replace(output_path)
 
     def save_result(self, result: EvaluatorResult | EloTournamentResult):
         """
@@ -742,19 +844,20 @@ class Experiment:
         except ValueError:
             query_id_column = None
 
-        for idx, row in enumerate(csv.DictReader(open(file_path))):
-            if query_id_column is None:
-                query_id_column = f"query_{idx}"
-            else:
-                qid = row.get(query_id_column, f"query_{idx}")
-            if qid in read_queries or qid in self.queries:
-                if not exist_ok:
-                    logger.warning(f"Query with ID {qid} already read. Skipping")
-                continue
-            query_text = row[query_text_column].strip()
-            metadata = {k: v for k, v in row.items() if k not in [query_id_column, query_text_column]}
-            self.queries[qid] = Query(qid=qid, query=query_text, metadata=metadata)
-            read_queries.add(qid)
+        with open(file_path, "r", encoding="utf-8") as f:
+            for idx, row in enumerate(csv.DictReader(f)):
+                if query_id_column is None:
+                    query_id_column = f"query_{idx}"
+                else:
+                    qid = row.get(query_id_column, f"query_{idx}")
+                if qid in read_queries or qid in self.queries:
+                    if not exist_ok:
+                        logger.warning(f"Query with ID {qid} already read. Skipping")
+                    continue
+                query_text = row[query_text_column].strip()
+                metadata = {k: v for k, v in row.items() if k not in [query_id_column, query_text_column]}
+                self.queries[qid] = Query(qid=qid, query=query_text, metadata=metadata)
+                read_queries.add(qid)
         if len(read_queries) > 0:
             logger.info(f"Loaded {len(read_queries)} queries from {file_path}")
 
@@ -788,26 +891,29 @@ class Experiment:
         document_id_col = self.__infer_document_id_column(file_path, document_id_col)
         warned_queries = set()
 
-        for line in csv.DictReader(open(file_path)):
-            qid = line[query_id_col].strip()
-            did = line[document_id_col].strip()
-            text = line[document_text_col].strip()
-            agent = line.get(agent_col)
-            metadata = {
-                k: v for k, v in line.items() if k not in [query_id_col, document_id_col, document_text_col, agent_col]
-            }
-            if qid not in self.queries:
-                if qid not in warned_queries:
-                    warned_queries.add(qid)
-                    logger.warning(f"Query {qid} found in {file_path} but not found in queries. Skipping")
-                continue
-            if (doc_obj := self.queries[qid].retrieved_docs.get(did)) is None:
-                doc_obj = Document(qid=qid, did=did, text=text)
-                doc_obj.add_metadata(metadata)
-                documents_read += 1
-            if agent is not None:
-                doc_obj.add_retrieved_by(agent, exist_ok=exist_ok)
-            self.add_retrieved_doc(doc_obj, exist_ok=exist_ok, should_save=False)
+        with open(file_path, "r", encoding="utf-8") as f:
+            for line in csv.DictReader(f):
+                qid = line[query_id_col].strip()
+                did = line[document_id_col].strip()
+                text = line[document_text_col].strip()
+                agent = line.get(agent_col)
+                metadata = {
+                    k: v
+                    for k, v in line.items()
+                    if k not in [query_id_col, document_id_col, document_text_col, agent_col]
+                }
+                if qid not in self.queries:
+                    if qid not in warned_queries:
+                        warned_queries.add(qid)
+                        logger.warning(f"Query {qid} found in {file_path} but not found in queries. Skipping")
+                    continue
+                if (doc_obj := self.queries[qid].retrieved_docs.get(did)) is None:
+                    doc_obj = Document(qid=qid, did=did, text=text)
+                    doc_obj.add_metadata(metadata)
+                    documents_read += 1
+                if agent is not None:
+                    doc_obj.add_retrieved_by(agent, exist_ok=exist_ok)
+                self.add_retrieved_doc(doc_obj, exist_ok=exist_ok, should_save=False)
         if documents_read > 0:
             logger.info(f"Loaded {documents_read} new documents from {file_path}")
             self.save()
@@ -838,31 +944,31 @@ class Experiment:
         docs_per_query = {}
         warned_queries = set()
 
-        if isinstance(list(corpus.values())[0], str):
+        if isinstance(next(iter(corpus.values())), str):
             corpus = {k: str(v) for k, v in corpus.items()}
-            # corpus = {k: Document(did=k, text=str(v)) for k, v in corpus.items()}
 
         if not os.path.isfile(run_file_path):
             raise FileNotFoundError(f"Run file {run_file_path} not found")
-        for line in open(run_file_path):
-            qid, _, did, _, score, agent = line.strip().split()
-            if did not in corpus:
-                missing_docs.add(did)
-                continue
-            doc = corpus[did]
-            if isinstance(doc, str):
-                doc = Document(qid=qid, did=did, text=doc)
-            if qid not in self.queries:
-                if qid not in warned_queries:
-                    warned_queries.add(qid)
-                    logger.warning(f"Query {qid} not found in queries. Skipping")
-                continue
-            if qid not in docs_per_query:
-                docs_per_query[qid] = 0
-            if docs_per_query[qid] < top_k:
-                self.add_retrieved_doc(doc, qid, score=float(score), agent=agent, should_save=False)
-                docs_per_query[qid] += 1
-                documents_read.add(did)
+        with open(run_file_path, "r", encoding="utf-8") as f:
+            for line in f:
+                qid, _, did, _, score, agent = line.strip().split()
+                if did not in corpus:
+                    missing_docs.add(did)
+                    continue
+                doc = corpus[did]
+                if isinstance(doc, str):
+                    doc = Document(qid=qid, did=did, text=doc)
+                if qid not in self.queries:
+                    if qid not in warned_queries:
+                        warned_queries.add(qid)
+                        logger.warning(f"Query {qid} not found in queries. Skipping")
+                    continue
+                if qid not in docs_per_query:
+                    docs_per_query[qid] = 0
+                if docs_per_query[qid] < top_k:
+                    self.add_retrieved_doc(doc, qid, score=float(score), agent=agent, should_save=False)
+                    docs_per_query[qid] += 1
+                    documents_read.add(did)
         if len(missing_docs) > 0:
             logger.warning(f"Loaded {len(documents_read)} documents. {len(missing_docs)} missing docs")
         if documents_read:
@@ -894,23 +1000,24 @@ class Experiment:
         answers_read = 0
         warned_queries = set()
         query_id_col = self.__infer_query_id_column(file_path, query_id_col)
-        for line in csv.DictReader(open(file_path)):
-            qid = line[query_id_col].strip()
-            agent = line[agent_col].strip()
-            answer = line[answer_col].strip()
-            metadata = {k: v for k, v in line.items() if k not in [query_id_col, agent_col, answer_col]}
-            if qid not in self.queries:
-                if qid not in warned_queries:
-                    warned_queries.add(qid)
-                    logger.warning(f"Query {qid} found in {file_path} but not found in queries. Skipping")
-                continue
-            if agent not in self.queries[qid].answers:
-                answer_obj = AgentAnswer(qid=qid, agent=agent, text=answer)
-                answer_obj.add_metadata(metadata)
-                self.add_agent_answer(answer_obj, exist_ok=exist_ok, should_save=False)
-                answers_read += 1
-            elif not exist_ok:
-                logger.info(f"Answer from agent {agent} already exists in query {qid}. Skipping")
+        with open(file_path, "r", encoding="utf-8") as f:
+            for line in csv.DictReader(f):
+                qid = line[query_id_col].strip()
+                agent = line[agent_col].strip()
+                answer = line[answer_col].strip()
+                metadata = {k: v for k, v in line.items() if k not in [query_id_col, agent_col, answer_col]}
+                if qid not in self.queries:
+                    if qid not in warned_queries:
+                        warned_queries.add(qid)
+                        logger.warning(f"Query {qid} found in {file_path} but not found in queries. Skipping")
+                    continue
+                if agent not in self.queries[qid].answers:
+                    answer_obj = AgentAnswer(qid=qid, agent=agent, text=answer)
+                    answer_obj.add_metadata(metadata)
+                    self.add_agent_answer(answer_obj, exist_ok=exist_ok, should_save=False)
+                    answers_read += 1
+                elif not exist_ok:
+                    logger.info(f"Answer from agent {agent} already exists in query {qid}. Skipping")
         if answers_read > 0:
             logger.info(f"Loaded {answers_read} answers from {file_path}")
             self.save()
@@ -939,8 +1046,7 @@ class Experiment:
                 query_id_col = query_text_col
             p = Path(f)
             agent_name = p.stem
-
-            for line in csv.DictReader(open(p)):
+            for line in csv.DictReader(p.read_text().splitlines()):
                 qid = line[query_id_col].strip()
                 query = line[query_text_col].strip()
                 answer = line[answer_text_col].strip()
@@ -998,48 +1104,7 @@ class Experiment:
 
         queries_data = data.get("queries", {})
         for qid, q_data in queries_data.items():
-            q_object = Query(qid=qid, query=q_data["query"], metadata=q_data.get("metadata"))
-            for did, doc_data in q_data.get("retrieved_docs", {}).items():
-                doc_object = Document(
-                    qid=qid,
-                    did=did,
-                    text=doc_data["text"],
-                    metadata=doc_data.get("metadata"),
-                    retrieved_by=doc_data.get("retrieved_by") or {},
-                )
-                q_object.add_retrieved_doc(doc_object)
-            for agent, answer_data in q_data.get("answers", {}).items():
-                text = answer_data.get("text")
-                conversation_data = answer_data.get("conversation")
-                if conversation_data is None:
-                    conversation = None
-                else:
-                    conversation = []
-                    for message in conversation_data:
-                        if isinstance(message, dict):
-                            conversation.append(ChatMessage(sender=message["sender"], content=message["content"]))
-                        else:
-                            sender, content = message
-                            conversation.append(ChatMessage(sender=sender, content=content))
-                answer_object = AgentAnswer(
-                    qid=qid,
-                    agent=agent,
-                    text=text,
-                    metadata=answer_data.get("metadata"),
-                    conversation=conversation,
-                )
-                q_object.add_agent_answer(answer_object)
-            # Load pairwise games
-            pairwise_games_data = q_data.get("pairwise_games", {})
-            if isinstance(pairwise_games_data, dict):
-                for game_id, game_data in pairwise_games_data.items():
-                    # Reconstruct the pairwise game from saved data
-                    agent_a = game_data.get("agent_a_answer", {}).get("agent")
-                    agent_b = game_data.get("agent_b_answer", {}).get("agent")
-                    if agent_a and agent_b:
-                        # Simply create the game - answers are already loaded
-                        q_object.add_pairwise_game(agent_a, agent_b)
-            self.queries[qid] = q_object
+            self.queries[qid] = Query.model_validate({**q_data, "qid": qid})
 
         self._load_results_from_cache(self.evaluations_cache_path)
 
@@ -1073,7 +1138,7 @@ class Experiment:
                     kind = None
                 expected_result_type = resolve_evaluator_result_type(evaluator_name, kind=kind)
                 result = expected_result_type.model_validate(result)
-            except (ValueError, Exception) as e:
+            except Exception as e:  # noqa: BLE001
                 logger.error(f"Failed to validate result for evaluator {evaluator_name}: {e}")
                 continue
 

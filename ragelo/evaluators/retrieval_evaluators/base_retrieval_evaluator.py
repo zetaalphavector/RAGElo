@@ -5,16 +5,19 @@ and returns a score or a label for each document."""
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any, Callable, get_type_hints
+from collections.abc import Callable, Sequence
+from typing import TYPE_CHECKING, Any, ClassVar, get_type_hints
 
+from pydantic import BaseModel
 from tenacity import RetryError
 
 from ragelo.evaluators.base_evaluator import BaseEvaluator, T_Config
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
 from ragelo.types import LLMInputPrompt, Query, RetrievalEvaluatorResult
+from ragelo.types.answer_formats import EvaluationAnswer, RetrievalEvaluationAnswer
 from ragelo.types.configurations import BaseRetrievalEvaluatorConfig
 from ragelo.types.evaluables import Document, Evaluable
+from ragelo.types.evaluator_utils import answer_format_for
 from ragelo.types.types import RetrievalEvaluatorTypes, _result_type_registry
 from ragelo.utils import call_async_fn
 
@@ -32,6 +35,7 @@ class BaseRetrievalEvaluator(BaseEvaluator[T_Config, RetrievalEvaluatorResult]):
     config: T_Config
     evaluable_name: str = "Retrieved document"
     result_type: type[RetrievalEvaluatorResult] = RetrievalEvaluatorResult
+    answer_format: type[EvaluationAnswer] = RetrievalEvaluationAnswer
 
     def __init__(self, config: T_Config, llm_provider: BaseLLMProvider):
         super().__init__(config, llm_provider)
@@ -72,27 +76,17 @@ class BaseRetrievalEvaluator(BaseEvaluator[T_Config, RetrievalEvaluatorResult]):
         query, document = eval_sample
         if not isinstance(document, Document):
             type_name = type(document).__name__
-            raise ValueError(f"can't evaluate a {type_name} in a Retrieval Evaluator")
+            raise TypeError(f"can't evaluate a {type_name} in a Retrieval Evaluator")
 
         exc = None
         evaluator_name = str(self.config.evaluator_name)
         if evaluator_name in document.evaluations and not self.config.force:
             cached_eval = document.evaluations[evaluator_name]
-            if isinstance(cached_eval, RetrievalEvaluatorResult):
+            if isinstance(cached_eval, RetrievalEvaluatorResult) and self._is_cached_result_valid(query, cached_eval):
                 return cached_eval
 
-        # Get the answer schema type from the result_type's 'answer' field
-        answer_field = self.result_type.model_fields.get("answer")
-        if not answer_field or not answer_field.annotation:
-            raise ValueError(f"Result type {self.result_type} does not have an 'answer' field with annotation")
-
-        answer_type = answer_field.annotation
-        # Handle Optional types (answer_type might be "SomeType | None")
-        if hasattr(answer_type, "__args__"):
-            # Get the first non-None type from the union
-            answer_type = next((arg for arg in answer_type.__args__ if arg is not type(None)), answer_type)
-
         llm_input = self._build_message(query, document)
+        answer_type = self._resolve_response_schema(llm_input)
         parsed_answer = None
         raw_answer = ""
         try:
@@ -103,7 +97,7 @@ class BaseRetrievalEvaluator(BaseEvaluator[T_Config, RetrievalEvaluatorResult]):
             llm_response = self._process_answer(llm_response, query)
             parsed_answer = llm_response.parsed_answer
             raw_answer = llm_response.raw_answer
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             if isinstance(e, RetryError):
                 exc = str(e) + "\nLLM Error: \n" + str(e.last_attempt.exception())
             elif raw_answer:
@@ -142,10 +136,23 @@ class BaseRetrievalEvaluator(BaseEvaluator[T_Config, RetrievalEvaluatorResult]):
             )
         return tuples_to_eval
 
+    def _resolve_response_schema(self, prompt: LLMInputPrompt) -> type[BaseModel]:
+        """The schema the LLM is asked to produce, most specific source first.
+
+        Evaluators whose response shape depends on the query (a rubric with one field per criterion)
+        set `llm_response_schema` on the prompt they build; the rest declare `answer_format`.
+        """
+        schema = prompt.llm_response_schema or self.config.llm_response_schema
+        if isinstance(schema, type) and issubclass(schema, BaseModel):
+            return schema
+        if self.config.result_type:
+            return self.config.result_type
+        return answer_format_for(self, BaseRetrievalEvaluator)
+
     def _build_message(self, query: Query, document: Document) -> LLMInputPrompt:
         context = {"query": query, "document": document}
         user_message = self.user_prompt.render(**context) if self.user_prompt else None
-        system_prompt = self.system_prompt.render(**context)
+        system_prompt = self.system_prompt.render(**context) if self.system_prompt else None
 
         return LLMInputPrompt(
             system_prompt=system_prompt,
@@ -162,7 +169,7 @@ class BaseRetrievalEvaluator(BaseEvaluator[T_Config, RetrievalEvaluatorResult]):
 
 
 class RetrievalEvaluatorFactory:
-    registry: dict[RetrievalEvaluatorTypes, type[BaseRetrievalEvaluator]] = {}
+    registry: ClassVar[dict[RetrievalEvaluatorTypes, type[BaseRetrievalEvaluator]]] = {}
 
     @classmethod
     def register(cls, evaluator_name: RetrievalEvaluatorTypes) -> Callable:

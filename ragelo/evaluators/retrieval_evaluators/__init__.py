@@ -8,6 +8,7 @@ from ragelo.evaluators.retrieval_evaluators.domain_expert_evaluator import Domai
 from ragelo.evaluators.retrieval_evaluators.few_shot_evaluator import FewShotEvaluator
 from ragelo.evaluators.retrieval_evaluators.rdnam_evaluator import RDNAMEvaluator
 from ragelo.evaluators.retrieval_evaluators.reasoner_evaluator import ReasonerEvaluator
+from ragelo.evaluators.retrieval_evaluators.rubric_coverage_evaluator import RubricCoverageEvaluator
 
 __all__ = [
     "BaseRetrievalEvaluator",
@@ -17,5 +18,6 @@ __all__ = [
     "RDNAMEvaluator",
     "ReasonerEvaluator",
     "RetrievalEvaluatorFactory",
+    "RubricCoverageEvaluator",
     "get_retrieval_evaluator",
 ]
