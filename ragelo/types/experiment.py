@@ -27,6 +27,7 @@ from ragelo.measures import (
     parse_measure,
 )
 from ragelo.presenters import render_evaluation, render_retrieval_comparison, render_retrieval_summary
+from ragelo.retrievers import RetrievedDocument, Retriever, RunFile
 from ragelo.types.answer_formats import SubtopicJudgment
 from ragelo.types.evaluables import AgentAnswer, Document, Evaluable
 from ragelo.types.evaluator_utils import resolve_evaluator_result_type
@@ -44,8 +45,6 @@ from ragelo.utils import call_async_fn, get_pbar
 
 if TYPE_CHECKING:
     from ir_measures import Qrel
-
-    from ragelo.retrievers import RetrievedDocument, Retriever
 
 logger = logging.getLogger(__name__)
 
@@ -766,6 +765,42 @@ class Experiment:
                     json.dump(runs_by_agent, f)
 
         return runs_by_agent
+
+    def get_run_files(
+        self,
+        agents: list[str] | None = None,
+        output_dir: str | Path | None = None,
+    ) -> dict[str, RunFile]:
+        """One reusable run file per agent, reconstructing each ranked list from the pooled documents.
+
+        A pooled document's metadata comes from whichever agent retrieved it first, so it rides
+        along for tracing rather than as the exporting agent's own record.
+        """
+        if agents is None:
+            agents = sorted({agent for query in self for agent in query.retrieval_systems})
+        run_files: dict[str, RunFile] = {}
+        for agent in agents:
+            runs: dict[str, list[RetrievedDocument]] = {}
+            for query in self:
+                scored = [
+                    (document, score)
+                    for document in query.retrieved_docs.values()
+                    for retrieved_by, score in document.retrieved_by.items()
+                    if retrieved_by == agent
+                ]
+                scored.sort(key=lambda pair: pair[1], reverse=True)
+                runs[query.qid] = [
+                    RetrievedDocument(did=document.did, text=document.text, score=score, metadata=document.metadata)
+                    for document, score in scored
+                ]
+            run_files[agent] = RunFile(retriever_name=agent, runs=runs)
+        if output_dir is not None:
+            output_dir = Path(output_dir)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            for agent, run_file in run_files.items():
+                (output_dir / f"{agent}.json").write_text(run_file.model_dump_json(indent=2, exclude_none=True))
+            logger.info(f"Wrote {len(run_files)} run files to {output_dir}")
+        return run_files
 
     def save(self, output_path: str | Path | None = None) -> None:
         """

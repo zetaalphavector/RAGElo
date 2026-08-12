@@ -6,7 +6,7 @@ from ragelo.evaluators.retrieval_evaluators import RetrievalEvaluatorFactory, ge
 from ragelo.generators import RubricGenerator, get_rubric_generator
 from ragelo.llm_providers.base_llm_provider import get_llm_provider
 from ragelo.logger import configure_logging
-from ragelo.retrievers import RetrievedDocument, Retriever
+from ragelo.retrievers import FileRetriever, NamespacedRetriever, RetrievedDocument, Retriever, RunFile
 from ragelo.types import AgentAnswer, Document, Experiment, Query
 
 __all__ = [
@@ -14,11 +14,14 @@ __all__ = [
     "AnswerEvaluatorFactory",
     "Document",
     "Experiment",
+    "FileRetriever",
+    "NamespacedRetriever",
     "Query",
     "RetrievalEvaluatorFactory",
     "RetrievedDocument",
     "Retriever",
     "RubricGenerator",
+    "RunFile",
     "configure_logging",
     "get_agent_ranker",
     "get_answer_evaluator",
