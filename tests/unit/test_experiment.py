@@ -1,10 +1,18 @@
 import json
 import os
 import shutil
+from collections.abc import Mapping
 
 import pytest
 
-from ragelo import Experiment, get_agent_ranker, get_answer_evaluator, get_llm_provider, get_retrieval_evaluator
+from ragelo import (
+    Experiment,
+    RetrievedDocument,
+    get_agent_ranker,
+    get_answer_evaluator,
+    get_llm_provider,
+    get_retrieval_evaluator,
+)
 from ragelo.types.evaluables import AgentAnswer, ChatMessage, Document
 from ragelo.types.query import Query
 from ragelo.types.results import (
@@ -17,11 +25,24 @@ from ragelo.types.results import (
 )
 
 
+class FakeRetriever:
+    def __init__(self, runs: Mapping[str, list[RetrievedDocument] | Exception]):
+        self.runs = runs
+        self.calls: list[str] = []
+
+    async def retrieve(self, query: Query, top_k: int) -> list[RetrievedDocument]:
+        self.calls.append(query.qid)
+        run = self.runs[query.qid]
+        if isinstance(run, Exception):
+            raise run
+        return run[:top_k]
+
+
 class TestExperiment:
     def test_experiment_initialization(self, experiment):
         assert len(experiment) == 2
-        assert "0" in experiment.keys()
-        assert "1" in experiment.keys()
+        assert "0" in experiment
+        assert "1" in experiment
 
         # Check queries were loaded correctly
         assert experiment["0"].query == "What is the capital of Brazil?"
@@ -49,10 +70,64 @@ class TestExperiment:
         assert qid2 == "test2"
         assert empty_experiment[qid2].query == "Test query 2"
 
-        # Test force parameter
-        empty_experiment.add_query("New query", qid, force=False)
+        # Re-adding an existing query is a no-op; force replaces it
+        empty_experiment.add_query("New query", qid)
+        assert empty_experiment[qid].query == "Test query 1"
         empty_experiment.add_query("Forced query", qid, force=True)
         assert empty_experiment[qid].query == "Forced query"
+
+    def test_re_declaring_a_query_keeps_the_stored_one_and_its_evaluables(self, empty_experiment):
+        """A harness re-declares plain queries every run; the pool and its judgements are paid for once."""
+        empty_experiment.add_query(
+            Query(
+                qid="q0",
+                query="What is the capital of Brazil?",
+                metadata={"run": 1},
+            )
+        )
+        empty_experiment.add_retrieved_doc(
+            Document(qid="q0", did="d0", text="Brasilia is the capital."), agent="agent1", score=1.0
+        )
+        empty_experiment.add_evaluation(
+            eval_tuple=(empty_experiment["q0"], empty_experiment["q0"].retrieved_docs["d0"]),
+            evaluation=RetrievalEvaluatorResult(
+                qid="q0",
+                did="d0",
+                evaluator_name="reasoner",
+                answer=RetrievalEvaluationAnswer(reasoning="relevant", score=2),
+            ),
+        )
+
+        empty_experiment.add_query(Query(qid="q0", query="Edited text the re-run should ignore.", metadata={"run": 2}))
+
+        query = empty_experiment["q0"]
+        assert query.query == "What is the capital of Brazil?"
+        assert query.metadata == {"run": 1}
+        assert query.retrieved_docs["d0"].evaluations["reasoner"].answer.score == 2
+
+    def test_retrieval_systems_reports_what_has_already_been_pooled(self, empty_experiment):
+        empty_experiment.add_query(Query(qid="q0", query="What is the capital of Brazil?"))
+        assert empty_experiment["q0"].retrieval_systems == set()
+
+        empty_experiment.add_retrieved_doc(Document(qid="q0", did="d0", text="Brasilia."), agent="keyword", score=2.0)
+        empty_experiment.add_retrieved_doc(
+            Document(qid="q0", did="d0", text="Brasilia."), agent="knn", score=1.0, exist_ok=True
+        )
+        empty_experiment.add_retrieved_doc(Document(qid="q0", did="d1", text="Rio."), agent="knn", score=0.5)
+
+        assert empty_experiment["q0"].retrieval_systems == {"keyword", "knn"}
+        assert empty_experiment["q0"].retrieved_docs["d0"].retrieved_by == {"keyword": 2.0, "knn": 1.0}
+
+    def test_force_replaces_a_query_and_drops_what_it_accumulated(self, empty_experiment, caplog):
+        empty_experiment.add_query(Query(qid="q0", query="What is the capital of Brazil?"))
+        empty_experiment.add_retrieved_doc(
+            Document(qid="q0", did="d0", text="Brasilia is the capital."), agent="agent1", score=1.0
+        )
+
+        empty_experiment.add_query(Query(qid="q0", query="Replaced"), force=True)
+
+        assert empty_experiment["q0"].retrieved_docs == {}
+        assert "discards 1 retrieved documents" in caplog.text
 
     def test_add_retrieved_doc(self, empty_experiment):
         """Test adding retrieved documents manually"""
@@ -166,6 +241,23 @@ class TestExperiment:
             for did, doc in experiment[qid].retrieved_docs.items():
                 assert loaded_experiment[qid].retrieved_docs[did].retrieved_by == doc.retrieved_by
 
+    def test_retrieved_by_survives_a_save_load_cycle(self, tmp_path, base_experiment_config):
+        """Without the agents that retrieved each document, `get_runs()` is empty and
+        `evaluate_retrieval` scores nothing — silently, since there is no agent to report on. A
+        reloaded experiment must therefore still know its runs, or resuming one cannot be scored.
+        """
+        save_path = tmp_path / "exp.json"
+        base_experiment_config["save_on_disk"] = True
+        base_experiment_config["save_path"] = str(save_path)
+        experiment = Experiment(**base_experiment_config)
+        experiment["0"].retrieved_docs["0"].retrieved_by = {"agent1": 2.0, "agent2": 1.0}
+        experiment.save()
+
+        loaded = Experiment(experiment_name="test_experiment", save_path=str(save_path), save_on_disk=True)
+
+        assert loaded["0"].retrieved_docs["0"].retrieved_by == {"agent1": 2.0, "agent2": 1.0}
+        assert set(loaded.get_runs()) >= {"agent1", "agent2"}
+
     def test_save_and_load_retrieval_result_with_colliding_evaluator_name(self, tmp_path):
         """Regression: persisted RetrievalEvaluatorResult must reload as RetrievalEvaluatorResult
         even when the evaluator name (e.g. "domain_expert") is also registered as an answer evaluator.
@@ -260,6 +352,55 @@ class TestExperiment:
         output_path = tmp_path / "test_qrels.txt"
         experiment.get_qrels(output_path=str(output_path), output_format="trec")
         assert os.path.exists(output_path)
+
+    def _score_document(self, experiment, did, score, evaluator_name):
+        experiment.add_evaluation(
+            eval_tuple=(experiment["0"], experiment["0"].retrieved_docs[did]),
+            evaluation=RetrievalEvaluatorResult(
+                qid="0",
+                did=did,
+                evaluator_name=evaluator_name,
+                answer=RetrievalEvaluationAnswer(reasoning="judged", score=score),
+            ),
+        )
+
+    def test_get_qrels_reads_scores_and_honours_the_evaluator_name(self, experiment):
+        """The qrels values, not just their shape, and which judge they come from."""
+        self._score_document(experiment, "0", 2, "reasoner")
+        self._score_document(experiment, "0", 0, "domain_expert")
+        self._score_document(experiment, "1", 1, "reasoner")
+
+        assert experiment.get_qrels(retrieval_evaluator_name="reasoner")["0"] == {"0": 2, "1": 1}
+        assert experiment.get_qrels(retrieval_evaluator_name="domain_expert")["0"] == {"0": 0}
+
+    def test_get_qrels_skips_documents_it_cannot_score(self, experiment, caplog):
+        """Half-evaluated experiments must still yield qrels for what was judged.
+
+        Turning this into an exception would make it impossible to score a run while judging is
+        still in progress.
+        """
+        self._score_document(experiment, "0", 2, "reasoner")
+
+        qrels = experiment.get_qrels(retrieval_evaluator_name="reasoner")
+
+        assert qrels["0"] == {"0": 2}
+        assert qrels["1"] == {}
+        assert "does not have an evaluation" in caplog.text
+
+    def test_get_qrels_zeroes_scores_below_the_threshold(self, experiment):
+        """Below-threshold documents stay in the qrels with relevance 0 rather than being dropped.
+
+        Dropping them instead would leave them unjudged, which changes `Judged@k` while leaving
+        `nDCG@k` untouched.
+        """
+        self._score_document(experiment, "0", 2.0, "reasoner")
+        self._score_document(experiment, "1", 1, "reasoner")
+
+        qrels = experiment.get_qrels(relevance_threshold=2, retrieval_evaluator_name="reasoner")
+
+        assert qrels["0"] == {"0": 2, "1": 0}
+        # ir_measures/pytrec_eval rejects float qrels, so both the kept and zeroed labels must be int.
+        assert all(type(relevance) is int for relevance in qrels["0"].values())
 
     def test_add_retrieval_evaluation(self, experiment, retrieval_evaluation, caplog):
         """Test adding retrieval evaluation"""
@@ -550,8 +691,8 @@ class TestExperiment:
         """Test adding queries from CSV"""
         empty_experiment.add_queries_from_csv("tests/data/queries.csv")
         assert len(empty_experiment) == 2
-        assert "0" in empty_experiment.keys()
-        assert "1" in empty_experiment.keys()
+        assert "0" in empty_experiment
+        assert "1" in empty_experiment
 
     def test_add_documents_from_csv(self, empty_experiment):
         """Test adding documents from CSV"""
@@ -639,6 +780,170 @@ class TestExperiment:
         assert os.path.exists("ragelo_cache/A_really_cool_RAGElo_experiment_results.jsonl")
         os.remove("ragelo_cache/A_really_cool_RAGElo_experiment.json")
         os.remove("ragelo_cache/A_really_cool_RAGElo_experiment_results.jsonl")
+
+    @pytest.mark.requires_openai
+    def test_readme_retrieval_comparison_example(self):
+        """Test the README retrieval comparison example"""
+        pytest.importorskip("ir_measures")
+        for leftover in (
+            "ragelo_cache/keyword_vs_hybrid.json",
+            "ragelo_cache/keyword_vs_hybrid_results.jsonl",
+        ):
+            if os.path.exists(leftover):
+                os.remove(leftover)
+
+        corpus = {
+            "keyword": [
+                RetrievedDocument(did="d0", text="Brasília is the capital of Brazil", score=12.3),
+                RetrievedDocument(did="d1", text="Rio de Janeiro used to be the capital of Brazil.", score=8.1),
+            ],
+            "hybrid": [
+                RetrievedDocument(did="d0", text="Brasília is the capital of Brazil", score=0.93),
+                RetrievedDocument(did="d2", text="Lyon is the second largest city in France.", score=0.88),
+            ],
+        }
+
+        class SearchClient:  # anything with this method satisfies ragelo.Retriever
+            def __init__(self, endpoint: str):
+                self.endpoint = endpoint
+
+            async def retrieve(self, query, top_k):
+                return corpus[self.endpoint][:top_k]
+
+        experiment = Experiment(experiment_name="keyword_vs_hybrid")
+        experiment.add_query("What is the capital of Brazil?", query_id="q0")
+
+        experiment.run_retrievers(
+            {"keyword": SearchClient("keyword"), "hybrid": SearchClient("hybrid")},
+            top_k=50,
+            n_threads=8,
+        )
+
+        assert experiment["q0"].retrieval_systems == {"keyword", "hybrid"}
+        assert experiment["q0"].retrieved_docs["d0"].retrieved_by == {"keyword": 12.3, "hybrid": 0.93}
+
+        llm_provider = get_llm_provider("openai", model="gpt-4.1-nano")
+        evaluator = get_retrieval_evaluator("reasoner", llm_provider=llm_provider)
+        evaluator.evaluate_experiment(experiment)
+
+        result = experiment.compare_retrieval("keyword", "hybrid", metrics=["nDCG@10", "R@50"])
+
+        assert set(result.metrics) == {"nDCG@10", "R@50"}
+        for comparison in result.metrics.values():
+            assert set(comparison.per_query_delta) == {"q0"}
+            assert comparison.wins + comparison.ties + comparison.losses == 1
+            assert 0.0 <= comparison.p_value <= 1.0
+
+        assert os.path.exists("ragelo_cache/keyword_vs_hybrid.json")
+        assert os.path.exists("ragelo_cache/keyword_vs_hybrid_results.jsonl")
+        os.remove("ragelo_cache/keyword_vs_hybrid.json")
+        os.remove("ragelo_cache/keyword_vs_hybrid_results.jsonl")
+
+    def test_run_retrievers_pools_ranked_documents(self, empty_experiment):
+        empty_experiment.add_query(Query(qid="q0", query="What is the capital of Brazil?"))
+        keyword = FakeRetriever(
+            {
+                "q0": [
+                    RetrievedDocument(did="d0", text="Brasilia.", score=2.0),
+                    RetrievedDocument(did="d1", text="Rio."),
+                ]
+            }
+        )
+        knn = FakeRetriever({"q0": [RetrievedDocument(did="d0", text="Brasilia.", score=0.9)]})
+
+        empty_experiment.run_retrievers({"keyword": keyword, "knn": knn}, top_k=10)
+
+        query = empty_experiment["q0"]
+        assert query.retrieval_systems == {"keyword", "knn"}
+        assert query.retrieved_docs["d0"].retrieved_by == {"keyword": 2.0, "knn": 0.9}
+        assert query.retrieved_docs["d1"].retrieved_by == {"keyword": 1 / 2}
+
+    def test_run_retrievers_skips_already_pooled_systems(self, empty_experiment):
+        empty_experiment.add_query(Query(qid="q0", query="What is the capital of Brazil?"))
+        empty_experiment.add_query(Query(qid="q1", query="What is the capital of France?"))
+        empty_experiment.add_retrieved_doc(Document(qid="q0", did="d0", text="Brasilia."), agent="keyword", score=1.0)
+        runs = {
+            "q0": [RetrievedDocument(did="d0", text="Brasilia.")],
+            "q1": [RetrievedDocument(did="d1", text="Paris.")],
+        }
+        keyword, knn = FakeRetriever(runs), FakeRetriever(runs)
+
+        empty_experiment.run_retrievers({"keyword": keyword, "knn": knn}, top_k=10)
+
+        assert keyword.calls == ["q1"]
+        assert sorted(knn.calls) == ["q0", "q1"]
+
+    def test_run_retrievers_rejects_a_pooled_did_with_different_text(self, empty_experiment):
+        empty_experiment.add_query(Query(qid="q0", query="What is the capital of Brazil?"))
+        empty_experiment.add_retrieved_doc(Document(qid="q0", did="d0", text="Brasilia."), agent="keyword", score=1.0)
+        knn = FakeRetriever({"q0": [RetrievedDocument(did="d0", text="Rio.")]})
+
+        with pytest.raises(ValueError, match="namespace"):
+            empty_experiment.run_retrievers({"knn": knn}, top_k=10)
+
+    def test_run_retrievers_keeps_successes_when_a_fetch_fails(self, empty_experiment):
+        empty_experiment.add_query(Query(qid="q0", query="What is the capital of Brazil?"))
+        empty_experiment.add_query(Query(qid="q1", query="What is the capital of France?"))
+        keyword = FakeRetriever(
+            {
+                "q0": [RetrievedDocument(did="d0", text="Brasilia.")],
+                "q1": [RetrievedDocument(did="d1", text="Paris.")],
+            }
+        )
+        knn = FakeRetriever(
+            {
+                "q0": ConnectionError("search is down"),
+                "q1": [RetrievedDocument(did="d1", text="Paris.")],
+            }
+        )
+
+        with pytest.raises(RuntimeError, match="1 of 4 retrieve calls failed"):
+            empty_experiment.run_retrievers({"keyword": keyword, "knn": knn}, top_k=10)
+
+        assert empty_experiment["q0"].retrieval_systems == {"keyword"}
+        assert empty_experiment["q1"].retrieval_systems == {"keyword", "knn"}
+
+    def test_compare_retrieval_reports_paired_differences(self, empty_experiment):
+        pytest.importorskip("ir_measures")
+        rankings = {
+            ("q0", "keyword"): ["rel", "junk"],
+            ("q0", "knn"): ["rel", "junk"],
+            ("q1", "keyword"): ["junk", "rel"],
+            ("q1", "knn"): ["rel", "junk"],
+        }
+        for qid in ("q0", "q1"):
+            empty_experiment.add_query(Query(qid=qid, query=f"question {qid}"))
+        for (qid, agent), dids in rankings.items():
+            for rank, did in enumerate(dids):
+                empty_experiment.add_retrieved_doc(
+                    Document(qid=qid, did=f"{qid}-{did}", text=did),
+                    agent=agent,
+                    score=1 / (rank + 1),
+                    exist_ok=True,
+                )
+        for qid in ("q0", "q1"):
+            for did, score in ((f"{qid}-rel", 1), (f"{qid}-junk", 0)):
+                document = empty_experiment[qid].retrieved_docs[did]
+                empty_experiment.add_evaluation(
+                    (empty_experiment[qid], document),
+                    RetrievalEvaluatorResult(
+                        qid=qid,
+                        did=did,
+                        evaluator_name="reasoner",
+                        answer=RetrievalEvaluationAnswer(reasoning="judged", score=score),
+                    ),
+                )
+
+        result = empty_experiment.compare_retrieval("keyword", "knn", metrics=["P@1"])
+
+        comparison = result.metrics["P@1"]
+        assert (comparison.mean_a, comparison.mean_b, comparison.delta) == (0.5, 1.0, 0.5)
+        assert comparison.per_query_delta == {"q0": 0.0, "q1": 1.0}
+        assert (comparison.wins, comparison.ties, comparison.losses) == (1, 1, 0)
+        assert comparison.p_value == 1.0
+
+        with pytest.raises(ValueError, match="Agents with runs"):
+            empty_experiment.compare_retrieval("keyword", "unknown", metrics=["P@1"])
 
 
 class TestExperimentSerialization:
@@ -932,9 +1237,9 @@ class TestExperimentSerialization:
         exp2 = Experiment(**base_experiment_config)
 
         loaded_query = exp2["0"]
-        assert (
-            "agent1-agent2" in loaded_query.pairwise_games
-        ), "Pairwise game should be reconstructed from cached results"
+        assert "agent1-agent2" in loaded_query.pairwise_games, (
+            "Pairwise game should be reconstructed from cached results"
+        )
         loaded_game = loaded_query.pairwise_games["agent1-agent2"]
         assert "pairwise" in loaded_game.evaluations
         loaded_eval = loaded_game.evaluations["pairwise"]
