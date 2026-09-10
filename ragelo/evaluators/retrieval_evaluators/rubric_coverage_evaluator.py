@@ -9,7 +9,7 @@ from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
     RetrievalEvaluatorFactory,
 )
 from ragelo.evaluators.rubric_evaluator_mixin import RubricEvaluatorMixin
-from ragelo.types.answer_formats import Criterion, RubricCoverageAnswerFormat
+from ragelo.types.answer_formats import Criterion, CriterionEvaluationPointwise, RubricCoverageAnswerFormat
 from ragelo.types.configurations import RubricCoverageEvaluatorConfig
 from ragelo.types.evaluables import Document
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
@@ -28,9 +28,12 @@ class RubricCoverageEvaluator(RubricEvaluatorMixin, BaseRetrievalEvaluator[Rubri
     judging starts: supplied on the query, seeded from `config.rubrics`, or generated in the
     prepare phase from `config.rubric_source` (the pooled documents or the reference answer).
 
+    With `config.graduated_scoring` each criterion is scored 0 to `config.max_score` with its own
+    reasoning instead of a yes/no flag.
+
     The result carries the addressed criteria, letting the same judgement feed both flat qrels
-    (`score` = how many criteria the document addresses) and subtopic qrels for coverage
-    measures such as `StRecall` and `alpha_nDCG`.
+    (`score` = how many criteria the document addresses, fractional when graduated) and
+    subtopic qrels for coverage measures such as `StRecall` and `alpha_nDCG`.
     """
 
     config: RubricCoverageEvaluatorConfig
@@ -41,8 +44,15 @@ class RubricCoverageEvaluator(RubricEvaluatorMixin, BaseRetrievalEvaluator[Rubri
         You are tasked with evaluating a retrieval system for question answering.
 
         A user asked the question you will be shown. You are given a rubric: the criteria that a
-        complete answer to that question must satisfy. For each criterion, decide whether the
-        retrieved document addresses it.
+        complete answer to that question must satisfy. {% if graduated_scoring -%}
+        For each criterion, explain how well the retrieved document addresses it and assign an
+        integer score from 0 to {{ max_score }}:
+        - 0: the document does not address the criterion.
+        - {{ max_score }}: the document fully addresses the criterion with sufficient information.
+        - In between: the document carries relevant but incomplete information for the criterion.
+        {%- else -%}
+        For each criterion, decide whether the retrieved document addresses it.
+        {%- endif %}
 
         Judge the document, not the question, and judge each criterion on its own:
         - A criterion is addressed only if the document states the information the criterion asks for.
@@ -50,7 +60,12 @@ class RubricCoverageEvaluator(RubricEvaluatorMixin, BaseRetrievalEvaluator[Rubri
           criterion if the document does not carry the information itself.
         - A document may address a criterion in different words than the criterion uses, and may fail
           to address one it superficially resembles.
+        {% if graduated_scoring -%}
+        If you are uncertain about a criterion, score it lower. Weights affect aggregation, not
+        individual scores.
+        {%- else -%}
         If you are uncertain about a criterion, treat it as not addressed.
+        {%- endif %}
 
         ## Rubric
         {% for criterion in rubric %}
@@ -70,6 +85,30 @@ class RubricCoverageEvaluator(RubricEvaluatorMixin, BaseRetrievalEvaluator[Rubri
         """)
 
     def _build_evaluation_schema(self, rubric: list[Criterion]) -> type[BaseModel]:
+        if self.config.graduated_scoring:
+            scored_models = {
+                criterion.criterion_name: (
+                    create_model(
+                        criterion.criterion_name,
+                        reasoning=(
+                            str,
+                            Field(description="A brief explanation of how well the document addresses the criterion."),
+                        ),
+                        score=(
+                            int,
+                            Field(
+                                description=f"Score from 0 to {self.config.max_score}. "
+                                f"0 means not addressed, {self.config.max_score} means fully addressed.",
+                                ge=0,
+                                le=self.config.max_score,
+                            ),
+                        ),
+                    ),
+                    Field(description=f"The judgement for this criterion: {criterion.short_question}"),
+                )
+                for criterion in rubric
+            }
+            return create_model("RubricCoverageSchema", **scored_models)  # type: ignore[call-overload]
         criteria_models = {
             criterion.criterion_name: (
                 bool,
@@ -93,6 +132,8 @@ class RubricCoverageEvaluator(RubricEvaluatorMixin, BaseRetrievalEvaluator[Rubri
                 expert_in=self.config.expert_in,
                 company=self.config.company,
                 rubric=query.rubric,
+                graduated_scoring=self.config.graduated_scoring,
+                max_score=self.config.max_score,
             ),
             user_message=self.user_prompt.render(query=query, document=document),
             llm_response_schema=schema,
@@ -100,13 +141,34 @@ class RubricCoverageEvaluator(RubricEvaluatorMixin, BaseRetrievalEvaluator[Rubri
 
     def _process_answer(self, llm_response: LLMResponseType, query: Query) -> LLMResponseType:
         response = llm_response.parsed_answer.model_dump()
-        addressed = [c.criterion_name for c in query.rubric if response.get(c.criterion_name)]
+        if self.config.graduated_scoring:
+            criteria = [
+                CriterionEvaluationPointwise(
+                    criterion=criterion,
+                    reasoning=response[criterion.criterion_name]["reasoning"],
+                    fulfillment=response[criterion.criterion_name]["score"] / self.config.max_score,
+                )
+                for criterion in query.rubric
+            ]
+            reasoning = "\n".join(f"{item.criterion.criterion_name}: {item.reasoning}" for item in criteria)
+        else:
+            criteria = [
+                CriterionEvaluationPointwise(
+                    criterion=criterion,
+                    reasoning="",
+                    fulfillment=bool(response.get(criterion.criterion_name)),
+                )
+                for criterion in query.rubric
+            ]
+            reasoning = response.get("reasoning", "")
+        addressed = [item.criterion.criterion_name for item in criteria if item.fulfillment]
         return LLMResponseType(
             raw_answer=llm_response.raw_answer,
             parsed_answer=RubricCoverageAnswerFormat(
-                reasoning=response.get("reasoning", ""),
+                reasoning=reasoning,
                 criteria_addressed=addressed,
-                score=len(addressed),
+                criteria=criteria,
+                score=sum(float(item.fulfillment) for item in criteria),
                 rubric_fingerprint=query.rubric_fingerprint,
             ),
         )

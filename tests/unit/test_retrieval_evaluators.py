@@ -323,6 +323,43 @@ class TestRubricCoverageEvaluator:
             "gives_population",
         }
 
+    def test_graduated_scoring_grades_each_criterion_with_its_own_reasoning(self, llm_provider_mock, experiment):
+        query = experiment["0"]
+        query.rubric = self._rubric()
+        document = query.retrieved_docs["0"]
+
+        def score_each_criterion(input, response_schema):
+            parsed = response_schema(
+                names_capital={"reasoning": "States Brasilia.", "score": 2},
+                gives_population={"reasoning": "Mentions the city is large, no figure.", "score": 1},
+            )
+            return LLMResponseType(raw_answer=parsed.model_dump_json(), parsed_answer=parsed)
+
+        llm_provider_mock.async_call_mocker.side_effect = score_each_criterion
+        evaluator = RubricCoverageEvaluator.from_config(
+            config=RubricCoverageEvaluatorConfig(expert_in="geography", graduated_scoring=True, force=True),
+            llm_provider=llm_provider_mock,
+        )
+
+        result = evaluator.evaluate(query, document)
+
+        assert [(c.criterion.criterion_name, c.fulfillment, c.reasoning) for c in result.answer.criteria] == [
+            ("names_capital", 1.0, "States Brasilia."),
+            ("gives_population", 0.5, "Mentions the city is large, no figure."),
+        ]
+        assert result.answer.criteria_addressed == ["names_capital", "gives_population"]
+        assert result.answer.score == 1.5
+        assert result.answer.reasoning == (
+            "names_capital: States Brasilia.\ngives_population: Mentions the city is large, no figure."
+        )
+        llm_input = llm_provider_mock.async_call_mocker.call_args_list[0][0][0]
+        assert "integer score from 0 to 2" in llm_input.system_prompt
+        assert "reasoning" not in llm_input.llm_response_schema.model_fields
+        criterion_schema = llm_input.llm_response_schema.model_fields["names_capital"].annotation
+        assert set(criterion_schema.model_fields) == {"reasoning", "score"}
+        with pytest.raises(ValueError, match="less than or equal to 2"):
+            criterion_schema(reasoning="too generous", score=3)
+
     def test_judging_directly_without_a_rubric_raises_instead_of_generating(self, llm_provider_mock, experiment):
         query = experiment["0"]
         evaluator = RubricCoverageEvaluator.from_config(

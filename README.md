@@ -109,7 +109,7 @@ pairwise = get_answer_evaluator(
 pairwise.evaluate_experiment(experiment)
 ```
 
-The rubric lives on the query (`query.rubric`), so it is saved with the experiment, can be reviewed or edited between runs, and is shared by every evaluator that grades against it, including the `rubric_coverage` retrieval evaluator. Each judgment records which rubric it was made against, so editing one query's rubric re-judges that query and leaves the rest cached.
+The rubric lives on the query (`query.rubric`), so it is saved with the experiment, can be reviewed or edited between runs, and is shared by every evaluator that grades against it, including the `rubric_coverage` retrieval evaluator. By default, criteria are binary. Use `graduated_scoring=True` (and optionally `max_score`, default 2) to score each criterion on a scale instead. Each judgment records which rubric it was made against, so editing one query's rubric re-judges that query and leaves the rest cached.
 
 `evaluate_experiment` and `evaluate_all_evaluables` generate any missing rubric before they start judging, so every answer in a run is graded against the same criteria. Judging a single answer directly with `evaluate()` does not generate one: set `query.rubric`, pass `rubrics=` in the config, or run the generator below.
 
