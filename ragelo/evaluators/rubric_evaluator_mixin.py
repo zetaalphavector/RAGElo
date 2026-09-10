@@ -16,6 +16,7 @@ class RubricEvaluatorMixin:
 
     config: RubricConfigMixin
     llm_provider: BaseLLMProvider
+    rubric_evidence: bool = True
 
     def __init__(self, *args, rubric_generator: RubricGenerator | None = None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -29,6 +30,7 @@ class RubricEvaluatorMixin:
                 documents_limit=self.config.rubric_documents_limit,
                 n_processes=self.config.n_processes,
                 guidelines=self.config.guidelines,
+                with_evidence=self.rubric_evidence,
             ),
             self.llm_provider,
         )

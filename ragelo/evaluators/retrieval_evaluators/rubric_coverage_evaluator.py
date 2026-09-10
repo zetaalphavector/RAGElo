@@ -38,6 +38,7 @@ class RubricCoverageEvaluator(RubricEvaluatorMixin, BaseRetrievalEvaluator[Rubri
 
     config: RubricCoverageEvaluatorConfig
     answer_format = RubricCoverageAnswerFormat
+    rubric_evidence = False
 
     system_prompt = string_to_template("""
         You are an impartial expert document annotator and a domain expert in {{ expert_in }}.{% if company %} You are annotating for {{ company }}.{% endif %}

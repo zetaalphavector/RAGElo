@@ -411,7 +411,7 @@ class TestRubricCoverageEvaluator:
 
     def test_evaluate_experiment_generates_the_rubric_from_the_pooled_documents(self, llm_provider_mock, experiment):
         def generate_then_judge(input, response_schema):
-            if response_schema is RubricSchema:
+            if issubclass(response_schema, RubricSchema):
                 parsed = RubricSchema(criteria=self._rubric())
             else:
                 parsed = response_schema(
@@ -429,7 +429,8 @@ class TestRubricCoverageEvaluator:
         evaluator.evaluate_experiment(experiment)
 
         generation_input, generation_schema = llm_provider_mock.async_call_mocker.call_args_list[0][0]
-        assert generation_schema is RubricSchema
+        assert issubclass(generation_schema, RubricSchema)
+        assert "evidence" not in generation_schema.model_json_schema()["$defs"]["Criterion"]["properties"]
         assert "[[0]]" in generation_input.user_message
         for query in experiment:
             assert [c.criterion_name for c in query.rubric] == ["names_capital", "gives_population"]
