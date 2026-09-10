@@ -551,7 +551,7 @@ def expert_retrieval_eval_config(base_eval_config):
         expert_in="Computer Science",
         domain_short="computer scientists",
         company="Zeta Alpha",
-        extra_guidelines=["Super precise answers only!"],
+        guidelines="Super precise answers only!",
         **base_eval_config,
     )
 

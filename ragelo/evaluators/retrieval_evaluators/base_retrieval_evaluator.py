@@ -85,7 +85,7 @@ class BaseRetrievalEvaluator(BaseEvaluator[T_Config, RetrievalEvaluatorResult]):
             if isinstance(cached_eval, RetrievalEvaluatorResult) and self._is_cached_result_valid(query, cached_eval):
                 return cached_eval
 
-        llm_input = self._build_message(query, document)
+        llm_input = self._with_guidelines(self._build_message(query, document))
         answer_type = self._resolve_response_schema(llm_input)
         parsed_answer = None
         raw_answer = ""

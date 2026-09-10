@@ -13,10 +13,10 @@ from ragelo.presenters import render_failed_evaluations
 from ragelo.types.answer_formats import RubricJudgment
 from ragelo.types.configurations import BaseEvaluatorConfig
 from ragelo.types.evaluables import Evaluable
-from ragelo.types.formats import LLMResponseType
+from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.query import Query
 from ragelo.types.results import EvaluatorResult
-from ragelo.utils import call_async_fn, get_pbar, string_to_template
+from ragelo.utils import call_async_fn, get_pbar, string_to_template, with_guidelines
 
 if TYPE_CHECKING:
     from ragelo.types.experiment import Experiment
@@ -53,6 +53,13 @@ class BaseEvaluator(ABC, Generic[T_Config, T_Result]):
             self.user_prompt = config.user_prompt
         if isinstance(config.user_prompt, str):
             self.user_prompt = string_to_template(config.user_prompt)
+
+    def _with_guidelines(self, prompt: LLMInputPrompt) -> LLMInputPrompt:
+        if not self.config.guidelines:
+            return prompt
+        return prompt.model_copy(
+            update={"system_prompt": with_guidelines(prompt.system_prompt, self.config.guidelines)}
+        )
 
     def evaluate_experiment(self, experiment: Experiment, n_threads: int | None = None):
         """

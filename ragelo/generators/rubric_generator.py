@@ -15,7 +15,7 @@ from ragelo.types.configurations import RubricGeneratorConfig
 from ragelo.types.evaluables import ChatMessage
 from ragelo.types.formats import LLMInputPrompt
 from ragelo.types.query import Query
-from ragelo.utils import call_async_fn, get_pbar, string_to_template
+from ragelo.utils import call_async_fn, get_pbar, string_to_template, with_guidelines
 
 if TYPE_CHECKING:
     from ragelo.types.experiment import Experiment
@@ -88,6 +88,9 @@ class RubricGenerator:
     ) -> list[Criterion]:
         """Generates the criteria for a single query. Does not write them to the query."""
         llm_input = self._build_message(query, conversation_context)
+        llm_input = llm_input.model_copy(
+            update={"system_prompt": with_guidelines(llm_input.system_prompt, self.config.guidelines)}
+        )
         llm_response = await self.llm_provider.call_async(llm_input, response_schema=RubricSchema)
         rubric = llm_response.parsed_answer
         if not isinstance(rubric, RubricSchema):

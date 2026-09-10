@@ -61,10 +61,6 @@ class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         "submitted the query works for. that the domain belongs to. "
         "(e.g.: ChemCorp, CS Inc.)",
     )
-    extra_guidelines: list[str] | None = Field(
-        default=None,
-        description="A list of extra guidelines to be used when reasoning about the relevancy of the document.",
-    )
 
 
 class RubricCoverageEvaluatorConfig(RubricConfigMixin, BaseRetrievalEvaluatorConfig):

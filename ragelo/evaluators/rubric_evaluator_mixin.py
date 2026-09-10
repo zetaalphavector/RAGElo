@@ -28,6 +28,7 @@ class RubricEvaluatorMixin:
                 source=self.config.rubric_source,
                 documents_limit=self.config.rubric_documents_limit,
                 n_processes=self.config.n_processes,
+                guidelines=self.config.guidelines,
             ),
             self.llm_provider,
         )

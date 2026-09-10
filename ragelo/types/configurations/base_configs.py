@@ -34,7 +34,15 @@ class BaseConfig(BaseModel):
     )
 
 
-class BaseEvaluatorConfig(BaseConfig):
+class GuidelinesConfigMixin(BaseConfig):
+    guidelines: str | None = Field(
+        default=None,
+        description="Free-text guidelines from the evaluation author, appended to the system prompt. "
+        "They refine how the evidence is weighed and never change the task, the scale or the output format.",
+    )
+
+
+class BaseEvaluatorConfig(GuidelinesConfigMixin):
     model_config = ConfigDict(arbitrary_types_allowed=True, populate_by_name=True)
     evaluator_name: str | AnswerEvaluatorTypes | None = Field(
         default=None,

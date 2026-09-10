@@ -285,6 +285,46 @@ class TestRequestedAnswerFormat:
         assert evaluator.answer_format is RubricCoverageAnswerFormat
 
 
+class TestGuidelines:
+    def test_guidelines_are_appended_to_the_system_prompt_only_when_given(
+        self, llm_provider_mock_retrieval, experiment
+    ):
+        query = experiment["0"]
+        document = query.retrieved_docs["0"]
+        calls = llm_provider_mock_retrieval.async_call_mocker.call_args_list
+
+        ReasonerEvaluator.from_config(
+            config=ReasonerEvaluatorConfig(force=True), llm_provider=llm_provider_mock_retrieval
+        ).evaluate(query, document)
+        plain = calls[0][0][0]
+        assert "<guidelines>" not in plain.system_prompt
+
+        ReasonerEvaluator.from_config(
+            config=ReasonerEvaluatorConfig(force=True, guidelines="  Prefer primary sources.  "),
+            llm_provider=llm_provider_mock_retrieval,
+        ).evaluate(query, document)
+        guided = calls[1][0][0]
+        assert guided.system_prompt.startswith(plain.system_prompt)
+        assert guided.system_prompt.endswith("<guidelines>\nPrefer primary sources.\n</guidelines>")
+        assert "The user message carries only the material to judge." in guided.system_prompt
+        assert guided.user_message == plain.user_message
+
+    def test_rubric_evaluators_pass_guidelines_on_to_rubric_generation(self, llm_provider_mock, experiment):
+        llm_provider_mock.async_call_mocker.side_effect = lambda input, schema: LLMResponseType(
+            raw_answer="rubric",
+            parsed_answer=RubricSchema(criteria=[Criterion(criterion_name="c", short_question="q?")]),
+        )
+        evaluator = RubricCoverageEvaluator.from_config(
+            config=RubricCoverageEvaluatorConfig(expert_in="geography", guidelines="Only count cited facts."),
+            llm_provider=llm_provider_mock,
+        )
+
+        evaluator.prepare_query(experiment["0"])
+
+        generation_input = llm_provider_mock.async_call_mocker.call_args_list[0][0][0]
+        assert generation_input.system_prompt.endswith("<guidelines>\nOnly count cited facts.\n</guidelines>")
+
+
 class TestRubricCoverageEvaluator:
     def _rubric(self):
         return [
@@ -475,7 +515,7 @@ class TestDomainExpertEvaluator:
 
         assert prompt.system_prompt.startswith("You are a domain expert in")
         assert expert_retrieval_eval_config.expert_in in prompt.system_prompt
-        assert expert_retrieval_eval_config.extra_guidelines[0] in prompt.system_prompt
+        assert expert_retrieval_eval_config.guidelines in prompt.system_prompt
         assert expert_retrieval_eval_config.domain_short in prompt.system_prompt
         assert expert_retrieval_eval_config.company in prompt.system_prompt
 

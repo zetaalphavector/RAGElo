@@ -111,6 +111,8 @@ pairwise.evaluate_experiment(experiment)
 
 The rubric lives on the query (`query.rubric`), so it is saved with the experiment, can be reviewed or edited between runs, and is shared by every evaluator that grades against it, including the `rubric_coverage` retrieval evaluator. By default, criteria are binary. Use `graduated_scoring=True` (and optionally `max_score`, default 2) to score each criterion on a scale instead. Each judgment records which rubric it was made against, so editing one query's rubric re-judges that query and leaves the rest cached.
 
+Every evaluator config and the rubric generator accept `guidelines`, free text from the evaluation author that is appended to the system prompt. Use it to steer what counts as evidence without rewriting the prompt; the prompt tells the model that guidelines never change the task, the scale or the output format.
+
 `evaluate_experiment` and `evaluate_all_evaluables` generate any missing rubric before they start judging, so every answer in a run is graded against the same criteria. Judging a single answer directly with `evaluate()` does not generate one: set `query.rubric`, pass `rubrics=` in the config, or run the generator below.
 
 #### Generating the rubric yourself
