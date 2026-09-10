@@ -38,6 +38,25 @@ class TestRubricGenerator:
             assert f"[[{did}]]" in prompt.user_message
             assert document.text in prompt.user_message
 
+    def test_evidence_is_requested_only_when_configured(self, llm_provider_mock, experiment):
+        _responds_with_criteria(llm_provider_mock)
+        query = experiment["0"]
+        RubricGenerator(RubricGeneratorConfig(expert_in="geography"), llm_provider_mock).generate(query)
+        prompt, schema = llm_provider_mock.async_call_mocker.call_args_list[0][0]
+        assert "evidence list" in prompt.system_prompt
+        assert "report" not in prompt.system_prompt
+        assert "evidence" in schema.model_json_schema()["$defs"]["Criterion"]["properties"]
+
+        _responds_with_criteria(llm_provider_mock)
+        rubric = RubricGenerator(
+            RubricGeneratorConfig(expert_in="geography", with_evidence=False), llm_provider_mock
+        ).generate(query)
+        prompt, schema = llm_provider_mock.async_call_mocker.call_args_list[0][0]
+        assert "evidence" not in prompt.system_prompt
+        assert issubclass(schema, RubricSchema)
+        assert "evidence" not in schema.model_json_schema()["$defs"]["Criterion"]["properties"]
+        assert all(type(criterion) is Criterion for criterion in rubric)
+
     def test_documents_source_shows_only_the_best_scored_documents(self, llm_provider_mock, experiment):
         _responds_with_criteria(llm_provider_mock)
         generator = RubricGenerator(RubricGeneratorConfig(expert_in="geography", documents_limit=1), llm_provider_mock)

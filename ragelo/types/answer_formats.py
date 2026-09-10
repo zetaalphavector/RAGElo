@@ -571,6 +571,11 @@ class RubricCoverageAnswerFormat(EvaluationAnswer):
     criteria_addressed: list[str] = Field(
         default_factory=list, description="The names of the rubric criteria this document addresses."
     )
+    criteria: list[CriterionEvaluationPointwise] = Field(
+        default_factory=list,
+        description="The per-criterion judgement. `fulfillment` is the addressed flag, or the score "
+        "divided by `max_score` under graduated scoring.",
+    )
     score: SkipJsonSchema[float | int] = 0
 
     def relevance(self) -> float | int | None:

@@ -152,7 +152,7 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
             if isinstance(cached, AnswerEvaluatorResult):
                 return cached
 
-        prompt = self._build_message(query, answer)
+        prompt = self._with_guidelines(self._build_message(query, answer))
         response_schema = self._resolve_response_schema(prompt)
 
         exc = None
@@ -179,7 +179,7 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
     async def __evaluate_single_game(self, query: Query, game: PairwiseGame) -> PairwiseGameEvaluatorResult:
         evaluator_name = str(self.config.evaluator_name)
 
-        prompt = self._build_message_pairwise(query, game)
+        prompt = self._with_guidelines(self._build_message_pairwise(query, game))
         response_schema = self._resolve_response_schema(prompt)
 
         exc = None

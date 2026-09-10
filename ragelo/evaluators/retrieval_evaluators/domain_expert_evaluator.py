@@ -38,11 +38,6 @@ class DomainExpertEvaluator(BaseRetrievalEvaluator[DomainExpertEvaluatorConfig])
             - Content Overlap: Consider the extent of content overlap between the document and the query. Assess whether the document covers the core aspects of the query or only peripheral topics.
             - Neutrality: Base judgments solely on the content's relevance and avoid any personal opinions or biases.
             - Uncertainty: If uncertain about a relevance judgement, annotators default to a lower relevance.
-        {% if extra_guidelines %}
-        {%- for g in extra_guidelines %}
-            - {{ g }}
-        {% endfor %}
-        {% endif %}
         Given the analysis above, assign a relevance score of 0, 1, or 2 to the retrieved document for this query, where:
         - 0: the document is not relevant to the query
         - 1: the document is somewhat relevant to the query
@@ -59,7 +54,6 @@ class DomainExpertEvaluator(BaseRetrievalEvaluator[DomainExpertEvaluatorConfig])
         context = {
             "query": query,
             "document": document,
-            "extra_guidelines": self.config.extra_guidelines or [],
             "expert_in": self.config.expert_in,
             "company": self.config.company,
             "domain_short": self.config.domain_short,

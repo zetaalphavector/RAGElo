@@ -285,6 +285,46 @@ class TestRequestedAnswerFormat:
         assert evaluator.answer_format is RubricCoverageAnswerFormat
 
 
+class TestGuidelines:
+    def test_guidelines_are_appended_to_the_system_prompt_only_when_given(
+        self, llm_provider_mock_retrieval, experiment
+    ):
+        query = experiment["0"]
+        document = query.retrieved_docs["0"]
+        calls = llm_provider_mock_retrieval.async_call_mocker.call_args_list
+
+        ReasonerEvaluator.from_config(
+            config=ReasonerEvaluatorConfig(force=True), llm_provider=llm_provider_mock_retrieval
+        ).evaluate(query, document)
+        plain = calls[0][0][0]
+        assert "<guidelines>" not in plain.system_prompt
+
+        ReasonerEvaluator.from_config(
+            config=ReasonerEvaluatorConfig(force=True, guidelines="  Prefer primary sources.  "),
+            llm_provider=llm_provider_mock_retrieval,
+        ).evaluate(query, document)
+        guided = calls[1][0][0]
+        assert guided.system_prompt.startswith(plain.system_prompt)
+        assert guided.system_prompt.endswith("<guidelines>\nPrefer primary sources.\n</guidelines>")
+        assert "The user message carries only the material to judge." in guided.system_prompt
+        assert guided.user_message == plain.user_message
+
+    def test_rubric_evaluators_pass_guidelines_on_to_rubric_generation(self, llm_provider_mock, experiment):
+        llm_provider_mock.async_call_mocker.side_effect = lambda input, schema: LLMResponseType(
+            raw_answer="rubric",
+            parsed_answer=RubricSchema(criteria=[Criterion(criterion_name="c", short_question="q?")]),
+        )
+        evaluator = RubricCoverageEvaluator.from_config(
+            config=RubricCoverageEvaluatorConfig(expert_in="geography", guidelines="Only count cited facts."),
+            llm_provider=llm_provider_mock,
+        )
+
+        evaluator.prepare_query(experiment["0"])
+
+        generation_input = llm_provider_mock.async_call_mocker.call_args_list[0][0][0]
+        assert generation_input.system_prompt.endswith("<guidelines>\nOnly count cited facts.\n</guidelines>")
+
+
 class TestRubricCoverageEvaluator:
     def _rubric(self):
         return [
@@ -323,6 +363,43 @@ class TestRubricCoverageEvaluator:
             "gives_population",
         }
 
+    def test_graduated_scoring_grades_each_criterion_with_its_own_reasoning(self, llm_provider_mock, experiment):
+        query = experiment["0"]
+        query.rubric = self._rubric()
+        document = query.retrieved_docs["0"]
+
+        def score_each_criterion(input, response_schema):
+            parsed = response_schema(
+                names_capital={"reasoning": "States Brasilia.", "score": 2},
+                gives_population={"reasoning": "Mentions the city is large, no figure.", "score": 1},
+            )
+            return LLMResponseType(raw_answer=parsed.model_dump_json(), parsed_answer=parsed)
+
+        llm_provider_mock.async_call_mocker.side_effect = score_each_criterion
+        evaluator = RubricCoverageEvaluator.from_config(
+            config=RubricCoverageEvaluatorConfig(expert_in="geography", graduated_scoring=True, force=True),
+            llm_provider=llm_provider_mock,
+        )
+
+        result = evaluator.evaluate(query, document)
+
+        assert [(c.criterion.criterion_name, c.fulfillment, c.reasoning) for c in result.answer.criteria] == [
+            ("names_capital", 1.0, "States Brasilia."),
+            ("gives_population", 0.5, "Mentions the city is large, no figure."),
+        ]
+        assert result.answer.criteria_addressed == ["names_capital", "gives_population"]
+        assert result.answer.score == 1.5
+        assert result.answer.reasoning == (
+            "names_capital: States Brasilia.\ngives_population: Mentions the city is large, no figure."
+        )
+        llm_input = llm_provider_mock.async_call_mocker.call_args_list[0][0][0]
+        assert "integer score from 0 to 2" in llm_input.system_prompt
+        assert "reasoning" not in llm_input.llm_response_schema.model_fields
+        criterion_schema = llm_input.llm_response_schema.model_fields["names_capital"].annotation
+        assert set(criterion_schema.model_fields) == {"reasoning", "score"}
+        with pytest.raises(ValueError, match="less than or equal to 2"):
+            criterion_schema(reasoning="too generous", score=3)
+
     def test_judging_directly_without_a_rubric_raises_instead_of_generating(self, llm_provider_mock, experiment):
         query = experiment["0"]
         evaluator = RubricCoverageEvaluator.from_config(
@@ -334,7 +411,7 @@ class TestRubricCoverageEvaluator:
 
     def test_evaluate_experiment_generates_the_rubric_from_the_pooled_documents(self, llm_provider_mock, experiment):
         def generate_then_judge(input, response_schema):
-            if response_schema is RubricSchema:
+            if issubclass(response_schema, RubricSchema):
                 parsed = RubricSchema(criteria=self._rubric())
             else:
                 parsed = response_schema(
@@ -352,7 +429,8 @@ class TestRubricCoverageEvaluator:
         evaluator.evaluate_experiment(experiment)
 
         generation_input, generation_schema = llm_provider_mock.async_call_mocker.call_args_list[0][0]
-        assert generation_schema is RubricSchema
+        assert issubclass(generation_schema, RubricSchema)
+        assert "evidence" not in generation_schema.model_json_schema()["$defs"]["Criterion"]["properties"]
         assert "[[0]]" in generation_input.user_message
         for query in experiment:
             assert [c.criterion_name for c in query.rubric] == ["names_capital", "gives_population"]
@@ -438,7 +516,7 @@ class TestDomainExpertEvaluator:
 
         assert prompt.system_prompt.startswith("You are a domain expert in")
         assert expert_retrieval_eval_config.expert_in in prompt.system_prompt
-        assert expert_retrieval_eval_config.extra_guidelines[0] in prompt.system_prompt
+        assert expert_retrieval_eval_config.guidelines in prompt.system_prompt
         assert expert_retrieval_eval_config.domain_short in prompt.system_prompt
         assert expert_retrieval_eval_config.company in prompt.system_prompt
 

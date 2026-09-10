@@ -61,14 +61,20 @@ class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         "submitted the query works for. that the domain belongs to. "
         "(e.g.: ChemCorp, CS Inc.)",
     )
-    extra_guidelines: list[str] | None = Field(
-        default=None,
-        description="A list of extra guidelines to be used when reasoning about the relevancy of the document.",
-    )
 
 
 class RubricCoverageEvaluatorConfig(RubricConfigMixin, BaseRetrievalEvaluatorConfig):
     evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.RUBRIC_COVERAGE
+    graduated_scoring: bool = Field(
+        default=False,
+        description="Score each criterion on a 0 to max_score scale, with a reasoning per criterion, "
+        "instead of a yes/no addressed flag.",
+    )
+    max_score: int = Field(
+        default=2,
+        ge=1,
+        description="The top of the per-criterion scale. Only used when graduated_scoring is True.",
+    )
 
 
 class CustomPromptEvaluatorConfig(BaseRetrievalEvaluatorConfig):

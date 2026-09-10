@@ -5,12 +5,12 @@ from typing import Literal
 from pydantic import Field
 
 from ragelo.types.answer_formats import Criterion
-from ragelo.types.configurations.base_configs import BaseConfig
+from ragelo.types.configurations.base_configs import GuidelinesConfigMixin
 
 RubricSource = Literal["documents", "reference_answer"]
 
 
-class RubricGeneratorConfig(BaseConfig):
+class RubricGeneratorConfig(GuidelinesConfigMixin):
     expert_in: str = Field(description="What the LLM should mimic being an expert in.")
     company: str | None = Field(
         default=None,
@@ -30,9 +30,14 @@ class RubricGeneratorConfig(BaseConfig):
         description="How many retrieved documents the 'documents' source shows the LLM, best-scored first. "
         "A pooled experiment can hold far more text per query than a rubric prompt should carry.",
     )
+    with_evidence: bool = Field(
+        default=True,
+        description="Ask for the document IDs or answer passages that support each criterion. Answer evaluators "
+        "use the evidence for recall; turn it off when the rubric grades retrieved documents.",
+    )
 
 
-class RubricConfigMixin(BaseConfig):
+class RubricConfigMixin(GuidelinesConfigMixin):
     """The rubric-generation settings shared by every evaluator that grades against `query.rubric`."""
 
     expert_in: str = Field(description="What the LLM should mimic being an expert in.")
