@@ -40,7 +40,7 @@ class RubricGenerator:
 
     documents_system_prompt = string_to_template(
         """
-        You are a domain expert in {{ expert_in }}.{% if company %} You work for {{ company }}.{% endif %}
+        {% if expert_in %}You are a domain expert in {{ expert_in }}.{% endif %}{% if company %} You work for {{ company }}.{% endif %}
         Your task is to, given a user question and a set of relevant retrieved documents, create a rubric: the criteria that a complete answer to the question must satisfy.
         Think deeply and carefully about which questions a complete and high-quality answer to the user question should answer.
         Each criterion should be a short yes/no question that can be used to evaluate whether an answer satisfies it.
@@ -70,7 +70,7 @@ class RubricGenerator:
 
     reference_answer_system_prompt = string_to_template(
         """
-        You are a domain expert in {{ expert_in }}.{% if company %} You work for {{ company }}.{% endif %}
+        {% if expert_in %}You are a domain expert in {{ expert_in }}.{% endif %}{% if company %} You work for {{ company }}.{% endif %}
         Your task is to, given a user question and a known-correct answer to it, decompose that answer into a rubric: the criteria that a complete answer to the question must satisfy.
         Each criterion should be a short yes/no question about one piece of information a complete answer must contain.
         You should write at most {{ n_criteria }} criteria, and fewer if the correct answer does not support that many.

@@ -385,6 +385,33 @@ class TestRequestedAnswerFormat:
         assert evaluator.answer_format is RubricCoverageAnswerFormat
 
 
+class TestRubricCoverageExpertise:
+    @pytest.mark.parametrize(
+        ("expert_in", "opening"),
+        [
+            (None, "You are an impartial expert document annotator.\n"),
+            ("geography", "You are an impartial expert document annotator and a domain expert in geography.\n"),
+        ],
+    )
+    def test_the_domain_expertise_is_optional(self, expert_in, opening, experiment, llm_provider_mock):
+        query = experiment["0"]
+        query.rubric = [Criterion(criterion_name="names_capital", short_question="Does it name the capital?")]
+        provider = llm_provider_mock
+        provider.async_call_mocker = AsyncMock(
+            side_effect=lambda prompt, schema: LLMResponseType(
+                raw_answer="{}", parsed_answer=schema(reasoning="It does.", names_capital=True)
+            )
+        )
+        evaluator = RubricCoverageEvaluator.from_config(
+            config=RubricCoverageEvaluatorConfig(expert_in=expert_in), llm_provider=provider
+        )
+
+        result = evaluator.evaluate(query, query.retrieved_docs["0"])
+
+        assert provider.async_call_mocker.call_args_list[0][0][0].system_prompt.startswith(opening)
+        assert result.answer.score == 1
+
+
 class TestGuidelines:
     def test_guidelines_are_appended_to_the_system_prompt_only_when_given(
         self, llm_provider_mock_retrieval, experiment

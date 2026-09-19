@@ -11,7 +11,7 @@ RubricSource = Literal["documents", "reference_answer"]
 
 
 class RubricGeneratorConfig(GuidelinesConfigMixin):
-    expert_in: str = Field(description="What the LLM should mimic being an expert in.")
+    expert_in: str | None = Field(default=None, description="What the LLM should mimic being an expert in.")
     company: str | None = Field(
         default=None,
         description="Name of the company or organization that the user that "
@@ -40,7 +40,7 @@ class RubricGeneratorConfig(GuidelinesConfigMixin):
 class RubricConfigMixin(GuidelinesConfigMixin):
     """The rubric-generation settings shared by every evaluator that grades against `query.rubric`."""
 
-    expert_in: str = Field(description="What the LLM should mimic being an expert in.")
+    expert_in: str | None = Field(default=None, description="What the LLM should mimic being an expert in.")
     company: str | None = Field(
         default=None,
         description="Name of the company or organization that the user that "

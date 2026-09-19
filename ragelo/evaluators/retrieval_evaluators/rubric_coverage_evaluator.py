@@ -41,7 +41,7 @@ class RubricCoverageEvaluator(RubricEvaluatorMixin, BaseRetrievalEvaluator[Rubri
     rubric_evidence = False
 
     system_prompt = string_to_template("""
-        You are an impartial expert document annotator and a domain expert in {{ expert_in }}.{% if company %} You are annotating for {{ company }}.{% endif %}
+        You are an impartial expert document annotator{% if expert_in %} and a domain expert in {{ expert_in }}{% endif %}.{% if company %} You are annotating for {{ company }}.{% endif %}
         You are tasked with evaluating a retrieval system for question answering.
 
         A user asked the question you will be shown. You are given a rubric: the criteria that a
