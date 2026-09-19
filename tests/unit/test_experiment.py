@@ -369,6 +369,17 @@ class TestExperiment:
         assert experiment.get_qrels(retrieval_evaluator_name="reasoner")["0"] == {"0": 2, "1": 1}
         assert experiment.get_qrels(retrieval_evaluator_name="domain_expert")["0"] == {"0": 0}
 
+    def test_get_qrels_rounds_fractional_scores_before_applying_the_threshold(self, experiment):
+        """Averaged judgments are fractional: four of five annotators saying 2 is a 2, not a 1."""
+        self._score_document(experiment, "0", 1.8, "reasoner")
+        self._score_document(experiment, "1", 0.5, "reasoner")
+
+        assert experiment.get_qrels(retrieval_evaluator_name="reasoner")["0"] == {"0": 2, "1": 1}
+        assert experiment.get_qrels(relevance_threshold=2, retrieval_evaluator_name="reasoner")["0"] == {
+            "0": 2,
+            "1": 0,
+        }
+
     def test_get_qrels_skips_documents_it_cannot_score(self, experiment, caplog):
         """Half-evaluated experiments must still yield qrels for what was judged.
 
