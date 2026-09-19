@@ -60,7 +60,7 @@ When adding a new evaluator, LLM provider, or ranker:
 ```
 BaseEvaluator (ragelo/evaluators/base_evaluator.py) — async-first, abstract
 ├── BaseRetrievalEvaluator — evaluates document relevance (Query + Document → score)
-│   Implementations: Reasoner, RDNAM, DomainExpert, FewShot, CustomPrompt, RubricCoverage, Jev, JevRubricCoverage
+│   Implementations: Reasoner, RDNAM, DomainExpert, FewShot, CustomPrompt, RubricCoverage, Jev, JevRDNAM, JevRubricCoverage
 └── BaseAnswerEvaluator — evaluates answer quality (Query + AgentAnswer → score/winner)
     Implementations: Pairwise, ChatPairwise, CustomPairwise, DomainExpert, CustomPrompt, RubricPairwise, RubricPointwise,
     Jev, JevPairwise, JevRubricPairwise, JevRubricPointwise

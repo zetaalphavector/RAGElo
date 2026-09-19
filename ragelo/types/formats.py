@@ -38,6 +38,13 @@ class LLMUsage(BaseModel):
     output_tokens: int = 0
     cached_tokens: int = 0
 
+    def __add__(self, other: LLMUsage) -> LLMUsage:
+        return LLMUsage(
+            input_tokens=self.input_tokens + other.input_tokens,
+            output_tokens=self.output_tokens + other.output_tokens,
+            cached_tokens=self.cached_tokens + other.cached_tokens,
+        )
+
 
 class LLMResponseType(BaseModel, Generic[T_Schema]):
     raw_answer: str
@@ -47,6 +54,7 @@ class LLMResponseType(BaseModel, Generic[T_Schema]):
 
 class JevAnswer(BaseModel):
     type: Literal["score", "choice", "boolean"]
+    score: float | None = None
     probability: float | None = None
     probabilities: dict[str, float] | None = None
     confidence: float | None = None

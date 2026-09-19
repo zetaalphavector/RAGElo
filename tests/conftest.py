@@ -113,8 +113,10 @@ def answer_model_factory(input: LLMInputPrompt, response_schema, **kwargs):
             ),
         )
     if isinstance(response_schema, type) and response_schema.__name__.startswith("RDNAM"):
-        judgment = {"score": 1, "intent_match": 2.0, "trustworthiness": 2.0}
         fields = response_schema.model_fields
+        judged = fields["annotator_1"].annotation.model_fields if "annotator_1" in fields else fields
+        judgment = {"reasoning": "Doc judged", "score": 1, "intent_match": 2, "trustworthiness": 2}
+        judgment = {name: judgment[name] for name in judged}
         raw_answer = json.dumps({name: judgment for name in fields} if "annotator_1" in fields else judgment)
         return LLMResponseType(raw_answer=raw_answer, parsed_answer=response_schema.model_validate_json(raw_answer))
     if isinstance(response_schema, type) and issubclass(response_schema, PairwiseEvaluationAnswer):
@@ -606,14 +608,20 @@ def mock_llm_provider_factory(monkeypatch):
 
 @pytest.fixture
 def llm_provider_mock_rdnam(llm_provider_config):
-    annotators = [(1.0, 2.0, 1.0), (2.0, 1.0, 1.0), (1.0, 1.0, 1.0), (0.0, 0.0, 0.0), (2.0, 1.0, 1.0)]
+    """Five annotators answering in one call: (overall, intent match, trustworthiness)."""
+    annotators = [(1, 2, 1), (2, 1, 1), (1, 1, 1), (0, 0, 0), (2, 1, 1)]
+    provider = MockLLMProvider(llm_provider_config)
     raw_answer = json.dumps(
         {
-            f"annotator_{i}": {"score": score, "intent_match": intent_match, "trustworthiness": trustworthiness}
-            for i, (score, intent_match, trustworthiness) in enumerate(annotators, start=1)
+            f"annotator_{i}": {
+                "reasoning": "One annotator",
+                "intent_match": intent_match,
+                "trustworthiness": trustworthiness,
+                "score": overall,
+            }
+            for i, (overall, intent_match, trustworthiness) in enumerate(annotators, start=1)
         }
     )
-    provider = MockLLMProvider(llm_provider_config)
 
     def side_effect(input, response_schema):
         return LLMResponseType(raw_answer=raw_answer, parsed_answer=response_schema.model_validate_json(raw_answer))

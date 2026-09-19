@@ -20,6 +20,7 @@ class RetrievalEvaluatorTypes(StrEnum):
     FEW_SHOT = "few_shot"
     RDNAM = "RDNAM"
     JEV = "jev"
+    JEV_RDNAM = "jev_rdnam"
     JEV_RUBRIC_COVERAGE = "jev_rubric_coverage"
     REASONER = "reasoner"
     RUBRIC_COVERAGE = "rubric_coverage"

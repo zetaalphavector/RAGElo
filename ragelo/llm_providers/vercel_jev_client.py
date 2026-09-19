@@ -14,6 +14,12 @@ from ragelo.types.formats import JevAnswer, JevResponse, LLMUsage
 from ragelo.types.types import LLMProviderTypes
 
 T_Schema = TypeVar("T_Schema", bound=BaseModel)
+RETRIED_STATUSES = {
+    httpx.codes.TOO_MANY_REQUESTS,
+    httpx.codes.BAD_GATEWAY,
+    httpx.codes.SERVICE_UNAVAILABLE,
+    httpx.codes.GATEWAY_TIMEOUT,
+}
 
 
 @LLMProviderFactory.register(LLMProviderTypes.VERCEL_JEV)
@@ -45,32 +51,40 @@ class VercelJevProvider(BaseLLMProvider):
         response = await self.__post({"state": input.user_message, "questions": questions})
         if response.is_error:
             raise ValueError(f"Jev request failed: {response.status_code} {response.text}")
-        body = response.json()
-        confidence = body.get("providerMetadata", {}).get("typesafe", {}).get("confidence", {})
-        parsed = JevResponse(
-            answers={
-                name: JevAnswer(**answer, confidence=confidence.get(name)) for name, answer in body["answers"].items()
-            }
-        )
-        usage = None
-        if "usage" in body:
-            usage = LLMUsage(input_tokens=body["usage"]["inputTokens"], output_tokens=body["usage"]["outputTokens"])
+        try:
+            body = response.json()
+            confidence = body.get("providerMetadata", {}).get("typesafe", {}).get("confidence", {})
+            parsed = JevResponse(
+                answers={
+                    name: JevAnswer(**{"confidence": confidence.get(name)} | answer)
+                    for name, answer in body["answers"].items()
+                }
+            )
+            usage = None
+            if "usage" in body:
+                usage = LLMUsage(
+                    input_tokens=body["usage"]["inputTokens"], output_tokens=body["usage"]["outputTokens"]
+                )
+        except (ValueError, KeyError, TypeError, AttributeError) as e:
+            raise ValueError(f"Jev answered in an unexpected format ({type(e).__name__}: {e}): {response.text}") from e
         return LLMResponseType(raw_answer=response.text, parsed_answer=parsed, usage=usage)  # type: ignore[arg-type]
 
     async def __post(self, body: dict[str, object]) -> httpx.Response:
-        """The gateway answers 503 under load, so those are retried with the TypeSafe SDK's backoff."""
-        for attempt in range(self.config.max_retries + 1):
-            response = await self.__client.post(
-                self.config.api_base,
-                headers={
-                    "Authorization": f"Bearer {self.config.api_key.get_secret_value()}",
-                    "ai-model-id": self.config.model,
-                    "ai-evaluation-model-specification-version": "4",
-                    "ai-gateway-protocol-version": "0.0.1",
-                },
-                json=body,
-            )
-            if response.status_code != httpx.codes.SERVICE_UNAVAILABLE or attempt == self.config.max_retries:
-                break
+        """Under load the gateway answers 503 or stops answering. Those, the other statuses worth a second try
+        and transport errors are retried with the TypeSafe SDK's backoff. The last attempt's response is
+        returned and its transport error raised."""
+        headers = {
+            "Authorization": f"Bearer {self.config.api_key.get_secret_value()}",
+            "ai-model-id": self.config.model,
+            "ai-evaluation-model-specification-version": "4",
+            "ai-gateway-protocol-version": "0.0.1",
+        }
+        for attempt in range(self.config.max_retries):
+            try:
+                response = await self.__client.post(self.config.api_base, headers=headers, json=body)
+            except httpx.TransportError:
+                response = None
+            if response is not None and response.status_code not in RETRIED_STATUSES:
+                return response
             await self.__sleep(min(0.5 * 2**attempt, 5.0))
-        return response
+        return await self.__client.post(self.config.api_base, headers=headers, json=body)

@@ -6,12 +6,14 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
+from benchmarks.jev_criteria import RDNAM_CRITERIA, JevCriteriaEvaluator
 from ragelo import Experiment, get_answer_evaluator, get_retrieval_evaluator
 from ragelo.evaluators.jev_evaluator_mixin import JEV_REASONING
+from ragelo.evaluators.retrieval_evaluators import RDNAMEvaluator
 from ragelo.llm_providers import VercelJevProvider
 from ragelo.types import Document, LLMInputPrompt, PairwiseGame, Query
-from ragelo.types.answer_formats import Criterion, RetrievalEvaluationAnswer
-from ragelo.types.configurations import VercelJevConfiguration
+from ragelo.types.answer_formats import Criterion, RDNAMEvaluationAnswer, RetrievalEvaluationAnswer
+from ragelo.types.configurations import JevRubricCoverageEvaluatorConfig, VercelJevConfiguration
 from ragelo.types.formats import JevResponse, LLMUsage
 
 Answerer = Callable[[str, dict[str, Any], str], dict[str, Any]]
@@ -37,6 +39,10 @@ def jev_provider(answerer: Answerer, requests: list[httpx.Request] | None = None
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     return VercelJevProvider(VercelJevConfiguration(api_key=SecretStr("gateway-key")), client=client)
+
+
+def relevant(score: int) -> RetrievalEvaluationAnswer:
+    return RetrievalEvaluationAnswer(reasoning="Names the capital.", score=score)
 
 
 def score_answer(probabilities: dict[str, float]) -> dict[str, Any]:
@@ -73,19 +79,62 @@ class TestVercelJevProvider:
             provider(LLMInputPrompt(user_message="Write a poem"), response_schema=RetrievalEvaluationAnswer)
 
     def test_a_gateway_error_carries_the_status_and_body(self):
-        client = httpx.AsyncClient(transport=httpx.MockTransport(lambda _: httpx.Response(429, text="slow down")))
+        requests: list[httpx.Request] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(request)
+            return httpx.Response(403, text="no credits")
+
+        client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
         provider = VercelJevProvider(VercelJevConfiguration(api_key=SecretStr("k")), client=client)
         prompt = LLMInputPrompt(user_message="state", questions={"q": {"type": "boolean", "instructions": "?"}})
-        with pytest.raises(ValueError, match="429 slow down"):
+        with pytest.raises(ValueError, match="403 no credits"):
             provider(prompt, response_schema=RetrievalEvaluationAnswer)
+        assert len(requests) == 1, "a status that a second try cannot fix is not retried"
 
-    @pytest.mark.parametrize(("failures", "succeeds", "delays"), [(2, True, [0.5, 1.0]), (3, False, [0.5, 1.0])])
-    def test_a_503_is_retried_with_backoff_until_the_retries_run_out(self, failures, succeeds, delays):
-        statuses = [503] * failures + [200]
+    @pytest.mark.parametrize(
+        "body", ['{"result": []}', '{"answers": {"q": {"type": "essay"}}}', "<html>bad gateway</html>"]
+    )
+    def test_an_unexpected_answer_format_says_what_the_gateway_sent(self, body):
+        client = httpx.AsyncClient(transport=httpx.MockTransport(lambda _: httpx.Response(200, text=body)))
+        provider = VercelJevProvider(VercelJevConfiguration(api_key=SecretStr("k")), client=client)
+        prompt = LLMInputPrompt(user_message="state", questions={"q": {"type": "boolean", "instructions": "?"}})
+        with pytest.raises(ValueError, match="unexpected format") as error:
+            provider(prompt, response_schema=RetrievalEvaluationAnswer)
+        assert body in str(error.value)
+
+    def test_a_confidence_inside_the_answer_is_kept(self):
+        answer = {"type": "choice", "choice": "A", "probabilities": {"A": 0.9, "B": 0.1}, "confidence": 0.7}
+        client = httpx.AsyncClient(
+            transport=httpx.MockTransport(lambda _: httpx.Response(200, json={"answers": {"q": answer}}))
+        )
+        provider = VercelJevProvider(VercelJevConfiguration(api_key=SecretStr("k")), client=client)
+        prompt = LLMInputPrompt(user_message="state", questions={"q": {"type": "choice", "instructions": "?"}})
+        assert provider(prompt, response_schema=RetrievalEvaluationAnswer).parsed_answer.answers["q"].confidence == 0.7
+
+    @pytest.mark.parametrize(
+        ("failure", "failures", "raised"),
+        [
+            (503, 2, None),
+            (503, 3, ValueError),
+            (429, 2, None),
+            (502, 2, None),
+            ("timeout", 2, None),
+            ("timeout", 3, httpx.ReadTimeout),
+            ("connect", 2, None),
+        ],
+    )
+    def test_a_passing_failure_is_retried_with_backoff_until_the_retries_run_out(self, failure, failures, raised):
+        statuses = [failure] * failures + [200]
+        delays = [0.5, 1.0]
         slept: list[float] = []
 
         def handler(_: httpx.Request) -> httpx.Response:
             status = statuses.pop(0)
+            if status == "timeout":
+                raise httpx.ReadTimeout("")
+            if status == "connect":
+                raise httpx.ConnectError("")
             return httpx.Response(status, json={"answers": {"q": {"type": "boolean", "probability": 0.9}}})
 
         async def sleep(delay: float) -> None:
@@ -95,11 +144,11 @@ class TestVercelJevProvider:
         provider = VercelJevProvider(VercelJevConfiguration(api_key=SecretStr("k")), client=client, sleep=sleep)
         prompt = LLMInputPrompt(user_message="state", questions={"q": {"type": "boolean"}})
 
-        if succeeds:
+        if raised is None:
             response = provider(prompt, response_schema=RetrievalEvaluationAnswer).parsed_answer
             assert response.answers["q"].probability == 0.9
         else:
-            with pytest.raises(ValueError, match="503"):
+            with pytest.raises(raised):
                 provider(prompt, response_schema=RetrievalEvaluationAnswer)
         assert slept == delays
 
@@ -108,6 +157,18 @@ class TestJevEvaluators:
     def test_only_the_jev_provider_is_accepted(self, llm_provider_mock):
         with pytest.raises(TypeError, match='"vercel-jev" LLM provider'):
             get_retrieval_evaluator("jev", llm_provider=llm_provider_mock)
+
+    def test_answer_evaluators_are_told_what_jev_found_about_a_document(self, experiment: Experiment):
+        """Pairwise prompts quote each document's relevance reasoning by default."""
+        provider = jev_provider(lambda *_: {"type": "boolean", "probability": 0.9})
+        get_retrieval_evaluator("jev", llm_provider=provider).evaluate_experiment(experiment)
+        query = experiment["0"]
+        game = PairwiseGame(qid="0", agent_a_answer=query.answers["agent1"], agent_b_answer=query.answers["agent2"])
+
+        prompt = get_answer_evaluator("jev_pairwise", llm_provider=provider)._build_message_pairwise(query, game)
+
+        assert JEV_REASONING not in prompt.user_message
+        assert "[0]  Jev gives a probability of 0.90 that the document is relevant." in prompt.user_message
 
     def test_score_question_takes_the_most_likely_grade_not_the_mean(self, experiment: Experiment):
         """A 0.4 / 0.0 / 0.6 split has a mean of 1.2, which no single grade got any probability for."""
@@ -121,7 +182,7 @@ class TestJevEvaluators:
         assert answer.score == 2
         assert answer.probabilities == {"0": 0.4, "1": 0.0, "2": 0.6}
         assert answer.confidence == 0.8
-        assert answer.reasoning == JEV_REASONING
+        assert answer.reasoning == f"Jev's most likely relevance grade: {evaluator.relevance_grades[2]}"
         assert experiment.get_qrels()["0"] == {"0": 2, "1": 2}
         question = json.loads(requests[0].content)["questions"]["score"]
         assert question["criteria"] == list(evaluator.relevance_grades)
@@ -158,6 +219,22 @@ class TestJevEvaluators:
         assert "Paris is the capital" in long_state and "and so on" not in long_state
         assert "Paris." in short_state
         assert "Document long cut from" in caplog.text and "Document short" not in caplog.text
+
+    def test_a_system_prompt_replaces_the_yes_no_question(self):
+        requests: list[httpx.Request] = []
+        provider = jev_provider(lambda *_: {"type": "boolean", "probability": 0.25}, requests)
+        evaluator = get_retrieval_evaluator(
+            "jev", llm_provider=provider, system_prompt="Would you cite the document when answering {{ query.query }}?"
+        )
+
+        result = evaluator.evaluate(query="capital of France?", document="Paris is the capital of France.")
+
+        question = json.loads(requests[0].content)["questions"]["score"]
+        assert question == {
+            "type": "boolean",
+            "instructions": "Would you cite the document when answering capital of France??",
+        }
+        assert result.answer.score == pytest.approx(0.5)
 
     def test_custom_relevance_grades_become_the_score_levels(self):
         requests: list[httpx.Request] = []
@@ -209,6 +286,41 @@ class TestJevEvaluators:
         assert result.answer.winner == winner
         assert result.answer.probabilities == pytest.approx(probabilities)
 
+    @pytest.mark.parametrize(
+        ("options", "shown", "hidden"),
+        [
+            ({}, ["[0]  Names the capital."], ["Content: Brasília", '"']),
+            ({"include_relevance_reasoning": False}, [], ["[Reference Documents]"]),
+            ({"include_relevance_reasoning": False, "include_relevance_score": True}, ["[0]  2 "], ["Names the"]),
+            (
+                {"include_raw_documents": True},
+                ["Content: Brasília is the capital of Brazil.", "Relevance:  Names the capital.", "[1]: Rio de"],
+                [],
+            ),
+        ],
+    )
+    def test_pairwise_state_follows_the_document_options_of_the_pairwise_evaluator(
+        self, experiment: Experiment, retrieval_evaluation, options, shown, hidden
+    ):
+        """The options are inherited from the pairwise config, so the state has to honour them too."""
+        requests: list[httpx.Request] = []
+        provider = jev_provider(
+            lambda *_: {"type": "choice", "probabilities": {"A": 0.6, "B": 0.3, "C": 0.1}}, requests
+        )
+        query = experiment["0"]
+        experiment.add_evaluation(
+            (query, query.retrieved_docs["0"]), retrieval_evaluation.model_copy(update={"answer": relevant(2)})
+        )
+        evaluator = get_answer_evaluator("jev_pairwise", llm_provider=provider, **options)
+
+        evaluator.evaluate(query=query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
+
+        request = json.loads(requests[0].content)
+        assert request["questions"]["winner"]["instructions"].startswith("Which assistant gave the better answer")
+        assert query.answers["agent1"].text in request["state"] and query.answers["agent2"].text in request["state"]
+        assert all(text in request["state"] for text in shown)
+        assert not any(text in request["state"] for text in hidden)
+
     def test_rubric_pointwise_asks_every_criterion_in_one_request(self, experiment: Experiment):
         requests: list[httpx.Request] = []
         yes_probability = {"names_capital": 0.9, "gives_population": 0.2}
@@ -252,3 +364,71 @@ class TestJevEvaluators:
         assert reloaded["0"].retrieved_docs["0"].evaluations["jev"].usage == LLMUsage(
             input_tokens=278, output_tokens=20
         )
+
+
+class TestJevRDNAMEvaluator:
+    def test_the_relevance_is_one_score_question_over_the_rdnam_grades(self, base_experiment_config, tmp_path):
+        requests: list[httpx.Request] = []
+        provider = jev_provider(lambda *_: score_answer({"0": 0.0, "1": 0.46, "2": 0.54}), requests)
+        config = base_experiment_config | {"save_on_disk": True, "save_path": str(tmp_path / "jev_rdnam.json")}
+        evaluator = get_retrieval_evaluator("jev_rdnam", llm_provider=provider)
+
+        evaluator.evaluate_experiment(Experiment(**config))
+
+        questions = json.loads(requests[0].content)["questions"]
+        assert questions.keys() == {"score"}
+        assert questions["score"]["criteria"] == list(RDNAMEvaluator.relevance_grades)
+        assert "Assume that you are writing a report" in questions["score"]["instructions"]
+        reloaded = Experiment(**config)
+        answer = reloaded["0"].retrieved_docs["0"].evaluations["jev_rdnam"].answer
+        assert isinstance(answer, RDNAMEvaluationAnswer)
+        assert answer.score == pytest.approx(1.54)
+        assert (answer.probabilities, answer.confidence) == ({"0": 0.0, "1": 0.46, "2": 0.54}, 0.8)
+        assert answer.intent_match is None
+        assert answer.reasoning == "Jev's expected relevance grade is 1.54 out of 2."
+        assert reloaded.get_qrels()["0"]["0"] == 2
+
+    def test_aspects_are_extra_questions(self):
+        requests: list[httpx.Request] = []
+        means = {"score": 1.2, "intent_match": 2.0, "trustworthiness": 1.0}
+        provider = jev_provider(
+            lambda name, *_: {"type": "score", "score": means[name], "probabilities": {}}, requests
+        )
+        evaluator = get_retrieval_evaluator("jev_rdnam", llm_provider=provider, use_aspects=True)
+
+        result = evaluator.evaluate(query="capital of France?", document="Paris is the capital of France.")
+
+        questions = json.loads(requests[0].content)["questions"]
+        assert questions.keys() == {"intent_match", "trustworthiness", "score"}
+        assert questions["intent_match"]["criteria"] == ["0 out of 2", "1 out of 2", "2 out of 2"]
+        assert (result.answer.score, result.answer.intent_match, result.answer.trustworthiness) == (1.2, 2.0, 1.0)
+
+    def test_several_annotators_are_rejected(self):
+        """Jev repeats itself, so five annotators would be five identical judgments."""
+        with pytest.raises(ValueError, match="use_multiple_annotators"):
+            get_retrieval_evaluator(
+                "jev_rdnam", llm_provider=jev_provider(lambda *_: {}), use_multiple_annotators=True
+            )
+
+
+class TestJevCriteriaEvaluator:
+    def test_the_yes_probabilities_of_the_grade_boundaries_add_up_to_the_expected_grade(self):
+        requests: list[httpx.Request] = []
+        yes_probability = {"usable": 0.9, "vital": 0.3}
+        provider = jev_provider(lambda name, *_: {"type": "boolean", "probability": yes_probability[name]}, requests)
+        config = JevRubricCoverageEvaluatorConfig(expert_in="web search", rubrics={"q": RDNAM_CRITERIA})
+        evaluator = JevCriteriaEvaluator.from_config(config, provider)
+        query = Query(qid="q", query="capital of France?")
+        query.add_retrieved_doc(Document(qid="q", did="d", text="Paris is the capital of France."))
+
+        evaluator.evaluate_all_evaluables(query)
+
+        answer = query.retrieved_docs["d"].evaluations["jev_rubric_coverage"].answer
+        questions = json.loads(requests[0].content)["questions"]
+        assert len(requests) == 1
+        assert {name: question["instructions"] for name, question in questions.items()} == {
+            criterion.criterion_name: criterion.short_question for criterion in RDNAM_CRITERIA
+        }
+        assert answer.score == pytest.approx(1.2)
+        assert answer.criteria_addressed == ["usable"]
+        assert query.get_qrels() == {"d": 1}

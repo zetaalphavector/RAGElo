@@ -110,10 +110,11 @@ class OpenAIProvider(BaseLLMProvider):
 
         usage = None
         if answer.usage:
+            details = answer.usage.input_tokens_details
             usage = LLMUsage(
                 input_tokens=answer.usage.input_tokens,
                 output_tokens=answer.usage.output_tokens,
-                cached_tokens=answer.usage.input_tokens_details.cached_tokens,
+                cached_tokens=details.cached_tokens if details else 0,
             )
         return LLMResponseType(raw_answer=raw_answer, parsed_answer=parsed_answer, usage=usage)
 

@@ -11,10 +11,14 @@ class ReasonerEvaluator(BaseRetrievalEvaluator[ReasonerEvaluatorConfig]):
     """
 
     config: ReasonerEvaluatorConfig
+    # Measured against grading by topic in benchmarks/README.md.
     relevance_grades = (
-        "Not relevant: The document is not on topic.",
-        "Somewhat relevant: The document is on topic but does not fully answer the user question.",
-        "Very relevant: The document is on topic and answers the user question.",
+        (
+            "Not relevant: The document contains no information that helps answer the user question, "
+            "even if it is on the same topic or shares keywords with it."
+        ),
+        "Somewhat relevant: The document contains partial or indirect information that helps answer the user question.",
+        "Very relevant: The document contains the answer to the user question, even if surrounded by other content.",
     )
     system_prompt = string_to_template("""
         You are an impartial expert document annotator, tasked with evaluating if a document contains relevant information to answer a question submitted by a user. 

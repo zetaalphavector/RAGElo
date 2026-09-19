@@ -22,7 +22,7 @@ from ragelo.types.configurations import BaseAnswerEvaluatorConfig, PairwiseEvalu
 from ragelo.types.evaluables import AgentAnswer, Document, Evaluable, PairwiseGame
 from ragelo.types.evaluator_utils import answer_format_for
 from ragelo.types.types import AnswerEvaluatorTypes, _result_type_registry
-from ragelo.utils import call_async_fn, get_placeholders_and_tags
+from ragelo.utils import call_async_fn, describe_exception, get_placeholders_and_tags
 
 logger = logging.getLogger(__name__)
 
@@ -164,7 +164,7 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
             llm_response = self._process_answer(llm_response, query)
             parsed_answer = llm_response.parsed_answer
         except Exception as e:  # noqa: BLE001 - captured on the result as `exception`
-            exc = str(e)
+            exc = describe_exception(e)
             logger.warning(f"Failed to generate answer for qid: {query.qid} and agent: {answer.agent}: {exc}")
 
         result = AnswerEvaluatorResult(
@@ -192,7 +192,7 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
             llm_response = self._process_answer(llm_response, query)
             parsed_answer = llm_response.parsed_answer
         except Exception as e:  # noqa: BLE001 - captured on the result as `exception`
-            exc = str(e)
+            exc = describe_exception(e)
             logger.warning(
                 f"Failed to evaluate game for qid: {query.qid} "
                 f"agents: ({game.agent_a_answer.agent}, {game.agent_b_answer.agent}): {exc}"
@@ -233,6 +233,18 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
 
         a_vs_b_result = await self.__evaluate_single_game(query, normal_game)
         b_vs_a_result = await self.__evaluate_single_game(query, reversed_game)
+        failed = next((r for r in (a_vs_b_result, b_vs_a_result) if r.exception or r.answer is None), None)
+        if failed is not None:
+            # One answer order alone decides nothing: judging both is what cancels the position bias.
+            return PairwiseGameEvaluatorResult(
+                qid=query.qid,
+                agent_a=game.agent_a_answer.agent,
+                agent_b=game.agent_b_answer.agent,
+                evaluator_name=evaluator_name,
+                exception=failed.exception or "One answer order returned no judgment",
+                a_vs_b_result=a_vs_b_result,
+                b_vs_a_result=b_vs_a_result,
+            )
 
         # Reconcile using weighted scores.
         # Positive margin = A is better; the reversed game's margin is negated
@@ -277,15 +289,13 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
             else:
                 parent_answer = answer_source.model_copy(update={"winner": final_winner})
 
-        exc = a_vs_b_result.exception or b_vs_a_result.exception
-
         result = PairwiseGameEvaluatorResult(
             qid=query.qid,
             agent_a=game.agent_a_answer.agent,
             agent_b=game.agent_b_answer.agent,
             evaluator_name=evaluator_name,
             answer=parent_answer,
-            exception=exc,
+            usage=a_vs_b_result.usage + b_vs_a_result.usage if a_vs_b_result.usage and b_vs_a_result.usage else None,
             a_vs_b_result=a_vs_b_result,
             b_vs_a_result=b_vs_a_result,
         )

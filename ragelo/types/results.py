@@ -59,7 +59,9 @@ class EvaluatorResult(BaseModel):
     )
     answer: EvaluationAnswer | None = Field(default=None, description="The LLM-generated evaluation content.")
     usage: SkipJsonSchema[LLMUsage | None] = Field(
-        default=None, description="The tokens the LLM call behind this result was billed for."
+        default=None,
+        description="The tokens the judging calls behind this result were billed for. A pairwise game adds up "
+        "both answer orders. Rubric generation and the evidence recall and citation quality checks are not counted.",
     )
 
     @field_serializer("answer")
@@ -268,7 +270,7 @@ class RetrievalComparisonResult(BaseModel):
 class RDNAMEvaluatorResult(RetrievalEvaluatorResult):
     """Specialized retrieval result for RDNAM (answer is typically RDNAMEvaluationAnswer)."""
 
-    answer: RDNAMEvaluationAnswer = Field(...)
+    answer: RDNAMEvaluationAnswer | None = None
 
     @model_validator(mode="before")
     @classmethod

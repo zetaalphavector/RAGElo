@@ -25,4 +25,5 @@ def config_kwargs(config_class: type[BaseModel], cli_kwargs: dict[str, Any]) -> 
 
 
 def get_cli_llm_provider(name: str, cli_kwargs: dict[str, Any]) -> BaseLLMProvider:
-    return get_llm_provider(name, **split_llm_provider_kwargs(name, cli_kwargs)[0])
+    provider_kwargs, _ = split_llm_provider_kwargs(name, cli_kwargs)
+    return get_llm_provider(name, **{option: value for option, value in provider_kwargs.items() if value is not None})

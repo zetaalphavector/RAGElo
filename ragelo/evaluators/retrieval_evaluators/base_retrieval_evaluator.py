@@ -18,7 +18,7 @@ from ragelo.types.configurations import BaseRetrievalEvaluatorConfig
 from ragelo.types.evaluables import Document, Evaluable
 from ragelo.types.evaluator_utils import answer_format_for
 from ragelo.types.types import RetrievalEvaluatorTypes, _result_type_registry
-from ragelo.utils import call_async_fn
+from ragelo.utils import call_async_fn, describe_exception
 
 logger = logging.getLogger(__name__)
 
@@ -41,9 +41,11 @@ class BaseRetrievalEvaluator(BaseEvaluator[T_Config, RetrievalEvaluatorResult]):
 
     def __init__(self, config: T_Config, llm_provider: BaseLLMProvider):
         super().__init__(config, llm_provider)
+        states_its_grades = type(self).relevance_grades is not BaseRetrievalEvaluator.relevance_grades
         if config.relevance_grades:
             self.relevance_grades = config.relevance_grades
-        if self.answer_format is RetrievalEvaluationAnswer:
+        # A custom prompt brings its own scale, so its score is only bounded once the grades are given.
+        if self.answer_format is RetrievalEvaluationAnswer and (states_its_grades or config.relevance_grades):
             self.answer_format = create_model(
                 "RetrievalEvaluationAnswer", __base__=RetrievalEvaluationAnswer, score=(int, self._score_field())
             )
@@ -128,7 +130,7 @@ class BaseRetrievalEvaluator(BaseEvaluator[T_Config, RetrievalEvaluatorResult]):
             llm_response = self._process_answer(llm_response, query)
             parsed_answer = llm_response.parsed_answer
         except Exception as e:  # noqa: BLE001
-            exc = str(e)
+            exc = describe_exception(e)
             logger.warning(f"Failed to generate answer for qid: {query.qid} and document: {document.did}: {exc}")
 
         return self.result_type(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import random
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -27,6 +28,9 @@ def agreement(reference: Qrels, judged: Qrels, max_label: int = 2, relevant_from
     That puts the 0-3 TREC labels and the 0-2 RAGElo labels on the same three grades. Spearman is
     rank-based and reads the uncollapsed labels. Fractional scores are rounded half-up to labels, as
     `Experiment.get_qrels` does, except for `spearman_raw`, which keeps the ranking the rounding loses.
+
+    `kappa_binary` cuts the rounded labels at `relevant_from`, so a fractional judge is relevant from
+    `relevant_from - 0.5`. For a yes/no judge scaled to 0-2 that is a yes-probability of 0.75, not 0.5.
     """
     scores = [
         (int(reference[qid][did]), score)
@@ -50,6 +54,39 @@ def agreement(reference: Qrels, judged: Qrels, max_label: int = 2, relevant_from
         spearman=spearman(raw_reference, raw_judged),
         spearman_raw=spearman(raw_reference, [score for _, score in scores]),
     )
+
+
+def spearman_interval(
+    reference: Qrels, judged: Qrels, n_resamples: int = 1000, seed: int = 0, level: float = 0.95
+) -> tuple[float, float]:
+    """Bootstrap interval of the label Spearman, resampling queries.
+
+    Pairs of one query are not independent, so resampling pairs gives an interval that is too narrow.
+    """
+    labels = {
+        qid: [
+            (int(reference[qid][did]), math.floor(score + 0.5))
+            for did, score in scores.items()
+            if did in reference[qid]
+        ]
+        for qid, scores in judged.items()
+        if qid in reference
+    }
+    qids = sorted(qid for qid, pairs in labels.items() if pairs)
+    if not qids:
+        return math.nan, math.nan
+    rng = random.Random(seed)
+    estimates = []
+    for _ in range(n_resamples):
+        pairs = [pair for qid in rng.choices(qids, k=len(qids)) for pair in labels[qid]]
+        estimate = spearman([a for a, _ in pairs], [b for _, b in pairs])
+        if not math.isnan(estimate):
+            estimates.append(estimate)
+    if not estimates:
+        return math.nan, math.nan
+    estimates.sort()
+    tail = (1 - level) / 2
+    return estimates[int(tail * len(estimates))], estimates[min(int((1 - tail) * len(estimates)), len(estimates) - 1)]
 
 
 def cohen_kappa(a: Sequence[int], b: Sequence[int]) -> float:

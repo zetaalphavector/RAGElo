@@ -28,11 +28,12 @@ Environment variables and providers:
 - OpenAI requires `OPENAI_API_KEY`. Set it in your shell or load it via dotenv before invoking the CLI.
 - Ollama is supported for local models (`--llm-provider-name ollama`).
 - The [Vercel AI Gateway](https://vercel.com/docs/ai-gateway) (`--llm-provider-name vercel`) requires `AI_GATEWAY_API_KEY` and takes `creator/model` ids, e.g. `ragelo run-all ... --model anthropic/claude-haiku-4-5`.
-- [Jev](https://docs.typesafe.ai/introduction) (`llm_provider="vercel-jev"`, also through the Vercel AI Gateway and `AI_GATEWAY_API_KEY`) is not an LLM: it answers typed questions with probabilities and writes no reasoning. It only works with the `jev`, `jev_pairwise`, `jev_rubric_pointwise`, `jev_rubric_pairwise` and `jev_rubric_coverage` evaluators, which store the most likely label plus `probabilities` and `confidence` on the usual answer formats:
+- [Jev](https://docs.typesafe.ai/introduction) (`llm_provider="vercel-jev"`, also through the Vercel AI Gateway and `AI_GATEWAY_API_KEY`) is not an LLM: it answers typed questions with probabilities and writes no reasoning. It only works with the `jev`, `jev_rdnam`, `jev_pairwise`, `jev_rubric_pointwise`, `jev_rubric_pairwise` and `jev_rubric_coverage` evaluators, which store the most likely label plus `probabilities` and `confidence` on the usual answer formats:
   ```python
   evaluator = get_retrieval_evaluator("jev", llm_provider="vercel-jev")
   ```
-  The `jev` retrieval evaluator is the exception: it asks one yes/no question, whether the document helps answer the user question, and stores the probability of a yes scaled to the top relevance grade. Pass `boolean_question=False` to score over the relevance grades and keep the most likely one.
+  Two retrieval evaluators store a fractional score instead. `jev_rdnam` keeps Jev's expected grade, like RDNAM's annotator average. `jev` asks one yes/no question, whether the document would be used in a report on the topic of the user question, and stores the probability of a yes scaled to the top relevance grade. Pass `boolean_question=False` to score over the relevance grades and keep the most likely one.
+- Stored judgments are reused unless `force=True`. The `reasoner` grades were reworded to grade what a document contributes to an answer, so judgments cached by an earlier version were made under the old wording.
 - The **Instructor provider** enables multi-provider support (Anthropic, Mistral, Cohere, and more) via the [`instructor`](https://github.com/jxnl/instructor) library. Install the extra and the relevant SDK:
   ```bash
   pip install 'ragelo[instructor]' anthropic   # for Anthropic/Claude

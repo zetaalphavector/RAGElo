@@ -9,6 +9,7 @@ from pydantic import BaseModel, ValidationError
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, LLMProviderFactory
 from ragelo.types import LLMInputPrompt, LLMResponseType
 from ragelo.types.configurations import OllamaConfiguration
+from ragelo.types.formats import LLMUsage
 from ragelo.types.types import LLMProviderTypes
 
 T_Schema = TypeVar("T_Schema", bound=BaseModel)
@@ -99,10 +100,10 @@ class OllamaProvider(BaseLLMProvider):
             parsed_answer = answers.choices[0].message.parsed
             raw_answer = answers.choices[0].message.content
 
-        return LLMResponseType(
-            raw_answer=raw_answer,
-            parsed_answer=parsed_answer,
-        )
+        usage = None
+        if answers.usage:
+            usage = LLMUsage(input_tokens=answers.usage.prompt_tokens, output_tokens=answers.usage.completion_tokens)
+        return LLMResponseType(raw_answer=raw_answer, parsed_answer=parsed_answer, usage=usage)
 
     @staticmethod
     def __get_ollama_client(ollama_config: OllamaConfiguration) -> AsyncOpenAI:

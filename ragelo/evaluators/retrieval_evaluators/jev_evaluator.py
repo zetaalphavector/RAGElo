@@ -2,16 +2,18 @@ import logging
 
 from pydantic import BaseModel
 
-from ragelo.evaluators.jev_evaluator_mixin import JEV_REASONING, JevEvaluatorMixin, JevRubricEvaluatorMixin
-from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
-    BaseRetrievalEvaluator,
-    RetrievalEvaluatorFactory,
-)
+from ragelo.evaluators.jev_evaluator_mixin import JevEvaluatorMixin, JevRubricEvaluatorMixin
+from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import RetrievalEvaluatorFactory
+from ragelo.evaluators.retrieval_evaluators.rdnam_evaluator import RDNAMEvaluator
 from ragelo.evaluators.retrieval_evaluators.reasoner_evaluator import ReasonerEvaluator
 from ragelo.evaluators.retrieval_evaluators.rubric_coverage_evaluator import RubricCoverageEvaluator
 from ragelo.types import Document, LLMInputPrompt, LLMResponseType, Query
-from ragelo.types.answer_formats import RetrievalEvaluationAnswer
-from ragelo.types.configurations import JevRetrievalEvaluatorConfig, JevRubricCoverageEvaluatorConfig
+from ragelo.types.answer_formats import RDNAMEvaluationAnswer, RetrievalEvaluationAnswer
+from ragelo.types.configurations import (
+    JevRDNAMEvaluatorConfig,
+    JevRetrievalEvaluatorConfig,
+    JevRubricCoverageEvaluatorConfig,
+)
 from ragelo.types.formats import JevAnswer
 from ragelo.types.types import RetrievalEvaluatorTypes
 from ragelo.utils import string_to_template
@@ -27,23 +29,27 @@ def _trimmed(document: Document, max_chars: int) -> Document:
 
 
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.JEV)
-class JevRetrievalEvaluator(JevEvaluatorMixin, BaseRetrievalEvaluator[JevRetrievalEvaluatorConfig]):
-    """Asks Jev whether the document helps answer the question. On LLMJudge this agrees with the human
-    labels better than a score question over the relevance grades, which `boolean_question=False` asks.
+class JevRetrievalEvaluator(JevEvaluatorMixin, ReasonerEvaluator):
+    """Asks Jev one yes/no question about the document, or with `boolean_question=False` a score
+    question over the relevance grades. The yes-probability is scaled to the top grade, so on a 0-2
+    scale a document rounds to grade 2 from a probability of 0.75 and to grade 1 from 0.25.
+    Both defaults are measured in benchmarks/README.md.
     """
 
     config: JevRetrievalEvaluatorConfig
-    relevance_grades = ReasonerEvaluator.relevance_grades
     system_prompt = string_to_template("How relevant is the document to the user question?")
-    user_prompt = ReasonerEvaluator.user_prompt
 
-    boolean_prompt = "Does the document contain information that helps answer the user question?"
+    boolean_prompt = (
+        "Assume you are writing a report on the topic of the user question. "
+        "Would you use any of the information contained in the document in that report?"
+    )
 
     def _build_message(self, query: Query, document: Document) -> LLMInputPrompt:
         prompt = super()._build_message(query, _trimmed(document, self.config.max_document_chars))
         if self.config.boolean_question:
+            instructions = prompt.system_prompt if self.config.system_prompt else self.boolean_prompt
             return prompt.model_copy(
-                update={"system_prompt": self.boolean_prompt, "questions": {"score": {"type": "boolean"}}}
+                update={"system_prompt": instructions, "questions": {"score": {"type": "boolean"}}}
             )
         question = {"type": "score", "criteria": list(self.relevance_grades)}
         return prompt.model_copy(update={"questions": {"score": question}})
@@ -51,7 +57,7 @@ class JevRetrievalEvaluator(JevEvaluatorMixin, BaseRetrievalEvaluator[JevRetriev
     def _process_answer(self, llm_response: LLMResponseType[BaseModel], query: Query) -> LLMResponseType[BaseModel]:
         answer = self._jev_answer(llm_response, "score")
         parsed = RetrievalEvaluationAnswer(
-            reasoning=JEV_REASONING,
+            reasoning=self._reasoning(answer),
             score=self._score(answer),
             probabilities=answer.probabilities,
             confidence=answer.confidence,
@@ -62,6 +68,44 @@ class JevRetrievalEvaluator(JevEvaluatorMixin, BaseRetrievalEvaluator[JevRetriev
         if answer.probability is not None:
             return answer.probability * self.max_score
         return int(answer.label)
+
+    def _reasoning(self, answer: JevAnswer) -> str:
+        """Answer evaluators quote a document's relevance reasoning in their prompts, so it says what Jev found."""
+        if answer.probability is not None:
+            return f"Jev gives a probability of {answer.probability:.2f} that the document is relevant."
+        return f"Jev's most likely relevance grade: {self.relevance_grades[int(answer.label)]}"
+
+
+@RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.JEV_RDNAM)
+class JevRDNAMEvaluator(JevEvaluatorMixin, RDNAMEvaluator):
+    """RDNAM's prompt and relevance grades as Jev score questions, one for the relevance and one per aspect.
+
+    The stored scores are Jev's expected levels, so they are fractional like RDNAM's annotator averages.
+    Jev answers every question on its own, so the aspects are reported without informing the relevance.
+    """
+
+    config: JevRDNAMEvaluatorConfig
+    unsupported_options = ("use_multiple_annotators",)
+
+    def _build_message(self, query: Query, document: Document) -> LLMInputPrompt:
+        prompt = super()._build_message(query, _trimmed(document, self.config.max_document_chars))
+        levels = [f"{level} out of {self.max_score}" for level in range(self.max_score + 1)]
+        questions: dict[str, dict[str, object]] = {
+            name: {"type": "score", "instructions": f"Rate {aspect}.", "criteria": levels}
+            for name, aspect in self.aspects.items()
+        }
+        questions["score"] = {"type": "score", "criteria": list(self.relevance_grades)}
+        return prompt.model_copy(update={"questions": questions})
+
+    def _process_answer(self, llm_response: LLMResponseType[BaseModel], query: Query) -> LLMResponseType[BaseModel]:
+        relevance = self._jev_answer(llm_response, "score")
+        answer = RDNAMEvaluationAnswer(
+            reasoning=f"Jev's expected relevance grade is {relevance.score:.2f} out of {self.max_score}.",
+            probabilities=relevance.probabilities,
+            confidence=relevance.confidence,
+            **{name: self._jev_answer(llm_response, name).score for name in [*self.aspects, "score"]},
+        )
+        return LLMResponseType(raw_answer=llm_response.raw_answer, parsed_answer=answer)
 
 
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.JEV_RUBRIC_COVERAGE)
@@ -85,7 +129,8 @@ class JevRubricCoverageEvaluator(JevRubricEvaluatorMixin, RubricCoverageEvaluato
             criterion.criterion_name: self._jev_answer(llm_response, criterion.criterion_name).is_yes
             for criterion in query.rubric
         }
-        verdicts = self._rubric_schema(query)(reasoning=JEV_REASONING, **addressed)
+        found = ", ".join(name for name, is_addressed in addressed.items() if is_addressed) or "none"
+        verdicts = self._rubric_schema(query)(reasoning=f"Criteria Jev found addressed: {found}", **addressed)
         return super()._process_answer(
             LLMResponseType(raw_answer=llm_response.raw_answer, parsed_answer=verdicts), query
         )

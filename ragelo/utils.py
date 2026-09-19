@@ -14,11 +14,17 @@ from tqdm.auto import tqdm
 from tqdm.rich import tqdm_rich
 
 _LOOP = asyncio.new_event_loop()
-threading.Thread(target=_LOOP.run_forever, daemon=True).start()
+_LOOP_THREAD = threading.Thread(target=_LOOP.run_forever, daemon=True)
+_LOOP_THREAD.start()
 
 
 def call_async_fn(fn: Callable[..., Coroutine[Any, Any, Any]], *args: Any, **kwargs: Any) -> Any:
     """Runs an asynchronous function to completion from synchronous code."""
+    if threading.current_thread() is _LOOP_THREAD:
+        raise RuntimeError(
+            f"{fn.__qualname__} was called through its synchronous wrapper from code that RAGElo is already "
+            "running asynchronously, which would wait on itself forever. Await the async method instead."
+        )
     return asyncio.run_coroutine_threadsafe(fn(*args, **kwargs), _LOOP).result()
 
 
@@ -30,6 +36,11 @@ def get_pbar(
         return tqdm_rich(total=total, ncols=ncols, desc=desc, disable=disable)
     else:
         return tqdm(total=total, ncols=ncols, desc=desc, disable=disable)
+
+
+def describe_exception(error: BaseException) -> str:
+    """Never empty: a timeout has no message, and an empty string would read as no failure at all."""
+    return f"{type(error).__name__}: {error}"
 
 
 def string_to_template(src: str) -> Template:

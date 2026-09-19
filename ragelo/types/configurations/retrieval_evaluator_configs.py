@@ -58,25 +58,26 @@ class BaseRetrievalEvaluatorConfig(BaseEvaluatorConfig):
 
 class JevDocumentConfigMixin(BaseConfig):
     max_document_chars: int = Field(
-        default=60_000,
+        default=30_000,
         gt=0,
         description="Documents longer than this are cut to their first characters before Jev sees them. Jev "
-        "rejects a request with about 75,000 characters of dense text.",
-    )
-
-
-class JevRetrievalEvaluatorConfig(JevDocumentConfigMixin, BaseRetrievalEvaluatorConfig):
-    evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.JEV
-    boolean_question: bool = Field(
-        default=True,
-        description="Ask Jev one yes/no question, whether the document helps answer the user question, and scale "
-        "the probability of a yes to the top grade. When False, Jev scores the document over the relevance "
-        "grades and the most likely grade is kept.",
+        "rejects prose beyond about 83,000 characters and number-dense text beyond about 38,000.",
     )
 
 
 class ReasonerEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.REASONER
+
+
+class JevRetrievalEvaluatorConfig(JevDocumentConfigMixin, ReasonerEvaluatorConfig):
+    evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.JEV
+    boolean_question: bool = Field(
+        default=True,
+        description="Ask Jev one yes/no question, whether the document would be used in a report on the topic "
+        "of the user question, and scale the probability of a yes to the top grade. Set system_prompt to ask a "
+        "different yes/no question. When False, Jev scores the document over the relevance grades and the most "
+        "likely grade is kept.",
+    )
 
 
 class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
@@ -164,8 +165,12 @@ class RDNAMEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     )
     use_multiple_annotators: bool = Field(
         default=False,
-        description="Should the prompt ask the LLM to mimic multiple annotators?",
+        description="Judge every document five times, independently, and average the scores.",
     )
+
+
+class JevRDNAMEvaluatorConfig(JevDocumentConfigMixin, RDNAMEvaluatorConfig):
+    evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.JEV_RDNAM
 
 
 class JevRubricCoverageEvaluatorConfig(JevDocumentConfigMixin, RubricCoverageEvaluatorConfig):

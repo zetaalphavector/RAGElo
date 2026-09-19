@@ -23,11 +23,17 @@ from ragelo.types.types import RetrievalEvaluatorTypes
 from ragelo.utils import string_to_template
 
 N_ANNOTATORS = 5
+ASPECTS = {
+    "intent_match": "the match of the document to the query intent",
+    "trustworthiness": "the trustworthiness of the document",
+}
 
 
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.RDNAM)
 class RDNAMEvaluator(BaseRetrievalEvaluator[RDNAMEvaluatorConfig]):
     config: RDNAMEvaluatorConfig
+    result_type = RDNAMEvaluatorResult
+    answer_format = RDNAMEvaluationAnswer
     relevance_grades = (
         "not relevant, should never be shown for this query",
         "relevant, may be partly helpful but might contain other irrelevant content",
@@ -68,28 +74,29 @@ class RDNAMEvaluator(BaseRetrievalEvaluator[RDNAMEvaluatorConfig]):
         We asked five search engine raters to evaluate the relevance of the web page for the query.
         Each rater used their own independent judgement.
         {%- endif %}""")
-    result_type = RDNAMEvaluatorResult
-    answer_format = RDNAMEvaluationAnswer
 
     def __init__(self, config: RDNAMEvaluatorConfig, llm_provider: BaseLLMProvider):
         super().__init__(config, llm_provider)
         self._response_schema = self._build_response_schema()
 
+    @property
+    def aspects(self) -> dict[str, str]:
+        """What is scored before the overall relevance, by the name it is stored under."""
+        return ASPECTS if self.config.use_aspects else {}
+
     def _build_response_schema(self) -> type[BaseModel]:
-        fields: dict[str, tuple[type, FieldInfo]] = {"score": (int, self._score_field())}
-        if self.config.use_aspects:
-            fields["intent_match"] = (int, self._aspect_field("the match of the document to the query intent"))
-            fields["trustworthiness"] = (int, self._aspect_field("the trustworthiness of the document"))
+        fields: dict[str, tuple[type, FieldInfo]] = {
+            "reasoning": (str, Field(description="A concise explanation of the scores."))
+        }
+        for name, aspect in self.aspects.items():
+            description = f"An integer from 0 to {self.max_score} representing {aspect}."
+            fields[name] = (int, Field(description=description, ge=0, le=self.max_score))
+        fields["score"] = (int, self._score_field())
         judgment = create_model("RDNAMJudgment", **fields)  # type: ignore[call-overload]
         if not self.config.use_multiple_annotators:
             return judgment
         annotators = {f"annotator_{i}": (judgment, ...) for i in range(1, N_ANNOTATORS + 1)}
         return create_model("RDNAMAnnotators", **annotators)  # type: ignore[call-overload]
-
-    def _aspect_field(self, aspect: str) -> FieldInfo:
-        return Field(
-            description=f"An integer from 0 to {self.max_score} representing {aspect}.", ge=0, le=self.max_score
-        )
 
     def _build_message(self, query: Query, document: Document) -> LLMInputPrompt:
         context = self._prompt_context(query, document) | {
@@ -104,13 +111,12 @@ class RDNAMEvaluator(BaseRetrievalEvaluator[RDNAMEvaluatorConfig]):
         )
 
     def _process_answer(self, llm_response: LLMResponseType[BaseModel], query: Query) -> LLMResponseType[BaseModel]:
-        parsed = llm_response.parsed_answer
-        if parsed is None:
-            return llm_response
-        response = parsed.model_dump()
+        """The annotators all answer in one call, and the stored judgment is their average."""
+        response = llm_response.parsed_answer.model_dump()
         judgments = list(response.values()) if self.config.use_multiple_annotators else [response]
-        answer = RDNAMEvaluationAnswer(score=fmean(judgment["score"] for judgment in judgments))
-        if self.config.use_aspects:
-            answer.intent_match = fmean(judgment["intent_match"] for judgment in judgments)
-            answer.trustworthiness = fmean(judgment["trustworthiness"] for judgment in judgments)
+        answer = RDNAMEvaluationAnswer(
+            reasoning="\n\n".join(judgment["reasoning"] for judgment in judgments),
+            score=fmean(judgment["score"] for judgment in judgments),
+            **{name: fmean(judgment[name] for judgment in judgments) for name in self.aspects},
+        )
         return LLMResponseType(raw_answer=llm_response.raw_answer, parsed_answer=answer)

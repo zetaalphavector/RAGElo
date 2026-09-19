@@ -14,11 +14,18 @@ class JevEvaluatorMixin:
 
     llm_provider: BaseLLMProvider
     config: BaseModel
+    unsupported_options: tuple[str, ...] = ()
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if not isinstance(self.llm_provider, VercelJevProvider):
             raise TypeError(f'{type(self).__name__} only works with the "vercel-jev" LLM provider')
+        enabled = [option for option in self.unsupported_options if getattr(self.config, option, False)]
+        if enabled:
+            raise ValueError(
+                f"{type(self).__name__} does not support {', '.join(enabled)}: Jev generates no text and "
+                "answers the same request the same way"
+            )
 
     @staticmethod
     def _jev_answer(llm_response: LLMResponseType[BaseModel], question: str) -> JevAnswer:
@@ -42,9 +49,3 @@ class JevRubricEvaluatorMixin(JevEvaluatorMixin):
         "rich_pairwise_output",
         "include_evidence_in_evaluation",
     )
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        enabled = [option for option in self.unsupported_options if getattr(self.config, option, False)]
-        if enabled:
-            raise ValueError(f"{type(self).__name__} does not support {', '.join(enabled)}: Jev generates no text")

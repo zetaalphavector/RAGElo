@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, LLMProviderFactory
 from ragelo.types import LLMInputPrompt, LLMResponseType
 from ragelo.types.configurations import InstructorConfiguration
+from ragelo.types.formats import LLMUsage
 from ragelo.types.types import LLMProviderTypes
 
 T_Schema = TypeVar("T_Schema", bound=BaseModel)
@@ -73,7 +74,19 @@ class InstructorProvider(BaseLLMProvider):
                 f"Received response: {parsed_answer}"
             )
         raw_answer = parsed_answer.model_dump_json()
-        return LLMResponseType(raw_answer=raw_answer, parsed_answer=parsed_answer)
+        return LLMResponseType(raw_answer=raw_answer, parsed_answer=parsed_answer, usage=self.__usage(parsed_answer))
+
+    @staticmethod
+    def __usage(parsed_answer: BaseModel) -> LLMUsage | None:
+        """Instructor keeps the provider's response on the model. OpenAI-style SDKs count prompt and
+        completion tokens, Anthropic's counts input and output tokens."""
+        usage = getattr(getattr(parsed_answer, "_raw_response", None), "usage", None)
+        if usage is None:
+            return None
+        return LLMUsage(
+            input_tokens=getattr(usage, "input_tokens", None) or getattr(usage, "prompt_tokens", None) or 0,
+            output_tokens=getattr(usage, "output_tokens", None) or getattr(usage, "completion_tokens", None) or 0,
+        )
 
     @staticmethod
     def __get_instructor_client(config: InstructorConfiguration) -> AsyncInstructor:

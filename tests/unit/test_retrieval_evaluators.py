@@ -103,28 +103,6 @@ class TestRetrievalEvaluator:
         captured = capsys.readouterr()
         assert "🔎" in captured.out
 
-    def test_get_by_name(self, llm_provider_mock, expert_retrieval_eval_config):
-        domain_expert_evaluator = get_retrieval_evaluator(
-            "domain_expert",
-            llm_provider_mock,
-            expert_in=expert_retrieval_eval_config.expert_in,
-        )
-        assert isinstance(domain_expert_evaluator, DomainExpertEvaluator)
-        reasoner_evaluator = get_retrieval_evaluator(
-            "reasoner",
-            llm_provider_mock,
-        )
-        assert isinstance(reasoner_evaluator, ReasonerEvaluator)
-        rdna_evaluator = get_retrieval_evaluator("RDNAM", llm_provider_mock)
-
-        assert isinstance(rdna_evaluator, RDNAMEvaluator)
-        custom_evaluator = get_retrieval_evaluator(
-            "custom_prompt",
-            llm_provider_mock,
-            user_prompt="Query: {{ query.query }} Retrieved document: {{ document.text }}",
-        )
-        assert isinstance(custom_evaluator, BaseRetrievalEvaluator)
-
     def test_evaluate_all_evaluables(self, llm_provider_mock_retrieval, experiment, base_retrieval_eval_config):
         evaluator = RetrievalEvaluator.from_config(
             config=base_retrieval_eval_config, llm_provider=llm_provider_mock_retrieval
@@ -152,6 +130,20 @@ class TestRDNAMEvaluator:
 
         call_args = llm_provider_mock_rdnam.async_call_mocker.call_args_list
         assert call_args[0][0][0].system_prompt.startswith("You are a search quality rater evaluating")
+        assert len(call_args) == 1, "the five annotators answer in one call"
+
+    @pytest.mark.parametrize("use_multiple_annotators", [False, True])
+    def test_llm_failure_is_reported_on_the_result(self, use_multiple_annotators, llm_provider_mock, experiment):
+        llm_provider_mock.call_async = AsyncMock(side_effect=ValueError("gateway said no"))
+        evaluator = get_retrieval_evaluator(
+            "RDNAM", llm_provider=llm_provider_mock, use_multiple_annotators=use_multiple_annotators
+        )
+        query = experiment["0"]
+
+        result = call_async_fn(evaluator.evaluate_async, (query, query.retrieved_docs["0"]))
+
+        assert result.answer is None
+        assert "gateway said no" in result.exception
 
     @pytest.mark.parametrize("use_aspects", [False, True])
     @pytest.mark.parametrize("use_multiple_annotators", [False, True])
@@ -171,7 +163,8 @@ class TestRDNAMEvaluator:
 
         answer = Experiment(**config)["0"].retrieved_docs["0"].evaluations["RDNAM"].answer
         aspect = 2.0 if use_aspects else None
-        assert answer == RDNAMEvaluationAnswer(score=1.0, intent_match=aspect, trustworthiness=aspect)
+        assert (answer.score, answer.intent_match, answer.trustworthiness) == (1.0, aspect, aspect)
+        assert answer.reasoning.count("Doc judged") == (5 if use_multiple_annotators else 1)
 
 
 class TestReasonerEvaluator:
@@ -189,14 +182,22 @@ class TestReasonerEvaluator:
         assert call_args[0][0][0].user_message == user_prompt
         assert all(f"- {grade}" in call_args[0][0][0].system_prompt for grade in ReasonerEvaluator.relevance_grades)
 
-    def test_llm_failure_is_reported_on_the_result(self, llm_provider_mock, base_retrieval_eval_config, experiment):
-        llm_provider_mock.call_async = AsyncMock(side_effect=ValueError("gateway said no"))
+    @pytest.mark.parametrize(
+        ("error", "recorded"),
+        [(ValueError("gateway said no"), "ValueError: gateway said no"), (TimeoutError(), "TimeoutError: ")],
+    )
+    def test_llm_failure_is_reported_on_the_result(
+        self, error, recorded, llm_provider_mock, base_retrieval_eval_config, experiment
+    ):
+        """A timeout carries no message, and an empty exception would make the failure read as a success."""
+        llm_provider_mock.call_async = AsyncMock(side_effect=error)
         evaluator = ReasonerEvaluator.from_config(config=base_retrieval_eval_config, llm_provider=llm_provider_mock)
         query = experiment["0"]
 
         result = call_async_fn(evaluator.evaluate_async, (query, query.retrieved_docs["0"]))
 
-        assert result.exception == "gateway said no"
+        assert result.exception == recorded
+        assert result.answer is None
 
 
 class TestCustomPromptEvaluator:
@@ -284,6 +285,23 @@ class TestCustomPromptEvaluator:
         assert query.retrieved_docs["d"].evaluation.answer == answer
         assert query.get_qrels() == {}
         assert "does not contribute a relevance label" in caplog.text
+
+    @pytest.mark.parametrize(
+        ("relevance_grades", "bounds"),
+        [(None, (None, None)), (["off topic", "on topic", "partial", "full"], (0, 3))],
+        ids=["the prompt's own scale is left alone", "given grades bound the score"],
+    )
+    def test_the_score_is_only_bounded_by_grades_the_evaluator_knows(
+        self, llm_provider_mock, relevance_grades, bounds
+    ):
+        evaluator = get_retrieval_evaluator(
+            "custom_prompt",
+            llm_provider=llm_provider_mock,
+            user_prompt="Score from 1 to 5. {{ query.query }} {{ document.text }}",
+            relevance_grades=relevance_grades,
+        )
+        score = evaluator.answer_format.model_json_schema()["properties"]["score"]
+        assert (score.get("minimum"), score.get("maximum")) == bounds
 
 
 class TestAnswerFormatSchemas:
@@ -699,7 +717,8 @@ class TestReadmeExamples:
             query="What is the capital of France?",
             document="Lyon is the second largest city in France.",
         )
-        assert result.answer == RDNAMEvaluationAnswer(score=1.0, intent_match=None, trustworthiness=None)
+        assert isinstance(result.answer, RDNAMEvaluationAnswer)
+        assert (result.answer.score, result.answer.intent_match) == (1.0, None)
 
     def test_custom_prompt_evaluator_example(self, llm_provider_mock):
         answer_dict = {

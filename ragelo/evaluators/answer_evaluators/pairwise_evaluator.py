@@ -76,7 +76,7 @@ class PairwiseAnswerEvaluator(BaseAnswerEvaluator[PairwiseEvaluatorConfig, Pairw
         {%- elif doc %}
             [{{ d.did }}]: {{ d.text }}
         {%- elif (annotation or reasoning) and judged %}
-            [{{d.did }}] {% if reasoning %} {{ d.evaluation.answer.reasoning }} {% else %} {{ d.evaluation.answer.score }} {% endif %}"
+            [{{d.did }}] {% if reasoning %} {{ d.evaluation.answer.reasoning }} {% else %} {{ d.evaluation.answer.score }} {% endif %}
         {% endif -%}
         {% endfor %}
         {% endif -%}

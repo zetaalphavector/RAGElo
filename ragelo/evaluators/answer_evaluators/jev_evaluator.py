@@ -3,6 +3,7 @@ from typing import ClassVar
 from pydantic import BaseModel
 
 from ragelo.evaluators.answer_evaluators.base_answer_evaluator import AnswerEvaluatorFactory, BaseAnswerEvaluator
+from ragelo.evaluators.answer_evaluators.pairwise_evaluator import PairwiseAnswerEvaluator
 from ragelo.evaluators.answer_evaluators.rubric_pairwise_evaluator import RubricPairwiseEvaluator
 from ragelo.evaluators.answer_evaluators.rubric_pointwise_evaluator import RubricPointwiseEvaluator
 from ragelo.evaluators.jev_evaluator_mixin import JEV_REASONING, JevEvaluatorMixin, JevRubricEvaluatorMixin
@@ -14,7 +15,7 @@ from ragelo.types.configurations import (
     JevRubricPairwiseEvaluatorConfig,
     JevRubricPointwiseEvaluatorConfig,
 )
-from ragelo.types.results import AnswerEvaluatorResult, PairwiseGameEvaluatorResult
+from ragelo.types.results import AnswerEvaluatorResult
 from ragelo.types.types import AnswerEvaluatorTypes
 from ragelo.utils import string_to_template
 
@@ -62,14 +63,10 @@ class JevAnswerEvaluator(JevEvaluatorMixin, BaseAnswerEvaluator[JevAnswerEvaluat
 
 
 @AnswerEvaluatorFactory.register(AnswerEvaluatorTypes.JEV_PAIRWISE)
-class JevPairwiseEvaluator(
-    JevEvaluatorMixin, BaseAnswerEvaluator[JevPairwiseEvaluatorConfig, PairwiseGameEvaluatorResult]
-):
-    """Picks the better of two answers with one Jev choice question."""
+class JevPairwiseEvaluator(JevEvaluatorMixin, PairwiseAnswerEvaluator):
+    """Picks the better of two answers with one Jev choice question, over the state the pairwise evaluator builds."""
 
     config: JevPairwiseEvaluatorConfig
-    result_type = PairwiseGameEvaluatorResult
-    answer_format = PairwiseEvaluationAnswer
     winner_options: ClassVar[dict[str, str]] = {
         "A": "The answer from assistant A is better.",
         "B": "The answer from assistant B is better.",
@@ -78,39 +75,10 @@ class JevPairwiseEvaluator(
     system_prompt = string_to_template(
         "Which assistant gave the better answer to the user question, considering {{ factors }}?"
     )
-    user_prompt = string_to_template("""
-        [user question]
-        {{ query.query }}
-        {%- if documents %}
-
-        [retrieved documents]
-        {%- for d in documents %}
-        [{{ d.did }}] {{ d.text }}
-        {%- endfor %}
-        {%- endif %}
-
-        [answer from assistant A]
-        {{ game.agent_a_answer.text }}
-
-        [answer from assistant B]
-        {{ game.agent_b_answer.text }}
-        """)
-
-    def _filter_documents(self, query: Query):
-        return super()._filter_documents(query) if self.config.include_raw_documents else []
 
     def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> LLMInputPrompt:
-        context = {
-            "query": query,
-            "game": game,
-            "documents": self._filter_documents(query),
-            "factors": self.config.factors,
-        }
-        return LLMInputPrompt(
-            system_prompt=self.system_prompt.render(**context),
-            user_message=self.user_prompt.render(**context),
-            questions={"winner": {"type": "choice", "criteria": self.winner_options}},
-        )
+        question = {"type": "choice", "criteria": self.winner_options}
+        return super()._build_message_pairwise(query, game).model_copy(update={"questions": {"winner": question}})
 
     def _process_answer(self, llm_response: LLMResponseType[BaseModel], query: Query) -> LLMResponseType[BaseModel]:
         answer = self._jev_answer(llm_response, "winner")

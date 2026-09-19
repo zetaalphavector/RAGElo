@@ -42,7 +42,11 @@ class BaseCLIConfig(BaseConfig):
         default=True,
         description="Use rich to print colorful outputs.",
     )
-    model: str = Field(default="gpt-4.1-mini", description="The model to use for the LLM")
+    model: str | None = Field(
+        default=None,
+        description="The model to use for the LLM. The openai provider has a default. The vercel and ollama "
+        "providers need one, such as anthropic/claude-haiku-4-5 or llama3.1.",
+    )
 
 
 class CLIEvaluatorConfig(BaseCLIConfig):
