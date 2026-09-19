@@ -60,16 +60,19 @@ When adding a new evaluator, LLM provider, or ranker:
 ```
 BaseEvaluator (ragelo/evaluators/base_evaluator.py) — async-first, abstract
 ├── BaseRetrievalEvaluator — evaluates document relevance (Query + Document → score)
-│   Implementations: Reasoner, RDNAM, DomainExpert, FewShot, CustomPrompt
+│   Implementations: Reasoner, RDNAM, DomainExpert, FewShot, CustomPrompt, RubricCoverage, Jev, JevRubricCoverage
 └── BaseAnswerEvaluator — evaluates answer quality (Query + AgentAnswer → score/winner)
-    Implementations: Pairwise, ChatPairwise, CustomPairwise, DomainExpert, CustomPrompt
+    Implementations: Pairwise, ChatPairwise, CustomPairwise, DomainExpert, CustomPrompt, RubricPairwise, RubricPointwise,
+    Jev, JevPairwise, JevRubricPairwise, JevRubricPointwise
 ```
 
 All evaluations are **async**: `evaluate_async()` is the core abstract method. `evaluate_experiment()` orchestrates bounded concurrent execution via `asyncio.wait()` with configurable `n_processes`.
 
 ### LLM Providers
 
-`BaseLLMProvider` defines the interface: `call_async(input, response_schema) → LLMResponseType[T]`. Implementations: `OpenAIProvider` (structured output via Responses API), `VercelProvider` (the same client pointed at the Vercel AI Gateway), `OllamaProvider`, `InstructorProvider`. Providers return `LLMResponseType[T]` with `raw_answer` and `parsed_answer`.
+`BaseLLMProvider` defines the interface: `call_async(input, response_schema) → LLMResponseType[T]`. Implementations: `OpenAIProvider` (structured output via Responses API), `VercelProvider` (the same client pointed at the Vercel AI Gateway), `OllamaProvider`, `InstructorProvider`, `VercelJevProvider`. Providers return `LLMResponseType[T]` with `raw_answer` and `parsed_answer`.
+
+`VercelJevProvider` (`"vercel-jev"`) calls TypeSafe's Jev through the Vercel AI Gateway. Jev answers typed questions about a state with probabilities and generates no text, so it returns a `JevResponse` and only the evaluators built on `JevEvaluatorMixin` can use it. They put the questions on `LLMInputPrompt.questions` and turn the response into the usual answer formats in `_process_answer`.
 
 `InstructorProvider` is registered as `"instructor"` and uses the [`instructor`](https://github.com/jxnl/instructor) library to support multiple backends (Anthropic, OpenAI, Mistral, Cohere) through a unified interface. It is an **optional dependency** — requires `pip install 'ragelo[instructor]'` plus the relevant provider SDK. Instantiation raises `ImportError` with a helpful message if instructor is not installed, so `import ragelo` always works regardless.
 

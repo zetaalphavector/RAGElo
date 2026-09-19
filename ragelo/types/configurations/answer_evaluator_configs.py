@@ -69,6 +69,23 @@ class PairwiseEvaluatorConfig(BaseAnswerEvaluatorConfig):
         return prompt
 
 
+class JevAnswerEvaluatorConfig(BaseAnswerEvaluatorConfig):
+    evaluator_name: AnswerEvaluatorTypes = AnswerEvaluatorTypes.JEV
+    answer_grades: list[str] = Field(
+        default=[
+            "The answer does not answer the question.",
+            "The answer answers the question but is not very helpful.",
+            "The answer answers the question and is very helpful.",
+        ],
+        min_length=2,
+        description="What each answer score means, from the lowest score (0) to the highest.",
+    )
+
+
+class JevPairwiseEvaluatorConfig(PairwiseEvaluatorConfig):
+    evaluator_name: AnswerEvaluatorTypes = AnswerEvaluatorTypes.JEV_PAIRWISE
+
+
 class CustomPairwiseEvaluatorConfig(PairwiseEvaluatorConfig):
     """Configuration for a custom pairwise evaluator."""
 
@@ -178,3 +195,12 @@ class RubricPointwiseEvaluatorConfig(RubricEvaluatorConfigBase):
         default=5,
         description="The maximum score for graduated scoring. Only used when graduated_scoring is True.",
     )
+
+
+class JevRubricPointwiseEvaluatorConfig(RubricPointwiseEvaluatorConfig):
+    evaluator_name: AnswerEvaluatorTypes = AnswerEvaluatorTypes.JEV_RUBRIC_POINTWISE
+
+
+class JevRubricPairwiseEvaluatorConfig(RubricPairwiseEvaluatorConfig):
+    evaluator_name: AnswerEvaluatorTypes = AnswerEvaluatorTypes.JEV_RUBRIC_PAIRWISE
+    rich_pairwise_output: bool = Field(default=False, description="Jev cannot write the rich per-criterion output.")

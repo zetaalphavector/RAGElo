@@ -8,7 +8,7 @@ from pydantic import SecretStr, ValidationError
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.llm_providers.openai_client import OpenAIProvider
 from ragelo.types.configurations import LLMProviderConfig, OpenAIConfiguration
-from ragelo.types.formats import LLMInputPrompt, LLMResponseType
+from ragelo.types.formats import LLMInputPrompt, LLMResponseType, LLMUsage
 from ragelo.types.results import PairwiseEvaluationAnswer, RetrievalEvaluationAnswer
 
 
@@ -50,6 +50,14 @@ class TestOpenAIProvider:
         assert call_args[1]["input"] == user_prompt
         assert call_args[1]["text_format"] == RetrievalEvaluationAnswer
         assert "instructions" not in call_args[1]
+
+    @pytest.mark.parametrize("provider_fixture", ["openai_provider_structured", "openai_provider_json_mode"])
+    def test_the_billed_tokens_are_reported_with_the_cached_part_of_the_input(self, provider_fixture, request):
+        provider = request.getfixturevalue(provider_fixture)
+
+        result = provider(LLMInputPrompt(user_message="Evaluate."), response_schema=RetrievalEvaluationAnswer)
+
+        assert result.usage == LLMUsage(input_tokens=120, output_tokens=30, cached_tokens=20)
 
     def test_retrieval_evaluation_json_mode(self, openai_provider_json_mode, flexible_openai_client_mock):
         """Test retrieval evaluation with json_mode=True (JSON string via responses.create)."""

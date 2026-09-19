@@ -3,7 +3,7 @@ from __future__ import annotations
 from jinja2 import Template
 from pydantic import BaseModel, Field, field_validator
 
-from ragelo.types.configurations.base_configs import BaseEvaluatorConfig
+from ragelo.types.configurations.base_configs import BaseConfig, BaseEvaluatorConfig
 from ragelo.types.configurations.generator_configs import RubricConfigMixin
 from ragelo.types.types import RetrievalEvaluatorTypes
 from ragelo.utils import get_placeholders_and_tags, string_to_template
@@ -54,6 +54,25 @@ class BaseRetrievalEvaluatorConfig(BaseEvaluatorConfig):
         if "document.text" not in placeholders:
             raise ValueError("The user prompt must contain a {{ document.text }} placeholder")
         return prompt
+
+
+class JevDocumentConfigMixin(BaseConfig):
+    max_document_chars: int = Field(
+        default=60_000,
+        gt=0,
+        description="Documents longer than this are cut to their first characters before Jev sees them. Jev "
+        "rejects a request with about 75,000 characters of dense text.",
+    )
+
+
+class JevRetrievalEvaluatorConfig(JevDocumentConfigMixin, BaseRetrievalEvaluatorConfig):
+    evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.JEV
+    boolean_question: bool = Field(
+        default=True,
+        description="Ask Jev one yes/no question, whether the document helps answer the user question, and scale "
+        "the probability of a yes to the top grade. When False, Jev scores the document over the relevance "
+        "grades and the most likely grade is kept.",
+    )
 
 
 class ReasonerEvaluatorConfig(BaseRetrievalEvaluatorConfig):
@@ -147,3 +166,7 @@ class RDNAMEvaluatorConfig(BaseRetrievalEvaluatorConfig):
         default=False,
         description="Should the prompt ask the LLM to mimic multiple annotators?",
     )
+
+
+class JevRubricCoverageEvaluatorConfig(JevDocumentConfigMixin, RubricCoverageEvaluatorConfig):
+    evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.JEV_RUBRIC_COVERAGE

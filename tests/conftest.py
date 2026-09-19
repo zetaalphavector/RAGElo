@@ -7,6 +7,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 from openai import AsyncOpenAI
+from openai.types.responses import ResponseUsage
+from openai.types.responses.response_usage import InputTokensDetails, OutputTokensDetails
 from pydantic import BaseModel, SecretStr, ValidationError
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
@@ -82,6 +84,15 @@ def openai_client_config():
         api_version=None,
         model="fake model",
     )
+
+
+OPENAI_USAGE = ResponseUsage(
+    input_tokens=120,
+    input_tokens_details=InputTokensDetails(cached_tokens=20, cache_write_tokens=0),
+    output_tokens=30,
+    output_tokens_details=OutputTokensDetails(reasoning_tokens=0),
+    total_tokens=150,
+)
 
 
 @pytest.fixture
@@ -170,16 +181,19 @@ def responses_api_mock(mocker, answer_format):
 
     def create_text_response():
         resp = mocker.Mock()
+        resp.usage = OPENAI_USAGE
         resp.output_text = "fake response"
         return resp
 
     def create_json_response():
         resp = mocker.Mock()
+        resp.usage = OPENAI_USAGE
         resp.output_text = '{"keyA": "valueA", "keyB": "valueB"}'
         return resp
 
     def parse_structured_response():
         resp = mocker.Mock()
+        resp.usage = OPENAI_USAGE
         resp.output_text = '{"keyA": "valueA", "keyB": "valueB"}'
         resp.output_parsed = answer_format(keyA="valueA", keyB="valueB")
         return resp
@@ -243,6 +257,7 @@ def flexible_openai_client_mock(mocker):
     def create_side_effect(*args, **kwargs):
         """Mock responses.create (used when json_mode=True)."""
         resp = mocker.Mock()
+        resp.usage = OPENAI_USAGE
         resp.output_text = '{"reasoning": "The document is highly relevant to the query", "score": 2}'
         return resp
 
@@ -250,6 +265,7 @@ def flexible_openai_client_mock(mocker):
         """Mock responses.parse (used when json_mode=False)."""
         text_format = kwargs.get("text_format")
         resp = mocker.Mock()
+        resp.usage = OPENAI_USAGE
 
         if text_format:
             sample_data = get_sample_data_for_schema(text_format)

@@ -22,6 +22,17 @@ class TestAgreement:
         assert result.kappa_graded == pytest.approx(0.52)
         assert result.alpha_ordinal == pytest.approx(0.7635582)
         assert result.spearman == pytest.approx(0.6515328)
+        assert result.spearman_raw == result.spearman
+
+    def test_fractional_scores_round_half_up_for_the_labels_and_keep_their_ranking_for_spearman_raw(self):
+        human = {"q1": {"p1": 0, "p2": 1, "p3": 2, "p4": 3}}
+        judged = {"q1": {"p1": 0.6, "p2": 1.4, "p3": 1.5, "p4": 1.9}}
+
+        result = agreement(human, judged)
+
+        assert result.kappa_graded == agreement(human, {"q1": {"p1": 1, "p2": 1, "p3": 2, "p4": 2}}).kappa_graded
+        assert result.spearman < 1
+        assert result.spearman_raw == pytest.approx(1.0)
 
     def test_a_judge_that_gives_one_label_to_everything_has_no_defined_agreement(self):
         human = {"q1": {"p1": 3, "p2": 0}}

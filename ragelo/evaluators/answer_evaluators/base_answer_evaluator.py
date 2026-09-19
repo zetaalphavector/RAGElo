@@ -157,8 +157,10 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
 
         exc = None
         parsed_answer = None
+        usage = None
         try:
             llm_response = await self.llm_provider.call_async(input=prompt, response_schema=response_schema)  # type: ignore[arg-type]
+            usage = llm_response.usage
             llm_response = self._process_answer(llm_response, query)
             parsed_answer = llm_response.parsed_answer
         except Exception as e:  # noqa: BLE001 - captured on the result as `exception`
@@ -171,6 +173,7 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
             evaluator_name=evaluator_name,
             answer=parsed_answer,  # type: ignore[arg-type]
             exception=exc,
+            usage=usage,
         )
         return await self.__augment_if_judged(result, query, answer)
 
@@ -182,8 +185,10 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
 
         exc = None
         parsed_answer = None
+        usage = None
         try:
             llm_response = await self.llm_provider.call_async(input=prompt, response_schema=response_schema)  # type: ignore[arg-type]
+            usage = llm_response.usage
             llm_response = self._process_answer(llm_response, query)
             parsed_answer = llm_response.parsed_answer
         except Exception as e:  # noqa: BLE001 - captured on the result as `exception`
@@ -200,6 +205,7 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
             evaluator_name=evaluator_name,
             answer=parsed_answer,  # type: ignore[arg-type]
             exception=exc,
+            usage=usage,
         )
 
     async def __evaluate_game(self, query: Query, game: PairwiseGame) -> PairwiseGameEvaluatorResult:
@@ -257,6 +263,13 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
         parent_answer: PairwiseEvaluationAnswer | RubricAnswerFormat | None
         if isinstance(forward_answer, RubricAnswerFormat) and isinstance(reversed_canonical, RubricAnswerFormat):
             parent_answer = forward_answer.merge_with_canonicalized(reversed_canonical)
+        elif (
+            isinstance(forward_answer, PairwiseEvaluationAnswer)
+            and isinstance(reversed_canonical, PairwiseEvaluationAnswer)
+            and forward_answer.probabilities
+            and reversed_canonical.probabilities
+        ):
+            parent_answer = forward_answer.averaged_with(reversed_canonical)
         else:
             answer_source = reversed_canonical if use_reversed else forward_answer
             if answer_source is None:

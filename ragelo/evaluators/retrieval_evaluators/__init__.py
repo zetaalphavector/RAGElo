@@ -6,6 +6,7 @@ from ragelo.evaluators.retrieval_evaluators.base_retrieval_evaluator import (
 from ragelo.evaluators.retrieval_evaluators.custom_prompt_evaluator import CustomPromptEvaluator
 from ragelo.evaluators.retrieval_evaluators.domain_expert_evaluator import DomainExpertEvaluator
 from ragelo.evaluators.retrieval_evaluators.few_shot_evaluator import FewShotEvaluator
+from ragelo.evaluators.retrieval_evaluators.jev_evaluator import JevRetrievalEvaluator, JevRubricCoverageEvaluator
 from ragelo.evaluators.retrieval_evaluators.rdnam_evaluator import RDNAMEvaluator
 from ragelo.evaluators.retrieval_evaluators.reasoner_evaluator import ReasonerEvaluator
 from ragelo.evaluators.retrieval_evaluators.rubric_coverage_evaluator import RubricCoverageEvaluator
@@ -15,6 +16,8 @@ __all__ = [
     "CustomPromptEvaluator",
     "DomainExpertEvaluator",
     "FewShotEvaluator",
+    "JevRetrievalEvaluator",
+    "JevRubricCoverageEvaluator",
     "RDNAMEvaluator",
     "ReasonerEvaluator",
     "RetrievalEvaluatorFactory",

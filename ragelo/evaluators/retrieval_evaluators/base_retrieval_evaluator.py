@@ -118,11 +118,13 @@ class BaseRetrievalEvaluator(BaseEvaluator[T_Config, RetrievalEvaluatorResult]):
         llm_input = self._with_guidelines(self._build_message(query, document))
         answer_type = self._resolve_response_schema(llm_input)
         parsed_answer = None
+        usage = None
         try:
             llm_response = await self.llm_provider.call_async(
                 input=llm_input,
                 response_schema=answer_type,
             )
+            usage = llm_response.usage
             llm_response = self._process_answer(llm_response, query)
             parsed_answer = llm_response.parsed_answer
         except Exception as e:  # noqa: BLE001
@@ -135,6 +137,7 @@ class BaseRetrievalEvaluator(BaseEvaluator[T_Config, RetrievalEvaluatorResult]):
             evaluator_name=str(self.config.evaluator_name),
             answer=parsed_answer,  # type: ignore[arg-type]
             exception=exc,
+            usage=usage,
         )
 
     def _get_all_evaluables(self, query: Query) -> list[Evaluable]:

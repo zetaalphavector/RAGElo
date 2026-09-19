@@ -19,6 +19,8 @@ class RetrievalEvaluatorTypes(StrEnum):
     DOMAIN_EXPERT = "domain_expert"
     FEW_SHOT = "few_shot"
     RDNAM = "RDNAM"
+    JEV = "jev"
+    JEV_RUBRIC_COVERAGE = "jev_rubric_coverage"
     REASONER = "reasoner"
     RUBRIC_COVERAGE = "rubric_coverage"
 
@@ -30,6 +32,7 @@ class LLMProviderTypes(StrEnum):
     OLLAMA = "ollama"
     INSTRUCTOR = "instructor"
     VERCEL = "vercel"
+    VERCEL_JEV = "vercel-jev"
 
 
 class AnswerEvaluatorTypes(StrEnum):
@@ -40,6 +43,10 @@ class AnswerEvaluatorTypes(StrEnum):
     CUSTOM_PROMPT = "custom_prompt"
     DOMAIN_EXPERT = "domain_expert"
     CHAT_PAIRWISE = "chat_pairwise"
+    JEV = "jev"
+    JEV_PAIRWISE = "jev_pairwise"
+    JEV_RUBRIC_PAIRWISE = "jev_rubric_pairwise"
+    JEV_RUBRIC_POINTWISE = "jev_rubric_pointwise"
     RUBRIC_PAIRWISE = "rubric_pairwise"
     RUBRIC_POINTWISE = "rubric_pointwise"
 

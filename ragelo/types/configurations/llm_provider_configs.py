@@ -26,6 +26,14 @@ class VercelConfiguration(OpenAIConfiguration):
     model: str
 
 
+class VercelJevConfiguration(LLMProviderConfig):
+    api_key: SecretStr
+    api_base: str = "https://ai-gateway.vercel.sh/v4/ai/evaluation-model"
+    model: str = "typesafe-ai/jev"
+    timeout: float = 60.0
+    max_retries: int = 2
+
+
 class OllamaConfiguration(LLMProviderConfig):
     api_base: str | None = "http://localhost:11434/v1/"
     model: str

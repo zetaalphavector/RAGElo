@@ -10,6 +10,7 @@ from pydantic import BaseModel, ValidationError
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, LLMProviderFactory
 from ragelo.types import LLMInputPrompt, LLMResponseType
 from ragelo.types.configurations import OpenAIConfiguration
+from ragelo.types.formats import LLMUsage
 from ragelo.types.types import LLMProviderTypes
 
 T_Schema = TypeVar("T_Schema", bound=BaseModel)
@@ -107,10 +108,14 @@ class OpenAIProvider(BaseLLMProvider):
             parsed_answer = answer.output_parsed
             raw_answer = answer.output_text
 
-        return LLMResponseType(
-            raw_answer=raw_answer,
-            parsed_answer=parsed_answer,
-        )
+        usage = None
+        if answer.usage:
+            usage = LLMUsage(
+                input_tokens=answer.usage.input_tokens,
+                output_tokens=answer.usage.output_tokens,
+                cached_tokens=answer.usage.input_tokens_details.cached_tokens,
+            )
+        return LLMResponseType(raw_answer=raw_answer, parsed_answer=parsed_answer, usage=usage)
 
     @staticmethod
     def __get_openai_client(openai_config: OpenAIConfiguration) -> AsyncOpenAI:

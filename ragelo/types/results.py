@@ -15,6 +15,7 @@ from ragelo.types.answer_formats import (
     RubricCoverageAnswerFormat,
     RubricPointwiseAnswerFormat,
 )
+from ragelo.types.formats import LLMUsage
 
 
 def _resolve_legacy_answer(data: Any, members: tuple[type[EvaluationAnswer], ...]) -> Any:
@@ -57,6 +58,9 @@ class EvaluatorResult(BaseModel):
         default=None, description="Any exception captured during evaluation."
     )
     answer: EvaluationAnswer | None = Field(default=None, description="The LLM-generated evaluation content.")
+    usage: SkipJsonSchema[LLMUsage | None] = Field(
+        default=None, description="The tokens the LLM call behind this result was billed for."
+    )
 
     @field_serializer("answer")
     def serialize_answer(self, answer: EvaluationAnswer | None, _info) -> dict[str, Any] | None:

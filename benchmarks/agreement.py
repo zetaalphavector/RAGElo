@@ -18,20 +18,23 @@ class Agreement:
     kappa_graded: float
     alpha_ordinal: float
     spearman: float
+    spearman_raw: float
 
 
 def agreement(reference: Qrels, judged: Qrels, max_label: int = 2, relevant_from: int = 2) -> Agreement:
     """Kappa and alpha need both sides on one scale, so labels above `max_label` are collapsed into it.
 
     That puts the 0-3 TREC labels and the 0-2 RAGElo labels on the same three grades. Spearman is
-    rank-based and reads the uncollapsed labels.
+    rank-based and reads the uncollapsed labels. Fractional scores are rounded half-up to labels, as
+    `Experiment.get_qrels` does, except for `spearman_raw`, which keeps the ranking the rounding loses.
     """
-    pairs = [
-        (int(reference[qid][did]), int(label))
+    scores = [
+        (int(reference[qid][did]), score)
         for qid, labels in judged.items()
-        for did, label in labels.items()
+        for did, score in labels.items()
         if did in reference.get(qid, {})
     ]
+    pairs = [(label, math.floor(score + 0.5)) for label, score in scores]
     raw_reference = [a for a, _ in pairs]
     raw_judged = [b for _, b in pairs]
     graded_reference = [min(a, max_label) for a in raw_reference]
@@ -45,6 +48,7 @@ def agreement(reference: Qrels, judged: Qrels, max_label: int = 2, relevant_from
         kappa_graded=cohen_kappa(graded_reference, graded_judged),
         alpha_ordinal=krippendorff_alpha_ordinal(graded_reference, graded_judged),
         spearman=spearman(raw_reference, raw_judged),
+        spearman_raw=spearman(raw_reference, [score for _, score in scores]),
     )
 
 
