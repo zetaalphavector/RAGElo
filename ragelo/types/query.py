@@ -239,7 +239,7 @@ class Query(BaseModel):
                 docs_without_relevance += 1
                 continue
             answer = getattr(document.evaluations[retrieval_evaluator_name], "answer", None)
-            if not isinstance(answer, GradedJudgment):
+            if not isinstance(answer, GradedJudgment) or not callable(answer.relevance):
                 logger.warning(f"Evaluation {answer} does not contribute a relevance label.")
                 docs_without_relevance += 1
                 continue

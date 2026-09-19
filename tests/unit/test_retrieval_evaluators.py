@@ -242,6 +242,30 @@ class TestCustomPromptEvaluator:
             == "query: this is a query doc: this is a document q_metadata: q_1 d_metadata: d_1"
         )
 
+    def test_a_relevance_field_is_not_a_relevance_label(self, llm_provider_mock, caplog):
+        """A custom schema may name a field `relevance`; only a `relevance()` method feeds the qrels."""
+
+        class FieldOnlyAnswer(EvaluationAnswer):
+            relevance: int
+
+        answer = FieldOnlyAnswer(relevance=1)
+        llm_provider_mock.async_call_mocker = AsyncMock(
+            side_effect=lambda *args: LLMResponseType(raw_answer=answer.model_dump_json(), parsed_answer=answer)
+        )
+        evaluator = get_retrieval_evaluator(
+            "custom_prompt",
+            llm_provider=llm_provider_mock,
+            user_prompt="{{ query.query }} {{ document.text }}",
+            result_type=FieldOnlyAnswer,
+        )
+        query = Query(qid="q", query="What is the capital of France?")
+        query.add_retrieved_doc(Document(qid="q", did="d", text="Paris."), agent="agent")
+        evaluator.evaluate_all_evaluables(query)
+
+        assert query.retrieved_docs["d"].evaluation.answer == answer
+        assert query.get_qrels() == {}
+        assert "does not contribute a relevance label" in caplog.text
+
 
 class TestAnswerFormatSchemas:
     @pytest.mark.parametrize(

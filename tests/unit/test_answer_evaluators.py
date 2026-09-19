@@ -1883,6 +1883,28 @@ class TestConversationSupportInPairwiseEvaluators:
         assert query.answers["agent2"].text in prompt.user_message
         assert "answers" in prompt.system_prompt
 
+    @pytest.mark.parametrize("include_raw_documents", [False, True])
+    def test_pairwise_evaluator_renders_documents_without_a_retrieval_evaluation(
+        self, llm_provider_mock, experiment, pairwise_answer_eval_config, include_raw_documents
+    ):
+        pairwise_answer_eval_config.user_prompt = None
+        pairwise_answer_eval_config.system_prompt = None
+        pairwise_answer_eval_config.include_relevance_reasoning = True
+        pairwise_answer_eval_config.include_raw_documents = include_raw_documents
+        evaluator = PairwiseAnswerEvaluator.from_config(
+            config=pairwise_answer_eval_config, llm_provider=llm_provider_mock
+        )
+        query = experiment["0"]
+        for document in query.retrieved_docs.values():
+            document.evaluations.clear()
+        game = PairwiseGame(
+            qid=query.qid, agent_a_answer=query.answers["agent1"], agent_b_answer=query.answers["agent2"]
+        )
+
+        prompt = evaluator._build_message_pairwise(query, game)
+
+        assert (query.retrieved_docs["0"].text in prompt.user_message) is include_raw_documents
+
     def test_domain_expert_evaluator_renders_conversations(
         self, llm_provider_mock, experiment, domain_expert_answer_eval_config
     ):

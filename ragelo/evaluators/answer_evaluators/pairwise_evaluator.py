@@ -67,14 +67,15 @@ class PairwiseAnswerEvaluator(BaseAnswerEvaluator[PairwiseEvaluatorConfig, Pairw
         {%- if documents %}
         [Reference Documents]
         {%- for d in documents %}
-        {%- if doc and (annotation or reasoning) %}
+        {%- set judged = d.evaluation and d.evaluation.answer %}
+        {%- if doc and (annotation or reasoning) and judged %}
             Document ID: [{{ d.did }}]
             Content: {{ d.text }}
             Relevance: {% if reasoning %} {{ d.evaluation.answer.reasoning }} {% else %} {{ d.evaluation.answer.score }} {% endif %}
         ------------------
         {%- elif doc %}
             [{{ d.did }}]: {{ d.text }}
-        {%- elif annotation or reasoning %}
+        {%- elif (annotation or reasoning) and judged %}
             [{{d.did }}] {% if reasoning %} {{ d.evaluation.answer.reasoning }} {% else %} {{ d.evaluation.answer.score }} {% endif %}"
         {% endif -%}
         {% endfor %}
