@@ -195,72 +195,20 @@ class PairwiseEvaluationAnswer(EvaluationAnswer):
 
 
 class RDNAMEvaluationAnswer(RetrievalEvaluationAnswer):
-    """LLM-generated evaluation for RDNAM retrieval tasks."""
+    """The stored RDNAM judgment: the mean over the annotators, with the aspects when they were asked for.
+
+    The evaluator builds the schema the LLM answers from its config, so none of these fields are
+    LLM-facing.
+    """
 
     # Narrowing the discriminator in a subclass is intended: an RDNAM payload must not
     # identify itself as the base relevance format.
     answer_format: SkipJsonSchema[Literal["rdnam"]] = "rdnam"  # type: ignore[assignment]
 
     reasoning: SkipJsonSchema[str] = ""
-    score: float = Field(
-        ...,
-        description="An number between 0 and 2 representing the score of the document.",
-    )
-    intent_match: float | None = Field(
-        ...,
-        description="An number between 0 and 2 representing the match of the document to the query intent.",
-    )
-    trustworthiness: float | None = Field(
-        ..., description="An number between 0 and 2 representing the trustworthiness of the document."
-    )
-
-
-class RDNAMNoAspectsAnswer(RetrievalEvaluationAnswer):
-    """Output format for evaluating the relevance of a document to a question."""
-
-    # Narrowing the discriminator in a subclass is intended: an RDNAM payload must not
-    # identify itself as the base relevance format.
-    answer_format: SkipJsonSchema[Literal["rdnam_no_aspects"]] = "rdnam_no_aspects"  # type: ignore[assignment]
-
-    reasoning: SkipJsonSchema[str] = ""
-    score: float = Field(
-        ...,
-        description="An number between 0 and 2 representing the overall score of the document.",
-    )
-
-
-class RDNAMMultipleAnnotatorsAnswer(RetrievalEvaluationAnswer):
-    """Output format for evaluating the relevance of a document to a question by simulating 5 annotators."""
-
-    # Narrowing the discriminator in a subclass is intended: an RDNAM payload must not
-    # identify itself as the base relevance format.
-    answer_format: SkipJsonSchema[Literal["rdnam_multiple_annotators"]] = "rdnam_multiple_annotators"  # type: ignore[assignment]
-
-    score: SkipJsonSchema[float | int] = 0.0
-    reasoning: SkipJsonSchema[str] = ""
-    annotator_1: RDNAMEvaluationAnswer
-    annotator_2: RDNAMEvaluationAnswer
-    annotator_3: RDNAMEvaluationAnswer
-    annotator_4: RDNAMEvaluationAnswer
-    annotator_5: RDNAMEvaluationAnswer
-
-
-class RDNAMMultipleAnnotatorsNoAspectsAnswer(RetrievalEvaluationAnswer):
-    """Output format for evaluating the relevance of a document to a question by simulating 5 annotators."""
-
-    # Narrowing the discriminator in a subclass is intended: an RDNAM payload must not
-    # identify itself as the base relevance format.
-    answer_format: SkipJsonSchema[Literal["rdnam_multiple_annotators_no_aspects"]] = (
-        "rdnam_multiple_annotators_no_aspects"  # type: ignore[assignment]
-    )
-
-    score: SkipJsonSchema[float | int] = 0.0
-    reasoning: SkipJsonSchema[str] = ""
-    annotator_1: RDNAMNoAspectsAnswer
-    annotator_2: RDNAMNoAspectsAnswer
-    annotator_3: RDNAMNoAspectsAnswer
-    annotator_4: RDNAMNoAspectsAnswer
-    annotator_5: RDNAMNoAspectsAnswer
+    score: float
+    intent_match: float | None = None
+    trustworthiness: float | None = None
 
 
 class Criterion(BaseModel):

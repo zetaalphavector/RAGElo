@@ -15,8 +15,6 @@ from ragelo.types.answer_formats import (
     AnswerEvaluationAnswer,
     EvaluationAnswer,
     PairwiseEvaluationAnswer,
-    RDNAMEvaluationAnswer,
-    RDNAMMultipleAnnotatorsAnswer,
     RetrievalEvaluationAnswer,
 )
 from ragelo.types.configurations import (
@@ -92,26 +90,9 @@ def llm_provider_config():
 
 
 def answer_model_factory(input: LLMInputPrompt, response_schema, **kwargs):
-    # Retrieval answers (base or subclasses like RDNAMEvaluationAnswer)
     if response_schema == RetrievalEvaluationAnswer or (
         isinstance(response_schema, type) and issubclass(response_schema, RetrievalEvaluationAnswer)
     ):
-        # Handle specialized RDNAMEvaluationAnswer subclass
-        if isinstance(response_schema, type) and response_schema.__name__ == "RDNAMEvaluationAnswer":
-            raw_answer = (
-                '{"reasoning": "Doc judged with aspects", "score": 2, "intent_match": 2.0, "trustworthiness": 2.0}'
-            )
-            return LLMResponseType(
-                raw_answer=raw_answer,
-                parsed_answer=response_schema.model_validate_json(raw_answer),  # type: ignore
-            )
-        # RDNAM without aspects
-        if isinstance(response_schema, type) and response_schema.__name__ == "RDNAMNoAspectsAnswer":
-            raw_answer = '{"reasoning": "Doc judged", "score": 1}'
-            return LLMResponseType(
-                raw_answer=raw_answer,
-                parsed_answer=response_schema.model_validate_json(raw_answer),  # type: ignore
-            )
         # Generic retrieval evaluation
         return LLMResponseType(
             raw_answer='{"reasoning": "The document is very relevant", "score": 2}',
@@ -120,6 +101,11 @@ def answer_model_factory(input: LLMInputPrompt, response_schema, **kwargs):
                 score=2,
             ),
         )
+    if isinstance(response_schema, type) and response_schema.__name__.startswith("RDNAM"):
+        judgment = {"score": 1, "intent_match": 2.0, "trustworthiness": 2.0}
+        fields = response_schema.model_fields
+        raw_answer = json.dumps({name: judgment for name in fields} if "annotator_1" in fields else judgment)
+        return LLMResponseType(raw_answer=raw_answer, parsed_answer=response_schema.model_validate_json(raw_answer))
     if isinstance(response_schema, type) and issubclass(response_schema, PairwiseEvaluationAnswer):
         raw_answer = '{"answer_a_analysis": "Answer A is good", "answer_b_analysis": "Answer B is bad", "comparison_reasoning": "A is better", "winner": "A"}'
         return LLMResponseType(raw_answer=raw_answer, parsed_answer=response_schema.model_validate_json(raw_answer))
@@ -604,20 +590,17 @@ def mock_llm_provider_factory(monkeypatch):
 
 @pytest.fixture
 def llm_provider_mock_rdnam(llm_provider_config):
-    mocked_answer = RDNAMMultipleAnnotatorsAnswer(
-        annotator_1=RDNAMEvaluationAnswer(reasoning="Annotator 1", score=1.0, intent_match=2.0, trustworthiness=1.0),
-        annotator_2=RDNAMEvaluationAnswer(reasoning="Annotator 2", score=2.0, intent_match=1.0, trustworthiness=1.0),
-        annotator_3=RDNAMEvaluationAnswer(reasoning="Annotator 3", score=1.0, intent_match=1.0, trustworthiness=1.0),
-        annotator_4=RDNAMEvaluationAnswer(reasoning="Annotator 4", score=0.0, intent_match=0.0, trustworthiness=0.0),
-        annotator_5=RDNAMEvaluationAnswer(reasoning="Annotator 5", score=2.0, intent_match=1.0, trustworthiness=1.0),
-    )
-    LLM_response: LLMResponseType[RDNAMMultipleAnnotatorsAnswer] = LLMResponseType(
-        raw_answer=mocked_answer.model_dump_json(), parsed_answer=mocked_answer
+    annotators = [(1.0, 2.0, 1.0), (2.0, 1.0, 1.0), (1.0, 1.0, 1.0), (0.0, 0.0, 0.0), (2.0, 1.0, 1.0)]
+    raw_answer = json.dumps(
+        {
+            f"annotator_{i}": {"score": score, "intent_match": intent_match, "trustworthiness": trustworthiness}
+            for i, (score, intent_match, trustworthiness) in enumerate(annotators, start=1)
+        }
     )
     provider = MockLLMProvider(llm_provider_config)
 
-    def side_effect(*args, **kwargs):
-        return LLM_response
+    def side_effect(input, response_schema):
+        return LLMResponseType(raw_answer=raw_answer, parsed_answer=response_schema.model_validate_json(raw_answer))
 
     provider.async_call_mocker = AsyncMock(side_effect=side_effect)
     return provider

@@ -165,5 +165,3 @@ so the summary cannot contradict the per-query record it ships with.
 
 - **The built-in judge prompts ignore `Query.reference_answer`.** A gold answer reaches `reasoner`
   and `domain_expert` only through a `{{ query.metadata.<key> }}` convention in a custom prompt.
-- **`RDNAMEvaluator` mutates `self.result_type`** inside `_process_answer` to choose its output class,
-  while `_run_evaluations` fans out concurrent coroutines against the same evaluator object.

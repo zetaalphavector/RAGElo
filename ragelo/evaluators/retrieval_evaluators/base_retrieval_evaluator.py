@@ -6,11 +6,11 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable, Sequence
-from typing import TYPE_CHECKING, Any, ClassVar, get_type_hints
+from typing import TYPE_CHECKING, Any, ClassVar, TypeVar, get_type_hints
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, create_model
 
-from ragelo.evaluators.base_evaluator import BaseEvaluator, T_Config
+from ragelo.evaluators.base_evaluator import BaseEvaluator
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider, split_llm_provider_kwargs
 from ragelo.types import LLMInputPrompt, Query, RetrievalEvaluatorResult
 from ragelo.types.answer_formats import EvaluationAnswer, RetrievalEvaluationAnswer
@@ -21,6 +21,8 @@ from ragelo.types.types import RetrievalEvaluatorTypes, _result_type_registry
 from ragelo.utils import call_async_fn
 
 logger = logging.getLogger(__name__)
+
+T_Config = TypeVar("T_Config", bound=BaseRetrievalEvaluatorConfig)
 
 if TYPE_CHECKING:
     from ragelo.types.experiment import Experiment
@@ -35,9 +37,38 @@ class BaseRetrievalEvaluator(BaseEvaluator[T_Config, RetrievalEvaluatorResult]):
     evaluable_name: str = "Retrieved document"
     result_type: type[RetrievalEvaluatorResult] = RetrievalEvaluatorResult
     answer_format: type[EvaluationAnswer] = RetrievalEvaluationAnswer
+    relevance_grades: Sequence[str] = ("non-relevant", "somewhat relevant", "highly relevant")
 
     def __init__(self, config: T_Config, llm_provider: BaseLLMProvider):
         super().__init__(config, llm_provider)
+        if config.relevance_grades:
+            self.relevance_grades = config.relevance_grades
+        if self.answer_format is RetrievalEvaluationAnswer:
+            self.answer_format = create_model(
+                "RetrievalEvaluationAnswer", __base__=RetrievalEvaluationAnswer, score=(int, self._score_field())
+            )
+
+    @property
+    def max_score(self) -> int:
+        return len(self.relevance_grades) - 1
+
+    def _score_field(self) -> Any:
+        grades = "\n".join(f"{score}: {grade}" for score, grade in enumerate(self.relevance_grades))
+        return Field(
+            description=f"Your relevance score for the document, an integer from 0 to {self.max_score}.\n{grades}",
+            ge=0,
+            le=self.max_score,
+        )
+
+    def _prompt_context(self, query: Query, document: Document) -> dict[str, Any]:
+        """`custom_grades` lets a prompt drop text that only explains the evaluator's own grades."""
+        return {
+            "query": query,
+            "document": document,
+            "relevance_grades": self.relevance_grades,
+            "max_score": self.max_score,
+            "custom_grades": self.config.relevance_grades is not None,
+        }
 
     def evaluate(
         self,
@@ -144,7 +175,7 @@ class BaseRetrievalEvaluator(BaseEvaluator[T_Config, RetrievalEvaluatorResult]):
         return answer_format_for(self, BaseRetrievalEvaluator)
 
     def _build_message(self, query: Query, document: Document) -> LLMInputPrompt:
-        context = {"query": query, "document": document}
+        context = self._prompt_context(query, document)
         user_message = self.user_prompt.render(**context) if self.user_prompt else None
         system_prompt = self.system_prompt.render(**context) if self.system_prompt else None
 

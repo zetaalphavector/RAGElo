@@ -30,6 +30,18 @@ class BaseRetrievalEvaluatorConfig(BaseEvaluatorConfig):
         description="The user prompt to use for the evaluator. Should contain at least a {{ query.query }} and a {{ document.text }} placeholder for the query and the document text.",
     )
 
+    relevance_grades: list[str] | None = Field(
+        default=None,
+        description="What each relevance score means, from the lowest score (0) to the highest. Replaces the "
+        "evaluator's own 0 to 2 grades, so four grades make the evaluator score from 0 to 3.",
+    )
+
+    @field_validator("relevance_grades", mode="after")
+    def validate_relevance_grades(cls, grades: list[str] | None) -> list[str] | None:
+        if grades is not None and len(grades) < 2:
+            raise ValueError("relevance_grades needs at least two grades")
+        return grades
+
     @field_validator("user_prompt", mode="after")
     def validate_user_prompt(cls, prompt: Template | None) -> Template | None:
         if prompt is None:

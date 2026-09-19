@@ -289,3 +289,4 @@ When you complete a task and realize you made a mistake that could have been avo
 ## Lessons Learned
 
 <!-- Add entries here when you discover something that would have prevented a mistake -->
+- The RDNAM retrieval evaluator is registered as `"RDNAM"` (uppercase), unlike every other evaluator name. A new evaluator config is only proven once it has gone through `evaluate_experiment`: `evaluate()` skips the result type check in `Query.add_evaluation`.
