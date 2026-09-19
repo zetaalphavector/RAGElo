@@ -1,8 +1,8 @@
 import typer
 
-from ragelo import Experiment, get_answer_evaluator, get_llm_provider, get_retrieval_evaluator
+from ragelo import Experiment, get_answer_evaluator, get_retrieval_evaluator
 from ragelo.cli.args import get_params_from_function
-from ragelo.cli.utils import get_path
+from ragelo.cli.utils import get_cli_llm_provider, get_path
 from ragelo.logger import configure_logging
 from ragelo.types import AnswerEvaluatorTypes
 from ragelo.types.configurations.cli_configs import CLIPairwiseDomainExpertEvaluatorConfig, CLIPairwiseEvaluatorConfig
@@ -24,7 +24,7 @@ def pairwise(config: CLIPairwiseEvaluatorConfig = CLIPairwiseEvaluatorConfig(), 
 
     config = CLIPairwiseEvaluatorConfig(**kwargs)
     configure_logging(level="INFO", rich=config.rich_print)
-    llm_provider = get_llm_provider(config.llm_provider_name, **kwargs)
+    llm_provider = get_cli_llm_provider(config.llm_provider_name, kwargs)
 
     queries_csv_file = get_path(config.data_dir, config.queries_csv_file)
     documents_file = get_path(config.data_dir, config.documents_csv_file)
@@ -76,7 +76,7 @@ def expert_pairwise(
     config = CLIPairwiseDomainExpertEvaluatorConfig(**kwargs)
     configure_logging(level="INFO", rich=config.rich_print)
 
-    llm_provider = get_llm_provider(config.llm_provider_name, **kwargs)
+    llm_provider = get_cli_llm_provider(config.llm_provider_name, kwargs)
 
     queries_csv_file = get_path(config.data_dir, config.queries_csv_file)
     documents_file = get_path(config.data_dir, config.documents_csv_file)

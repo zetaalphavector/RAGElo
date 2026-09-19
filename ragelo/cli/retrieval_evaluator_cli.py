@@ -1,8 +1,8 @@
 import typer
 
-from ragelo import Experiment, get_llm_provider, get_retrieval_evaluator
+from ragelo import Experiment, get_retrieval_evaluator
 from ragelo.cli.args import get_params_from_function
-from ragelo.cli.utils import get_path
+from ragelo.cli.utils import get_cli_llm_provider, get_path
 from ragelo.logger import configure_logging
 from ragelo.types.configurations.cli_configs import (
     CLIDomainExpertEvaluatorConfig,
@@ -33,7 +33,7 @@ def domain_expert(config: CLIDomainExpertEvaluatorConfig = CLIDomainExpertEvalua
 
     config = CLIDomainExpertEvaluatorConfig(**kwargs)
     configure_logging(level="INFO", rich=config.rich_print)
-    llm_provider = get_llm_provider(config.llm_provider_name, **kwargs)
+    llm_provider = get_cli_llm_provider(config.llm_provider_name, kwargs)
 
     queries_csv_file = get_path(config.data_dir, config.queries_csv_file)
     documents_file = get_path(config.data_dir, config.documents_csv_file)
@@ -87,7 +87,7 @@ def reasoner(
 
     kwargs = config.model_dump()
 
-    llm_provider = get_llm_provider(config.llm_provider_name, **kwargs)
+    llm_provider = get_cli_llm_provider(config.llm_provider_name, kwargs)
 
     evaluator = get_retrieval_evaluator(RetrievalEvaluatorTypes.REASONER, config=config, llm_provider=llm_provider)
     evaluator.evaluate_experiment(experiment)
@@ -121,7 +121,7 @@ def rdnam(config: CLIRDNAMEvaluatorConfig = CLIRDNAMEvaluatorConfig(), **kwargs)
     kwargs = config.model_dump()
     kwargs.pop("llm_response_schema", None)
 
-    llm_provider = get_llm_provider(config.llm_provider_name, **kwargs)
+    llm_provider = get_cli_llm_provider(config.llm_provider_name, kwargs)
 
     evaluator = get_retrieval_evaluator(RetrievalEvaluatorTypes.RDNAM, config=config, llm_provider=llm_provider)
     evaluator.evaluate_experiment(experiment)

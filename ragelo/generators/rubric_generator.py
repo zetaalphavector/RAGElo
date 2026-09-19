@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 from pydantic import Field, create_model
 from pydantic.json_schema import SkipJsonSchema
 
-from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
+from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider, split_llm_provider_kwargs
 from ragelo.types.answer_formats import Criterion, RubricSchema
 from ragelo.types.configurations import RubricGeneratorConfig
 from ragelo.types.evaluables import ChatMessage
@@ -211,7 +211,8 @@ def get_rubric_generator(
     **kwargs,
 ) -> RubricGenerator:
     if isinstance(llm_provider, str):
-        llm_provider = get_llm_provider(llm_provider, **kwargs)
+        provider_kwargs, kwargs = split_llm_provider_kwargs(llm_provider, kwargs)
+        llm_provider = get_llm_provider(llm_provider, **provider_kwargs)
     if config is None:
         valid_keys = [field for field in RubricGeneratorConfig.model_fields]
         config = RubricGeneratorConfig(**{k: v for k, v in kwargs.items() if k in valid_keys})

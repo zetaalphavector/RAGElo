@@ -1,10 +1,10 @@
 import typer
 
-from ragelo import Experiment, get_agent_ranker, get_answer_evaluator, get_llm_provider, get_retrieval_evaluator
+from ragelo import Experiment, get_agent_ranker, get_answer_evaluator, get_retrieval_evaluator
 from ragelo.cli.answer_evaluators_cli import app as answer_evaluator_app
 from ragelo.cli.args import get_params_from_function
 from ragelo.cli.retrieval_evaluator_cli import app as retrieval_evaluator_app
-from ragelo.cli.utils import get_path
+from ragelo.cli.utils import get_cli_llm_provider, get_path
 from ragelo.logger import configure_logging
 from ragelo.types import CLIConfig
 
@@ -25,7 +25,7 @@ def run_all(config: CLIConfig = CLIConfig(), **kwargs):
     configure_logging(level="INFO", rich=config.rich_print)
 
     # Parse the LLM provider and remove it from the kwargs
-    llm_provider = get_llm_provider(config.llm_provider_name, **kwargs)
+    llm_provider = get_cli_llm_provider(config.llm_provider_name, kwargs)
 
     # Get the absolute paths for the input and output files, and ensure that they exist.
     queries_csv_file = get_path(config.data_dir, config.queries_csv_file)

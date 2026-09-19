@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, get_type_hints
 from pydantic import BaseModel
 
 from ragelo.evaluators.base_evaluator import BaseEvaluator, T_Config
-from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
+from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider, split_llm_provider_kwargs
 from ragelo.types import LLMInputPrompt, Query, RetrievalEvaluatorResult
 from ragelo.types.answer_formats import EvaluationAnswer, RetrievalEvaluationAnswer
 from ragelo.types.configurations import BaseRetrievalEvaluatorConfig
@@ -208,7 +208,8 @@ class RetrievalEvaluatorFactory:
                 f"Unknown retrieval evaluator {evaluator_name}\nValid options are {list(cls.registry.keys())}"
             )
         if isinstance(llm_provider, str):
-            llm_provider_instance = get_llm_provider(llm_provider, **kwargs)
+            provider_kwargs, kwargs = split_llm_provider_kwargs(llm_provider, kwargs)
+            llm_provider_instance = get_llm_provider(llm_provider, **provider_kwargs)
         else:
             llm_provider_instance = llm_provider
         if config is None:

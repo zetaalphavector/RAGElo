@@ -360,6 +360,23 @@ class TestLLMProviderConfigOptionalApiKey:
             OpenAIConfiguration(api_key=None)  # type: ignore
 
 
+class TestLLMProviderFactoryArguments:
+    def test_unknown_argument_is_rejected(self):
+        from ragelo.llm_providers import get_llm_provider
+
+        with pytest.raises(ValidationError, match="temprature"):
+            get_llm_provider("openai", api_key="fake_key", temprature=0)
+
+    def test_evaluator_factory_routes_shared_arguments(self):
+        from ragelo import get_retrieval_evaluator
+
+        evaluator = get_retrieval_evaluator(
+            "reasoner", llm_provider="openai", api_key="fake_key", model="fake-model", n_processes=3
+        )
+        assert evaluator.llm_provider.config.model == "fake-model"
+        assert evaluator.config.n_processes == 3
+
+
 class TestOllamaConfiguration:
     """Tests for OllamaConfiguration validation."""
 

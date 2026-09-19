@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import contextlib
 import json
 from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
 from openai import AsyncOpenAI
-from pydantic import BaseModel, SecretStr
+from pydantic import BaseModel, SecretStr, ValidationError
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.llm_providers.openai_client import OpenAIConfiguration
@@ -92,49 +93,43 @@ def llm_provider_config():
 
 def answer_model_factory(input: LLMInputPrompt, response_schema, **kwargs):
     # Retrieval answers (base or subclasses like RDNAMEvaluationAnswer)
-    try:
-        if response_schema == RetrievalEvaluationAnswer or (
-            isinstance(response_schema, type) and issubclass(response_schema, RetrievalEvaluationAnswer)
-        ):
-            # Handle specialized RDNAMEvaluationAnswer subclass
-            if isinstance(response_schema, type) and response_schema.__name__ == "RDNAMEvaluationAnswer":
-                raw_answer = (
-                    '{"reasoning": "Doc judged with aspects", "score": 2, "intent_match": 2.0, "trustworthiness": 2.0}'
-                )
-                return LLMResponseType(
-                    raw_answer=raw_answer,
-                    parsed_answer=response_schema.model_validate_json(raw_answer),  # type: ignore
-                )
-            # RDNAM without aspects
-            if isinstance(response_schema, type) and response_schema.__name__ == "RDNAMNoAspectsAnswer":
-                raw_answer = '{"reasoning": "Doc judged", "score": 1}'
-                return LLMResponseType(
-                    raw_answer=raw_answer,
-                    parsed_answer=response_schema.model_validate_json(raw_answer),  # type: ignore
-                )
-            # Generic retrieval evaluation
-            return LLMResponseType(
-                raw_answer='{"reasoning": "The document is very relevant", "score": 2}',
-                parsed_answer=RetrievalEvaluationAnswer(
-                    reasoning="The document is very relevant",
-                    score=2,
-                ),
+    if response_schema == RetrievalEvaluationAnswer or (
+        isinstance(response_schema, type) and issubclass(response_schema, RetrievalEvaluationAnswer)
+    ):
+        # Handle specialized RDNAMEvaluationAnswer subclass
+        if isinstance(response_schema, type) and response_schema.__name__ == "RDNAMEvaluationAnswer":
+            raw_answer = (
+                '{"reasoning": "Doc judged with aspects", "score": 2, "intent_match": 2.0, "trustworthiness": 2.0}'
             )
-    except Exception:
-        pass
+            return LLMResponseType(
+                raw_answer=raw_answer,
+                parsed_answer=response_schema.model_validate_json(raw_answer),  # type: ignore
+            )
+        # RDNAM without aspects
+        if isinstance(response_schema, type) and response_schema.__name__ == "RDNAMNoAspectsAnswer":
+            raw_answer = '{"reasoning": "Doc judged", "score": 1}'
+            return LLMResponseType(
+                raw_answer=raw_answer,
+                parsed_answer=response_schema.model_validate_json(raw_answer),  # type: ignore
+            )
+        # Generic retrieval evaluation
+        return LLMResponseType(
+            raw_answer='{"reasoning": "The document is very relevant", "score": 2}',
+            parsed_answer=RetrievalEvaluationAnswer(
+                reasoning="The document is very relevant",
+                score=2,
+            ),
+        )
     if isinstance(response_schema, type) and issubclass(response_schema, PairwiseEvaluationAnswer):
         raw_answer = '{"answer_a_analysis": "Answer A is good", "answer_b_analysis": "Answer B is bad", "comparison_reasoning": "A is better", "winner": "A"}'
         return LLMResponseType(raw_answer=raw_answer, parsed_answer=response_schema.model_validate_json(raw_answer))
     # Check if it's a subclass of EvaluationAnswer (covers custom answer schemas)
     if isinstance(response_schema, type) and issubclass(response_schema, EvaluationAnswer):
-        # Try to instantiate with generic data
-        try:
-            raw_answer = '{"reasoning": "Generic", "score": 1}'
+        raw_answer = '{"reasoning": "Generic", "score": 1}'
+        with contextlib.suppress(ValidationError):
             return LLMResponseType(
                 raw_answer=raw_answer, parsed_answer=response_schema.model_validate_json(raw_answer)
             )
-        except Exception:
-            pass
     if response_schema == AnswerFormat:
         return LLMResponseType(
             raw_answer='{"keyA": "valueA", "keyB": "valueB"}',
@@ -172,10 +167,7 @@ class MockLLMProvider(BaseLLMProvider):
             return await self.async_call_mocker(input, response_schema)
         else:
             # Still record the call (without relying on its return value)
-            try:
-                await self.async_call_mocker(input, response_schema)
-            except Exception:
-                pass
+            await self.async_call_mocker(input, response_schema)
             return answer_model_factory(input, response_schema)
 
 
