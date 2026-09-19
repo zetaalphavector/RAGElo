@@ -1,17 +1,13 @@
 from __future__ import annotations
 
-import logging
 from typing import Any, TypeVar
 
 from pydantic import BaseModel
-from tenacity import before_sleep_log, retry, stop_after_attempt, wait_random_exponential
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, LLMProviderFactory
 from ragelo.types import LLMInputPrompt, LLMResponseType
 from ragelo.types.configurations import InstructorConfiguration
 from ragelo.types.types import LLMProviderTypes
-
-logger = logging.getLogger(__name__)
 
 T_Schema = TypeVar("T_Schema", bound=BaseModel)
 
@@ -44,12 +40,6 @@ class InstructorProvider(BaseLLMProvider):
         super().__init__(config)
         self.__instructor_client = client or self.__get_instructor_client(config)
 
-    @retry(
-        wait=wait_random_exponential(min=1, max=120),
-        reraise=True,
-        stop=stop_after_attempt(3),
-        before_sleep=before_sleep_log(logger=logger, log_level=logging.INFO),
-    )
     async def call_async(self, input: LLMInputPrompt, response_schema: type[T_Schema]) -> LLMResponseType[T_Schema]:
         messages: list[dict[str, str]] = []
         if input.messages:
@@ -62,7 +52,7 @@ class InstructorProvider(BaseLLMProvider):
         if not messages:
             raise ValueError("No input provided")
 
-        call_kwargs: dict[str, Any] = self.config.model_kwargs
+        call_kwargs: dict[str, Any] = {**self.config.model_kwargs}
         if self.config.temperature is not None:
             call_kwargs["temperature"] = self.config.temperature
         if self.config.max_tokens is not None:

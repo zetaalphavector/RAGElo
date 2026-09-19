@@ -9,7 +9,6 @@ from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any, ClassVar, get_type_hints
 
 from pydantic import BaseModel
-from tenacity import RetryError
 
 from ragelo.evaluators.base_evaluator import BaseEvaluator, T_Config
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
@@ -88,7 +87,6 @@ class BaseRetrievalEvaluator(BaseEvaluator[T_Config, RetrievalEvaluatorResult]):
         llm_input = self._with_guidelines(self._build_message(query, document))
         answer_type = self._resolve_response_schema(llm_input)
         parsed_answer = None
-        raw_answer = ""
         try:
             llm_response = await self.llm_provider.call_async(
                 input=llm_input,
@@ -96,12 +94,8 @@ class BaseRetrievalEvaluator(BaseEvaluator[T_Config, RetrievalEvaluatorResult]):
             )
             llm_response = self._process_answer(llm_response, query)
             parsed_answer = llm_response.parsed_answer
-            raw_answer = llm_response.raw_answer
         except Exception as e:  # noqa: BLE001
-            if isinstance(e, RetryError):
-                exc = str(e) + "\nLLM Error: \n" + str(e.last_attempt.exception())
-            elif raw_answer:
-                exc = str(e) + f"\nRaw answer: {raw_answer}"
+            exc = str(e)
             logger.warning(f"Failed to generate answer for qid: {query.qid} and document: {document.did}: {exc}")
 
         return self.result_type(

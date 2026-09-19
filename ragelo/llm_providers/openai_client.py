@@ -1,20 +1,16 @@
 from __future__ import annotations
 
 import json
-import logging
 from typing import Any, TypeVar
 
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 from openai.types.responses import ResponseFormatTextJSONSchemaConfigParam, ResponseTextConfigParam
 from pydantic import BaseModel, ValidationError
-from tenacity import before_sleep_log, retry, stop_after_attempt, wait_random_exponential
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, LLMProviderFactory
 from ragelo.types import LLMInputPrompt, LLMResponseType
 from ragelo.types.configurations import OpenAIConfiguration
 from ragelo.types.types import LLMProviderTypes
-
-logger = logging.getLogger(__name__)
 
 T_Schema = TypeVar("T_Schema", bound=BaseModel)
 
@@ -36,12 +32,6 @@ class OpenAIProvider(BaseLLMProvider):
             elif self.config.reasoning_effort:
                 self.config.reasoning_effort = None
 
-    @retry(
-        wait=wait_random_exponential(min=1, max=120),
-        reraise=True,
-        stop=stop_after_attempt(3),
-        before_sleep=before_sleep_log(logger=logger, log_level=logging.INFO),
-    )
     async def call_async(self, input: LLMInputPrompt, response_schema: type[T_Schema]) -> LLMResponseType[T_Schema]:
         """Calls the OpenAI API asynchronously.
 
@@ -73,21 +63,16 @@ class OpenAIProvider(BaseLLMProvider):
         }
 
         if self.config.json_mode:
-            # Build a JSON schema from a Pydantic model class when available
-            if isinstance(response_schema, type) and issubclass(response_schema, BaseModel):
-                schema_dict = response_schema.model_json_schema()
-            else:
-                # Fallback for dict-like schemas provided directly
-                schema_dict = response_schema  # type: ignore
+            schema_dict = response_schema.model_json_schema()
             schema = json.dumps(schema_dict, indent=4)
+            suffix = (
+                f"\n\nYour output should be a JSON string that STRICTLY adheres to the following schema:\n{schema}"
+            )
             if isinstance(llm_input, str):
-                llm_input += (
-                    f"\n\nYour output should be a JSON string that STRICTLY adheres to the following schema:\n{schema}"
-                )
+                llm_input += suffix
             else:
-                llm_input[-1]["content"] += (
-                    f"\n\nYour output should be a JSON string that STRICTLY adheres to the following schema:\n{schema}"
-                )
+                last = llm_input[-1]
+                llm_input = [*llm_input[:-1], {**last, "content": last["content"] + suffix}]
             try:
                 answer = await self.__openai_client.responses.create(
                     input=llm_input,  # type: ignore

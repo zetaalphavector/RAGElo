@@ -203,7 +203,7 @@ class TestOpenAIProvider:
         assert call_args[1]["input"] == messages
 
     def test_invalid_json_in_json_mode_raises_error(self, openai_provider_json_mode, flexible_openai_client_mock):
-        """Test that invalid JSON in json_mode raises the parse ValueError once retries exhaust."""
+        """Test that invalid JSON in json_mode raises the parse ValueError."""
 
         # Mock to return invalid JSON
         def create_invalid_json(*args, **kwargs):
@@ -213,7 +213,7 @@ class TestOpenAIProvider:
 
         flexible_openai_client_mock.responses.create.side_effect = create_invalid_json
 
-        # Execute & Assert - retries exhaust and reraise the underlying ValueError
+        # Execute & Assert
         with pytest.raises(ValueError) as exc_info:
             openai_provider_json_mode(
                 LLMInputPrompt(user_message="Test"),
@@ -225,7 +225,7 @@ class TestOpenAIProvider:
     def test_missing_required_field_in_json_mode_raises_error(
         self, openai_provider_json_mode, flexible_openai_client_mock
     ):
-        """Test that JSON missing required fields raises the parse ValueError once retries exhaust."""
+        """Test that JSON missing required fields raises the parse ValueError."""
 
         # Mock to return JSON missing required fields
         def create_incomplete_json(*args, **kwargs):
@@ -235,7 +235,7 @@ class TestOpenAIProvider:
 
         flexible_openai_client_mock.responses.create.side_effect = create_incomplete_json
 
-        # Execute & Assert - retries exhaust and reraise the underlying ValueError
+        # Execute & Assert
         with pytest.raises(ValueError) as exc_info:
             openai_provider_json_mode(
                 LLMInputPrompt(user_message="Test"),
@@ -247,7 +247,7 @@ class TestOpenAIProvider:
     def test_wrong_type_from_structured_mode_raises_error(
         self, openai_provider_structured, flexible_openai_client_mock
     ):
-        """Test that wrong type from structured mode raises the parse ValueError once retries exhaust."""
+        """Test that wrong type from structured mode raises the parse ValueError."""
 
         # Mock to return wrong type
         def parse_wrong_type(*args, **kwargs):
@@ -258,7 +258,7 @@ class TestOpenAIProvider:
 
         flexible_openai_client_mock.responses.parse.side_effect = parse_wrong_type
 
-        # Execute & Assert - retries exhaust and reraise the underlying ValueError
+        # Execute & Assert
         with pytest.raises(ValueError) as exc_info:
             openai_provider_structured(
                 LLMInputPrompt(user_message="Test"),
@@ -266,6 +266,17 @@ class TestOpenAIProvider:
             )
 
         assert "OpenAI failed to parse response" in str(exc_info.value)
+
+    def test_json_mode_leaves_the_prompt_messages_untouched(self, openai_provider_json_mode):
+        prompt = LLMInputPrompt(messages=[{"role": "user", "content": "Evaluate this document."}])
+        openai_provider_json_mode(prompt, response_schema=RetrievalEvaluationAnswer)
+        assert prompt.messages == [{"role": "user", "content": "Evaluate this document."}]
+
+    def test_failed_request_is_attempted_once(self, openai_provider_structured, flexible_openai_client_mock):
+        flexible_openai_client_mock.responses.parse = AsyncMock(side_effect=RuntimeError("boom"))
+        with pytest.raises(ValueError, match="boom"):
+            openai_provider_structured(LLMInputPrompt(user_message="Test"), response_schema=RetrievalEvaluationAnswer)
+        assert flexible_openai_client_mock.responses.parse.await_count == 1
 
     def test_temperature_set_to_none_for_reasoning_models(self, monkeypatch):
         """Test that temperature is set to None for reasoning models (gpt-5, o-series)."""
@@ -397,6 +408,28 @@ class TestOllamaProviderFactory:
         assert provider.config.model == "test-model"
 
 
+class TestOllamaProvider:
+    def test_json_mode_parses_a_valid_answer(self):
+        from ragelo.llm_providers import OllamaProvider
+        from ragelo.types.configurations import OllamaConfiguration
+
+        raw_answer = json.dumps({"reasoning": "Relevant", "score": 2})
+        client = MagicMock()
+        client.chat.completions.create = AsyncMock(
+            return_value=MagicMock(choices=[MagicMock(message=MagicMock(content=raw_answer))])
+        )
+        provider = OllamaProvider(OllamaConfiguration(model="test-model", json_mode=True), client=client)
+        prompt = LLMInputPrompt(messages=[{"role": "user", "content": "Evaluate this document."}])
+
+        result = provider(prompt, response_schema=RetrievalEvaluationAnswer)
+
+        assert result.parsed_answer == RetrievalEvaluationAnswer(reasoning="Relevant", score=2)
+        assert result.raw_answer == raw_answer
+        assert prompt.messages == [{"role": "user", "content": "Evaluate this document."}]
+        sent = client.chat.completions.create.call_args.kwargs["messages"]
+        assert "STRICTLY adheres" in sent[-1]["content"]
+
+
 class TestVercelProvider:
     """Tests for the Vercel AI Gateway provider."""
 
@@ -522,8 +555,12 @@ class TestInstructorProvider:
         call_args = instructor_client_mock.create.call_args
         assert call_args[1]["messages"] == messages
 
+    def test_call_leaves_the_configured_model_kwargs_untouched(self, instructor_provider):
+        instructor_provider(LLMInputPrompt(user_message="Test"), response_schema=RetrievalEvaluationAnswer)
+        assert instructor_provider.config.model_kwargs == {}
+
     def test_api_error_reraises_the_underlying_error(self, instructor_provider, instructor_client_mock):
-        """Test that an API failure raises the underlying ValueError once retries exhaust."""
+        """Test that an API failure raises the underlying ValueError."""
         pytest.importorskip("instructor")
         instructor_client_mock.create.side_effect = RuntimeError("Connection refused")
 

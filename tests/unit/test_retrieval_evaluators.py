@@ -26,7 +26,7 @@ from ragelo.types.answer_formats import (
 from ragelo.types.configurations import ReasonerEvaluatorConfig, RubricCoverageEvaluatorConfig
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.results import RetrievalEvaluatorResult
-from ragelo.utils import string_to_template
+from ragelo.utils import call_async_fn, string_to_template
 
 
 def _schema_flags(schema) -> list[str]:
@@ -169,6 +169,15 @@ class TestReasonerEvaluator:
         assert result.answer.score == 2
         assert call_args[0][0][0].user_message == user_prompt
         assert call_args[0][0][0].system_prompt == system_prompt
+
+    def test_llm_failure_is_reported_on_the_result(self, llm_provider_mock, base_retrieval_eval_config, experiment):
+        llm_provider_mock.call_async = AsyncMock(side_effect=ValueError("gateway said no"))
+        evaluator = ReasonerEvaluator.from_config(config=base_retrieval_eval_config, llm_provider=llm_provider_mock)
+        query = experiment["0"]
+
+        result = call_async_fn(evaluator.evaluate_async, (query, query.retrieved_docs["0"]))
+
+        assert result.exception == "gateway said no"
 
 
 class TestCustomPromptEvaluator:
