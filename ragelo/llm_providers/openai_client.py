@@ -81,6 +81,7 @@ class OpenAIProvider(BaseLLMProvider):
                             name=schema_dict.get("title", "response"),
                             schema=schema_dict,
                             type="json_schema",
+                            strict=False,
                         )
                     ),
                     **call_kwargs,

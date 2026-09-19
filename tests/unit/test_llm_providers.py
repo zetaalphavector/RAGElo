@@ -80,8 +80,8 @@ class TestOpenAIProvider:
         assert "schema" in input_arg.lower()  # Schema description should be in the prompt
 
         # Verify JSON mode response format is set
-        assert "text" in call_args[1]
         assert call_args[1]["text"]["format"]["type"] == "json_schema"
+        assert call_args[1]["text"]["format"]["strict"] is False
 
     def test_retrieval_evaluation_with_system_prompt_structured(
         self, openai_provider_structured, flexible_openai_client_mock
