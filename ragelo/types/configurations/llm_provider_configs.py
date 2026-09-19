@@ -4,9 +4,8 @@ from pydantic import BaseModel, SecretStr
 
 
 class LLMProviderConfig(BaseModel):
-    temperature: float | None = 0.1
+    temperature: float | None = None
     max_tokens: int = 4096
-    seed: int | None = 42
     json_mode: bool = False
     reasoning_effort: Literal["low", "medium", "high"] | None = None
 
@@ -28,6 +27,7 @@ class VercelConfiguration(OpenAIConfiguration):
 class OllamaConfiguration(LLMProviderConfig):
     api_base: str | None = "http://localhost:11434/v1/"
     model: str
+    seed: int | None = 42
 
 
 class InstructorConfiguration(LLMProviderConfig):

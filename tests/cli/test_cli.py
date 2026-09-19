@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from ragelo.cli.cli import app
@@ -300,3 +301,20 @@ def test_run_expert_pairwise_cli(mock_llm_provider_factory):
     assert not Path(f"ragelo_cache/{experiment_name}.json").exists()
 
     _cleanup_files(output_file, results_file)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        ["run-all"],
+        ["retrieval-evaluator", "reasoner"],
+        ["retrieval-evaluator", "domain-expert"],
+        ["retrieval-evaluator", "rdnam"],
+        ["answer-evaluator", "pairwise"],
+        ["answer-evaluator", "expert-pairwise"],
+    ],
+)
+def test_every_command_takes_a_model(command):
+    result = runner.invoke(app, [*command, "--help"], env=ENV)
+    assert result.exit_code == 0
+    assert "--model" in result.stdout

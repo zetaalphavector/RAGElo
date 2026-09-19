@@ -25,12 +25,6 @@ class OpenAIProvider(BaseLLMProvider):
     def __init__(self, config: OpenAIConfiguration, client: AsyncOpenAI | None = None) -> None:
         super().__init__(config)
         self.__openai_client = client or self.__get_openai_client(config)
-        creator, _, model = self.config.model.rpartition("/")
-        if creator in ("", "openai"):
-            if model.startswith(("gpt-5", "o")):
-                self.config.temperature = None
-            elif self.config.reasoning_effort:
-                self.config.reasoning_effort = None
 
     async def call_async(self, input: LLMInputPrompt, response_schema: type[T_Schema]) -> LLMResponseType[T_Schema]:
         """Calls the OpenAI API asynchronously.

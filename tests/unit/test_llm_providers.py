@@ -278,37 +278,21 @@ class TestOpenAIProvider:
             openai_provider_structured(LLMInputPrompt(user_message="Test"), response_schema=RetrievalEvaluationAnswer)
         assert flexible_openai_client_mock.responses.parse.await_count == 1
 
-    def test_temperature_set_to_none_for_reasoning_models(self, monkeypatch):
-        """Test that temperature is set to None for reasoning models (gpt-5, o-series)."""
-        # Test with gpt-5 model
-        config_gpt5 = OpenAIConfiguration(
-            api_key=SecretStr("fake_key"),
-            model="gpt-5-preview",
-            temperature=0.7,
+    def test_configured_sampling_params_are_sent_as_is(self, flexible_openai_client_mock):
+        config = OpenAIConfiguration(
+            api_key=SecretStr("fake_key"), model="gpt-4.1-mini", temperature=0.7, reasoning_effort="high"
         )
-        provider_gpt5 = OpenAIProvider(config=config_gpt5)
-        assert provider_gpt5.config is not None
-        assert provider_gpt5.config.temperature is None
+        provider = OpenAIProvider(config=config, client=flexible_openai_client_mock)
+        provider(LLMInputPrompt(user_message="Test"), response_schema=RetrievalEvaluationAnswer)
+        call_kwargs = flexible_openai_client_mock.responses.parse.call_args.kwargs
+        assert call_kwargs["temperature"] == 0.7
+        assert call_kwargs["reasoning"] == {"effort": "high"}
 
-        # Test with o-series model
-        config_o = OpenAIConfiguration(
-            api_key=SecretStr("fake_key"),
-            model="o1-preview",
-            temperature=0.7,
-        )
-        provider_o = OpenAIProvider(config=config_o)
-        assert provider_o.config is not None
-        assert provider_o.config.temperature is None
-
-        # Test with regular model keeps temperature
-        config_regular = OpenAIConfiguration(
-            api_key=SecretStr("fake_key"),
-            model="gpt-4o-mini",
-            temperature=0.7,
-        )
-        provider_regular = OpenAIProvider(config=config_regular)
-        assert provider_regular.config
-        assert provider_regular.config.temperature == 0.7
+    def test_unset_sampling_params_are_omitted(self, openai_provider_structured, flexible_openai_client_mock):
+        openai_provider_structured(LLMInputPrompt(user_message="Test"), response_schema=RetrievalEvaluationAnswer)
+        call_kwargs = flexible_openai_client_mock.responses.parse.call_args.kwargs
+        assert "temperature" not in call_kwargs
+        assert "reasoning" not in call_kwargs
 
 
 class TestExternalAdapterProvider:
@@ -456,26 +440,6 @@ class TestVercelProvider:
         monkeypatch.delenv("AI_GATEWAY_API_KEY", raising=False)
         with pytest.raises(ValueError, match="AI_GATEWAY_API_KEY"):
             get_llm_provider("vercel", model="anthropic/claude-sonnet-5")
-
-    @pytest.mark.parametrize(
-        ("model", "temperature", "reasoning_effort"),
-        [
-            ("openai/gpt-5", None, "high"),
-            ("openai/o3", None, "high"),
-            ("openai/gpt-4.1-mini", 0.7, None),
-            ("anthropic/claude-sonnet-5", 0.7, "high"),
-        ],
-    )
-    def test_sampling_params_follow_the_model_creator(self, model, temperature, reasoning_effort):
-        from ragelo.llm_providers import VercelProvider
-        from ragelo.types.configurations import VercelConfiguration
-
-        config = VercelConfiguration(
-            api_key=SecretStr("fake_key"), model=model, temperature=0.7, reasoning_effort="high"
-        )
-        provider = VercelProvider(config=config)
-        assert provider.config.temperature == temperature
-        assert provider.config.reasoning_effort == reasoning_effort
 
 
 class TestInstructorProvider:

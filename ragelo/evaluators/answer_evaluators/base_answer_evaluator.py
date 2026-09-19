@@ -157,14 +157,12 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
 
         exc = None
         parsed_answer = None
-        raw_answer = ""
         try:
             llm_response = await self.llm_provider.call_async(input=prompt, response_schema=response_schema)  # type: ignore[arg-type]
             llm_response = self._process_answer(llm_response, query)
             parsed_answer = llm_response.parsed_answer
-            raw_answer = llm_response.raw_answer
         except Exception as e:  # noqa: BLE001 - captured on the result as `exception`
-            exc = str(e) + f"\nRaw answer: {raw_answer}"
+            exc = str(e)
             logger.warning(f"Failed to generate answer for qid: {query.qid} and agent: {answer.agent}: {exc}")
 
         result = AnswerEvaluatorResult(
@@ -184,14 +182,12 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
 
         exc = None
         parsed_answer = None
-        raw_answer = ""
         try:
             llm_response = await self.llm_provider.call_async(input=prompt, response_schema=response_schema)  # type: ignore[arg-type]
             llm_response = self._process_answer(llm_response, query)
             parsed_answer = llm_response.parsed_answer
-            raw_answer = llm_response.raw_answer
         except Exception as e:  # noqa: BLE001 - captured on the result as `exception`
-            exc = str(e) + f"\nRaw answer: {raw_answer}"
+            exc = str(e)
             logger.warning(
                 f"Failed to evaluate game for qid: {query.qid} "
                 f"agents: ({game.agent_a_answer.agent}, {game.agent_b_answer.agent}): {exc}"

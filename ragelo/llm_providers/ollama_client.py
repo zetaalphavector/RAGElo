@@ -44,11 +44,11 @@ class OllamaProvider(BaseLLMProvider):
                 (if response_schema is a Pydantic BaseModel)).
         """
         messages = []
+        optional_kwargs = {"temperature": self.config.temperature, "seed": self.config.seed}
         call_kwargs: dict[str, Any] = {
             "model": self.config.model,
-            "temperature": self.config.temperature,
             "max_tokens": self.config.max_tokens,
-            "seed": self.config.seed,
+            **{k: v for k, v in optional_kwargs.items() if v is not None},
         }
 
         if input.system_prompt and input.messages:
