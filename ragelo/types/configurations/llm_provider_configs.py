@@ -20,6 +20,11 @@ class OpenAIConfiguration(LLMProviderConfig):
     model: str = "gpt-4.1-mini"
 
 
+class VercelConfiguration(OpenAIConfiguration):
+    api_base: str | None = "https://ai-gateway.vercel.sh/v1"
+    model: str
+
+
 class OllamaConfiguration(LLMProviderConfig):
     api_base: str | None = "http://localhost:11434/v1/"
     model: str

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import re
+import threading
 import warnings
 from collections.abc import Callable, Coroutine
-from concurrent.futures import ThreadPoolExecutor
 from textwrap import dedent
 from typing import Any
 
@@ -13,28 +13,13 @@ from tqdm import TqdmExperimentalWarning
 from tqdm.auto import tqdm
 from tqdm.rich import tqdm_rich
 
-
-def run(coroutine: Coroutine[Any, Any, Any]) -> Any:
-    """
-    Runs the given coroutine and returns its result.
-    """
-    return asyncio.run(coroutine)
+_LOOP = asyncio.new_event_loop()
+threading.Thread(target=_LOOP.run_forever, daemon=True).start()
 
 
 def call_async_fn(fn: Callable[..., Coroutine[Any, Any, Any]], *args: Any, **kwargs: Any) -> Any:
-    """
-    Calls an asynchronous function, either in the current event loop
-    or in a separate thread if no loop is running.
-    """
-    try:
-        asyncio.get_running_loop()
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            # Execute the coroutine using the `run` function in a thread pool
-            future = executor.submit(run, fn(*args, **kwargs))
-            return future.result()
-    except RuntimeError:
-        # If no running loop is detected, run the coroutine directly
-        return asyncio.run(fn(*args, **kwargs))
+    """Runs an asynchronous function to completion from synchronous code."""
+    return asyncio.run_coroutine_threadsafe(fn(*args, **kwargs), _LOOP).result()
 
 
 def get_pbar(

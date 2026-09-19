@@ -27,6 +27,7 @@ When working from source we recommend an isolated environment (e.g., `uv venv &&
 Environment variables and providers:
 - OpenAI requires `OPENAI_API_KEY`. Set it in your shell or load it via dotenv before invoking the CLI.
 - Ollama is supported for local models (`--llm-provider-name ollama`).
+- The [Vercel AI Gateway](https://vercel.com/docs/ai-gateway) (`--llm-provider-name vercel`) requires `AI_GATEWAY_API_KEY` and takes `creator/model` ids, e.g. `ragelo run-all ... --model anthropic/claude-haiku-4-5`.
 - The **Instructor provider** enables multi-provider support (Anthropic, Mistral, Cohere, and more) via the [`instructor`](https://github.com/jxnl/instructor) library. Install the extra and the relevant SDK:
   ```bash
   pip install 'ragelo[instructor]' anthropic   # for Anthropic/Claude

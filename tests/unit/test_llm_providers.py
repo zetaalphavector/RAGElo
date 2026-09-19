@@ -49,7 +49,7 @@ class TestOpenAIProvider:
         assert call_args[1]["model"] == "fake_model"
         assert call_args[1]["input"] == user_prompt
         assert call_args[1]["text_format"] == RetrievalEvaluationAnswer
-        assert call_args[1]["instructions"] is None
+        assert "instructions" not in call_args[1]
 
     def test_retrieval_evaluation_json_mode(self, openai_provider_json_mode, flexible_openai_client_mock):
         """Test retrieval evaluation with json_mode=True (JSON string via responses.create)."""
@@ -395,6 +395,54 @@ class TestOllamaProviderFactory:
         provider = get_llm_provider("ollama", model="test-model")
         assert isinstance(provider, OllamaProvider)
         assert provider.config.model == "test-model"
+
+
+class TestVercelProvider:
+    """Tests for the Vercel AI Gateway provider."""
+
+    def test_configuration_requires_model(self):
+        from ragelo.types.configurations import VercelConfiguration
+
+        with pytest.raises(ValidationError):
+            VercelConfiguration(api_key=SecretStr("fake_key"))  # type: ignore[call-arg]
+
+    def test_factory_reads_the_gateway_key(self, monkeypatch):
+        from ragelo.llm_providers import VercelProvider, get_llm_provider
+
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.setenv("AI_GATEWAY_API_KEY", "gateway-key")
+        provider = get_llm_provider("vercel", model="anthropic/claude-sonnet-5")
+        assert isinstance(provider, VercelProvider)
+        assert provider.config.api_key.get_secret_value() == "gateway-key"
+        assert provider.config.api_base == "https://ai-gateway.vercel.sh/v1"
+
+    def test_factory_ignores_the_openai_key(self, monkeypatch):
+        from ragelo.llm_providers import get_llm_provider
+
+        monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
+        monkeypatch.delenv("AI_GATEWAY_API_KEY", raising=False)
+        with pytest.raises(ValueError, match="AI_GATEWAY_API_KEY"):
+            get_llm_provider("vercel", model="anthropic/claude-sonnet-5")
+
+    @pytest.mark.parametrize(
+        ("model", "temperature", "reasoning_effort"),
+        [
+            ("openai/gpt-5", None, "high"),
+            ("openai/o3", None, "high"),
+            ("openai/gpt-4.1-mini", 0.7, None),
+            ("anthropic/claude-sonnet-5", 0.7, "high"),
+        ],
+    )
+    def test_sampling_params_follow_the_model_creator(self, model, temperature, reasoning_effort):
+        from ragelo.llm_providers import VercelProvider
+        from ragelo.types.configurations import VercelConfiguration
+
+        config = VercelConfiguration(
+            api_key=SecretStr("fake_key"), model=model, temperature=0.7, reasoning_effort="high"
+        )
+        provider = VercelProvider(config=config)
+        assert provider.config.temperature == temperature
+        assert provider.config.reasoning_effort == reasoning_effort
 
 
 class TestInstructorProvider:

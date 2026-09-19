@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 from openai.types.responses import ResponseFormatTextJSONSchemaConfigParam, ResponseTextConfigParam
@@ -29,10 +29,12 @@ class OpenAIProvider(BaseLLMProvider):
     def __init__(self, config: OpenAIConfiguration, client: AsyncOpenAI | None = None) -> None:
         super().__init__(config)
         self.__openai_client = client or self.__get_openai_client(config)
-        if self.config.model.startswith("gpt-5") or self.config.model.startswith("o"):
-            self.config.temperature = None
-        elif self.config.reasoning_effort:
-            self.config.reasoning_effort = None
+        creator, _, model = self.config.model.rpartition("/")
+        if creator in ("", "openai"):
+            if model.startswith(("gpt-5", "o")):
+                self.config.temperature = None
+            elif self.config.reasoning_effort:
+                self.config.reasoning_effort = None
 
     @retry(
         wait=wait_random_exponential(min=1, max=120),
@@ -59,10 +61,16 @@ class OpenAIProvider(BaseLLMProvider):
             llm_input = input.user_message
         else:
             raise ValueError("No input provided")
-        if input.system_prompt:
-            instructions = input.system_prompt
-        else:
-            instructions = None
+        optional_kwargs = {
+            "instructions": input.system_prompt,
+            "temperature": self.config.temperature,
+            "reasoning": {"effort": self.config.reasoning_effort} if self.config.reasoning_effort else None,
+        }
+        call_kwargs: dict[str, Any] = {
+            "model": self.config.model,
+            "max_output_tokens": self.config.max_tokens,
+            **{k: v for k, v in optional_kwargs.items() if v is not None},
+        }
 
         if self.config.json_mode:
             # Build a JSON schema from a Pydantic model class when available
@@ -83,10 +91,6 @@ class OpenAIProvider(BaseLLMProvider):
             try:
                 answer = await self.__openai_client.responses.create(
                     input=llm_input,  # type: ignore
-                    instructions=instructions,
-                    model=self.config.model,
-                    temperature=self.config.temperature,
-                    max_output_tokens=self.config.max_tokens,
                     text=ResponseTextConfigParam(
                         format=ResponseFormatTextJSONSchemaConfigParam(
                             name=schema_dict.get("title", "response"),
@@ -94,7 +98,7 @@ class OpenAIProvider(BaseLLMProvider):
                             type="json_schema",
                         )
                     ),
-                    reasoning={"effort": self.config.reasoning_effort} if self.config.reasoning_effort else None,
+                    **call_kwargs,
                 )
             except Exception as e:
                 raise ValueError(f"OpenAI request failed: {e}") from e
@@ -111,11 +115,7 @@ class OpenAIProvider(BaseLLMProvider):
                 answer = await self.__openai_client.responses.parse(
                     text_format=response_schema,
                     input=llm_input,  # type: ignore
-                    instructions=instructions,
-                    model=self.config.model,
-                    temperature=self.config.temperature,
-                    max_output_tokens=self.config.max_tokens,
-                    reasoning={"effort": self.config.reasoning_effort} if self.config.reasoning_effort else None,
+                    **call_kwargs,
                 )
             except Exception as e:
                 raise ValueError(f"OpenAI request failed: {e}") from e
