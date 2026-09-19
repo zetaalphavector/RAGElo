@@ -551,7 +551,6 @@ def expert_retrieval_eval_config(base_eval_config):
 @pytest.fixture
 def rdnam_config(base_eval_config):
     base_config = base_eval_config.model_dump(exclude_unset=True)
-    base_config["query_file"] = "tests/data/rdnam_queries.csv"
     base_config["evaluator_name"] = RetrievalEvaluatorTypes.RDNAM
     return RDNAMEvaluatorConfig(
         annotator_role="You are a search quality rater evaluating the relevance of web pages. ",
@@ -711,7 +710,6 @@ def domain_expert_answer_eval_config(base_answer_eval_config):
     )
     base_config["pairwise"] = True
     base_config["expert_in"] = "Computer Science"
-    base_config["include_annotations"] = True
     base_config["include_raw_documents"] = True
     base_config["evaluator_name"] = AnswerEvaluatorTypes.DOMAIN_EXPERT
     base_config["include_relevance_reasoning"] = False

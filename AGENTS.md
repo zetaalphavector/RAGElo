@@ -42,6 +42,7 @@ All major components use decorator-based factory registration. Enum types in `ra
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.REASONER)
 class ReasonerEvaluator(BaseRetrievalEvaluator): ...
 
+
 # Instantiation (via factory functions)
 evaluator = get_retrieval_evaluator("reasoner", llm_provider=provider)
 provider = get_llm_provider("openai", api_key="...")

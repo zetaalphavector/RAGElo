@@ -580,7 +580,7 @@ class TestReadmeExamples:
             return LLMResponseType(raw_answer='{"score": 1.0}', parsed_answer=RDNAMNoAspectsAnswer(score=1.0))
 
         llm_provider_mock_rdnam.async_call_mocker = AsyncMock(side_effect=side_effect)
-        evaluator = get_retrieval_evaluator("RDNAM", llm_provider=llm_provider_mock_rdnam, write_output=False)
+        evaluator = get_retrieval_evaluator("RDNAM", llm_provider=llm_provider_mock_rdnam)
         result = evaluator.evaluate(
             query="What is the capital of France?",
             document="Lyon is the second largest city in France.",

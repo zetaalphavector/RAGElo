@@ -4,9 +4,9 @@ from ragelo import Experiment, get_agent_ranker, get_answer_evaluator, get_retri
 from ragelo.cli.answer_evaluators_cli import app as answer_evaluator_app
 from ragelo.cli.args import get_params_from_function
 from ragelo.cli.retrieval_evaluator_cli import app as retrieval_evaluator_app
-from ragelo.cli.utils import get_cli_llm_provider, get_path
+from ragelo.cli.utils import config_kwargs, get_cli_llm_provider, get_path
 from ragelo.logger import configure_logging
-from ragelo.types import CLIConfig
+from ragelo.types import CLIConfig, EloAgentRankerConfig, PairwiseEvaluatorConfig, ReasonerEvaluatorConfig
 
 typer.main.get_params_from_function = get_params_from_function  # type: ignore
 
@@ -47,9 +47,13 @@ def run_all(config: CLIConfig = CLIConfig(), **kwargs):
     kwargs = config.model_dump()
     kwargs.pop("llm_response_schema", None)
 
-    retrieval_evaluator = get_retrieval_evaluator("reasoner", llm_provider=llm_provider, **kwargs)
-    answers_evaluator = get_answer_evaluator("pairwise", llm_provider=llm_provider, **kwargs)
-    ranker = get_agent_ranker("elo", **kwargs)
+    retrieval_evaluator = get_retrieval_evaluator(
+        "reasoner", llm_provider=llm_provider, **config_kwargs(ReasonerEvaluatorConfig, kwargs)
+    )
+    answers_evaluator = get_answer_evaluator(
+        "pairwise", llm_provider=llm_provider, **config_kwargs(PairwiseEvaluatorConfig, kwargs)
+    )
+    ranker = get_agent_ranker("elo", **config_kwargs(EloAgentRankerConfig, kwargs))
 
     retrieval_evaluator.evaluate_experiment(experiment)
     answers_evaluator.evaluate_experiment(experiment)

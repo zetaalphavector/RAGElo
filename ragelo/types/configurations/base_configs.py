@@ -11,7 +11,7 @@ from ragelo.utils import get_placeholders_and_tags, string_to_template
 
 
 class BaseConfig(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
     force: bool = Field(
         default=False,

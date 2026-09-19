@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 from typing import Any
 
+from pydantic import BaseModel
+
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider, split_llm_provider_kwargs
 
 
@@ -16,6 +18,10 @@ def get_path(data_path: str | None, file_path: str, check_exists: bool = True) -
     if check_exists:
         assert os.path.exists(abs_path), f"File {abs_path} does not exist"
     return abs_path
+
+
+def config_kwargs(config_class: type[BaseModel], cli_kwargs: dict[str, Any]) -> dict[str, Any]:
+    return {k: v for k, v in cli_kwargs.items() if k in config_class.model_fields}
 
 
 def get_cli_llm_provider(name: str, cli_kwargs: dict[str, Any]) -> BaseLLMProvider:

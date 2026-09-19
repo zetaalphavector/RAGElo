@@ -214,6 +214,5 @@ def get_rubric_generator(
         provider_kwargs, kwargs = split_llm_provider_kwargs(llm_provider, kwargs)
         llm_provider = get_llm_provider(llm_provider, **provider_kwargs)
     if config is None:
-        valid_keys = [field for field in RubricGeneratorConfig.model_fields]
-        config = RubricGeneratorConfig(**{k: v for k, v in kwargs.items() if k in valid_keys})
+        config = RubricGeneratorConfig(**kwargs)
     return RubricGenerator(config, llm_provider)

@@ -85,11 +85,7 @@ class AgentRankerFactory:
         if ranker_name not in cls.registry:
             raise ValueError(f"Unknown Agent Ranker {ranker_name}")
         if config is None:
-            class_ = cls.registry[ranker_name]
-            type_config = class_.get_config_class()
-            valid_keys = [field for field in type_config.model_fields]
-            valid_args = {k: v for k, v in kwargs.items() if k in valid_keys}
-            config = type_config(**valid_args)
+            config = cls.registry[ranker_name].get_config_class()(**kwargs)
         return cls.registry[ranker_name].from_config(config)
 
 

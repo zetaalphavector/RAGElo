@@ -44,7 +44,9 @@ To use RAGElo as a library, all you need to do is import RAGElo, initialize an `
 from ragelo import get_retrieval_evaluator
 
 evaluator = get_retrieval_evaluator("RDNAM", llm_provider="openai")
-result = evaluator.evaluate(query="What is the capital of France?", document='Lyon is the second largest city in France.')
+result = evaluator.evaluate(
+    query="What is the capital of France?", document="Lyon is the second largest city in France."
+)
 print(result.answer)
 # Output: RDNAMEvaluationAnswer(reasoning='...', score=1.0, intent_match=None, trustworthiness=None)
 print(result.answer.score)
@@ -93,7 +95,7 @@ pointwise = get_answer_evaluator(
     "rubric_pointwise",
     llm_provider="openai",
     expert_in="Machine Learning",
-    n_criteria=5,           # number of criteria the LLM will generate
+    n_criteria=5,  # number of criteria the LLM will generate
 )
 pointwise.evaluate_all_evaluables(query)
 
@@ -131,7 +133,7 @@ generator = get_rubric_generator(
     n_criteria=5,
     source="reference_answer",  # or "documents" (the default)
 )
-generator.generate_experiment(experiment)   # writes query.rubric for every query without one
+generator.generate_experiment(experiment)  # writes query.rubric for every query without one
 
 for criterion in experiment["q0"].rubric:
     print(criterion.criterion_name, criterion.short_question, criterion.weight)
@@ -152,7 +154,7 @@ pointwise = get_answer_evaluator(
     "rubric_pointwise",
     llm_provider="openai",
     graduated_scoring=True,  # enable graduated scoring
-    max_score=5,             # score range 0–5 (default)
+    max_score=5,  # score range 0–5 (default)
 )
 ```
 
@@ -170,7 +172,7 @@ pointwise = get_answer_evaluator(
     llm_provider="openai",
     evidence_recall=True,
     evidence_recall_weight=1.5,  # relative importance (default 1.0)
-    evidence_snippets={          # optional per-query snippets
+    evidence_snippets={  # optional per-query snippets
         "q0": ["Brasília is the capital", "since 1960"],
     },
 )
@@ -368,8 +370,9 @@ print(tournament.scores)
 For a more complete example, we can evaluate with a custom prompt, and inject metadata into our evaluation prompt:
 
 ```python
-from pydantic import BaseModel, Field
+from pydantic import Field
 from ragelo import get_retrieval_evaluator
+from ragelo.types import EvaluationAnswer
 
 system_prompt = """You are a helpful assistant for evaluating the relevance of a retrieved document to a user query.
 You should pay extra attention to how **recent** a document is. A document older than 5 years is considered outdated.
@@ -385,7 +388,7 @@ Retrieved document: {{ document.text }}
 The document has a date of {{ document.metadata.date }}.
 Today is {{ query.metadata.today_date }}.
 """
-class ResponseSchema(BaseModel):
+class ResponseSchema(EvaluationAnswer):
     relevance: int = Field(description="An integer, either 0 or 1. 0 if the document is irrelevant, 1 if it is relevant.")
     recency: int = Field(description="An integer, either 0 or 1. 0 if the document is outdated, 1 if it is recent.")
     truthfulness: int = Field(description="An integer, either 0 or 1. 0 if the document is false, 1 if it is true.")
@@ -595,6 +598,7 @@ Reproducibility tips:
 Evaluating retrieval metrics (optional):
 ```python
 from ragelo import Experiment
+
 exp = Experiment(experiment_name="my_exp", save_on_disk=False)
 # load queries/docs/answers and evaluations...
 exp.evaluate_retrieval(metrics=["Precision@10", "nDCG@10"], relevance_threshold=1)
