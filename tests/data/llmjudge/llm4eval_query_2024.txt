@@ -1,0 +1,3 @@
+q1	dog age by teeth
+q2	how do you clean smoke off walls
+q3	unjudged in both splits
