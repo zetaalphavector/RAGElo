@@ -10,22 +10,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import httpx
 import typer
 from rich.console import Console
 from rich.table import Table
 
 from benchmarks import llmjudge, trec_rag24
 from benchmarks.agreement import Agreement, agreement, spearman_interval
-from benchmarks.jev_criteria import RDNAM_CRITERIA, TREC_CRITERIA, JevCriteriaEvaluator
-from benchmarks.jev_state import JsonStateTransport
 from benchmarks.llmjudge import GRADES, LLMJudgeData, Split, sample, to_experiment
 from benchmarks.throughput import Run, Throughput, record
 from ragelo import get_llm_provider, get_retrieval_evaluator
 from ragelo.evaluators.retrieval_evaluators import BaseRetrievalEvaluator
-from ragelo.llm_providers import VercelJevProvider
-from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
-from ragelo.types.configurations import JevRubricCoverageEvaluatorConfig
 from ragelo.types.formats import LLMUsage
 
 # The reasoner's grades until the answer-focused wording replaced them, kept to reproduce that comparison.
@@ -35,39 +29,6 @@ TOPICAL_GRADES = [
     "Very relevant: The document is on topic and answers the user question.",
 ]
 LOWER_WHEN_UNSURE = "If you are uncertain between two relevance grades, choose the lower one."
-
-# TypeSafe's guidance for Jev: the state holds content only, the instructions are one question, and the
-# levels describe situations. These are RDNAM's report test and framing, rewritten along those lines.
-JEV_RDNAM_STATE = """
-    [query]
-    {{ query.query }}
-    {%- if query.metadata and query.metadata.description %}
-
-    [what the searcher was looking for]
-    {{ query.metadata.description }}
-    {%- endif %}
-
-    [document]
-    {{ document.text }}"""
-# The values go through `set` because the prompt validator only recognises placeholders without filters.
-JEV_RDNAM_JSON_STATE = (
-    "{%- set query_json = query.query | tojson -%}{%- set document_json = document.text | tojson -%}"
-    '{"query": {{ query_json }}, "document": {{ document_json }}}'
-)
-JEV_REPORT_JSON_STATE = (
-    "{%- set question_json = query.query | tojson -%}{%- set document_json = document.text | tojson -%}"
-    '{"question": {{ question_json }}, "document": {{ document_json }}}'
-)
-JEV_RDNAM_QUESTION = "How useful is the document to someone who typed the query into a search engine?"
-JEV_RDNAM_JSON_QUESTION = "How useful is `document` to someone who typed `query` into a search engine?"
-JEV_RDNAM_LEVELS = [
-    "Nothing in the document would be used in a report on the topic of the query.",
-    (
-        "Some information in the document would be used in a report on the topic of the query, "
-        "but the document is not mainly about that topic."
-    ),
-    "The document is primarily about the topic of the query, or contains vital information about it.",
-]
 
 EVALUATORS: dict[str, dict[str, Any]] = {
     "reasoner": {"evaluator_name": "reasoner"},
@@ -85,54 +46,12 @@ EVALUATORS: dict[str, dict[str, Any]] = {
         "evaluator_name": "jev",
         "system_prompt": "Does the document contain information that helps answer the user question?",
     },
-    "jev_boolean_report_json": {
-        "evaluator_name": "jev",
-        "user_prompt": JEV_REPORT_JSON_STATE,
-        "system_prompt": "Assume you are writing a report on the topic of `question`. "
-        "Would you use any of the information contained in `document` in that report?",
-    },
     "jev_score": {"evaluator_name": "jev", "boolean_question": False},
     "jev_score_topical": {"evaluator_name": "jev", "boolean_question": False, "relevance_grades": TOPICAL_GRADES},
     "jev_score_0_3": {"evaluator_name": "jev", "boolean_question": False, "relevance_grades": GRADES},
     "jev_rdnam": {"evaluator_name": "jev_rdnam"},
     "jev_rdnam_aspects": {"evaluator_name": "jev_rdnam", "use_aspects": True},
-    "jev_rdnam_state": {"evaluator_name": "jev_rdnam", "user_prompt": JEV_RDNAM_STATE},
-    "jev_rdnam_question": {"evaluator_name": "jev_rdnam", "system_prompt": JEV_RDNAM_QUESTION},
-    "jev_rdnam_levels": {"evaluator_name": "jev_rdnam", "relevance_grades": JEV_RDNAM_LEVELS},
-    "jev_rdnam_all": {
-        "evaluator_name": "jev_rdnam",
-        "user_prompt": JEV_RDNAM_STATE,
-        "system_prompt": JEV_RDNAM_QUESTION,
-        "relevance_grades": JEV_RDNAM_LEVELS,
-    },
-    "jev_rdnam_json": {
-        "evaluator_name": "jev_rdnam",
-        "user_prompt": JEV_RDNAM_JSON_STATE,
-        "system_prompt": JEV_RDNAM_JSON_QUESTION,
-        "relevance_grades": JEV_RDNAM_LEVELS,
-    },
-    "jev_rdnam_criteria": {"evaluator_name": "jev_rubric_coverage"},
-    "jev_trec_criteria": {"evaluator_name": "jev_rubric_coverage", "relevance_grades": GRADES},
 }
-# Variants judged against the same criteria for every query, by an evaluator that only lives in the benchmark.
-JSON_STATE = {"jev_rdnam_json", "jev_boolean_report_json"}
-CRITERIA = {"jev_rdnam_criteria": RDNAM_CRITERIA, "jev_trec_criteria": TREC_CRITERIA}
-
-
-def build_evaluator(
-    variant: str, llm_provider: BaseLLMProvider, qids: Iterable[str], n_processes: int
-) -> BaseRetrievalEvaluator:
-    kwargs = EVALUATORS[variant] | {"n_processes": n_processes}
-    if variant in JSON_STATE and isinstance(llm_provider, VercelJevProvider):
-        client = httpx.AsyncClient(
-            transport=JsonStateTransport(httpx.AsyncHTTPTransport()), timeout=llm_provider.config.timeout
-        )
-        llm_provider = VercelJevProvider(llm_provider.config, client=client)
-    if variant not in CRITERIA:
-        return get_retrieval_evaluator(llm_provider=llm_provider, **kwargs)
-    config = JevRubricCoverageEvaluatorConfig(**kwargs, rubrics=dict.fromkeys(qids, CRITERIA[variant]))
-    return JevCriteriaEvaluator.from_config(config, llm_provider)
-
 
 # Each dataset module has `download(data_dir)` and `load(data_dir, split)`, and lists its splits, default first.
 DATASETS = {"llmjudge": (llmjudge, ("dev", "test")), "trec_rag24": (trec_rag24, ("test",))}
@@ -331,7 +250,9 @@ def main(
     for model in models:
         llm_provider = get_llm_provider(provider, model=model)
         for variant in evaluators:
-            evaluator = build_evaluator(variant, llm_provider, data.queries, n_processes)
+            evaluator = get_retrieval_evaluator(
+                llm_provider=llm_provider, n_processes=n_processes, **EVALUATORS[variant]
+            )
             experiment_name = f"{subset}_{variant}_{model.replace('/', '_')}{tag and '_' + tag}"
             judged[(variant, model)] = judge(data, evaluator, experiment_name, results_dir), evaluator.max_score
 

@@ -6,14 +6,13 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
-from benchmarks.jev_criteria import RDNAM_CRITERIA, JevCriteriaEvaluator
 from ragelo import Experiment, get_answer_evaluator, get_retrieval_evaluator
 from ragelo.evaluators.jev_evaluator_mixin import JEV_REASONING
 from ragelo.evaluators.retrieval_evaluators import RDNAMEvaluator
 from ragelo.llm_providers import VercelJevProvider
 from ragelo.types import Document, LLMInputPrompt, PairwiseGame, Query
 from ragelo.types.answer_formats import Criterion, RDNAMEvaluationAnswer, RetrievalEvaluationAnswer
-from ragelo.types.configurations import JevRubricCoverageEvaluatorConfig, VercelJevConfiguration
+from ragelo.types.configurations import VercelJevConfiguration
 from ragelo.types.formats import JevResponse, LLMUsage
 
 Answerer = Callable[[str, dict[str, Any], str], dict[str, Any]]
@@ -409,26 +408,3 @@ class TestJevRDNAMEvaluator:
             get_retrieval_evaluator(
                 "jev_rdnam", llm_provider=jev_provider(lambda *_: {}), use_multiple_annotators=True
             )
-
-
-class TestJevCriteriaEvaluator:
-    def test_the_yes_probabilities_of_the_grade_boundaries_add_up_to_the_expected_grade(self):
-        requests: list[httpx.Request] = []
-        yes_probability = {"usable": 0.9, "vital": 0.3}
-        provider = jev_provider(lambda name, *_: {"type": "boolean", "probability": yes_probability[name]}, requests)
-        config = JevRubricCoverageEvaluatorConfig(expert_in="web search", rubrics={"q": RDNAM_CRITERIA})
-        evaluator = JevCriteriaEvaluator.from_config(config, provider)
-        query = Query(qid="q", query="capital of France?")
-        query.add_retrieved_doc(Document(qid="q", did="d", text="Paris is the capital of France."))
-
-        evaluator.evaluate_all_evaluables(query)
-
-        answer = query.retrieved_docs["d"].evaluations["jev_rubric_coverage"].answer
-        questions = json.loads(requests[0].content)["questions"]
-        assert len(requests) == 1
-        assert {name: question["instructions"] for name, question in questions.items()} == {
-            criterion.criterion_name: criterion.short_question for criterion in RDNAM_CRITERIA
-        }
-        assert answer.score == pytest.approx(1.2)
-        assert answer.criteria_addressed == ["usable"]
-        assert query.get_qrels() == {"d": 1}
