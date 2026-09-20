@@ -6,7 +6,8 @@ labels. Each table prints how many pairs failed, and the agreement is computed o
 ## Usage
 
 Every run calls a paid API. Set `OPENAI_API_KEY` for `--provider openai` (the default of `run_llmjudge`), or
-`AI_GATEWAY_API_KEY` for `vercel` and `vercel-jev`. Run from the repository root:
+`AI_GATEWAY_API_KEY` for `vercel` and `vercel-jev`. The correlations come from SciPy, which the dev group
+installs and the `benchmarks` extra declares (`pip install 'ragelo[benchmarks]'`). Run from the repository root:
 
 ```sh
 # Retrieval evaluators on a label-stratified sample, with the cost per 1,000 pairs

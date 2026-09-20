@@ -40,6 +40,7 @@ dependencies = [
 [project.optional-dependencies]
 eval = ["ir-measures[pyndeval]>=0.4.3"]
 instructor = ["instructor>=1.0.0"]
+benchmarks = ["scipy>=1.10"]
 
 [dependency-groups]
 dev = [
@@ -53,6 +54,7 @@ dev = [
     "pre-commit>=4.0.0",
     "instructor>=1.0.0",
     "ir-measures[pyndeval]>=0.4.3",
+    "scipy>=1.10",
 ]
 
 [project.scripts]

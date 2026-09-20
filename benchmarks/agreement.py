@@ -8,6 +8,8 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
+from scipy.stats import spearmanr
+
 Qrels = Mapping[str, Mapping[str, float]]
 
 
@@ -51,8 +53,8 @@ def agreement(reference: Qrels, judged: Qrels, max_label: int = 2, relevant_from
         ),
         kappa_graded=cohen_kappa(graded_reference, graded_judged),
         alpha_ordinal=krippendorff_alpha_ordinal(graded_reference, graded_judged),
-        spearman=spearman(raw_reference, raw_judged),
-        spearman_raw=spearman(raw_reference, [score for _, score in scores]),
+        spearman=_spearman(raw_reference, raw_judged),
+        spearman_raw=_spearman(raw_reference, [score for _, score in scores]),
     )
 
 
@@ -79,7 +81,7 @@ def spearman_interval(
     estimates = []
     for _ in range(n_resamples):
         pairs = [pair for qid in rng.choices(qids, k=len(qids)) for pair in labels[qid]]
-        estimate = spearman([a for a, _ in pairs], [b for _, b in pairs])
+        estimate = _spearman([a for a, _ in pairs], [b for _, b in pairs])
         if not math.isnan(estimate):
             estimates.append(estimate)
     if not estimates:
@@ -87,6 +89,13 @@ def spearman_interval(
     estimates.sort()
     tail = (1 - level) / 2
     return estimates[int(tail * len(estimates))], estimates[min(int((1 - tail) * len(estimates)), len(estimates) - 1)]
+
+
+def _spearman(a: Sequence[float], b: Sequence[float]) -> float:
+    """nan for a constant side, which scipy also returns, but with a warning per call."""
+    if len(set(a)) < 2 or len(set(b)) < 2:
+        return math.nan
+    return float(spearmanr(a, b).statistic)
 
 
 def cohen_kappa(a: Sequence[int], b: Sequence[int]) -> float:
@@ -121,26 +130,3 @@ def krippendorff_alpha_ordinal(a: Sequence[int], b: Sequence[int]) -> float:
     if expected == 0:
         return math.nan
     return 1 - (n - 1) * observed / expected
-
-
-def spearman(a: Sequence[float], b: Sequence[float]) -> float:
-    ranks_a, ranks_b = _average_ranks(a), _average_ranks(b)
-    n = len(a)
-    if n == 0:
-        return math.nan
-    mean_a, mean_b = sum(ranks_a) / n, sum(ranks_b) / n
-    covariance = sum((x - mean_a) * (y - mean_b) for x, y in zip(ranks_a, ranks_b))
-    spread = math.sqrt(sum((x - mean_a) ** 2 for x in ranks_a) * sum((y - mean_b) ** 2 for y in ranks_b))
-    if spread == 0:
-        return math.nan
-    return covariance / spread
-
-
-def _average_ranks(values: Sequence[float]) -> list[float]:
-    counts = Counter(values)
-    rank_of: dict[float, float] = {}
-    seen = 0
-    for value in sorted(counts):
-        rank_of[value] = seen + (counts[value] + 1) / 2
-        seen += counts[value]
-    return [rank_of[value] for value in values]
