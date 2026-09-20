@@ -43,6 +43,29 @@ The table is ranked by the Spearman of the rounded labels, with a 95% interval t
 To benchmark another configuration, add an entry to `EVALUATORS`. To add a dataset, write a module with
 `download(data_dir)` and `load(data_dir, split)` that returns an `LLMJudgeData`, and list it in `DATASETS`.
 
+## System ranking on the TREC 2024 RAG answers
+
+`run_trec_rag24_answers.py` plays an Elo tournament between the systems of the TREC 2024 RAG track and compares
+the ranking with the one from NIST's nugget judgments of the same answers.
+
+```sh
+uv run --python 3.13 python -m benchmarks.run_trec_rag24_answers --evaluator jev_pairwise --evaluator jev_rubric_pairwise
+uv run --python 3.13 python -m benchmarks.run_trec_rag24_answers --provider openai --model gpt-5.6-luna \
+    --evaluator pairwise --evaluator rubric_pairwise --price gpt-5.6-luna=0.20,1.20,0.02
+```
+
+NIST's [final nugget assessments](https://trec.nist.gov/data/rag2024.html) hold 2,471 full answers from 45 runs on
+56 topics, no password needed. A nugget is an atomic fact a good answer should contain, marked vital or okay,
+and every answer is labelled support, partial_support or not_support on each nugget of its topic. That is the
+shape of a RAGElo rubric: `trec_rag24_answers.rubrics` turns a topic's nuggets into its criteria, weighted 1
+and 0.5 as in the track, and the evaluators with "rubric" in their name judge against them. This tests the
+judging, not the writing of a rubric. The human side is the track's primary score, vital strict.
+
+`--n-systems` takes the best and the worst system by the human score and one at random from each rank band
+between them (10 by default), and `--n-topics` a difficulty-stratified sample of topics (all 56 by default).
+The output is each system's human score and Elo rating, Kendall's tau and Spearman between the two, and how
+often a game's winner is the answer with the higher human score.
+
 ## Datasets
 
 | `--dataset` | Pairs | Queries | Labels | Source |

@@ -131,6 +131,9 @@ class JevRubricCoverageEvaluator(JevRubricEvaluatorMixin, RubricCoverageEvaluato
         }
         found = ", ".join(name for name, is_addressed in addressed.items() if is_addressed) or "none"
         verdicts = self._rubric_schema(query)(reasoning=f"Criteria Jev found addressed: {found}", **addressed)
-        return super()._process_answer(
+        processed = super()._process_answer(
             LLMResponseType(raw_answer=llm_response.raw_answer, parsed_answer=verdicts), query
         )
+        for judged in processed.parsed_answer.criteria:
+            judged.probability = self._jev_answer(llm_response, judged.criterion.criterion_name).probability
+        return processed

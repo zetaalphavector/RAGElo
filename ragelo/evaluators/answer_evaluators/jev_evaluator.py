@@ -114,9 +114,12 @@ class JevRubricPointwiseEvaluator(JevRubricEvaluatorMixin, RubricPointwiseEvalua
                 for criterion in self._rubric_for(query)
             }
         )
-        return super()._process_answer(
+        processed = super()._process_answer(
             LLMResponseType(raw_answer=llm_response.raw_answer, parsed_answer=verdicts), query
         )
+        for judged in processed.parsed_answer.criteria:
+            judged.probability = self._jev_answer(llm_response, judged.criterion.criterion_name).probability
+        return processed
 
 
 @AnswerEvaluatorFactory.register(AnswerEvaluatorTypes.JEV_RUBRIC_PAIRWISE)

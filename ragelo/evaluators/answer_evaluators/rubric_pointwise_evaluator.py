@@ -50,7 +50,9 @@ class RubricPointwiseEvaluator(
         ## Criteria
         {% for criteria in rubric %}
         Criterion: {{criteria.criterion_name}}
+        {%- if criteria.evidence %}
         Supporting Documents: {{criteria.evidence}}
+        {%- endif %}
         Short Question: {{criteria.short_question}}
         --------------------------------
         {% endfor %}

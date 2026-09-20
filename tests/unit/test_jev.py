@@ -337,9 +337,9 @@ class TestJevEvaluators:
         assert len(requests) == 1
         questions = json.loads(requests[0].content)["questions"]
         assert questions["names_capital"] == {"type": "boolean", "instructions": "Does the response name the capital?"}
-        assert {c.criterion.criterion_name: c.fulfillment for c in result.answer.criteria} == {
-            "names_capital": True,
-            "gives_population": False,
+        assert {c.criterion.criterion_name: (c.fulfillment, c.probability) for c in result.answer.criteria} == {
+            "names_capital": (True, 0.9),
+            "gives_population": (False, 0.2),
         }
 
     def test_rubric_options_that_need_generated_text_are_rejected(self):

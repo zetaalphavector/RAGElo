@@ -496,6 +496,10 @@ class CriterionEvaluationPointwise(BaseModel):
     criterion: Criterion = Field(..., description="The criterion used for evaluating the answer quality")
     reasoning: str = Field(..., description="The LLM reasoning for the score of the criterion")
     fulfillment: bool | float = Field(..., description="Whether/how much the criterion is fulfilled by the answer")
+    probability: float | None = Field(
+        default=None,
+        description="The probability of a yes behind `fulfillment`, from judges that answer with one, such as Jev.",
+    )
 
 
 class RubricPointwiseAnswerFormat(EvaluationAnswer):
