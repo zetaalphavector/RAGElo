@@ -7,7 +7,8 @@ from typing import TypeVar
 import httpx
 from pydantic import BaseModel
 
-from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, LLMProviderFactory
+from ragelo.llm_providers.base_llm_provider import LLMProviderFactory
+from ragelo.llm_providers.jev_provider import JevProvider
 from ragelo.types import LLMInputPrompt, LLMResponseType
 from ragelo.types.configurations import VercelJevConfiguration
 from ragelo.types.formats import JevAnswer, JevResponse, LLMUsage
@@ -23,10 +24,8 @@ RETRIED_STATUSES = {
 
 
 @LLMProviderFactory.register(LLMProviderTypes.VERCEL_JEV)
-class VercelJevProvider(BaseLLMProvider):
-    """TypeSafe's Jev through the Vercel AI Gateway. Jev answers typed questions about a state
-    with probabilities and generates no text, so only the jev evaluators can use it.
-    """
+class VercelJevProvider(JevProvider):
+    """Jev through the Vercel AI Gateway's evaluation endpoint, which Vercel documents for its AI SDK only."""
 
     config: VercelJevConfiguration
     api_key_env_var: str = "AI_GATEWAY_API_KEY"
@@ -43,12 +42,7 @@ class VercelJevProvider(BaseLLMProvider):
 
     async def call_async(self, input: LLMInputPrompt, response_schema: type[T_Schema]) -> LLMResponseType[T_Schema]:
         """Returns a JevResponse as the parsed answer. The jev evaluators turn it into `response_schema`."""
-        if not input.questions:
-            raise ValueError("Jev needs typed questions. Use it with one of the jev evaluators.")
-        questions = {
-            name: {"instructions": input.system_prompt, **question} for name, question in input.questions.items()
-        }
-        response = await self.__post({"state": input.user_message, "questions": questions})
+        response = await self.__post({"state": self._state(input), "questions": self._questions(input)})
         if response.is_error:
             raise ValueError(f"Jev request failed: {response.status_code} {response.text}")
         try:

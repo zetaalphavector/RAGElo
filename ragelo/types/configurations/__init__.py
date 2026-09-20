@@ -21,6 +21,7 @@ from ragelo.types.configurations.llm_provider_configs import (
     LLMProviderConfig,
     OllamaConfiguration,
     OpenAIConfiguration,
+    TypeSafeConfiguration,
     VercelConfiguration,
     VercelJevConfiguration,
 )
@@ -72,6 +73,7 @@ __all__ = [
     "RubricPairwiseEvaluatorConfig",
     "RubricPointwiseEvaluatorConfig",
     "RubricSource",
+    "TypeSafeConfiguration",
     "VercelConfiguration",
     "VercelJevConfiguration",
 ]

@@ -3,7 +3,7 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
-from ragelo.llm_providers.vercel_jev_client import VercelJevProvider
+from ragelo.llm_providers.jev_provider import JevProvider
 from ragelo.types.formats import JevAnswer, JevResponse, LLMResponseType
 
 JEV_REASONING = "Jev returns probabilities, not reasoning."
@@ -18,8 +18,8 @@ class JevEvaluatorMixin:
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if not isinstance(self.llm_provider, VercelJevProvider):
-            raise TypeError(f'{type(self).__name__} only works with the "vercel-jev" LLM provider')
+        if not isinstance(self.llm_provider, JevProvider):
+            raise TypeError(f'{type(self).__name__} only works with the "typesafe" and "vercel-jev" LLM providers')
         enabled = [option for option in self.unsupported_options if getattr(self.config, option, False)]
         if enabled:
             raise ValueError(

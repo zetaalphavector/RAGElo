@@ -59,6 +59,12 @@ def pytest_addoption(parser):
         default=False,
         help="run tests that require an Anthropic API key",
     )
+    parser.addoption(
+        "--runtypesafe",
+        action="store_true",
+        default=False,
+        help="run tests that require a TypeSafe API key",
+    )
 
 
 def pytest_collection_modifyitems(config, items):
@@ -72,6 +78,11 @@ def pytest_collection_modifyitems(config, items):
         for item in items:
             if "requires_anthropic" in item.keywords:
                 item.add_marker(skip_anthropic)
+    if not config.getoption("--runtypesafe"):
+        skip_typesafe = pytest.mark.skip(reason="need --runtypesafe option to run")
+        for item in items:
+            if "requires_typesafe" in item.keywords:
+                item.add_marker(skip_typesafe)
 
 
 @pytest.fixture

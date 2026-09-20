@@ -154,7 +154,7 @@ class TestVercelJevProvider:
 
 class TestJevEvaluators:
     def test_only_the_jev_provider_is_accepted(self, llm_provider_mock):
-        with pytest.raises(TypeError, match='"vercel-jev" LLM provider'):
+        with pytest.raises(TypeError, match='"typesafe" and "vercel-jev" LLM providers'):
             get_retrieval_evaluator("jev", llm_provider=llm_provider_mock)
 
     def test_answer_evaluators_are_told_what_jev_found_about_a_document(self, experiment: Experiment):

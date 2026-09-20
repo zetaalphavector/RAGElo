@@ -32,6 +32,14 @@ class VercelJevConfiguration(LLMProviderConfig):
     max_retries: int = 2
 
 
+class TypeSafeConfiguration(LLMProviderConfig):
+    api_key: SecretStr
+    api_base: str | None = None
+    model: str = "jev-latest"
+    timeout: float = 60.0
+    max_retries: int = 2
+
+
 class OllamaConfiguration(LLMProviderConfig):
     api_base: str | None = "http://localhost:11434/v1/"
     model: str

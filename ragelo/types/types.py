@@ -34,6 +34,7 @@ class LLMProviderTypes(StrEnum):
     INSTRUCTOR = "instructor"
     VERCEL = "vercel"
     VERCEL_JEV = "vercel-jev"
+    TYPESAFE = "typesafe"
 
 
 class AnswerEvaluatorTypes(StrEnum):

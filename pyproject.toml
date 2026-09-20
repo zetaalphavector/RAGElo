@@ -40,6 +40,7 @@ dependencies = [
 [project.optional-dependencies]
 eval = ["ir-measures[pyndeval]>=0.4.3"]
 instructor = ["instructor>=1.0.0"]
+typesafe = ["typesafe-sdk>=0.7.0"]
 benchmarks = ["scipy>=1.10"]
 
 [dependency-groups]
@@ -53,6 +54,7 @@ dev = [
     "pytest-mock==3.12.0",
     "pre-commit>=4.0.0",
     "instructor>=1.0.0",
+    "typesafe-sdk>=0.7.0",
     "ir-measures[pyndeval]>=0.4.3",
     "scipy>=1.10",
 ]
@@ -105,6 +107,7 @@ pythonpath = ["."]
 markers = [
     "requires_openai: marks tests as requiring a valid OpenAI api key (deselect with '-m \"not requires_openai\"')",
     "requires_anthropic: marks tests as requiring a valid Anthropic api key (deselect with '-m \"not requires_anthropic\"')",
+    "requires_typesafe: marks tests as requiring a valid TypeSafe api key (deselect with '-m \"not requires_typesafe\"')",
     "serial",
 ]
 
