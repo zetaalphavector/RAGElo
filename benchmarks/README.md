@@ -3,11 +3,46 @@
 `run_llmjudge.py` and `run_llmjudge_pairwise.py` judge passages and compare the judgments with the human
 labels. Each table prints how many pairs failed, and the agreement is computed over the pairs every row judged.
 
+## Usage
+
+Every run calls a paid API. Set `OPENAI_API_KEY` for `--provider openai` (the default of `run_llmjudge`), or
+`AI_GATEWAY_API_KEY` for `vercel` and `vercel-jev`. Run from the repository root:
+
 ```sh
-uv run --python 3.13 python -m benchmarks.run_llmjudge --model gpt-5.6-luna --n-pairs 500
-uv run --python 3.13 python -m benchmarks.run_llmjudge --dataset trec_rag24 --model gpt-5.6-luna --n-pairs 2000
+# Retrieval evaluators on a label-stratified sample, with the cost per 1,000 pairs
+uv run --python 3.13 python -m benchmarks.run_llmjudge --model gpt-5.6-luna --n-pairs 500 \
+    --evaluator reasoner --evaluator rdnam --price gpt-5.6-luna=0.20,1.20,0.02
+
+# The same on the TREC 2024 RAG qrels, judged by Jev
+uv run --python 3.13 python -m benchmarks.run_llmjudge --dataset trec_rag24 --n-pairs 2000 \
+    --provider vercel-jev --model typesafe-ai/jev --evaluator jev_boolean --evaluator jev_rdnam
+
+# Pairwise answer evaluators: which of two passages of a query did the assessors grade higher
 uv run --python 3.13 python -m benchmarks.run_llmjudge_pairwise --model typesafe-ai/jev
 ```
+
+| Option | Meaning |
+|---|---|
+| `--model`, `--evaluator` | Repeat either to add rows. The retrieval variants are the keys of `EVALUATORS` in `run_llmjudge.py`. Always pass `--evaluator` to `run_llmjudge`: its default is every variant, and the `jev_*` ones raise on any provider but `vercel-jev`. |
+| `--n-pairs`, `--seed` | Judge a sample that keeps the label distribution. Without `--n-pairs` the whole split is judged. |
+| `--split` | `dev` or `test` for `llmjudge`. `trec_rag24` has `test` only. |
+| `--price` | `MODEL=INPUT,OUTPUT,CACHED` in USD per million tokens. Jev's price is built in; for any other model the table shows tokens and no cost without it. |
+| `--n-processes` | Parallel evaluations, 16 by default. At 32 the Jev gateway stalled. |
+| `--tag` | Suffix of the experiment names, to judge again without reusing a cache. |
+
+Judgments are cached per evaluator, model, sample and tag under `benchmarks/results/<dataset>/`, and the data
+under `benchmarks/data/<dataset>/`. Both are ignored by git. Running the same command again judges only the
+pairs that are missing or failed, so that is also how to retry failures, and a fully cached run reprints the
+table without calling the API.
+
+The table is ranked by the Spearman of the rounded labels, with a 95% interval that resamples queries.
+`failed` counts the evaluations that returned no judgment. Tokens and cost cover the judged pairs only.
+`evaluations / s` is the median over the timed runs at the current `--n-processes`.
+
+To benchmark another configuration, add an entry to `EVALUATORS`. To add a dataset, write a module with
+`download(data_dir)` and `load(data_dir, split)` that returns an `LLMJudgeData`, and list it in `DATASETS`.
+
+## Datasets
 
 | `--dataset` | Pairs | Queries | Labels | Source |
 |---|---|---|---|---|
