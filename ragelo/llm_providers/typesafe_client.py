@@ -5,8 +5,8 @@ from typing import Any, TypeVar
 from pydantic import BaseModel
 
 from ragelo.llm_providers.base_llm_provider import LLMProviderFactory
-from ragelo.llm_providers.jev_provider import JevProvider
-from ragelo.types import LLMInputPrompt, LLMResponseType
+from ragelo.llm_providers.jev_provider import JevProvider, JevQuestions, JevState
+from ragelo.types import LLMResponseType
 from ragelo.types.configurations import TypeSafeConfiguration
 from ragelo.types.formats import JevAnswer, JevResponse, LLMUsage
 from ragelo.types.types import LLMProviderTypes
@@ -50,18 +50,17 @@ class TypeSafeProvider(JevProvider):
             retry=RetryPolicy(max_retries=config.max_retries),
         )
 
-    async def call_async(self, input: LLMInputPrompt, response_schema: type[T_Schema]) -> LLMResponseType[T_Schema]:
-        """Returns a JevResponse as the parsed answer. The jev evaluators turn it into `response_schema`."""
-        questions = {name: self.__question(question) for name, question in self._questions(input).items()}
+    async def _request(self, state: JevState, questions: JevQuestions) -> LLMResponseType[JevResponse]:
+        asked = {name: self.__question(question) for name, question in questions.items()}
         try:
-            response = await self.__client.system_one(state=self._state(input), questions=questions)
+            response = await self.__client.system_one(state=state, questions=asked)
         except TypeSafeError as e:
             raise ValueError(f"TypeSafe request failed: {e}") from e
         parsed = JevResponse(answers={name: self.__jev_answer(answer) for name, answer in response.answers.items()})
         usage = LLMUsage(
             input_tokens=response.usage.input_tokens or 0, output_tokens=response.usage.output_tokens or 0
         )
-        return LLMResponseType(raw_answer=response.model_dump_json(), parsed_answer=parsed, usage=usage)  # type: ignore[arg-type]
+        return LLMResponseType(raw_answer=response.model_dump_json(), parsed_answer=parsed, usage=usage)
 
     @staticmethod
     def __question(question: dict[str, Any]) -> Question:

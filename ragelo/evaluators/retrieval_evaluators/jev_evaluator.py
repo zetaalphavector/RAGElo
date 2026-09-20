@@ -49,10 +49,14 @@ class JevRetrievalEvaluator(JevEvaluatorMixin, ReasonerEvaluator):
         if self.config.boolean_question:
             instructions = prompt.system_prompt if self.config.system_prompt else self.boolean_prompt
             return prompt.model_copy(
-                update={"system_prompt": instructions, "questions": {"score": {"type": "boolean"}}}
+                update={
+                    "system_prompt": instructions,
+                    "questions": {"score": {"type": "boolean"}},
+                    "batch_key": self._batch_key(query),
+                }
             )
         question = {"type": "score", "criteria": list(self.relevance_grades)}
-        return prompt.model_copy(update={"questions": {"score": question}})
+        return prompt.model_copy(update={"questions": {"score": question}, "batch_key": self._batch_key(query)})
 
     def _process_answer(self, llm_response: LLMResponseType[BaseModel], query: Query) -> LLMResponseType[BaseModel]:
         answer = self._jev_answer(llm_response, "score")
@@ -95,7 +99,7 @@ class JevRDNAMEvaluator(JevEvaluatorMixin, RDNAMEvaluator):
             for name, aspect in self.aspects.items()
         }
         questions["score"] = {"type": "score", "criteria": list(self.relevance_grades)}
-        return prompt.model_copy(update={"questions": questions})
+        return prompt.model_copy(update={"questions": questions, "batch_key": self._batch_key(query)})
 
     def _process_answer(self, llm_response: LLMResponseType[BaseModel], query: Query) -> LLMResponseType[BaseModel]:
         relevance = self._jev_answer(llm_response, "score")
@@ -122,7 +126,8 @@ class JevRubricCoverageEvaluator(JevRubricEvaluatorMixin, RubricCoverageEvaluato
             for criterion in query.rubric
         }
         document = _trimmed(document, self.config.max_document_chars)
-        return super()._build_message(query, document).model_copy(update={"questions": questions})
+        prompt = super()._build_message(query, document)
+        return prompt.model_copy(update={"questions": questions, "batch_key": self._batch_key(query)})
 
     def _process_answer(self, llm_response: LLMResponseType[BaseModel], query: Query) -> LLMResponseType[BaseModel]:
         addressed = {

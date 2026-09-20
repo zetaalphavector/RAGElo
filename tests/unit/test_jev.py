@@ -1,3 +1,4 @@
+import asyncio
 import json
 from collections.abc import Callable
 from typing import Any
@@ -14,6 +15,7 @@ from ragelo.types import Document, LLMInputPrompt, PairwiseGame, Query
 from ragelo.types.answer_formats import Criterion, RDNAMEvaluationAnswer, RetrievalEvaluationAnswer
 from ragelo.types.configurations import VercelJevConfiguration
 from ragelo.types.formats import JevResponse, LLMUsage
+from ragelo.utils import call_async_fn
 
 Answerer = Callable[[str, dict[str, Any], str], dict[str, Any]]
 
@@ -408,3 +410,109 @@ class TestJevRDNAMEvaluator:
             get_retrieval_evaluator(
                 "jev_rdnam", llm_provider=jev_provider(lambda *_: {}), use_multiple_annotators=True
             )
+
+
+class TestJevBatching:
+    """The provider asks prompts that share a batch key, the documents of one query, in one request."""
+
+    @staticmethod
+    def provider(requests: list[dict[str, Any]], fail_merged: bool = False, **config: Any) -> VercelJevProvider:
+        """Answers each question with the yes-probability written in the document it is about, as `p=0.7`."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            body = json.loads(request.content)
+            requests.append(body)
+            if fail_merged and isinstance(body["state"], dict):
+                return httpx.Response(400, json={"detail": {"error_type": "max_tokens_exceeded"}})
+            answers = {}
+            for name in body["questions"]:
+                state = body["state"][name.split("__")[0]] if isinstance(body["state"], dict) else body["state"]
+                answers[name] = {"type": "boolean", "probability": float(state.split("p=")[1][:3])}
+            usage = {"inputTokens": 100 * len(answers) + 1, "outputTokens": 10 * len(answers)}
+            return httpx.Response(200, json={"answers": answers, "usage": usage})
+
+        client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        return VercelJevProvider(VercelJevConfiguration(api_key=SecretStr("k"), **config), client=client)
+
+    @staticmethod
+    def query(qid: str, probabilities: list[float]) -> Query:
+        query = Query(qid=qid, query=f"question {qid}")
+        for i, probability in enumerate(probabilities):
+            query.add_retrieved_doc(Document(qid=qid, did=f"{qid}-d{i}", text=f"document {i} p={probability}"))
+        return query
+
+    def test_the_documents_of_a_query_share_a_request_and_keep_their_own_answers(self):
+        requests: list[dict[str, Any]] = []
+        evaluator = get_retrieval_evaluator("jev", llm_provider=self.provider(requests), n_processes=3)
+        query = self.query("q", [0.9, 0.1, 0.5])
+
+        evaluator.evaluate_all_evaluables(query)
+
+        assert len(requests) == 1
+        assert requests[0]["state"].keys() == {"item_0", "item_1", "item_2"}
+        assert requests[0]["questions"]["item_1__score"]["instructions"].startswith("Consider only `item_1`. ")
+        results = [document.evaluations["jev"] for document in query.retrieved_docs.values()]
+        assert [result.answer.score for result in results] == [1.8, 0.2, 1.0]
+        assert [result.usage.input_tokens for result in results] == [101, 100, 100], "the shares add up to 301"
+
+    def test_batches_are_capped_and_never_mix_queries(self):
+        requests: list[dict[str, Any]] = []
+        provider = self.provider(requests, batch_size=2)
+        evaluator = get_retrieval_evaluator("jev", llm_provider=provider, n_processes=5)
+        experiment = Experiment(experiment_name="batches", save_on_disk=False)
+        for query in (self.query("a", [0.9, 0.8, 0.7]), self.query("b", [0.1, 0.2])):
+            experiment.add_query(query)
+
+        evaluator.evaluate_experiment(experiment)
+
+        sizes = sorted(len(r["state"]) if isinstance(r["state"], dict) else 1 for r in requests)
+        assert sizes == [1, 2, 2], "query a is asked as 2 + 1 documents, query b as 2"
+        for request in requests:
+            if isinstance(request["state"], dict):
+                assert len({state.split("\n")[1] for state in request["state"].values()}) == 1, "one query each"
+
+    def test_two_experiments_that_reuse_a_query_id_never_share_a_request(self):
+        requests: list[dict[str, Any]] = []
+        evaluator = get_retrieval_evaluator("jev", llm_provider=self.provider(requests))
+        one, other = self.query("q", [0.9, 0.8]), self.query("q", [0.1, 0.2])
+
+        async def judge_both_at_once() -> None:
+            pairs = [(query, document) for query in (one, other) for document in query.retrieved_docs.values()]
+            await asyncio.gather(*(evaluator.evaluate_async(pair) for pair in pairs))
+
+        call_async_fn(judge_both_at_once)
+
+        assert len(requests) == 2
+        for request in requests:
+            probabilities = sorted(float(state.split("p=")[1][:3]) for state in request["state"].values())
+            assert probabilities in ([0.8, 0.9], [0.1, 0.2])
+
+    def test_a_batch_size_of_one_asks_every_document_alone(self):
+        requests: list[dict[str, Any]] = []
+        evaluator = get_retrieval_evaluator("jev", llm_provider=self.provider(requests, batch_size=1), n_processes=3)
+
+        evaluator.evaluate_all_evaluables(self.query("q", [0.9, 0.1, 0.5]))
+
+        assert [type(request["state"]) for request in requests] == [str, str, str]
+
+    def test_a_merged_request_that_fails_is_asked_again_one_document_at_a_time(self):
+        requests: list[dict[str, Any]] = []
+        evaluator = get_retrieval_evaluator(
+            "jev", llm_provider=self.provider(requests, fail_merged=True), n_processes=3
+        )
+        query = self.query("q", [0.9, 0.1, 0.5])
+
+        evaluator.evaluate_all_evaluables(query)
+
+        assert [type(request["state"]) for request in requests] == [dict, str, str, str]
+        assert [d.evaluations["jev"].answer.score for d in query.retrieved_docs.values()] == [1.8, 0.2, 1.0]
+
+    def test_prompts_without_a_batch_key_are_never_merged(self, experiment: Experiment):
+        requests: list[httpx.Request] = []
+        distribution = {"A": 0.6, "B": 0.3, "C": 0.1}
+        provider = jev_provider(lambda *_: {"type": "choice", "choice": "A", "probabilities": distribution}, requests)
+
+        get_answer_evaluator("jev_pairwise", llm_provider=provider, n_processes=4).evaluate_experiment(experiment)
+
+        assert requests
+        assert all(isinstance(json.loads(request.content)["state"], str) for request in requests)

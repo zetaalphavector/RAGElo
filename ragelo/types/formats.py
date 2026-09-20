@@ -16,6 +16,7 @@ class LLMInputPrompt(BaseModel):
     messages: list[dict[str, str]] | None = None
     llm_response_schema: type[BaseModel] | dict[str, Any] | None = None
     questions: dict[str, dict[str, Any]] | None = None
+    batch_key: str | None = None
 
     @model_validator(mode="after")
     def check_at_least_one_is_set(self) -> LLMInputPrompt:

@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.llm_providers.jev_provider import JevProvider
 from ragelo.types.formats import JevAnswer, JevResponse, LLMResponseType
+from ragelo.types.query import Query
 
 JEV_REASONING = "Jev returns probabilities, not reasoning."
 
@@ -26,6 +27,13 @@ class JevEvaluatorMixin:
                 f"{type(self).__name__} does not support {', '.join(enabled)}: Jev generates no text and "
                 "answers the same request the same way"
             )
+
+    def _batch_key(self, query: Query) -> str:
+        """Documents of one query are judged better in one request than alone, so the provider may batch them.
+
+        Two experiments reuse query ids, so the key names this query object and not only its id.
+        """
+        return f"{self.config.evaluator_name}:{query.qid}:{id(query)}"  # type: ignore[attr-defined]
 
     @staticmethod
     def _jev_answer(llm_response: LLMResponseType[BaseModel], question: str) -> JevAnswer:

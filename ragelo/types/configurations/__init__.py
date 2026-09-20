@@ -18,6 +18,7 @@ from ragelo.types.configurations.cli_configs import CLIConfig
 from ragelo.types.configurations.generator_configs import RubricConfigMixin, RubricGeneratorConfig, RubricSource
 from ragelo.types.configurations.llm_provider_configs import (
     InstructorConfiguration,
+    JevConfiguration,
     LLMProviderConfig,
     OllamaConfiguration,
     OpenAIConfiguration,
@@ -53,6 +54,7 @@ __all__ = [
     "FewShotEvaluatorConfig",
     "InstructorConfiguration",
     "JevAnswerEvaluatorConfig",
+    "JevConfiguration",
     "JevPairwiseEvaluatorConfig",
     "JevRDNAMEvaluatorConfig",
     "JevRetrievalEvaluatorConfig",

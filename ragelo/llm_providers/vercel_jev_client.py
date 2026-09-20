@@ -8,8 +8,8 @@ import httpx
 from pydantic import BaseModel
 
 from ragelo.llm_providers.base_llm_provider import LLMProviderFactory
-from ragelo.llm_providers.jev_provider import JevProvider
-from ragelo.types import LLMInputPrompt, LLMResponseType
+from ragelo.llm_providers.jev_provider import JevProvider, JevQuestions, JevState
+from ragelo.types import LLMResponseType
 from ragelo.types.configurations import VercelJevConfiguration
 from ragelo.types.formats import JevAnswer, JevResponse, LLMUsage
 from ragelo.types.types import LLMProviderTypes
@@ -40,9 +40,8 @@ class VercelJevProvider(JevProvider):
         self.__client = client or httpx.AsyncClient(timeout=config.timeout)
         self.__sleep = sleep
 
-    async def call_async(self, input: LLMInputPrompt, response_schema: type[T_Schema]) -> LLMResponseType[T_Schema]:
-        """Returns a JevResponse as the parsed answer. The jev evaluators turn it into `response_schema`."""
-        response = await self.__post({"state": self._state(input), "questions": self._questions(input)})
+    async def _request(self, state: JevState, questions: JevQuestions) -> LLMResponseType[JevResponse]:
+        response = await self.__post({"state": state, "questions": questions})
         if response.is_error:
             raise ValueError(f"Jev request failed: {response.status_code} {response.text}")
         try:
@@ -61,7 +60,7 @@ class VercelJevProvider(JevProvider):
                 )
         except (ValueError, KeyError, TypeError, AttributeError) as e:
             raise ValueError(f"Jev answered in an unexpected format ({type(e).__name__}: {e}): {response.text}") from e
-        return LLMResponseType(raw_answer=response.text, parsed_answer=parsed, usage=usage)  # type: ignore[arg-type]
+        return LLMResponseType(raw_answer=response.text, parsed_answer=parsed, usage=usage)
 
     async def __post(self, body: dict[str, object]) -> httpx.Response:
         """Under load the gateway answers 503 or stops answering. Those, the other statuses worth a second try

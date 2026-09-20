@@ -91,6 +91,23 @@ queries per split, with 95% intervals that resample queries.
 | `jev` asks one yes/no question (`boolean_question=True`) | a score question over the relevance grades | +0.11 (0.05 to 0.18) | +0.05 (-0.01 to 0.12) |
 | `jev` asks RDNAM's report test | "does the document help answer the question" | +0.05 (0.01 to 0.09) | +0.04 (-0.03 to 0.11) |
 
+## Asking Jev about several documents in one request
+
+The Jev providers ask prompts that share a batch key in one request (`batch_size`, default 10). The `jev`
+retrieval evaluators key their prompts by query. Measured on 2026-09-20 with the `typesafe` provider and the
+`jev` evaluator on the 500-pair LLMJudge samples, `n_processes=16`:
+
+| `batch_size` | Input tokens, dev | Spearman dev (95% interval) | Input tokens, test | Spearman test (95% interval) |
+|---|---|---|---|---|
+| 1 | 252,761 | 0.502 (0.418 to 0.586) | 235,522 | 0.486 (0.373 to 0.598) |
+| 10 | 158,757 | 0.577 (0.479 to 0.666) | 138,722 | 0.531 (0.438 to 0.609) |
+
+Batching cuts the input tokens by about 40% and does not change the wall time at the same `n_processes`,
+because fewer requests are in flight. The agreement only improves when the batch holds documents of one query.
+Asked outside the library, 10 documents of mixed queries per request scored 0.511 on dev and 0.452 on test,
+against 0.550 and 0.570 for the same merge in query order, which is why a prompt without a batch key is never
+merged. Both splits were tuned on, and the intervals overlap.
+
 ## Held-out check on TREC 2024 RAG
 
 No prompt was tuned on this dataset. 2,001 label-stratified pairs over all 86 queries, judged on 2026-09-20 at

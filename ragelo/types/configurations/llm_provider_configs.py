@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, SecretStr
+from pydantic import BaseModel, Field, SecretStr
 
 
 class LLMProviderConfig(BaseModel):
@@ -24,7 +24,18 @@ class VercelConfiguration(OpenAIConfiguration):
     model: str
 
 
-class VercelJevConfiguration(LLMProviderConfig):
+class JevConfiguration(LLMProviderConfig):
+    batch_size: int = Field(
+        default=10,
+        ge=1,
+        description="How many prompts with one batch key, such as the documents of one query, are asked in one request.",
+    )
+    batch_wait: float = Field(
+        default=0.02, ge=0, description="Seconds a prompt waits for others to share its request."
+    )
+
+
+class VercelJevConfiguration(JevConfiguration):
     api_key: SecretStr
     api_base: str = "https://ai-gateway.vercel.sh/v4/ai/evaluation-model"
     model: str = "typesafe-ai/jev"
@@ -32,7 +43,7 @@ class VercelJevConfiguration(LLMProviderConfig):
     max_retries: int = 2
 
 
-class TypeSafeConfiguration(LLMProviderConfig):
+class TypeSafeConfiguration(JevConfiguration):
     api_key: SecretStr
     api_base: str | None = None
     model: str = "jev-latest"
