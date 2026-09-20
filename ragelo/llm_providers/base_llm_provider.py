@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from ragelo.types.configurations import LLMProviderConfig
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.types import LLMProviderTypes
-from ragelo.utils import call_async_fn
+from ragelo.utils import call_async_fn, warn_ignored_arguments
 
 T_Schema = TypeVar("T_Schema", bound=BaseModel)
 
@@ -95,6 +95,7 @@ class LLMProviderFactory:
                     else:
                         api_key = api_key_field.default
                 kwargs["api_key"] = api_key
+            warn_ignored_arguments(f"The {name} LLM provider", type_config, kwargs)
             config = type_config(**kwargs)
         return cls.registry[name].from_config(config)
 

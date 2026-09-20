@@ -4,11 +4,12 @@ import asyncio
 import re
 import threading
 import warnings
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable, Coroutine, Mapping
 from textwrap import dedent
 from typing import Any
 
 from jinja2 import Template
+from pydantic import BaseModel
 from tqdm import TqdmExperimentalWarning
 from tqdm.auto import tqdm
 from tqdm.rich import tqdm_rich
@@ -26,6 +27,22 @@ def call_async_fn(fn: Callable[..., Coroutine[Any, Any, Any]], *args: Any, **kwa
             "running asynchronously, which would wait on itself forever. Await the async method instead."
         )
     return asyncio.run_coroutine_threadsafe(fn(*args, **kwargs), _LOOP).result()
+
+
+def warn_ignored_arguments(
+    component: str, config_class: type[BaseModel], kwargs: Mapping[str, Any], stacklevel: int = 4
+) -> None:
+    """Configs ignore the arguments they do not know, so that one set of arguments can be shared between
+    components. A misspelt argument vanishes the same way, so the ignored ones are named."""
+    known = set(config_class.model_fields)
+    for field in config_class.model_fields.values():
+        alias = field.validation_alias
+        known.update([alias] if isinstance(alias, str) else getattr(alias, "choices", []))
+    ignored = sorted(set(kwargs) - known)
+    if ignored:
+        warnings.warn(
+            f"{component} ignores the arguments it does not know: {', '.join(ignored)}", stacklevel=stacklevel
+        )
 
 
 def get_pbar(

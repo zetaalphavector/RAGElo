@@ -18,7 +18,7 @@ from ragelo.types.configurations import BaseRetrievalEvaluatorConfig
 from ragelo.types.evaluables import Document, Evaluable
 from ragelo.types.evaluator_utils import answer_format_for
 from ragelo.types.types import RetrievalEvaluatorTypes, _result_type_registry
-from ragelo.utils import call_async_fn, describe_exception
+from ragelo.utils import call_async_fn, describe_exception, warn_ignored_arguments
 
 logger = logging.getLogger(__name__)
 
@@ -249,7 +249,9 @@ class RetrievalEvaluatorFactory:
         else:
             llm_provider_instance = llm_provider
         if config is None:
-            config = cls.registry[evaluator_name].get_config_class()(**kwargs)
+            config_class = cls.registry[evaluator_name].get_config_class()
+            warn_ignored_arguments(f"The {evaluator_name} retrieval evaluator", config_class, kwargs)
+            config = config_class(**kwargs)
         return cls.registry[evaluator_name].from_config(config, llm_provider_instance)
 
 

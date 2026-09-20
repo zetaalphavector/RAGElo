@@ -18,7 +18,7 @@ from ragelo.types.configurations import RubricGeneratorConfig
 from ragelo.types.evaluables import ChatMessage
 from ragelo.types.formats import LLMInputPrompt
 from ragelo.types.query import Query
-from ragelo.utils import call_async_fn, get_pbar, string_to_template, with_guidelines
+from ragelo.utils import call_async_fn, get_pbar, string_to_template, warn_ignored_arguments, with_guidelines
 
 if TYPE_CHECKING:
     from ragelo.types.experiment import Experiment
@@ -214,5 +214,6 @@ def get_rubric_generator(
         provider_kwargs, kwargs = split_llm_provider_kwargs(llm_provider, kwargs)
         llm_provider = get_llm_provider(llm_provider, **provider_kwargs)
     if config is None:
+        warn_ignored_arguments("The rubric generator", RubricGeneratorConfig, kwargs, stacklevel=3)
         config = RubricGeneratorConfig(**kwargs)
     return RubricGenerator(config, llm_provider)

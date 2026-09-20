@@ -1,11 +1,9 @@
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, SecretStr
+from pydantic import BaseModel, SecretStr
 
 
 class LLMProviderConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
     temperature: float | None = None
     max_tokens: int = 4096
     json_mode: bool = False

@@ -1,9 +1,10 @@
 import json
 import os
+import warnings
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from pydantic import SecretStr, ValidationError
+from pydantic import SecretStr
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.llm_providers.openai_client import OpenAIProvider
@@ -270,11 +271,25 @@ class TestExternalAdapterProvider:
 
 
 class TestLLMProviderFactoryArguments:
-    def test_unknown_argument_is_rejected(self):
+    def test_an_unknown_argument_is_ignored_with_a_warning_that_names_it(self):
         from ragelo.llm_providers import get_llm_provider
 
-        with pytest.raises(ValidationError, match="temprature"):
-            get_llm_provider("openai", api_key="fake_key", temprature=0)
+        with pytest.warns(UserWarning, match="openai LLM provider ignores .* model_name, temprature"):
+            provider = get_llm_provider("openai", api_key="fake_key", model_name="gpt-4o", temprature=0)
+        assert provider.config.temperature is None
+
+    def test_components_sharing_one_set_of_arguments_are_told_what_each_ignores(self, llm_provider_mock):
+        from ragelo import get_agent_ranker, get_answer_evaluator, get_retrieval_evaluator
+
+        shared = {"llm_provider": llm_provider_mock, "rich_print": True, "include_raw_documents": True}
+        with pytest.warns(UserWarning, match="reasoner retrieval evaluator ignores .* include_raw_documents"):
+            get_retrieval_evaluator("reasoner", **shared)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            evaluator = get_answer_evaluator("pairwise", verbose=True, **shared)
+        assert evaluator.config.include_raw_documents and evaluator.config.show_results
+        with pytest.warns(UserWarning, match="elo agent ranker ignores .* k$"):
+            assert get_agent_ranker("elo", k=64).config.elo_k == 32
 
     def test_evaluator_factory_routes_shared_arguments(self):
         from ragelo import get_retrieval_evaluator

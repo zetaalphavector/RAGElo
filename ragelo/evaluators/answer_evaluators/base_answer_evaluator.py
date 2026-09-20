@@ -22,7 +22,7 @@ from ragelo.types.configurations import BaseAnswerEvaluatorConfig, PairwiseEvalu
 from ragelo.types.evaluables import AgentAnswer, Document, Evaluable, PairwiseGame
 from ragelo.types.evaluator_utils import answer_format_for
 from ragelo.types.types import AnswerEvaluatorTypes, _result_type_registry
-from ragelo.utils import call_async_fn, describe_exception, get_placeholders_and_tags
+from ragelo.utils import call_async_fn, describe_exception, get_placeholders_and_tags, warn_ignored_arguments
 
 logger = logging.getLogger(__name__)
 
@@ -534,7 +534,9 @@ class AnswerEvaluatorFactory:
         else:
             llm_provider_instance = llm_provider
         if config is None:
-            config = cls.registry[evaluator_name].get_config_class()(**kwargs)
+            config_class = cls.registry[evaluator_name].get_config_class()
+            warn_ignored_arguments(f"The {evaluator_name} answer evaluator", config_class, kwargs)
+            config = config_class(**kwargs)
         return cls.registry[evaluator_name].from_config(config, llm_provider_instance)
 
 
