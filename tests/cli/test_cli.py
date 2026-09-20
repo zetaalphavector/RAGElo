@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+import typer
 from typer.testing import CliRunner
 
 from ragelo.cli.cli import app
@@ -315,6 +316,8 @@ def test_run_expert_pairwise_cli(mock_llm_provider_factory):
     ],
 )
 def test_every_command_takes_a_model(command):
-    result = runner.invoke(app, [*command, "--help"], env=ENV)
-    assert result.exit_code == 0
-    assert "--model" in result.stdout
+    """Read from the command's options: the rendered help is styled, and CI colours split the option name."""
+    cli = typer.main.get_command(app)
+    for name in command:
+        cli = cli.commands[name]  # type: ignore[attr-defined]
+    assert "--model" in [option for param in cli.params for option in param.opts]
