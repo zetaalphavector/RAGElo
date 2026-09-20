@@ -15,10 +15,11 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from benchmarks import llmjudge, trec_rag24
 from benchmarks.agreement import Agreement, agreement, spearman_interval
 from benchmarks.jev_criteria import RDNAM_CRITERIA, TREC_CRITERIA, JevCriteriaEvaluator
 from benchmarks.jev_state import JsonStateTransport
-from benchmarks.llmjudge import GRADES, LLMJudgeData, Split, download, load, sample, to_experiment
+from benchmarks.llmjudge import GRADES, LLMJudgeData, Split, sample, to_experiment
 from benchmarks.throughput import Run, Throughput, record
 from ragelo import get_llm_provider, get_retrieval_evaluator
 from ragelo.evaluators.retrieval_evaluators import BaseRetrievalEvaluator
@@ -132,6 +133,9 @@ def build_evaluator(
     config = JevRubricCoverageEvaluatorConfig(**kwargs, rubrics=dict.fromkeys(qids, CRITERIA[variant]))
     return JevCriteriaEvaluator.from_config(config, llm_provider)
 
+
+# Each dataset module has `download(data_dir)` and `load(data_dir, split)`, and lists its splits, default first.
+DATASETS = {"llmjudge": (llmjudge, ("dev", "test")), "trec_rag24": (trec_rag24, ("test",))}
 
 app = typer.Typer()
 
@@ -293,7 +297,8 @@ def main(
     models: list[str] = typer.Option(..., "--model", help="Model to judge with. Repeat for several."),
     evaluators: list[str] = typer.Option(list(EVALUATORS), "--evaluator", help="Evaluator variant. Repeat."),
     provider: str = typer.Option("openai", help="The LLM provider every model is called through."),
-    split: Split = typer.Option("dev"),
+    dataset: str = typer.Option("llmjudge", help=f"One of {', '.join(DATASETS)}."),
+    split: Split | None = typer.Option(None, help="Defaults to the dataset's first split."),
     n_pairs: int | None = typer.Option(None, help="Judge a label-stratified sample of about this many pairs."),
     seed: int = typer.Option(42, help="Seed of the sample."),
     n_processes: int = typer.Option(16, help="Parallel LLM calls."),
@@ -302,12 +307,20 @@ def main(
         "--price",
         help="MODEL=INPUT,OUTPUT,CACHED in USD per million tokens, to report the cost per 1,000 pairs. Repeat.",
     ),
-    data_dir: Path = typer.Option(Path("benchmarks/data/llmjudge")),
-    results_dir: Path = typer.Option(Path("benchmarks/results/llmjudge")),
+    data_dir: Path | None = typer.Option(None, help="Defaults to benchmarks/data/<dataset>."),
+    results_dir: Path | None = typer.Option(None, help="Defaults to benchmarks/results/<dataset>."),
     tag: str = typer.Option("", help="Suffix of the experiment names, to judge again without reusing a cache."),
 ) -> None:
-    download(data_dir)
-    data = load(data_dir, split)
+    if dataset not in DATASETS:
+        raise typer.BadParameter(f"Unknown dataset {dataset}. Choose one of {', '.join(DATASETS)}.")
+    module, splits = DATASETS[dataset]
+    split = split or splits[0]  # type: ignore[assignment]
+    if split not in splits:
+        raise typer.BadParameter(f"{dataset} has no {split} split. Choose one of {', '.join(splits)}.")
+    data_dir = data_dir or Path("benchmarks/data") / dataset
+    results_dir = results_dir or Path("benchmarks/results") / dataset
+    module.download(data_dir)
+    data = module.load(data_dir, split)
     subset = f"{split}_all"
     if n_pairs is not None:
         data = sample(data, n_pairs, seed)
