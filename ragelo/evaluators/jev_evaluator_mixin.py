@@ -29,10 +29,8 @@ class JevEvaluatorMixin:
             )
 
     def _batch_key(self, query: Query) -> str:
-        """Documents of one query are judged better in one request than alone, so the provider may batch them.
-
-        Two experiments reuse query ids, so the key names this query object and not only its id.
-        """
+        """What is judged for one query shares its requests. Two experiments reuse query ids, so the key names
+        this query object and not only its id."""
         return f"{self.config.evaluator_name}:{query.qid}:{id(query)}"  # type: ignore[attr-defined]
 
     @staticmethod

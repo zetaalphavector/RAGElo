@@ -93,8 +93,8 @@ queries per split, with 95% intervals that resample queries.
 
 ## Asking Jev about several documents in one request
 
-The Jev providers ask prompts that share a batch key in one request (`batch_size`, default 10). The `jev`
-retrieval evaluators key their prompts by query. Measured on 2026-09-20 with the `typesafe` provider and the
+The Jev providers ask prompts that share a batch key in one request (`batch_size`, default 10). Every jev
+evaluator keys its prompts by query. Measured on 2026-09-20 with the `typesafe` provider and the
 `jev` evaluator on the 500-pair LLMJudge samples, `n_processes=16`:
 
 | `batch_size` | Input tokens, dev | Spearman dev (95% interval) | Input tokens, test | Spearman test (95% interval) |

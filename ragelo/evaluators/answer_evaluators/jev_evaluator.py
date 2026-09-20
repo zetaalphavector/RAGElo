@@ -49,7 +49,7 @@ class JevAnswerEvaluator(JevEvaluatorMixin, BaseAnswerEvaluator[JevAnswerEvaluat
     def _build_message(self, query: Query, answer: AgentAnswer) -> LLMInputPrompt:
         prompt = super()._build_message(query, answer)
         question = {"type": "score", "criteria": self.config.answer_grades}
-        return prompt.model_copy(update={"questions": {"score": question}})
+        return prompt.model_copy(update={"questions": {"score": question}, "batch_key": self._batch_key(query)})
 
     def _process_answer(self, llm_response: LLMResponseType[BaseModel], query: Query) -> LLMResponseType[BaseModel]:
         answer = self._jev_answer(llm_response, "score")
@@ -78,7 +78,8 @@ class JevPairwiseEvaluator(JevEvaluatorMixin, PairwiseAnswerEvaluator):
 
     def _build_message_pairwise(self, query: Query, game: PairwiseGame) -> LLMInputPrompt:
         question = {"type": "choice", "criteria": self.winner_options}
-        return super()._build_message_pairwise(query, game).model_copy(update={"questions": {"winner": question}})
+        prompt = super()._build_message_pairwise(query, game)
+        return prompt.model_copy(update={"questions": {"winner": question}, "batch_key": self._batch_key(query)})
 
     def _process_answer(self, llm_response: LLMResponseType[BaseModel], query: Query) -> LLMResponseType[BaseModel]:
         answer = self._jev_answer(llm_response, "winner")
@@ -102,7 +103,8 @@ class JevRubricPointwiseEvaluator(JevRubricEvaluatorMixin, RubricPointwiseEvalua
             criterion.criterion_name: {"type": "boolean", "instructions": criterion.short_question}
             for criterion in self._rubric_for(query)
         }
-        return super()._build_message(query, answer).model_copy(update={"questions": questions})
+        prompt = super()._build_message(query, answer)
+        return prompt.model_copy(update={"questions": questions, "batch_key": self._batch_key(query)})
 
     def _process_answer(self, llm_response: LLMResponseType[BaseModel], query: Query) -> LLMResponseType[BaseModel]:
         verdicts = self._rubric_schema(query)(
@@ -142,7 +144,8 @@ class JevRubricPairwiseEvaluator(JevRubricEvaluatorMixin, RubricPairwiseEvaluato
             }
             for criterion in self._rubric_for(query)
         }
-        return super()._build_message_pairwise(query, game).model_copy(update={"questions": questions})
+        prompt = super()._build_message_pairwise(query, game)
+        return prompt.model_copy(update={"questions": questions, "batch_key": self._batch_key(query)})
 
     def _process_answer(self, llm_response: LLMResponseType[BaseModel], query: Query) -> LLMResponseType[BaseModel]:
         verdicts = {}

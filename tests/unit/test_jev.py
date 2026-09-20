@@ -507,12 +507,133 @@ class TestJevBatching:
         assert [type(request["state"]) for request in requests] == [dict, str, str, str]
         assert [d.evaluations["jev"].answer.score for d in query.retrieved_docs.values()] == [1.8, 0.2, 1.0]
 
-    def test_prompts_without_a_batch_key_are_never_merged(self, experiment: Experiment):
-        requests: list[httpx.Request] = []
-        distribution = {"A": 0.6, "B": 0.3, "C": 0.1}
-        provider = jev_provider(lambda *_: {"type": "choice", "choice": "A", "probabilities": distribution}, requests)
+    def test_prompts_without_a_batch_key_are_never_merged(self):
+        requests: list[dict[str, Any]] = []
+        provider = self.provider(requests)
+        prompts = [
+            LLMInputPrompt(user_message=f"state p=0.{i}", questions={"q": {"type": "boolean", "instructions": "?"}})
+            for i in (1, 2, 3)
+        ]
 
-        get_answer_evaluator("jev_pairwise", llm_provider=provider, n_processes=4).evaluate_experiment(experiment)
+        async def ask_all_at_once() -> None:
+            await asyncio.gather(*(provider.call_async(prompt, RetrievalEvaluationAnswer) for prompt in prompts))
 
-        assert requests
-        assert all(isinstance(json.loads(request.content)["state"], str) for request in requests)
+        call_async_fn(ask_all_at_once)
+
+        assert [type(request["state"]) for request in requests] == [str, str, str]
+
+
+class TestJevAnswerBatching:
+    """The answers and the games of one query share a request, like the documents of one query."""
+
+    @staticmethod
+    def provider(requests: list[dict[str, Any]]) -> VercelJevProvider:
+        """An answer says how good it is, as `q=2`. It earns that grade, fulfils a criterion from q=1 upwards, and
+        beats an answer with a lower one."""
+
+        def quality(text: str, marker: str) -> int:
+            return int(text.split(marker, 1)[1].split("q=")[1][0])
+
+        def answer(question: dict[str, Any], state: str) -> dict[str, Any]:
+            if question["type"] == "boolean":
+                return {"type": "boolean", "probability": 0.9 if quality(state, "[Agent's Report]") >= 1 else 0.1}
+            if question["type"] == "score":
+                grade = quality(state, "[answer]")
+                return {
+                    "type": "score",
+                    "score": grade,
+                    "probabilities": {str(g): float(g == grade) for g in range(3)},
+                }
+            rubric_game = "Agent A's Answer]" in state
+            a = quality(state, "Agent A's Answer]" if rubric_game else "Assistant A]")
+            b = quality(state, "Agent B's Answer]" if rubric_game else "Assistant B]")
+            winner = "A" if a > b else "B" if b > a else "C"
+            return {"type": "choice", "choice": winner, "probabilities": {w: float(w == winner) for w in "ABC"}}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            body = json.loads(request.content)
+            requests.append(body)
+            answers = {}
+            for name, question in body["questions"].items():
+                state = body["state"][name.split("__")[0]] if isinstance(body["state"], dict) else body["state"]
+                answers[name] = answer(question, state)
+            return httpx.Response(200, json={"answers": answers, "usage": {"inputTokens": 300, "outputTokens": 30}})
+
+        client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        return VercelJevProvider(VercelJevConfiguration(api_key=SecretStr("k")), client=client)
+
+    @staticmethod
+    def experiment() -> Experiment:
+        experiment = Experiment(experiment_name="answers", save_on_disk=False)
+        experiment.add_query(Query(qid="q", query="capital of France?"))
+        for agent, quality in (("poor", 0), ("fair", 1), ("good", 2)):
+            experiment.add_agent_answer(f"An answer of q={quality}", agent, "q")
+        return experiment
+
+    def test_the_answers_of_a_query_share_a_request_and_keep_their_own_scores(self):
+        requests: list[dict[str, Any]] = []
+        experiment = self.experiment()
+
+        get_answer_evaluator("jev", llm_provider=self.provider(requests), n_processes=3).evaluate_experiment(
+            experiment
+        )
+
+        assert [len(request["state"]) for request in requests] == [3]
+        scores = {agent: answer.evaluations["jev"].answer.score for agent, answer in experiment["q"].answers.items()}
+        assert scores == {"poor": 0, "fair": 1, "good": 2}
+
+    def test_the_games_of_a_query_share_one_request_per_answer_order(self):
+        requests: list[dict[str, Any]] = []
+        experiment = self.experiment()
+        evaluator = get_answer_evaluator("jev_pairwise", llm_provider=self.provider(requests), n_processes=3)
+
+        evaluator.evaluate_experiment(experiment)
+
+        assert [len(request["state"]) for request in requests] == [3, 3], "the three games, forward then reversed"
+        winners = {
+            (game.agent_a_answer.agent, game.agent_b_answer.agent): {
+                "A": game.agent_a_answer.agent,
+                "B": game.agent_b_answer.agent,
+            }[game.evaluations["jev_pairwise"].answer.winner]
+            for game in experiment["q"].pairwise_games.values()
+        }
+        assert winners == {("fair", "good"): "good", ("fair", "poor"): "fair", ("good", "poor"): "good"}
+
+    def test_rubric_criteria_of_every_answer_go_in_one_request(self):
+        requests: list[dict[str, Any]] = []
+        experiment = self.experiment()
+        experiment["q"].rubric = [
+            Criterion(criterion_name="names_capital", short_question="Does the response name the capital?"),
+            Criterion(criterion_name="is_short", short_question="Is the response short?"),
+        ]
+        evaluator = get_answer_evaluator("jev_rubric_pointwise", llm_provider=self.provider(requests), n_processes=3)
+
+        evaluator.evaluate_experiment(experiment)
+
+        assert len(requests) == 1
+        assert len(requests[0]["questions"]) == 6
+        assert requests[0]["questions"]["item_0__is_short"]["instructions"] == (
+            "Consider only `item_0`. Is the response short?"
+        )
+        fulfilled = {
+            agent: [c.fulfillment for c in answer.evaluations["jev_rubric_pointwise"].answer.criteria]
+            for agent, answer in experiment["q"].answers.items()
+        }
+        assert fulfilled == {"poor": [False, False], "fair": [True, True], "good": [True, True]}
+
+    def test_rubric_games_of_a_query_share_one_request_per_answer_order(self):
+        requests: list[dict[str, Any]] = []
+        experiment = self.experiment()
+        experiment["q"].rubric = [Criterion(criterion_name="names_capital", short_question="Names the capital?")]
+        evaluator = get_answer_evaluator("jev_rubric_pairwise", llm_provider=self.provider(requests), n_processes=3)
+
+        evaluator.evaluate_experiment(experiment)
+
+        assert [len(request["state"]) for request in requests] == [3, 3]
+        winners = {
+            (game.agent_a_answer.agent, game.agent_b_answer.agent): game.evaluations[
+                "jev_rubric_pairwise"
+            ].answer.winner
+            for game in experiment["q"].pairwise_games.values()
+        }
+        assert winners == {("fair", "good"): "B", ("fair", "poor"): "A", ("good", "poor"): "A"}
