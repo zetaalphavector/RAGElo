@@ -235,7 +235,6 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
         b_vs_a_result = await self.__evaluate_single_game(query, reversed_game)
         failed = next((r for r in (a_vs_b_result, b_vs_a_result) if r.exception or r.answer is None), None)
         if failed is not None:
-            # One answer order alone decides nothing: judging both is what cancels the position bias.
             return PairwiseGameEvaluatorResult(
                 qid=query.qid,
                 agent_a=game.agent_a_answer.agent,

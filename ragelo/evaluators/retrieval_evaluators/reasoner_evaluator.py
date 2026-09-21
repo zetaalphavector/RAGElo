@@ -11,7 +11,6 @@ class ReasonerEvaluator(BaseRetrievalEvaluator[ReasonerEvaluatorConfig]):
     """
 
     config: ReasonerEvaluatorConfig
-    # Measured against grading by topic in benchmarks/README.md.
     relevance_grades = (
         (
             "Not relevant: The document contains no information that helps answer the user question, "
