@@ -27,6 +27,13 @@ When working from source we recommend an isolated environment (e.g., `uv venv &&
 Environment variables and providers:
 - OpenAI requires `OPENAI_API_KEY`. Set it in your shell or load it via dotenv before invoking the CLI.
 - Ollama is supported for local models (`--llm-provider-name ollama`).
+- The [Vercel AI Gateway](https://vercel.com/docs/ai-gateway) (`--llm-provider-name vercel`) requires `AI_GATEWAY_API_KEY` and takes `creator/model` ids, e.g. `ragelo run-all ... --model anthropic/claude-haiku-4-5`.
+- [Jev](https://docs.typesafe.ai/introduction) is not an LLM. Reach it with `llm_provider="typesafe"`, TypeSafe's own API and SDK (`pip install 'ragelo[typesafe]'`, `TYPESAFE_API_KEY`), or with `llm_provider="vercel-jev"`, the Vercel AI Gateway (`AI_GATEWAY_API_KEY`). It answers typed questions with probabilities and writes no reasoning. It only works with the `jev`, `jev_rdnam`, `jev_pairwise`, `jev_rubric_pointwise`, `jev_rubric_pairwise` and `jev_rubric_coverage` evaluators, which store the most likely label plus `probabilities` and `confidence` on the usual answer formats:
+  ```python
+  evaluator = get_retrieval_evaluator("jev", llm_provider="typesafe")
+  ```
+  Two retrieval evaluators store a fractional score instead. `jev_rdnam` keeps Jev's expected grade, like RDNAM's annotator average. `jev` asks one yes/no question, whether the document would be used in a report on the topic of the user question, and stores the probability of a yes scaled to the top relevance grade. Pass `boolean_question=False` to score over the relevance grades and keep the most likely one. Both Jev providers ask up to `batch_size` (default 10) documents, answers or games of one query in a single request, which needs `n_processes` of at least that size to take effect and costs about 40% fewer tokens; `batch_size=1` turns it off.
+- Stored judgments are reused unless `force=True`. The `reasoner` grades were reworded to grade what a document contributes to an answer, so judgments cached by an earlier version were made under the old wording.
 - The **Instructor provider** enables multi-provider support (Anthropic, Mistral, Cohere, and more) via the [`instructor`](https://github.com/jxnl/instructor) library. Install the extra and the relevant SDK:
   ```bash
   pip install 'ragelo[instructor]' anthropic   # for Anthropic/Claude
@@ -43,7 +50,9 @@ To use RAGElo as a library, all you need to do is import RAGElo, initialize an `
 from ragelo import get_retrieval_evaluator
 
 evaluator = get_retrieval_evaluator("RDNAM", llm_provider="openai")
-result = evaluator.evaluate(query="What is the capital of France?", document='Lyon is the second largest city in France.')
+result = evaluator.evaluate(
+    query="What is the capital of France?", document="Lyon is the second largest city in France."
+)
 print(result.answer)
 # Output: RDNAMEvaluationAnswer(reasoning='...', score=1.0, intent_match=None, trustworthiness=None)
 print(result.answer.score)
@@ -92,7 +101,7 @@ pointwise = get_answer_evaluator(
     "rubric_pointwise",
     llm_provider="openai",
     expert_in="Machine Learning",
-    n_criteria=5,           # number of criteria the LLM will generate
+    n_criteria=5,  # number of criteria the LLM will generate
 )
 pointwise.evaluate_all_evaluables(query)
 
@@ -130,7 +139,7 @@ generator = get_rubric_generator(
     n_criteria=5,
     source="reference_answer",  # or "documents" (the default)
 )
-generator.generate_experiment(experiment)   # writes query.rubric for every query without one
+generator.generate_experiment(experiment)  # writes query.rubric for every query without one
 
 for criterion in experiment["q0"].rubric:
     print(criterion.criterion_name, criterion.short_question, criterion.weight)
@@ -151,7 +160,7 @@ pointwise = get_answer_evaluator(
     "rubric_pointwise",
     llm_provider="openai",
     graduated_scoring=True,  # enable graduated scoring
-    max_score=5,             # score range 0–5 (default)
+    max_score=5,  # score range 0–5 (default)
 )
 ```
 
@@ -169,7 +178,7 @@ pointwise = get_answer_evaluator(
     llm_provider="openai",
     evidence_recall=True,
     evidence_recall_weight=1.5,  # relative importance (default 1.0)
-    evidence_snippets={          # optional per-query snippets
+    evidence_snippets={  # optional per-query snippets
         "q0": ["Brasília is the capital", "since 1960"],
     },
 )
@@ -367,8 +376,9 @@ print(tournament.scores)
 For a more complete example, we can evaluate with a custom prompt, and inject metadata into our evaluation prompt:
 
 ```python
-from pydantic import BaseModel, Field
+from pydantic import Field
 from ragelo import get_retrieval_evaluator
+from ragelo.types import EvaluationAnswer
 
 system_prompt = """You are a helpful assistant for evaluating the relevance of a retrieved document to a user query.
 You should pay extra attention to how **recent** a document is. A document older than 5 years is considered outdated.
@@ -384,7 +394,7 @@ Retrieved document: {{ document.text }}
 The document has a date of {{ document.metadata.date }}.
 Today is {{ query.metadata.today_date }}.
 """
-class ResponseSchema(BaseModel):
+class ResponseSchema(EvaluationAnswer):
     relevance: int = Field(description="An integer, either 0 or 1. 0 if the document is irrelevant, 1 if it is relevant.")
     recency: int = Field(description="An integer, either 0 or 1. 0 if the document is outdated, 1 if it is recent.")
     truthfulness: int = Field(description="An integer, either 0 or 1. 0 if the document is false, 1 if it is true.")
@@ -594,6 +604,7 @@ Reproducibility tips:
 Evaluating retrieval metrics (optional):
 ```python
 from ragelo import Experiment
+
 exp = Experiment(experiment_name="my_exp", save_on_disk=False)
 # load queries/docs/answers and evaluations...
 exp.evaluate_retrieval(metrics=["Precision@10", "nDCG@10"], relevance_threshold=1)

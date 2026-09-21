@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import contextlib
 import json
 from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
 from openai import AsyncOpenAI
-from pydantic import BaseModel, SecretStr
+from openai.types.responses import ResponseUsage
+from openai.types.responses.response_usage import InputTokensDetails, OutputTokensDetails
+from pydantic import BaseModel, SecretStr, ValidationError
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.llm_providers.openai_client import OpenAIConfiguration
@@ -14,8 +17,6 @@ from ragelo.types.answer_formats import (
     AnswerEvaluationAnswer,
     EvaluationAnswer,
     PairwiseEvaluationAnswer,
-    RDNAMEvaluationAnswer,
-    RDNAMMultipleAnnotatorsAnswer,
     RetrievalEvaluationAnswer,
 )
 from ragelo.types.configurations import (
@@ -58,6 +59,12 @@ def pytest_addoption(parser):
         default=False,
         help="run tests that require an Anthropic API key",
     )
+    parser.addoption(
+        "--runtypesafe",
+        action="store_true",
+        default=False,
+        help="run tests that require a TypeSafe API key",
+    )
 
 
 def pytest_collection_modifyitems(config, items):
@@ -71,6 +78,11 @@ def pytest_collection_modifyitems(config, items):
         for item in items:
             if "requires_anthropic" in item.keywords:
                 item.add_marker(skip_anthropic)
+    if not config.getoption("--runtypesafe"):
+        skip_typesafe = pytest.mark.skip(reason="need --runtypesafe option to run")
+        for item in items:
+            if "requires_typesafe" in item.keywords:
+                item.add_marker(skip_typesafe)
 
 
 @pytest.fixture
@@ -85,56 +97,49 @@ def openai_client_config():
     )
 
 
+OPENAI_USAGE = ResponseUsage(
+    input_tokens=120,
+    input_tokens_details=InputTokensDetails(cached_tokens=20, cache_write_tokens=0),
+    output_tokens=30,
+    output_tokens_details=OutputTokensDetails(reasoning_tokens=0),
+    total_tokens=150,
+)
+
+
 @pytest.fixture
 def llm_provider_config():
     return LLMProviderConfig()
 
 
 def answer_model_factory(input: LLMInputPrompt, response_schema, **kwargs):
-    # Retrieval answers (base or subclasses like RDNAMEvaluationAnswer)
-    try:
-        if response_schema == RetrievalEvaluationAnswer or (
-            isinstance(response_schema, type) and issubclass(response_schema, RetrievalEvaluationAnswer)
-        ):
-            # Handle specialized RDNAMEvaluationAnswer subclass
-            if isinstance(response_schema, type) and response_schema.__name__ == "RDNAMEvaluationAnswer":
-                raw_answer = (
-                    '{"reasoning": "Doc judged with aspects", "score": 2, "intent_match": 2.0, "trustworthiness": 2.0}'
-                )
-                return LLMResponseType(
-                    raw_answer=raw_answer,
-                    parsed_answer=response_schema.model_validate_json(raw_answer),  # type: ignore
-                )
-            # RDNAM without aspects
-            if isinstance(response_schema, type) and response_schema.__name__ == "RDNAMNoAspectsAnswer":
-                raw_answer = '{"reasoning": "Doc judged", "score": 1}'
-                return LLMResponseType(
-                    raw_answer=raw_answer,
-                    parsed_answer=response_schema.model_validate_json(raw_answer),  # type: ignore
-                )
-            # Generic retrieval evaluation
-            return LLMResponseType(
-                raw_answer='{"reasoning": "The document is very relevant", "score": 2}',
-                parsed_answer=RetrievalEvaluationAnswer(
-                    reasoning="The document is very relevant",
-                    score=2,
-                ),
-            )
-    except Exception:
-        pass
+    if response_schema == RetrievalEvaluationAnswer or (
+        isinstance(response_schema, type) and issubclass(response_schema, RetrievalEvaluationAnswer)
+    ):
+        # Generic retrieval evaluation
+        return LLMResponseType(
+            raw_answer='{"reasoning": "The document is very relevant", "score": 2}',
+            parsed_answer=RetrievalEvaluationAnswer(
+                reasoning="The document is very relevant",
+                score=2,
+            ),
+        )
+    if isinstance(response_schema, type) and response_schema.__name__.startswith("RDNAM"):
+        fields = response_schema.model_fields
+        judged = fields["annotator_1"].annotation.model_fields if "annotator_1" in fields else fields
+        judgment = {"reasoning": "Doc judged", "score": 1, "intent_match": 2, "trustworthiness": 2}
+        judgment = {name: judgment[name] for name in judged}
+        raw_answer = json.dumps({name: judgment for name in fields} if "annotator_1" in fields else judgment)
+        return LLMResponseType(raw_answer=raw_answer, parsed_answer=response_schema.model_validate_json(raw_answer))
     if isinstance(response_schema, type) and issubclass(response_schema, PairwiseEvaluationAnswer):
         raw_answer = '{"answer_a_analysis": "Answer A is good", "answer_b_analysis": "Answer B is bad", "comparison_reasoning": "A is better", "winner": "A"}'
         return LLMResponseType(raw_answer=raw_answer, parsed_answer=response_schema.model_validate_json(raw_answer))
     # Check if it's a subclass of EvaluationAnswer (covers custom answer schemas)
     if isinstance(response_schema, type) and issubclass(response_schema, EvaluationAnswer):
-        # Try to instantiate with generic data
-        try:
-            raw_answer = '{"reasoning": "Generic", "score": 1}'
+        raw_answer = '{"reasoning": "Generic", "score": 1}'
+        with contextlib.suppress(ValidationError):
             return LLMResponseType(
                 raw_answer=raw_answer, parsed_answer=response_schema.model_validate_json(raw_answer)
             )
-        except Exception:
-            pass
     if response_schema == AnswerFormat:
         return LLMResponseType(
             raw_answer='{"keyA": "valueA", "keyB": "valueB"}',
@@ -172,10 +177,7 @@ class MockLLMProvider(BaseLLMProvider):
             return await self.async_call_mocker(input, response_schema)
         else:
             # Still record the call (without relying on its return value)
-            try:
-                await self.async_call_mocker(input, response_schema)
-            except Exception:
-                pass
+            await self.async_call_mocker(input, response_schema)
             return answer_model_factory(input, response_schema)
 
 
@@ -192,16 +194,19 @@ def responses_api_mock(mocker, answer_format):
 
     def create_text_response():
         resp = mocker.Mock()
+        resp.usage = OPENAI_USAGE
         resp.output_text = "fake response"
         return resp
 
     def create_json_response():
         resp = mocker.Mock()
+        resp.usage = OPENAI_USAGE
         resp.output_text = '{"keyA": "valueA", "keyB": "valueB"}'
         return resp
 
     def parse_structured_response():
         resp = mocker.Mock()
+        resp.usage = OPENAI_USAGE
         resp.output_text = '{"keyA": "valueA", "keyB": "valueB"}'
         resp.output_parsed = answer_format(keyA="valueA", keyB="valueB")
         return resp
@@ -265,6 +270,7 @@ def flexible_openai_client_mock(mocker):
     def create_side_effect(*args, **kwargs):
         """Mock responses.create (used when json_mode=True)."""
         resp = mocker.Mock()
+        resp.usage = OPENAI_USAGE
         resp.output_text = '{"reasoning": "The document is highly relevant to the query", "score": 2}'
         return resp
 
@@ -272,6 +278,7 @@ def flexible_openai_client_mock(mocker):
         """Mock responses.parse (used when json_mode=False)."""
         text_format = kwargs.get("text_format")
         resp = mocker.Mock()
+        resp.usage = OPENAI_USAGE
 
         if text_format:
             sample_data = get_sample_data_for_schema(text_format)
@@ -559,7 +566,6 @@ def expert_retrieval_eval_config(base_eval_config):
 @pytest.fixture
 def rdnam_config(base_eval_config):
     base_config = base_eval_config.model_dump(exclude_unset=True)
-    base_config["query_file"] = "tests/data/rdnam_queries.csv"
     base_config["evaluator_name"] = RetrievalEvaluatorTypes.RDNAM
     return RDNAMEvaluatorConfig(
         annotator_role="You are a search quality rater evaluating the relevance of web pages. ",
@@ -613,20 +619,23 @@ def mock_llm_provider_factory(monkeypatch):
 
 @pytest.fixture
 def llm_provider_mock_rdnam(llm_provider_config):
-    mocked_answer = RDNAMMultipleAnnotatorsAnswer(
-        annotator_1=RDNAMEvaluationAnswer(reasoning="Annotator 1", score=1.0, intent_match=2.0, trustworthiness=1.0),
-        annotator_2=RDNAMEvaluationAnswer(reasoning="Annotator 2", score=2.0, intent_match=1.0, trustworthiness=1.0),
-        annotator_3=RDNAMEvaluationAnswer(reasoning="Annotator 3", score=1.0, intent_match=1.0, trustworthiness=1.0),
-        annotator_4=RDNAMEvaluationAnswer(reasoning="Annotator 4", score=0.0, intent_match=0.0, trustworthiness=0.0),
-        annotator_5=RDNAMEvaluationAnswer(reasoning="Annotator 5", score=2.0, intent_match=1.0, trustworthiness=1.0),
-    )
-    LLM_response: LLMResponseType[RDNAMMultipleAnnotatorsAnswer] = LLMResponseType(
-        raw_answer=mocked_answer.model_dump_json(), parsed_answer=mocked_answer
-    )
+    """Five annotators answering in one call: (overall, intent match, trustworthiness)."""
+    annotators = [(1, 2, 1), (2, 1, 1), (1, 1, 1), (0, 0, 0), (2, 1, 1)]
     provider = MockLLMProvider(llm_provider_config)
+    raw_answer = json.dumps(
+        {
+            f"annotator_{i}": {
+                "reasoning": "One annotator",
+                "intent_match": intent_match,
+                "trustworthiness": trustworthiness,
+                "score": overall,
+            }
+            for i, (overall, intent_match, trustworthiness) in enumerate(annotators, start=1)
+        }
+    )
 
-    def side_effect(*args, **kwargs):
-        return LLM_response
+    def side_effect(input, response_schema):
+        return LLMResponseType(raw_answer=raw_answer, parsed_answer=response_schema.model_validate_json(raw_answer))
 
     provider.async_call_mocker = AsyncMock(side_effect=side_effect)
     return provider
@@ -719,7 +728,6 @@ def domain_expert_answer_eval_config(base_answer_eval_config):
     )
     base_config["pairwise"] = True
     base_config["expert_in"] = "Computer Science"
-    base_config["include_annotations"] = True
     base_config["include_raw_documents"] = True
     base_config["evaluator_name"] = AnswerEvaluatorTypes.DOMAIN_EXPERT
     base_config["include_relevance_reasoning"] = False

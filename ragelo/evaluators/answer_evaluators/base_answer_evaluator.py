@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, TypeVar, get_type_hints
 from pydantic import BaseModel
 
 from ragelo.evaluators.base_evaluator import BaseEvaluator, T_Result
-from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
+from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider, split_llm_provider_kwargs
 from ragelo.types import AnswerEvaluatorResult, LLMInputPrompt, PairwiseGameEvaluatorResult, Query
 from ragelo.types.answer_formats import (
     AnswerEvaluationAnswer,
@@ -21,8 +21,8 @@ from ragelo.types.answer_formats import (
 from ragelo.types.configurations import BaseAnswerEvaluatorConfig, PairwiseEvaluatorConfig
 from ragelo.types.evaluables import AgentAnswer, Document, Evaluable, PairwiseGame
 from ragelo.types.evaluator_utils import answer_format_for
-from ragelo.types.types import AnswerEvaluatorTypes, _result_type_registry
-from ragelo.utils import call_async_fn, get_placeholders_and_tags
+from ragelo.types.types import AnswerEvaluatorTypes, result_type_registry
+from ragelo.utils import call_async_fn, describe_exception, get_placeholders_and_tags, warn_ignored_arguments
 
 logger = logging.getLogger(__name__)
 
@@ -157,14 +157,14 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
 
         exc = None
         parsed_answer = None
-        raw_answer = ""
+        usage = None
         try:
             llm_response = await self.llm_provider.call_async(input=prompt, response_schema=response_schema)  # type: ignore[arg-type]
+            usage = llm_response.usage
             llm_response = self._process_answer(llm_response, query)
             parsed_answer = llm_response.parsed_answer
-            raw_answer = llm_response.raw_answer
         except Exception as e:  # noqa: BLE001 - captured on the result as `exception`
-            exc = str(e) + f"\nRaw answer: {raw_answer}"
+            exc = describe_exception(e)
             logger.warning(f"Failed to generate answer for qid: {query.qid} and agent: {answer.agent}: {exc}")
 
         result = AnswerEvaluatorResult(
@@ -173,6 +173,7 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
             evaluator_name=evaluator_name,
             answer=parsed_answer,  # type: ignore[arg-type]
             exception=exc,
+            usage=usage,
         )
         return await self.__augment_if_judged(result, query, answer)
 
@@ -184,14 +185,14 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
 
         exc = None
         parsed_answer = None
-        raw_answer = ""
+        usage = None
         try:
             llm_response = await self.llm_provider.call_async(input=prompt, response_schema=response_schema)  # type: ignore[arg-type]
+            usage = llm_response.usage
             llm_response = self._process_answer(llm_response, query)
             parsed_answer = llm_response.parsed_answer
-            raw_answer = llm_response.raw_answer
         except Exception as e:  # noqa: BLE001 - captured on the result as `exception`
-            exc = str(e) + f"\nRaw answer: {raw_answer}"
+            exc = describe_exception(e)
             logger.warning(
                 f"Failed to evaluate game for qid: {query.qid} "
                 f"agents: ({game.agent_a_answer.agent}, {game.agent_b_answer.agent}): {exc}"
@@ -204,6 +205,7 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
             evaluator_name=evaluator_name,
             answer=parsed_answer,  # type: ignore[arg-type]
             exception=exc,
+            usage=usage,
         )
 
     async def __evaluate_game(self, query: Query, game: PairwiseGame) -> PairwiseGameEvaluatorResult:
@@ -231,6 +233,17 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
 
         a_vs_b_result = await self.__evaluate_single_game(query, normal_game)
         b_vs_a_result = await self.__evaluate_single_game(query, reversed_game)
+        failed = next((r for r in (a_vs_b_result, b_vs_a_result) if r.exception or r.answer is None), None)
+        if failed is not None:
+            return PairwiseGameEvaluatorResult(
+                qid=query.qid,
+                agent_a=game.agent_a_answer.agent,
+                agent_b=game.agent_b_answer.agent,
+                evaluator_name=evaluator_name,
+                exception=failed.exception or "One answer order returned no judgment",
+                a_vs_b_result=a_vs_b_result,
+                b_vs_a_result=b_vs_a_result,
+            )
 
         # Reconcile using weighted scores.
         # Positive margin = A is better; the reversed game's margin is negated
@@ -261,6 +274,13 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
         parent_answer: PairwiseEvaluationAnswer | RubricAnswerFormat | None
         if isinstance(forward_answer, RubricAnswerFormat) and isinstance(reversed_canonical, RubricAnswerFormat):
             parent_answer = forward_answer.merge_with_canonicalized(reversed_canonical)
+        elif (
+            isinstance(forward_answer, PairwiseEvaluationAnswer)
+            and isinstance(reversed_canonical, PairwiseEvaluationAnswer)
+            and forward_answer.probabilities
+            and reversed_canonical.probabilities
+        ):
+            parent_answer = forward_answer.averaged_with(reversed_canonical)
         else:
             answer_source = reversed_canonical if use_reversed else forward_answer
             if answer_source is None:
@@ -268,15 +288,13 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
             else:
                 parent_answer = answer_source.model_copy(update={"winner": final_winner})
 
-        exc = a_vs_b_result.exception or b_vs_a_result.exception
-
         result = PairwiseGameEvaluatorResult(
             qid=query.qid,
             agent_a=game.agent_a_answer.agent,
             agent_b=game.agent_b_answer.agent,
             evaluator_name=evaluator_name,
             answer=parent_answer,
-            exception=exc,
+            usage=a_vs_b_result.usage + b_vs_a_result.usage if a_vs_b_result.usage and b_vs_a_result.usage else None,
             a_vs_b_result=a_vs_b_result,
             b_vs_a_result=b_vs_a_result,
         )
@@ -473,7 +491,7 @@ class AnswerEvaluatorFactory:
             if name in cls.registry:
                 logger.warning(f"Overwriting {name} in registry")
             cls.registry[name] = wrapped_class
-            _result_type_registry[f"answer:{name}"] = wrapped_class.result_type
+            result_type_registry[f"answer:{name}"] = wrapped_class.result_type
             return wrapped_class
 
         return inner_wrapper
@@ -510,19 +528,14 @@ class AnswerEvaluatorFactory:
                 f"Unknown answer evaluator {evaluator_name}\nValid options are {list(cls.registry.keys())}"
             )
         if isinstance(llm_provider, str):
-            llm_provider_instance = get_llm_provider(llm_provider, **kwargs)
+            provider_kwargs, kwargs = split_llm_provider_kwargs(llm_provider, kwargs)
+            llm_provider_instance = get_llm_provider(llm_provider, **provider_kwargs)
         else:
             llm_provider_instance = llm_provider
         if config is None:
-            class_ = cls.registry[evaluator_name]
-            type_config = class_.get_config_class()
-            valid_keys = [field for field in type_config.model_fields]
-            valid_args = {k: v for k, v in kwargs.items() if k in valid_keys}
-            required_fields = [arg for arg, info in type_config.model_fields.items() if info.is_required()]
-            for field in required_fields:
-                if field not in valid_args:
-                    raise ValueError(f"Required argument {field} for evaluator {evaluator_name} not provided")
-            config = type_config(**valid_args)
+            config_class = cls.registry[evaluator_name].get_config_class()
+            warn_ignored_arguments(f"The {evaluator_name} answer evaluator", config_class, kwargs)
+            config = config_class(**kwargs)
         return cls.registry[evaluator_name].from_config(config, llm_provider_instance)
 
 

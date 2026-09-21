@@ -1,15 +1,16 @@
 import json
 import os
+import warnings
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from pydantic import SecretStr, ValidationError
+from pydantic import SecretStr
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider
 from ragelo.llm_providers.openai_client import OpenAIProvider
 from ragelo.types.configurations import LLMProviderConfig, OpenAIConfiguration
-from ragelo.types.formats import LLMInputPrompt, LLMResponseType
-from ragelo.types.results import PairwiseEvaluationAnswer, RetrievalEvaluationAnswer
+from ragelo.types.formats import LLMInputPrompt, LLMResponseType, LLMUsage
+from ragelo.types.results import RetrievalEvaluationAnswer
 
 
 class TestOpenAIProvider:
@@ -49,7 +50,15 @@ class TestOpenAIProvider:
         assert call_args[1]["model"] == "fake_model"
         assert call_args[1]["input"] == user_prompt
         assert call_args[1]["text_format"] == RetrievalEvaluationAnswer
-        assert call_args[1]["instructions"] is None
+        assert "instructions" not in call_args[1]
+
+    @pytest.mark.parametrize("provider_fixture", ["openai_provider_structured", "openai_provider_json_mode"])
+    def test_the_billed_tokens_are_reported_with_the_cached_part_of_the_input(self, provider_fixture, request):
+        provider = request.getfixturevalue(provider_fixture)
+
+        result = provider(LLMInputPrompt(user_message="Evaluate."), response_schema=RetrievalEvaluationAnswer)
+
+        assert result.usage == LLMUsage(input_tokens=120, output_tokens=30, cached_tokens=20)
 
     def test_retrieval_evaluation_json_mode(self, openai_provider_json_mode, flexible_openai_client_mock):
         """Test retrieval evaluation with json_mode=True (JSON string via responses.create)."""
@@ -80,8 +89,8 @@ class TestOpenAIProvider:
         assert "schema" in input_arg.lower()  # Schema description should be in the prompt
 
         # Verify JSON mode response format is set
-        assert "text" in call_args[1]
         assert call_args[1]["text"]["format"]["type"] == "json_schema"
+        assert call_args[1]["text"]["format"]["strict"] is False
 
     def test_retrieval_evaluation_with_system_prompt_structured(
         self, openai_provider_structured, flexible_openai_client_mock
@@ -128,61 +137,6 @@ class TestOpenAIProvider:
         assert user_prompt in input_arg
         assert "schema" in input_arg.lower()
 
-    def test_pairwise_evaluation_structured_mode(self, openai_provider_structured, flexible_openai_client_mock):
-        """Test pairwise evaluation with structured output."""
-        # Execute
-        user_prompt = "Compare these two answers and determine which is better."
-        result = openai_provider_structured(
-            LLMInputPrompt(user_message=user_prompt),
-            response_schema=PairwiseEvaluationAnswer,
-        )
-
-        # Assert
-        assert isinstance(result, LLMResponseType)
-        assert isinstance(result.parsed_answer, PairwiseEvaluationAnswer)
-        assert result.parsed_answer.answer_a_analysis == "Answer A is comprehensive and accurate"
-        assert result.parsed_answer.answer_b_analysis == "Answer B is less detailed"
-        assert result.parsed_answer.comparison_reasoning == "Answer A provides more depth"
-        assert result.parsed_answer.winner == "A"
-
-        # Verify responses.parse was called
-        assert flexible_openai_client_mock.responses.parse.called
-        call_args = flexible_openai_client_mock.responses.parse.call_args
-        assert call_args[1]["text_format"] == PairwiseEvaluationAnswer
-
-    def test_pairwise_evaluation_json_mode(self, openai_provider_json_mode, flexible_openai_client_mock):
-        """Test pairwise evaluation with JSON mode."""
-
-        # Update mock to return pairwise data for json_mode
-        def create_side_effect_pairwise(*args, **kwargs):
-            resp = flexible_openai_client_mock.responses.create.return_value
-            resp.output_text = json.dumps(
-                {
-                    "answer_a_analysis": "Answer A is comprehensive and accurate",
-                    "answer_b_analysis": "Answer B is less detailed",
-                    "comparison_reasoning": "Answer A provides more depth",
-                    "winner": "A",
-                }
-            )
-            return resp
-
-        flexible_openai_client_mock.responses.create.side_effect = create_side_effect_pairwise
-
-        # Execute
-        user_prompt = "Compare these two answers."
-        result = openai_provider_json_mode(
-            LLMInputPrompt(user_message=user_prompt),
-            response_schema=PairwiseEvaluationAnswer,
-        )
-
-        # Assert
-        assert isinstance(result, LLMResponseType)
-        assert isinstance(result.parsed_answer, PairwiseEvaluationAnswer)
-        assert result.parsed_answer.winner == "A"
-
-        # Verify responses.create was called
-        assert flexible_openai_client_mock.responses.create.called
-
     def test_messages_list_input(self, openai_provider_structured, flexible_openai_client_mock):
         """Test provider with messages list input format."""
         # Execute
@@ -203,7 +157,7 @@ class TestOpenAIProvider:
         assert call_args[1]["input"] == messages
 
     def test_invalid_json_in_json_mode_raises_error(self, openai_provider_json_mode, flexible_openai_client_mock):
-        """Test that invalid JSON in json_mode raises the parse ValueError once retries exhaust."""
+        """Test that invalid JSON in json_mode raises the parse ValueError."""
 
         # Mock to return invalid JSON
         def create_invalid_json(*args, **kwargs):
@@ -213,7 +167,7 @@ class TestOpenAIProvider:
 
         flexible_openai_client_mock.responses.create.side_effect = create_invalid_json
 
-        # Execute & Assert - retries exhaust and reraise the underlying ValueError
+        # Execute & Assert
         with pytest.raises(ValueError) as exc_info:
             openai_provider_json_mode(
                 LLMInputPrompt(user_message="Test"),
@@ -225,7 +179,7 @@ class TestOpenAIProvider:
     def test_missing_required_field_in_json_mode_raises_error(
         self, openai_provider_json_mode, flexible_openai_client_mock
     ):
-        """Test that JSON missing required fields raises the parse ValueError once retries exhaust."""
+        """Test that JSON missing required fields raises the parse ValueError."""
 
         # Mock to return JSON missing required fields
         def create_incomplete_json(*args, **kwargs):
@@ -235,7 +189,7 @@ class TestOpenAIProvider:
 
         flexible_openai_client_mock.responses.create.side_effect = create_incomplete_json
 
-        # Execute & Assert - retries exhaust and reraise the underlying ValueError
+        # Execute & Assert
         with pytest.raises(ValueError) as exc_info:
             openai_provider_json_mode(
                 LLMInputPrompt(user_message="Test"),
@@ -247,7 +201,7 @@ class TestOpenAIProvider:
     def test_wrong_type_from_structured_mode_raises_error(
         self, openai_provider_structured, flexible_openai_client_mock
     ):
-        """Test that wrong type from structured mode raises the parse ValueError once retries exhaust."""
+        """Test that wrong type from structured mode raises the parse ValueError."""
 
         # Mock to return wrong type
         def parse_wrong_type(*args, **kwargs):
@@ -258,7 +212,7 @@ class TestOpenAIProvider:
 
         flexible_openai_client_mock.responses.parse.side_effect = parse_wrong_type
 
-        # Execute & Assert - retries exhaust and reraise the underlying ValueError
+        # Execute & Assert
         with pytest.raises(ValueError) as exc_info:
             openai_provider_structured(
                 LLMInputPrompt(user_message="Test"),
@@ -267,37 +221,32 @@ class TestOpenAIProvider:
 
         assert "OpenAI failed to parse response" in str(exc_info.value)
 
-    def test_temperature_set_to_none_for_reasoning_models(self, monkeypatch):
-        """Test that temperature is set to None for reasoning models (gpt-5, o-series)."""
-        # Test with gpt-5 model
-        config_gpt5 = OpenAIConfiguration(
-            api_key=SecretStr("fake_key"),
-            model="gpt-5-preview",
-            temperature=0.7,
-        )
-        provider_gpt5 = OpenAIProvider(config=config_gpt5)
-        assert provider_gpt5.config is not None
-        assert provider_gpt5.config.temperature is None
+    def test_json_mode_leaves_the_prompt_messages_untouched(self, openai_provider_json_mode):
+        prompt = LLMInputPrompt(messages=[{"role": "user", "content": "Evaluate this document."}])
+        openai_provider_json_mode(prompt, response_schema=RetrievalEvaluationAnswer)
+        assert prompt.messages == [{"role": "user", "content": "Evaluate this document."}]
 
-        # Test with o-series model
-        config_o = OpenAIConfiguration(
-            api_key=SecretStr("fake_key"),
-            model="o1-preview",
-            temperature=0.7,
-        )
-        provider_o = OpenAIProvider(config=config_o)
-        assert provider_o.config is not None
-        assert provider_o.config.temperature is None
+    def test_failed_request_is_attempted_once(self, openai_provider_structured, flexible_openai_client_mock):
+        flexible_openai_client_mock.responses.parse = AsyncMock(side_effect=RuntimeError("boom"))
+        with pytest.raises(ValueError, match="boom"):
+            openai_provider_structured(LLMInputPrompt(user_message="Test"), response_schema=RetrievalEvaluationAnswer)
+        assert flexible_openai_client_mock.responses.parse.await_count == 1
 
-        # Test with regular model keeps temperature
-        config_regular = OpenAIConfiguration(
-            api_key=SecretStr("fake_key"),
-            model="gpt-4o-mini",
-            temperature=0.7,
+    def test_configured_sampling_params_are_sent_as_is(self, flexible_openai_client_mock):
+        config = OpenAIConfiguration(
+            api_key=SecretStr("fake_key"), model="gpt-5.6-luna", temperature=0.7, reasoning_effort="high"
         )
-        provider_regular = OpenAIProvider(config=config_regular)
-        assert provider_regular.config
-        assert provider_regular.config.temperature == 0.7
+        provider = OpenAIProvider(config=config, client=flexible_openai_client_mock)
+        provider(LLMInputPrompt(user_message="Test"), response_schema=RetrievalEvaluationAnswer)
+        call_kwargs = flexible_openai_client_mock.responses.parse.call_args.kwargs
+        assert call_kwargs["temperature"] == 0.7
+        assert call_kwargs["reasoning"] == {"effort": "high"}
+
+    def test_unset_sampling_params_are_omitted(self, openai_provider_structured, flexible_openai_client_mock):
+        openai_provider_structured(LLMInputPrompt(user_message="Test"), response_schema=RetrievalEvaluationAnswer)
+        call_kwargs = flexible_openai_client_mock.responses.parse.call_args.kwargs
+        assert "temperature" not in call_kwargs
+        assert "reasoning" not in call_kwargs
 
 
 class TestExternalAdapterProvider:
@@ -314,73 +263,42 @@ class TestExternalAdapterProvider:
         provider = ExternalAdapterProvider(some_client=object())
         assert provider.config is None
 
-    def test_base_llm_provider_still_accepts_config(self):
-        class SimpleProvider(BaseLLMProvider):
-            async def call_async(self, input, response_schema): ...
-
-        config = LLMProviderConfig()
-        provider = SimpleProvider(config=config)
-        assert provider.config is config
-
     def test_get_config_class_resolves_union_annotation(self):
         """get_config_class() returns the concrete LLMProviderConfig subclass even when
         the class attribute is annotated as 'LLMProviderConfig | None'."""
 
         assert BaseLLMProvider.get_config_class() is LLMProviderConfig
 
-    def test_external_adapter_call_delegates_to_call_async(self):
-        """External adapter's __call__ method correctly delegates to call_async."""
 
-        expected: LLMResponseType[RetrievalEvaluationAnswer] = LLMResponseType(
-            raw_answer='{"reasoning": "ok", "score": 1}',
-            parsed_answer=RetrievalEvaluationAnswer(reasoning="ok", score=1),
+class TestLLMProviderFactoryArguments:
+    def test_an_unknown_argument_is_ignored_with_a_warning_that_names_it(self):
+        from ragelo.llm_providers import get_llm_provider
+
+        with pytest.warns(UserWarning, match="openai LLM provider ignores .* model_name, temprature"):
+            provider = get_llm_provider("openai", api_key="fake_key", model_name="gpt-4o", temprature=0)
+        assert provider.config.temperature is None
+
+    def test_components_sharing_one_set_of_arguments_are_told_what_each_ignores(self, llm_provider_mock):
+        from ragelo import get_agent_ranker, get_answer_evaluator, get_retrieval_evaluator
+
+        shared = {"llm_provider": llm_provider_mock, "rich_print": True, "include_raw_documents": True}
+        with pytest.warns(UserWarning, match="reasoner retrieval evaluator ignores .* include_raw_documents"):
+            get_retrieval_evaluator("reasoner", **shared)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            evaluator = get_answer_evaluator("pairwise", verbose=True, **shared)
+        assert evaluator.config.include_raw_documents and evaluator.config.show_results
+        with pytest.warns(UserWarning, match="elo agent ranker ignores .* k$"):
+            assert get_agent_ranker("elo", k=64).config.elo_k == 32
+
+    def test_evaluator_factory_routes_shared_arguments(self):
+        from ragelo import get_retrieval_evaluator
+
+        evaluator = get_retrieval_evaluator(
+            "reasoner", llm_provider="openai", api_key="fake_key", model="fake-model", n_processes=3
         )
-
-        class ExternalAdapterProvider(BaseLLMProvider):
-            def __init__(self, client):
-                super().__init__()
-                self.client = client
-
-            async def call_async(self, input, response_schema): ...
-
-        provider = ExternalAdapterProvider(client=object())
-        provider.call_async = AsyncMock(return_value=expected)  # type: ignore[method-assign]
-        result = provider(LLMInputPrompt(user_message="test"), RetrievalEvaluationAnswer)
-        assert result == expected
-
-
-class TestLLMProviderConfigOptionalApiKey:
-    """Tests that api_key is optional in the base config but required in OpenAIConfiguration."""
-
-    def test_llm_provider_config_can_be_created_without_api_key(self):
-        """LLMProviderConfig can now be instantiated without providing api_key."""
-
-        config = LLMProviderConfig()
-        assert getattr(config, "api_key", None) is None
-
-    def test_openai_configuration_requires_api_key(self):
-        """OpenAIConfiguration.api_key is still required (no default)."""
-
-        with pytest.raises(ValidationError):
-            OpenAIConfiguration(api_key=None)  # type: ignore
-
-
-class TestOllamaConfiguration:
-    """Tests for OllamaConfiguration validation."""
-
-    def test_ollama_configuration_requires_model(self):
-        """OllamaConfiguration without model= raises ValidationError."""
-        from ragelo.types.configurations import OllamaConfiguration
-
-        with pytest.raises(ValidationError):
-            OllamaConfiguration()  # type: ignore[call-arg]
-
-    def test_ollama_configuration_accepts_model(self):
-        """OllamaConfiguration with model= succeeds."""
-        from ragelo.types.configurations import OllamaConfiguration
-
-        config = OllamaConfiguration(model="test-model")
-        assert config.model == "test-model"
+        assert evaluator.llm_provider.config.model == "fake-model"
+        assert evaluator.config.n_processes == 3
 
 
 class TestOllamaProviderFactory:
@@ -395,6 +313,105 @@ class TestOllamaProviderFactory:
         provider = get_llm_provider("ollama", model="test-model")
         assert isinstance(provider, OllamaProvider)
         assert provider.config.model == "test-model"
+
+
+class TestOllamaProvider:
+    def test_json_mode_parses_a_valid_answer(self):
+        from ragelo.llm_providers import OllamaProvider
+        from ragelo.types.configurations import OllamaConfiguration
+
+        raw_answer = json.dumps({"reasoning": "Relevant", "score": 2})
+        client = MagicMock()
+        client.chat.completions.create = AsyncMock(
+            return_value=MagicMock(choices=[MagicMock(message=MagicMock(content=raw_answer))])
+        )
+        provider = OllamaProvider(OllamaConfiguration(model="test-model", json_mode=True), client=client)
+        prompt = LLMInputPrompt(messages=[{"role": "user", "content": "Evaluate this document."}])
+
+        result = provider(prompt, response_schema=RetrievalEvaluationAnswer)
+
+        assert result.parsed_answer == RetrievalEvaluationAnswer(reasoning="Relevant", score=2)
+        assert result.raw_answer == raw_answer
+        assert prompt.messages == [{"role": "user", "content": "Evaluate this document."}]
+        sent = client.chat.completions.create.call_args.kwargs["messages"]
+        assert "STRICTLY adheres" in sent[-1]["content"]
+
+
+class TestUsage:
+    def test_openai_usage_without_token_details_counts_no_cached_tokens(
+        self, openai_provider_structured, flexible_openai_client_mock
+    ):
+        parse = flexible_openai_client_mock.responses.parse.side_effect
+
+        def without_details(*args, **kwargs):
+            response = parse(*args, **kwargs)
+            response.usage = MagicMock(input_tokens=120, output_tokens=30, input_tokens_details=None)
+            return response
+
+        flexible_openai_client_mock.responses.parse.side_effect = without_details
+        result = openai_provider_structured(
+            LLMInputPrompt(user_message="Test"), response_schema=RetrievalEvaluationAnswer
+        )
+        assert result.usage == LLMUsage(input_tokens=120, output_tokens=30, cached_tokens=0)
+
+    def test_ollama_reports_the_prompt_and_completion_tokens(self):
+        from ragelo.llm_providers import OllamaProvider
+        from ragelo.types.configurations import OllamaConfiguration
+
+        answer = RetrievalEvaluationAnswer(reasoning="Relevant", score=2)
+        message = MagicMock(content=answer.model_dump_json(), parsed=answer)
+        client = MagicMock()
+        client.chat.completions.parse = AsyncMock(
+            return_value=MagicMock(
+                choices=[MagicMock(message=message)], usage=MagicMock(prompt_tokens=90, completion_tokens=12)
+            )
+        )
+        provider = OllamaProvider(OllamaConfiguration(model="test-model"), client=client)
+
+        result = provider(LLMInputPrompt(user_message="Test"), response_schema=RetrievalEvaluationAnswer)
+
+        assert result.usage == LLMUsage(input_tokens=90, output_tokens=12)
+
+    @pytest.mark.parametrize(
+        "raw_usage",
+        [
+            MagicMock(spec=["prompt_tokens", "completion_tokens"], prompt_tokens=90, completion_tokens=12),
+            MagicMock(spec=["input_tokens", "output_tokens"], input_tokens=90, output_tokens=12),
+        ],
+        ids=["openai style", "anthropic style"],
+    )
+    def test_instructor_reads_the_usage_either_sdk_style_reports(
+        self, instructor_provider, instructor_client_mock, raw_usage
+    ):
+        answer = RetrievalEvaluationAnswer(reasoning="Relevant", score=2)
+        object.__setattr__(answer, "_raw_response", MagicMock(usage=raw_usage))
+        instructor_client_mock.create = AsyncMock(return_value=answer)
+
+        result = instructor_provider(LLMInputPrompt(user_message="Test"), response_schema=RetrievalEvaluationAnswer)
+
+        assert result.usage == LLMUsage(input_tokens=90, output_tokens=12)
+
+
+class TestVercelProvider:
+    """Tests for the Vercel AI Gateway provider."""
+
+    def test_factory_reads_the_gateway_key(self, monkeypatch):
+        from ragelo.llm_providers import VercelProvider, get_llm_provider
+
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.setenv("AI_GATEWAY_API_KEY", "gateway-key")
+        provider = get_llm_provider("vercel", model="anthropic/claude-sonnet-5")
+        assert isinstance(provider, VercelProvider)
+        assert provider.config.api_key.get_secret_value() == "gateway-key"
+        assert provider.config.api_base == "https://ai-gateway.vercel.sh/v1"
+
+    def test_factory_ignores_the_openai_key(self, monkeypatch):
+        from ragelo.llm_providers import get_llm_provider
+
+        monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
+        monkeypatch.delenv("AI_GATEWAY_API_KEY", raising=False)
+        with pytest.raises(ValueError, match="AI_GATEWAY_API_KEY"):
+            get_llm_provider("vercel", model="anthropic/claude-sonnet-5")
 
 
 class TestInstructorProvider:
@@ -424,28 +441,6 @@ class TestInstructorProvider:
         call_args = instructor_client_mock.create.call_args
         assert call_args[1]["response_model"] == RetrievalEvaluationAnswer
 
-    def test_pairwise_evaluation(self, instructor_provider, instructor_client_mock):
-        """Test pairwise evaluation with PairwiseEvaluationAnswer schema."""
-        pytest.importorskip("instructor")
-        pairwise_answer = PairwiseEvaluationAnswer(
-            answer_a_analysis="Answer A is comprehensive and accurate",
-            answer_b_analysis="Answer B is less detailed",
-            comparison_reasoning="Answer A provides more depth",
-            winner="A",
-        )
-        instructor_client_mock.create.return_value = pairwise_answer
-
-        result = instructor_provider(
-            LLMInputPrompt(user_message="Compare these two answers."),
-            response_schema=PairwiseEvaluationAnswer,
-        )
-
-        assert isinstance(result, LLMResponseType)
-        assert isinstance(result.parsed_answer, PairwiseEvaluationAnswer)
-        assert result.parsed_answer.winner == "A"
-        call_args = instructor_client_mock.create.call_args
-        assert call_args[1]["response_model"] == PairwiseEvaluationAnswer
-
     def test_system_and_user_prompt(self, instructor_provider, instructor_client_mock):
         """Test that system and user prompts are built into the messages list correctly."""
         pytest.importorskip("instructor")
@@ -474,8 +469,12 @@ class TestInstructorProvider:
         call_args = instructor_client_mock.create.call_args
         assert call_args[1]["messages"] == messages
 
+    def test_call_leaves_the_configured_model_kwargs_untouched(self, instructor_provider):
+        instructor_provider(LLMInputPrompt(user_message="Test"), response_schema=RetrievalEvaluationAnswer)
+        assert instructor_provider.config.model_kwargs == {}
+
     def test_api_error_reraises_the_underlying_error(self, instructor_provider, instructor_client_mock):
-        """Test that an API failure raises the underlying ValueError once retries exhaust."""
+        """Test that an API failure raises the underlying ValueError."""
         pytest.importorskip("instructor")
         instructor_client_mock.create.side_effect = RuntimeError("Connection refused")
 

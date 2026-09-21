@@ -11,14 +11,22 @@ class ReasonerEvaluator(BaseRetrievalEvaluator[ReasonerEvaluatorConfig]):
     """
 
     config: ReasonerEvaluatorConfig
+    relevance_grades = (
+        (
+            "Not relevant: The document contains no information that helps answer the user question, "
+            "even if it is on the same topic or shares keywords with it."
+        ),
+        "Somewhat relevant: The document contains partial or indirect information that helps answer the user question.",
+        "Very relevant: The document contains the answer to the user question, even if surrounded by other content.",
+    )
     system_prompt = string_to_template("""
         You are an impartial expert document annotator, tasked with evaluating if a document contains relevant information to answer a question submitted by a user. 
         Your goal is to evaluate the relevancy of the documents given a user question, and write a concise reasoning for your decision.
             
         You should write one sentence reasoning wether the document is relevant or not for the user question. A document can be:
-            - Not relevant: The document is not on topic.
-            - Somewhat relevant: The document is on topic but does not fully answer the user question.
-            - Very relevant: The document is on topic and answers the user question.
+        {%- for grade in relevance_grades %}
+            - {{ grade }}
+        {%- endfor %}
         """)
 
     user_prompt = string_to_template("""

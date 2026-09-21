@@ -7,6 +7,7 @@ from typing import Any, ClassVar, Generic, TypeVar, cast, get_type_hints
 from ragelo.types import Experiment, PairwiseGameEvaluatorResult
 from ragelo.types.configurations.agent_ranker_configs import AgentRankerConfig
 from ragelo.types.types import AgentRankerTypes
+from ragelo.utils import warn_ignored_arguments
 
 logger = logging.getLogger(__name__)
 
@@ -85,11 +86,9 @@ class AgentRankerFactory:
         if ranker_name not in cls.registry:
             raise ValueError(f"Unknown Agent Ranker {ranker_name}")
         if config is None:
-            class_ = cls.registry[ranker_name]
-            type_config = class_.get_config_class()
-            valid_keys = [field for field in type_config.model_fields]
-            valid_args = {k: v for k, v in kwargs.items() if k in valid_keys}
-            config = type_config(**valid_args)
+            config_class = cls.registry[ranker_name].get_config_class()
+            warn_ignored_arguments(f"The {ranker_name} agent ranker", config_class, kwargs)
+            config = config_class(**kwargs)
         return cls.registry[ranker_name].from_config(config)
 
 

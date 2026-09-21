@@ -29,7 +29,7 @@ class RubricPairwiseEvaluator(RubricEvaluatorMixin, PairwiseAnswerEvaluator):
     config: RubricPairwiseEvaluatorConfig
     system_prompt = string_to_template(
         """
-        You are a domain expert in {{ expert_in }}.{% if company %} You work for {{ company }}.{% endif %} 
+        {% if expert_in %}You are a domain expert in {{ expert_in }}.{% endif %}{% if company %} You work for {{ company }}.{% endif %} 
         You are tasked with evaluating the quality of two {% if is_conversation %}conversations{% else %}reports{% endif %} written by two agents in response of a user's question.
         The {% if is_conversation %}conversations{% else %}reports{% endif %} are written based on a set of documents retrieved by the two agents, and should answer the user's question based on the relevant documents retrieved by the agents.
 

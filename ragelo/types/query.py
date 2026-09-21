@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import math
 import warnings
 from collections.abc import Iterator
 from typing import Any
@@ -239,7 +240,7 @@ class Query(BaseModel):
                 docs_without_relevance += 1
                 continue
             answer = getattr(document.evaluations[retrieval_evaluator_name], "answer", None)
-            if not isinstance(answer, GradedJudgment):
+            if not isinstance(answer, GradedJudgment) or not callable(answer.relevance):
                 logger.warning(f"Evaluation {answer} does not contribute a relevance label.")
                 docs_without_relevance += 1
                 continue
@@ -249,8 +250,10 @@ class Query(BaseModel):
                 docs_without_relevance += 1
                 continue
 
-            # Relevance labels must be integers: pytrec_eval rejects float qrels.
-            qrels[did] = int(score) if score >= relevance_threshold else 0
+            # Relevance labels must be integers: pytrec_eval rejects float qrels. Halves round up,
+            # as round() sends 0.5 to 0 but 1.5 to 2.
+            label = math.floor(score + 0.5)
+            qrels[did] = label if label >= relevance_threshold else 0
         if docs_without_relevance > 0:
             logger.warning(f"Query {self.qid} has {docs_without_relevance} documents without relevance.")
         if docs_without_relevance == len(self.retrieved_docs):

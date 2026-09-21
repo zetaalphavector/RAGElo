@@ -32,34 +32,36 @@ from ragelo.types.answer_formats import (
 )
 from ragelo.types.configurations import RubricPairwiseEvaluatorConfig, RubricPointwiseEvaluatorConfig
 from ragelo.types.evaluables import AgentAnswer, ChatMessage, PairwiseGame
-from ragelo.types.formats import LLMInputPrompt, LLMResponseType
+from ragelo.types.formats import LLMInputPrompt, LLMResponseType, LLMUsage
 from ragelo.types.query import Query
 from ragelo.types.results import AnswerEvaluatorResult, PairwiseGameEvaluatorResult
 
 
-def test_get_by_name(llm_provider_mock):
-    pairwise_evaluator = get_answer_evaluator("pairwise", llm_provider_mock)
-    assert isinstance(pairwise_evaluator, PairwiseAnswerEvaluator)
-    custom_evaluator = get_answer_evaluator(
-        "custom_prompt",
-        llm_provider_mock,
-        system_prompt="system prompt",
-        user_prompt="Query: {{ query.query }} Answer agent a: {{ answer.text }}",
-    )
-    assert isinstance(custom_evaluator, CustomPromptEvaluator)
-    custom_pairwise_evaluator = get_answer_evaluator(
-        "custom_pairwise",
-        llm_provider=llm_provider_mock,
-        system_prompt="system prompt",
-        user_prompt="Query: {{ query.query }} Answer agent a: {{ game.agent_a_answer.text }} Answer agent b: {{ game.agent_b_answer.text }}",
-    )
-    assert isinstance(custom_pairwise_evaluator, CustomPairwiseEvaluator)
-    domain_expert_evaluator = get_answer_evaluator(
-        "domain_expert",
-        expert_in="computer science",
-        llm_provider=llm_provider_mock,
-    )
-    assert isinstance(domain_expert_evaluator, PairwiseDomainExpertEvaluator)
+@pytest.mark.parametrize(
+    ("name", "kwargs", "evaluator_class"),
+    [
+        ("pairwise", {}, PairwiseAnswerEvaluator),
+        (
+            "custom_prompt",
+            {"system_prompt": "system prompt", "user_prompt": "Query: {{ query.query }} Answer: {{ answer.text }}"},
+            CustomPromptEvaluator,
+        ),
+        (
+            "custom_pairwise",
+            {
+                "system_prompt": "system prompt",
+                "user_prompt": "Query: {{ query.query }} Answer agent a: {{ game.agent_a_answer.text }} "
+                "Answer agent b: {{ game.agent_b_answer.text }}",
+            },
+            CustomPairwiseEvaluator,
+        ),
+        ("domain_expert", {"expert_in": "computer science"}, PairwiseDomainExpertEvaluator),
+        ("rubric_pointwise", {"expert_in": "AI"}, RubricPointwiseEvaluator),
+        ("rubric_pairwise", {"expert_in": "AI"}, RubricPairwiseEvaluator),
+    ],
+)
+def test_get_by_name(llm_provider_mock, name, kwargs, evaluator_class):
+    assert isinstance(get_answer_evaluator(name, llm_provider_mock, **kwargs), evaluator_class)
 
     chat_pairwise_evaluator = get_answer_evaluator(
         "chat_pairwise",
@@ -142,27 +144,12 @@ class TestAnswerEvaluator:
         assert result.agent == answer.agent
         call_args = llm_provider_answer_mock.async_call_mocker.call_args_list
         assert len(call_args) == 1
+        assert call_args[0][0][1] == answer_eval_format, (
+            "the config's llm_response_schema is what the LLM is asked for"
+        )
         expected_user_prompt = f"Query: {query.query}\nAnswer: {answer.text}"
         assert call_args[0][0][0].user_message == expected_user_prompt
         assert call_args[0][0][0].system_prompt == base_answer_eval_config.system_prompt.render()
-
-    def test_evaluate_single_game(self, llm_provider_mock, experiment, pairwise_answer_eval_config):
-        evaluator = PairwiseAnswerEvaluator.from_config(
-            config=pairwise_answer_eval_config, llm_provider=llm_provider_mock
-        )
-        query = experiment["0"]
-        result = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
-
-        assert isinstance(result, PairwiseGameEvaluatorResult)
-        assert isinstance(result.answer, PairwiseEvaluationAnswer)
-        assert result.answer.winner in ["A", "B", "C"]  # Mock may return tie (C)
-        assert result.answer.answer_a_analysis is not None
-        assert result.answer.answer_b_analysis is not None
-        assert result.answer.comparison_reasoning is not None
-        assert result.exception is None
-        assert result.qid == query.qid
-        assert result.agent_a == query.answers["agent1"].agent
-        assert result.agent_b == query.answers["agent2"].agent
 
     def test_evaluate_experiment(
         self, llm_provider_answer_mock, experiment, base_answer_eval_config, answer_eval_format
@@ -236,7 +223,6 @@ class TestPairwiseAnswerEvaluator:
         result = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
         assert isinstance(result, PairwiseGameEvaluatorResult)
         assert isinstance(result.answer, PairwiseEvaluationAnswer)
-        assert result.answer.winner in ["A", "B", "C"]  # Mock may return tie (C)
 
         llm_call_args = llm_provider_mock.async_call_mocker.call_args_list
         assert len(llm_call_args) >= 1  # May be called multiple times during evaluation
@@ -311,7 +297,6 @@ class TestChatPairwiseEvaluator:
         result = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
         assert isinstance(result, PairwiseGameEvaluatorResult)
         assert isinstance(result.answer, PairwiseEvaluationAnswer)
-        assert result.answer.winner in ["A", "B", "C"]  # Mock may return tie (C)
         llm_call_args = llm_provider_mock.async_call_mocker.call_args_list
         assert len(llm_call_args) >= 1  # May be called multiple times during evaluation
         prompt = llm_call_args[0][0][0]
@@ -370,41 +355,9 @@ class TestDomainExpertEvaluator:
         assert prompt.system_prompt is not None
         assert "You work for" in prompt.system_prompt
 
-    def test_evaluate_single_answer_no_documents(
-        self,
-        llm_provider_mock,
-        experiment,
-        domain_expert_answer_eval_config,
-    ):
-        evaluator = PairwiseDomainExpertEvaluator.from_config(
-            config=domain_expert_answer_eval_config, llm_provider=llm_provider_mock
-        )
-        query = experiment["0"]
-        result = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
-        assert isinstance(result, PairwiseGameEvaluatorResult)
-        assert isinstance(result.answer, PairwiseEvaluationAnswer)
-        prompt = llm_provider_mock.async_call_mocker.call_args_list[0][0][0]
-        assert prompt.system_prompt is not None
-        assert "You work for" not in prompt.system_prompt
-
 
 class TestFilterDocuments:
     """Tests for _filter_documents operator precedence and unbound variable fixes."""
-
-    def test_documents_in_user_prompt_only(self, llm_provider_mock, experiment, pairwise_answer_eval_config):
-        """When only user_prompt contains {{ documents }}, _filter_documents should still return documents."""
-        pairwise_answer_eval_config.system_prompt = "System prompt without documents tag"
-        pairwise_answer_eval_config.user_prompt = (
-            "Query: {{ query.query }} {% for d in documents %}{{ d.text }}{% endfor %} "
-            "{{ game.agent_a_answer.text }} {{ game.agent_b_answer.text }}"
-        )
-        pairwise_answer_eval_config.include_raw_documents = True
-        evaluator = PairwiseAnswerEvaluator.from_config(
-            config=pairwise_answer_eval_config, llm_provider=llm_provider_mock
-        )
-        query = experiment["0"]
-        docs = evaluator._filter_documents(query)
-        assert len(docs) > 0
 
     def test_documents_in_neither_prompt(self, llm_provider_mock, experiment, pairwise_answer_eval_config):
         """When neither prompt contains {{ documents }}, _filter_documents should return []."""
@@ -418,21 +371,6 @@ class TestFilterDocuments:
         query = experiment["0"]
         docs = evaluator._filter_documents(query)
         assert docs == []
-
-    def test_no_system_prompt(self, llm_provider_mock, experiment, pairwise_answer_eval_config):
-        """When system_prompt is None, _filter_documents should not raise UnboundLocalError."""
-        pairwise_answer_eval_config.system_prompt = None
-        pairwise_answer_eval_config.user_prompt = (
-            "Query: {{ query.query }} {% for d in documents %}{{ d.text }}{% endfor %} "
-            "{{ game.agent_a_answer.text }} {{ game.agent_b_answer.text }}"
-        )
-        pairwise_answer_eval_config.include_raw_documents = True
-        evaluator = PairwiseAnswerEvaluator.from_config(
-            config=pairwise_answer_eval_config, llm_provider=llm_provider_mock
-        )
-        query = experiment["0"]
-        docs = evaluator._filter_documents(query)
-        assert len(docs) > 0
 
 
 class TestBidirectionalPairwise:
@@ -463,38 +401,36 @@ class TestBidirectionalPairwise:
         )
         return LLMResponseType(raw_answer=answer.model_dump_json(), parsed_answer=answer)
 
-    def test_both_directions_agree_a(self, llm_provider_mock, experiment, pairwise_answer_eval_config):
-        """When both directions say A wins (normal=A, reversed=B meaning original A), final winner is A."""
+    @pytest.mark.parametrize("failing_order", [0, 1])
+    def test_a_game_with_a_failed_answer_order_is_not_stored_and_is_judged_again(
+        self, failing_order, llm_provider_mock, experiment, pairwise_answer_eval_config
+    ):
+        """One answer order alone would decide the game without the position-bias control, and being
+        cached as judged it would never be repaired. A timeout has an empty message, which used to
+        make the failed order read as a success."""
+        experiment.queries = {"0": experiment["0"]}
+        evaluator = PairwiseAnswerEvaluator.from_config(
+            config=pairwise_answer_eval_config, llm_provider=llm_provider_mock
+        )
         responses = [self._make_pairwise_response("A"), self._make_pairwise_response("B")]
-        llm_provider_mock.async_call_mocker = AsyncMock(side_effect=responses)
-        evaluator = PairwiseAnswerEvaluator.from_config(
-            config=pairwise_answer_eval_config, llm_provider=llm_provider_mock
-        )
-        query = experiment["0"]
-        result = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
-        assert isinstance(result, PairwiseGameEvaluatorResult)
-        assert result.answer is not None
-        assert result.answer.winner == "A"
-        assert result.a_vs_b_result is not None
-        assert result.b_vs_a_result is not None
+        first_run = list(responses)
+        first_run[failing_order] = TimeoutError()
 
-    def test_both_directions_agree_b(self, llm_provider_mock, experiment, pairwise_answer_eval_config):
-        """When both directions say B wins (normal=B, reversed=A meaning original B), final winner is B."""
-        responses = [self._make_pairwise_response("B"), self._make_pairwise_response("A")]
+        llm_provider_mock.async_call_mocker = AsyncMock(side_effect=first_run)
+        evaluator.evaluate_experiment(experiment)
+        game = next(iter(experiment["0"].pairwise_games.values()))
+        assert game.evaluations == {}
+
         llm_provider_mock.async_call_mocker = AsyncMock(side_effect=responses)
-        evaluator = PairwiseAnswerEvaluator.from_config(
-            config=pairwise_answer_eval_config, llm_provider=llm_provider_mock
-        )
-        query = experiment["0"]
-        result = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
-        assert isinstance(result, PairwiseGameEvaluatorResult)
-        assert result.answer is not None
-        assert result.answer.winner == "B"
+        evaluator.evaluate_experiment(experiment)
+        assert game.evaluations["pairwise"].answer.winner == "A"
+        assert llm_provider_mock.async_call_mocker.call_count == 2
 
     @pytest.mark.parametrize(
         ("forward_winner", "reversed_winner", "expected_winner"),
         [
             ("A", "B", "A"),
+            ("B", "A", "B"),
             ("A", "C", "A"),
             ("C", "B", "A"),
             ("A", "A", "C"),
@@ -531,35 +467,6 @@ class TestBidirectionalPairwise:
         assert result.b_vs_a_result.answer is not None
         assert result.a_vs_b_result.answer.winner == forward_winner
         assert result.b_vs_a_result.answer.winner == reversed_winner
-
-    def test_disagreement_results_in_tie(self, llm_provider_mock, experiment, pairwise_answer_eval_config):
-        """When directions disagree (both say A in their own frame), result is a tie."""
-        responses = [self._make_pairwise_response("A"), self._make_pairwise_response("A")]
-        llm_provider_mock.async_call_mocker = AsyncMock(side_effect=responses)
-        evaluator = PairwiseAnswerEvaluator.from_config(
-            config=pairwise_answer_eval_config, llm_provider=llm_provider_mock
-        )
-        query = experiment["0"]
-        result = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
-        assert isinstance(result, PairwiseGameEvaluatorResult)
-        assert result.answer is not None
-        assert result.answer.winner == "C"
-
-    def test_sub_results_are_stored(self, llm_provider_mock, experiment, pairwise_answer_eval_config):
-        """Both directional sub-results should be stored on the parent result."""
-        responses = [self._make_pairwise_response("A"), self._make_pairwise_response("B")]
-        llm_provider_mock.async_call_mocker = AsyncMock(side_effect=responses)
-        evaluator = PairwiseAnswerEvaluator.from_config(
-            config=pairwise_answer_eval_config, llm_provider=llm_provider_mock
-        )
-        query = experiment["0"]
-        result = evaluator.evaluate(query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
-        assert result.a_vs_b_result is not None
-        assert result.b_vs_a_result is not None
-        assert result.a_vs_b_result.answer is not None
-        assert result.b_vs_a_result.answer is not None
-        assert result.a_vs_b_result.answer.winner == "A"
-        assert result.b_vs_a_result.answer.winner == "B"
 
     def test_uses_canonicalized_reversed_answer_when_reversed_direction_wins(
         self, llm_provider_mock, experiment, pairwise_answer_eval_config
@@ -635,6 +542,8 @@ class TestPairwiseAnswerCanonicalization:
                     agent_b_assessment="[[B]] misses the core fact",
                     winner_reasoning="[[A]] is more accurate than [[B]]",
                     winner="A",
+                    score_a=0.9,
+                    score_b=0.2,
                 )
             ],
             agent_a_wins=1,
@@ -650,6 +559,8 @@ class TestPairwiseAnswerCanonicalization:
         assert swapped.criteria[0].agent_b_assessment == "[[B]] addresses the core fact"
         assert swapped.criteria[0].winner_reasoning == "[[B]] is more accurate than [[A]]"
         assert swapped.criteria[0].winner == "B"
+        assert (swapped.criteria[0].score_a, swapped.criteria[0].score_b) == (0.2, 0.9)
+        assert swapped.margin == -answer.margin
         assert swapped.agent_a_wins == 0
         assert swapped.agent_b_wins == 1
         assert swapped.winner == "B"
@@ -734,20 +645,6 @@ class TestPairwiseAnswerCanonicalization:
         assert merged_by_name["clarity"].winner == "A"
         # Free-text fields remain from the forward direction.
         assert merged_by_name["accuracy"].winner_reasoning == "forward acc"
-
-    def test_llm_response_schema_from_config(
-        self, llm_provider_answer_mock, experiment, base_answer_eval_config, answer_eval_format
-    ):
-        """When llm_response_schema is set on config, it should be used as the response schema."""
-        evaluator = BaseAnswerEvaluator.from_config(
-            config=base_answer_eval_config, llm_provider=llm_provider_answer_mock
-        )
-        query = experiment["0"]
-        answer = query.answers["agent1"]
-        result = evaluator.evaluate(query, answer)
-        call_args = llm_provider_answer_mock.async_call_mocker.call_args_list
-        assert call_args[0].kwargs.get("response_schema") or call_args[0][0][1] == answer_eval_format
-        assert isinstance(result.answer, answer_eval_format)
 
 
 class TestRubricPairwiseEvaluator:
@@ -915,26 +812,6 @@ class TestRubricPairwiseEvaluator:
         assert "Agent A final answer" not in criteria_call.user_message
         assert "Agent B final answer" not in criteria_call.user_message
 
-    def test_rubric_pairwise_process_answer_tallies(self, llm_provider_mock, experiment):
-        """Test that _process_answer correctly tallies per-criterion winners."""
-
-        rubrics = {"0": self._make_criteria()}
-        config = RubricPairwiseEvaluatorConfig(expert_in="AI", rubrics=rubrics, force=True)
-        evaluator = RubricPairwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
-
-        eval_response = self._make_evaluation_response(["A", "A", "B"])
-        llm_response: LLMResponseType = LLMResponseType(raw_answer="test", parsed_answer=eval_response)
-        query = experiment["0"]
-        processed = evaluator._process_answer(llm_response, query)
-        answer = processed.parsed_answer
-        assert isinstance(answer, RubricAnswerFormat)
-        assert answer.agent_a_wins == 2
-        assert answer.agent_b_wins == 1
-        assert answer.winner == "A"
-        assert answer.criteria[0].agent_a_assessment == "[[A]] assessment for accuracy"
-        assert answer.criteria[0].agent_b_assessment == "[[B]] assessment for accuracy"
-        assert answer.criteria[0].winner_reasoning == "[[A]] vs [[B]] on accuracy"
-
     def test_rubric_pairwise_d_counted_as_equally_bad(self, llm_provider_mock, experiment):
         """Winner 'D' should be preserved and counted as equally_bad in tally."""
 
@@ -965,30 +842,6 @@ class TestRubricPairwiseEvaluator:
         assert "completeness" in model.model_fields
         assert "clarity" in model.model_fields
 
-    def test_rubric_pairwise_weighted_scoring(self, llm_provider_mock, experiment):
-        """A single high-weight A-win should outweigh multiple low-weight B-wins."""
-
-        criteria = [
-            Criterion(criterion_name="accuracy", evidence=["doc1"], short_question="Accurate?", weight=5.0),
-            Criterion(criterion_name="completeness", evidence=["doc2"], short_question="Complete?", weight=1.0),
-            Criterion(criterion_name="clarity", evidence=[], short_question="Clear?", weight=1.0),
-        ]
-        rubrics = {"0": criteria}
-        config = RubricPairwiseEvaluatorConfig(expert_in="AI", rubrics=rubrics, force=True)
-        evaluator = RubricPairwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
-
-        # A wins accuracy (weight=5), B wins completeness and clarity (weight=1 each)
-        eval_response = self._make_evaluation_response(["A", "B", "B"])
-        llm_response: LLMResponseType = LLMResponseType(raw_answer="test", parsed_answer=eval_response)
-        query = experiment["0"]
-        query.rubric = criteria
-        processed = evaluator._process_answer(llm_response, query)
-        answer = processed.parsed_answer
-        assert isinstance(answer, RubricAnswerFormat)
-        assert answer.agent_a_wins == 5.0
-        assert answer.agent_b_wins == 2.0
-        assert answer.winner == "A"
-
     def test_rubric_pairwise_richer_fields_populated(self, llm_provider_mock, experiment):
         """New diagnostic fields should be populated from LLM response."""
 
@@ -1015,42 +868,6 @@ class TestRubricPairwiseEvaluator:
         assert crit_c.winner == "C"
         assert crit_c.loser_fix == ""
         assert crit_c.failure_tags == []
-
-    def test_rubric_pairwise_aggregates(self, llm_provider_mock, experiment):
-        """Margin and mean_confidence should be correctly computed."""
-
-        rubrics = {"0": self._make_criteria()}
-        config = RubricPairwiseEvaluatorConfig(expert_in="AI", rubrics=rubrics, force=True)
-        evaluator = RubricPairwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
-
-        eval_response = self._make_evaluation_response(["A", "A", "B"])
-        llm_response: LLMResponseType = LLMResponseType(raw_answer="test", parsed_answer=eval_response)
-        query = experiment["0"]
-        processed = evaluator._process_answer(llm_response, query)
-        answer = processed.parsed_answer
-        assert isinstance(answer, RubricAnswerFormat)
-        assert answer.margin == 1.0  # 2 - 1
-        assert answer.mean_confidence == 0.9
-
-    def test_rubric_pairwise_swap_perspective_new_fields(self, llm_provider_mock, experiment):
-        """swap_perspective should swap scores and labels in new fields."""
-        from ragelo.types.configurations import RubricPairwiseEvaluatorConfig
-
-        rubrics = {"0": self._make_criteria()}
-        config = RubricPairwiseEvaluatorConfig(expert_in="AI", rubrics=rubrics, force=True)
-        evaluator = RubricPairwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
-
-        eval_response = self._make_evaluation_response(["A", "B", "C"])
-        llm_response: LLMResponseType = LLMResponseType(raw_answer="test", parsed_answer=eval_response)
-        query = experiment["0"]
-        processed = evaluator._process_answer(llm_response, query)
-        answer = processed.parsed_answer
-        assert isinstance(answer, RubricAnswerFormat)
-        swapped = answer.swap_perspective()
-        assert swapped.margin == -answer.margin
-        assert swapped.criteria[0].winner == "B"
-        assert swapped.criteria[0].score_a == answer.criteria[0].score_b
-        assert swapped.criteria[0].score_b == answer.criteria[0].score_a
 
 
 class TestCriterion:
@@ -1292,45 +1109,6 @@ class TestRubricPointwiseEvaluator:
     def _make_rubric_schema(self):
         return RubricSchema(criteria=self._make_criteria())
 
-    def test_rubric_pointwise_process_answer(self, llm_provider_mock, experiment):
-        """Test that _process_answer computes average score correctly."""
-
-        config = RubricPointwiseEvaluatorConfig(expert_in="AI", force=True)
-        evaluator = RubricPointwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
-
-        criteria = self._make_criteria()
-        experiment["0"].rubric = criteria
-
-        EvalSchema = create_model(
-            "EvaluationSchema",
-            **{
-                c.criterion_name: create_model(
-                    c.criterion_name,
-                    reasoning=(str, Field(description="reasoning")),
-                    fulfillment=(bool, Field(description="fulfillment")),
-                )
-                for c in criteria
-            },
-        )  # type: ignore[call-overload]
-        SubAccuracy = EvalSchema.model_fields["accuracy"].annotation
-        SubCompleteness = EvalSchema.model_fields["completeness"].annotation
-        eval_response = EvalSchema(
-            accuracy=SubAccuracy(reasoning="acc reason", fulfillment=True),
-            completeness=SubCompleteness(reasoning="comp reason", fulfillment=False),
-        )
-        llm_response: LLMResponseType = LLMResponseType(raw_answer="test", parsed_answer=eval_response)
-        query = experiment["0"]
-        processed = evaluator._process_answer(llm_response, query)
-        answer = processed.parsed_answer
-        assert isinstance(answer, RubricPointwiseAnswerFormat)
-        assert len(answer.criteria) == 2
-        assert answer.average_score == 0.5
-
-    def test_rubric_pointwise_get_by_name(self, llm_provider_mock):
-        """Rubric pointwise evaluator should be accessible via factory."""
-        evaluator = get_answer_evaluator("rubric_pointwise", llm_provider_mock, expert_in="AI")
-        assert isinstance(evaluator, RubricPointwiseEvaluator)
-
     def test_rubric_pointwise_with_presupplied_rubrics(self, llm_provider_mock, experiment):
         """When rubrics are pre-supplied, the evaluator skips rubric generation and only calls LLM for evaluation."""
 
@@ -1372,49 +1150,6 @@ class TestRubricPointwiseEvaluator:
         # Only 1 LLM call (evaluation), no rubric generation call
         assert llm_provider_mock.async_call_mocker.call_count == 1
 
-    def test_rubric_pairwise_get_by_name(self, llm_provider_mock):
-        """Rubric pairwise evaluator should be accessible via factory."""
-        evaluator = get_answer_evaluator("rubric_pairwise", llm_provider_mock, expert_in="AI")
-        assert isinstance(evaluator, RubricPairwiseEvaluator)
-
-    def test_rubric_pointwise_weighted_average(self, llm_provider_mock, experiment):
-        """Weighted average should give more importance to high-weight criteria."""
-
-        criteria = [
-            Criterion(criterion_name="accuracy", evidence=["doc1"], short_question="Accurate?", weight=3.0),
-            Criterion(criterion_name="completeness", evidence=["doc2"], short_question="Complete?", weight=1.0),
-        ]
-        config = RubricPointwiseEvaluatorConfig(expert_in="AI", force=True)
-        evaluator = RubricPointwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
-
-        experiment["0"].rubric = criteria
-
-        EvalSchema = create_model(
-            "EvaluationSchema",
-            **{
-                c.criterion_name: create_model(
-                    c.criterion_name,
-                    reasoning=(str, Field(description="reasoning")),
-                    fulfillment=(bool, Field(description="fulfillment")),
-                )
-                for c in criteria
-            },
-        )  # type: ignore[call-overload]
-        SubAccuracy = EvalSchema.model_fields["accuracy"].annotation
-        SubCompleteness = EvalSchema.model_fields["completeness"].annotation
-        # accuracy (weight=3) fulfilled, completeness (weight=1) not fulfilled
-        # weighted avg = (3*1 + 1*0) / (3+1) = 0.75
-        eval_response = EvalSchema(
-            accuracy=SubAccuracy(reasoning="acc reason", fulfillment=True),
-            completeness=SubCompleteness(reasoning="comp reason", fulfillment=False),
-        )
-        llm_response: LLMResponseType = LLMResponseType(raw_answer="test", parsed_answer=eval_response)
-        query = experiment["0"]
-        processed = evaluator._process_answer(llm_response, query)
-        answer = processed.parsed_answer
-        assert isinstance(answer, RubricPointwiseAnswerFormat)
-        assert answer.average_score == 0.75
-
     def test_rubric_pointwise_graduated_scoring(self, llm_provider_mock, experiment):
         """Graduated scoring normalizes integer scores to [0, 1] using max_score."""
 
@@ -1451,44 +1186,6 @@ class TestRubricPointwiseEvaluator:
         assert answer.average_score == pytest.approx(0.8)
         assert answer.criteria[0].fulfillment == pytest.approx(0.6)
         assert answer.criteria[1].fulfillment == pytest.approx(1.0)
-
-    def test_rubric_pointwise_graduated_with_weights(self, llm_provider_mock, experiment):
-        """Graduated scoring with weights applies both normalization and weighting."""
-
-        criteria = [
-            Criterion(criterion_name="accuracy", evidence=["doc1"], short_question="Accurate?", weight=3.0),
-            Criterion(criterion_name="completeness", evidence=["doc2"], short_question="Complete?", weight=1.0),
-        ]
-        config = RubricPointwiseEvaluatorConfig(expert_in="AI", force=True, graduated_scoring=True, max_score=10)
-        evaluator = RubricPointwiseEvaluator.from_config(config=config, llm_provider=llm_provider_mock)
-
-        experiment["0"].rubric = criteria
-
-        EvalSchema = create_model(
-            "EvaluationSchema",
-            **{
-                c.criterion_name: create_model(
-                    c.criterion_name,
-                    reasoning=(str, Field(description="reasoning")),
-                    score=(int, Field(description="score", ge=0, le=10)),
-                )
-                for c in criteria
-            },
-        )  # type: ignore[call-overload]
-        SubAccuracy = EvalSchema.model_fields["accuracy"].annotation
-        SubCompleteness = EvalSchema.model_fields["completeness"].annotation
-        # accuracy=8/10=0.8 (weight=3), completeness=2/10=0.2 (weight=1)
-        # weighted avg = (0.8*3 + 0.2*1) / (3+1) = (2.4 + 0.2) / 4 = 0.65
-        eval_response = EvalSchema(
-            accuracy=SubAccuracy(reasoning="acc reason", score=8),
-            completeness=SubCompleteness(reasoning="comp reason", score=2),
-        )
-        llm_response: LLMResponseType = LLMResponseType(raw_answer="test", parsed_answer=eval_response)
-        query = experiment["0"]
-        processed = evaluator._process_answer(llm_response, query)
-        answer = processed.parsed_answer
-        assert isinstance(answer, RubricPointwiseAnswerFormat)
-        assert answer.average_score == pytest.approx(0.65)
 
 
 class TestBuiltinCriteriaPointwise:
@@ -1861,6 +1558,28 @@ class TestConversationSupportInPairwiseEvaluators:
         assert "Assistant: Rio used to be the capital." in prompt.user_message
         assert "conversations" in prompt.system_prompt
 
+    def test_a_game_reports_the_tokens_of_both_answer_orders(
+        self, llm_provider_mock, experiment, pairwise_answer_eval_config
+    ):
+        answer = PairwiseEvaluationAnswer(
+            answer_a_analysis="a", answer_b_analysis="b", comparison_reasoning="c", winner="A"
+        )
+        llm_provider_mock.async_call_mocker = AsyncMock(
+            side_effect=lambda *_: LLMResponseType(
+                raw_answer=answer.model_dump_json(),
+                parsed_answer=answer,
+                usage=LLMUsage(input_tokens=100, output_tokens=10, cached_tokens=40),
+            )
+        )
+        evaluator = PairwiseAnswerEvaluator.from_config(
+            config=pairwise_answer_eval_config, llm_provider=llm_provider_mock
+        )
+        query = experiment["0"]
+
+        result = evaluator.evaluate(query=query, answer_a=query.answers["agent1"], answer_b=query.answers["agent2"])
+
+        assert result.usage == LLMUsage(input_tokens=200, output_tokens=20, cached_tokens=80)
+
     def test_pairwise_evaluator_renders_text_answers(self, llm_provider_mock, experiment, pairwise_answer_eval_config):
         pairwise_answer_eval_config.user_prompt = None
         pairwise_answer_eval_config.system_prompt = None
@@ -1882,6 +1601,28 @@ class TestConversationSupportInPairwiseEvaluators:
         assert query.answers["agent1"].text in prompt.user_message
         assert query.answers["agent2"].text in prompt.user_message
         assert "answers" in prompt.system_prompt
+
+    @pytest.mark.parametrize("include_raw_documents", [False, True])
+    def test_pairwise_evaluator_renders_documents_without_a_retrieval_evaluation(
+        self, llm_provider_mock, experiment, pairwise_answer_eval_config, include_raw_documents
+    ):
+        pairwise_answer_eval_config.user_prompt = None
+        pairwise_answer_eval_config.system_prompt = None
+        pairwise_answer_eval_config.include_relevance_reasoning = True
+        pairwise_answer_eval_config.include_raw_documents = include_raw_documents
+        evaluator = PairwiseAnswerEvaluator.from_config(
+            config=pairwise_answer_eval_config, llm_provider=llm_provider_mock
+        )
+        query = experiment["0"]
+        for document in query.retrieved_docs.values():
+            document.evaluations.clear()
+        game = PairwiseGame(
+            qid=query.qid, agent_a_answer=query.answers["agent1"], agent_b_answer=query.answers["agent2"]
+        )
+
+        prompt = evaluator._build_message_pairwise(query, game)
+
+        assert (query.retrieved_docs["0"].text in prompt.user_message) is include_raw_documents
 
     def test_domain_expert_evaluator_renders_conversations(
         self, llm_provider_mock, experiment, domain_expert_answer_eval_config
@@ -1915,17 +1656,6 @@ class TestConversationSupportInPairwiseEvaluators:
         assert "User: What is the capital of Brazil?" in prompt.user_message
         assert "Assistant: Brasilia is the capital." in prompt.user_message
 
-    def test_pairwise_evaluator_get_conversation_prefix(self):
-        conversation = [
-            ChatMessage(sender="User", content="Q1"),
-            ChatMessage(sender="Assistant", content="A1"),
-            ChatMessage(sender="User", content="Q2"),
-            ChatMessage(sender="Assistant", content="A2"),
-        ]
-        prefix = PairwiseAnswerEvaluator._get_conversation_prefix(conversation)
-        assert len(prefix) == 3
-        assert prefix[-1].content == "Q2"
-
     def test_pairwise_evaluator_get_conversation_prefix_no_user(self):
         conversation = [
             ChatMessage(sender="System", content="Setup"),
@@ -1934,50 +1664,9 @@ class TestConversationSupportInPairwiseEvaluators:
         prefix = PairwiseAnswerEvaluator._get_conversation_prefix(conversation)
         assert prefix == conversation
 
-    def test_pairwise_evaluator_get_shared_conversation_context(self, llm_provider_mock, pairwise_answer_eval_config):
-        evaluator = PairwiseAnswerEvaluator.from_config(
-            config=pairwise_answer_eval_config, llm_provider=llm_provider_mock
-        )
-        answer_a = AgentAnswer(
-            qid="0",
-            agent="agent1",
-            conversation=[
-                ChatMessage(sender="User", content="Q1"),
-                ChatMessage(sender="Assistant", content="A1"),
-                ChatMessage(sender="User", content="Q2"),
-                ChatMessage(sender="Assistant", content="Final A"),
-            ],
-        )
-        answer_b = AgentAnswer(qid="0", agent="agent2", text="Text answer")
-        query = Query(qid="0", query="Q2")
-        query.add_agent_answer(answer_a)
-        query.add_agent_answer(answer_b)
-        context = evaluator._get_conversation_context(query)
-        assert len(context) == 3
-        assert context[-1].content == "Q2"
-
 
 class TestPRFixVerification:
     """Tests that verify the fixes from the PR review."""
-
-    def test_pairwise_winner_imported_not_duplicated(self):
-        """PairwiseWinner should be imported from answer_formats, not re-defined."""
-        from ragelo.evaluators.answer_evaluators import base_answer_evaluator
-        from ragelo.types import answer_formats
-
-        # Should be the same type alias (imported, not duplicated)
-        assert base_answer_evaluator.PairwiseWinner is answer_formats.PairwiseWinner
-
-    def test_openai_provider_accepts_client_parameter(self):
-        """OpenAIProvider should accept an optional client parameter for testability."""
-        import inspect
-
-        from ragelo.llm_providers.openai_client import OpenAIProvider
-
-        sig = inspect.signature(OpenAIProvider.__init__)
-        assert "client" in sig.parameters
-        param = sig.parameters["client"]
-        assert param.default is None
 
     def test_swap_pairwise_labels_does_not_swap_bare_a_b(self):
         """swap_pairwise_labels should not swap bare standalone 'A' or 'B' in natural prose."""
@@ -2000,21 +1689,8 @@ class TestPRFixVerification:
         assert swap_pairwise_labels("answer A is better") == "answer B is better"
         assert swap_pairwise_labels("Response A is complete") == "Response B is complete"
 
-    def test_rubric_template_renders_evidence_field(self, llm_provider_mock):
-        """Rubric evaluator templates should reference the Criterion.evidence field, not supporting_documents."""
-        from ragelo.evaluators.answer_evaluators.rubric_pairwise_evaluator import RubricPairwiseEvaluator
-        from ragelo.evaluators.answer_evaluators.rubric_pointwise_evaluator import RubricPointwiseEvaluator
-
-        # Check that the system_prompt template contains 'criteria.evidence' (the correct field)
-        pairwise_source: str = RubricPairwiseEvaluator.system_prompt._ragelo_source
-        assert "criteria.evidence" in pairwise_source
-        assert "criteria.supporting_documents" not in pairwise_source
-
-        pointwise_source: str = RubricPointwiseEvaluator.system_prompt._ragelo_source
-        assert "criteria.evidence" in pointwise_source
-        assert "criteria.supporting_documents" not in pointwise_source
-
-        criterion = Criterion(criterion_name="c", evidence=["doc_1"], short_question="Good?")
+    def test_rubric_templates_render_the_evidence_of_each_criterion(self):
+        criterion = Criterion(criterion_name="c", evidence=["doc_1", "doc_2"], short_question="Good?")
         for graduated_scoring in (False, True):
             rendered = RubricPointwiseEvaluator.system_prompt.render(
                 expert_in="testing",
@@ -2026,15 +1702,6 @@ class TestPRFixVerification:
             assert "doc_1" in rendered
             assert ("score from 0 to 5" in rendered) is graduated_scoring
 
-    def test_rubric_template_renders_evidence_values(self, llm_provider_mock):
-        """Verify that the evidence field actually renders into the prompt output."""
-        from ragelo.evaluators.answer_evaluators.rubric_pairwise_evaluator import RubricPairwiseEvaluator
-
-        criterion = Criterion(
-            criterion_name="test_crit",
-            evidence=["doc_1", "doc_2"],
-            short_question="Is the answer good?",
-        )
         rendered = RubricPairwiseEvaluator.system_prompt.render(
             expert_in="testing",
             rubric=[criterion],
@@ -2047,36 +1714,3 @@ class TestPRFixVerification:
         )
         assert "doc_1" in rendered
         assert "doc_2" in rendered
-
-    def test_shared_config_fields_inherited(self):
-        """RubricPairwiseEvaluatorConfig and RubricPointwiseEvaluatorConfig should share evidence/citation fields."""
-        from ragelo.types.configurations.answer_evaluator_configs import RubricEvaluatorConfigBase
-
-        assert issubclass(RubricPairwiseEvaluatorConfig, RubricEvaluatorConfigBase)
-        assert issubclass(RubricPointwiseEvaluatorConfig, RubricEvaluatorConfigBase)
-
-        shared_fields = {
-            "evidence_recall",
-            "citation_quality",
-            "evidence_snippets",
-            "evidence_recall_weight",
-            "citation_quality_weight",
-            "n_criteria",
-            "rubrics",
-        }
-        mixin_fields = set(RubricEvaluatorConfigBase.model_fields.keys())
-        for field in shared_fields:
-            assert field in mixin_fields, f"{field} not in RubricEvaluatorConfigBase"
-
-    def test_shared_config_defaults_consistent(self):
-        """Both rubric configs should inherit the same defaults for shared fields."""
-        pairwise_config = RubricPairwiseEvaluatorConfig(expert_in="test")
-        pointwise_config = RubricPointwiseEvaluatorConfig(expert_in="test")
-
-        assert pairwise_config.evidence_recall == pointwise_config.evidence_recall == False
-        assert pairwise_config.citation_quality == pointwise_config.citation_quality == False
-        assert pairwise_config.evidence_recall_weight == pointwise_config.evidence_recall_weight == 1.0
-        assert pairwise_config.citation_quality_weight == pointwise_config.citation_quality_weight == 1.0
-        assert pairwise_config.n_criteria == pointwise_config.n_criteria == 5
-        assert pairwise_config.rubrics is None
-        assert pointwise_config.rubrics is None

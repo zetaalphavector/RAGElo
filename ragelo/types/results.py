@@ -10,14 +10,12 @@ from ragelo.types.answer_formats import (
     EvaluationAnswer,
     PairwiseEvaluationAnswer,
     RDNAMEvaluationAnswer,
-    RDNAMMultipleAnnotatorsAnswer,
-    RDNAMMultipleAnnotatorsNoAspectsAnswer,
-    RDNAMNoAspectsAnswer,
     RetrievalEvaluationAnswer,
     RubricAnswerFormat,
     RubricCoverageAnswerFormat,
     RubricPointwiseAnswerFormat,
 )
+from ragelo.types.formats import LLMUsage
 
 
 def _resolve_legacy_answer(data: Any, members: tuple[type[EvaluationAnswer], ...]) -> Any:
@@ -60,6 +58,11 @@ class EvaluatorResult(BaseModel):
         default=None, description="Any exception captured during evaluation."
     )
     answer: EvaluationAnswer | None = Field(default=None, description="The LLM-generated evaluation content.")
+    usage: SkipJsonSchema[LLMUsage | None] = Field(
+        default=None,
+        description="The tokens the judging calls behind this result were billed for. A pairwise game adds up "
+        "both answer orders. Rubric generation and the evidence recall and citation quality checks are not counted.",
+    )
 
     @field_serializer("answer")
     def serialize_answer(self, answer: EvaluationAnswer | None, _info) -> dict[str, Any] | None:
@@ -267,7 +270,7 @@ class RetrievalComparisonResult(BaseModel):
 class RDNAMEvaluatorResult(RetrievalEvaluatorResult):
     """Specialized retrieval result for RDNAM (answer is typically RDNAMEvaluationAnswer)."""
 
-    answer: RDNAMEvaluationAnswer = Field(...)
+    answer: RDNAMEvaluationAnswer | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -299,48 +302,6 @@ class RDNAMEvaluatorResult(RetrievalEvaluatorResult):
             return f"Score: {self.answer.score}\nReasoning: {self.answer.reasoning}\
             Intent Match: {self.answer.intent_match}\nTrustworthiness: {self.answer.trustworthiness}"
         return "No answer available"
-
-
-class RDNAMNoAspectsResult(RetrievalEvaluatorResult):
-    """RDNAM result without aspects (answer is typically RDNAMNoAspectsAnswer)."""
-
-    answer: RDNAMNoAspectsAnswer
-
-    @model_validator(mode="before")
-    @classmethod
-    def validate_answer_type(cls, data: Any) -> Any:
-        return _resolve_legacy_answer(data, (RDNAMNoAspectsAnswer,))
-
-    @property
-    def score(self) -> float | None:
-        """Convenience property to access score score from the nested answer."""
-        if self.answer and hasattr(self.answer, "score"):
-            return self.answer.score  # type: ignore
-        return None
-
-
-class RDNAMMUltipleAnnotatorsResult(RetrievalEvaluatorResult):
-    """RDNAM result simulating multiple annotators (answer is typically RDNAMMultipleAnnotatorsAnswer)."""
-
-    answer: RDNAMMultipleAnnotatorsAnswer
-
-    @model_validator(mode="before")
-    @classmethod
-    def validate_answer_type(cls, data: Any) -> Any:
-        return _resolve_legacy_answer(data, (RDNAMMultipleAnnotatorsAnswer,))
-
-
-class RDNAMMultipleAnnotatorsNoAspectsResult(RetrievalEvaluatorResult):
-    """
-    RDNAM result simulating multiple annotators without aspects (typically RDNAMMultipleAnnotatorsNoAspectsAnswer).
-    """
-
-    answer: RDNAMMultipleAnnotatorsNoAspectsAnswer
-
-    @model_validator(mode="before")
-    @classmethod
-    def validate_answer_type(cls, data: Any) -> Any:
-        return _resolve_legacy_answer(data, (RDNAMMultipleAnnotatorsNoAspectsAnswer,))
 
 
 T_Result = TypeVar("T_Result", bound=EvaluatorResult)

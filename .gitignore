@@ -166,3 +166,5 @@ uv.lock
 docs/examples/notebooks/ragelo_cache/*
 ragelo_cache/*
 worktrees/*
+benchmarks/data/
+benchmarks/results/

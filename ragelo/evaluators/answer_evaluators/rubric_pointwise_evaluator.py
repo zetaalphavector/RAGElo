@@ -37,7 +37,7 @@ class RubricPointwiseEvaluator(
 
     system_prompt = string_to_template(
         """
-        You are a domain expert in {{ expert_in }}.{% if company %} You work for {{ company }}.{% endif %} 
+        {% if expert_in %}You are a domain expert in {{ expert_in }}.{% endif %}{% if company %} You work for {{ company }}.{% endif %} 
         You are tasked with evaluating the quality of a report written by a deep research agent in response of a user's question.
         The report was written based on a set of documents retrieved by the agent, and should thoroughly answer the user's question based exclusively on the relevant documents retrieved by the agent.
 
@@ -50,7 +50,9 @@ class RubricPointwiseEvaluator(
         ## Criteria
         {% for criteria in rubric %}
         Criterion: {{criteria.criterion_name}}
+        {%- if criteria.evidence %}
         Supporting Documents: {{criteria.evidence}}
+        {%- endif %}
         Short Question: {{criteria.short_question}}
         --------------------------------
         {% endfor %}

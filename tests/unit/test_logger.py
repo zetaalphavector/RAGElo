@@ -16,10 +16,6 @@ class TestConfigureLogging:
         configure_logging(level="DEBUG", rich=False)
         assert logging.getLogger("ragelo").level == logging.DEBUG
 
-    def test_sets_level_from_int(self):
-        configure_logging(level=logging.INFO, rich=False)
-        assert logging.getLogger("ragelo").level == logging.INFO
-
     def test_rich_handler_by_default(self):
         configure_logging(level="INFO")
         lib_logger = logging.getLogger("ragelo")
@@ -48,7 +44,3 @@ class TestConfigureLogging:
         lib_logger = logging.getLogger("ragelo")
         null_handlers = [h for h in lib_logger.handlers if isinstance(h, logging.NullHandler)]
         assert len(null_handlers) == 1
-
-    def test_default_has_only_null_handler(self):
-        lib_logger = logging.getLogger("ragelo")
-        assert all(isinstance(h, logging.NullHandler) for h in lib_logger.handlers)

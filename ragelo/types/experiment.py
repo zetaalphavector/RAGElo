@@ -661,7 +661,7 @@ class Experiment:
                     if retrieval_evaluator_name is not None and name != retrieval_evaluator_name:
                         continue
                     answer = evaluation.answer
-                    if not isinstance(answer, SubtopicJudgment):
+                    if not isinstance(answer, SubtopicJudgment) or not callable(answer.subtopics):
                         continue
                     for subtopic in answer.subtopics():
                         addressed.add(subtopic)

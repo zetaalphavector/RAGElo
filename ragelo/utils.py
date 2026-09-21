@@ -2,39 +2,47 @@ from __future__ import annotations
 
 import asyncio
 import re
+import threading
 import warnings
-from collections.abc import Callable, Coroutine
-from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Callable, Coroutine, Mapping
 from textwrap import dedent
 from typing import Any
 
 from jinja2 import Template
+from pydantic import BaseModel
 from tqdm import TqdmExperimentalWarning
 from tqdm.auto import tqdm
 from tqdm.rich import tqdm_rich
 
-
-def run(coroutine: Coroutine[Any, Any, Any]) -> Any:
-    """
-    Runs the given coroutine and returns its result.
-    """
-    return asyncio.run(coroutine)
+_LOOP = asyncio.new_event_loop()
+_LOOP_THREAD = threading.Thread(target=_LOOP.run_forever, daemon=True)
+_LOOP_THREAD.start()
 
 
 def call_async_fn(fn: Callable[..., Coroutine[Any, Any, Any]], *args: Any, **kwargs: Any) -> Any:
-    """
-    Calls an asynchronous function, either in the current event loop
-    or in a separate thread if no loop is running.
-    """
-    try:
-        asyncio.get_running_loop()
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            # Execute the coroutine using the `run` function in a thread pool
-            future = executor.submit(run, fn(*args, **kwargs))
-            return future.result()
-    except RuntimeError:
-        # If no running loop is detected, run the coroutine directly
-        return asyncio.run(fn(*args, **kwargs))
+    """Runs an asynchronous function to completion from synchronous code."""
+    if threading.current_thread() is _LOOP_THREAD:
+        raise RuntimeError(
+            f"{fn.__qualname__} was called through its synchronous wrapper from code that RAGElo is already "
+            "running asynchronously, which would wait on itself forever. Await the async method instead."
+        )
+    return asyncio.run_coroutine_threadsafe(fn(*args, **kwargs), _LOOP).result()
+
+
+def warn_ignored_arguments(
+    component: str, config_class: type[BaseModel], kwargs: Mapping[str, Any], stacklevel: int = 4
+) -> None:
+    """Configs ignore the arguments they do not know, so that one set of arguments can be shared between
+    components. A misspelt argument vanishes the same way, so the ignored ones are named."""
+    known = set(config_class.model_fields)
+    for field in config_class.model_fields.values():
+        alias = field.validation_alias
+        known.update([alias] if isinstance(alias, str) else getattr(alias, "choices", []))
+    ignored = sorted(set(kwargs) - known)
+    if ignored:
+        warnings.warn(
+            f"{component} ignores the arguments it does not know: {', '.join(ignored)}", stacklevel=stacklevel
+        )
 
 
 def get_pbar(
@@ -45,6 +53,11 @@ def get_pbar(
         return tqdm_rich(total=total, ncols=ncols, desc=desc, disable=disable)
     else:
         return tqdm(total=total, ncols=ncols, desc=desc, disable=disable)
+
+
+def describe_exception(error: BaseException) -> str:
+    """Never empty: a timeout has no message, and an empty string would read as no failure at all."""
+    return f"{type(error).__name__}: {error}"
 
 
 def string_to_template(src: str) -> Template:

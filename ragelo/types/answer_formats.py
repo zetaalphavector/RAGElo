@@ -113,6 +113,8 @@ class RetrievalEvaluationAnswer(EvaluationAnswer):
         description="Your relevance score for the document. 0 for non-relevant, 1 for somewhat relevant "
         "and 2 for highly relevant.",
     )
+    probabilities: SkipJsonSchema[dict[str, float] | None] = None
+    confidence: SkipJsonSchema[float | None] = None
 
     def relevance(self) -> float | int | None:
         return self.score
@@ -135,6 +137,8 @@ class AnswerEvaluationAnswer(EvaluationAnswer):
             "and is very helpful."
         ),
     )
+    probabilities: SkipJsonSchema[dict[str, float] | None] = None
+    confidence: SkipJsonSchema[float | None] = None
 
 
 class PairwiseEvaluationAnswer(EvaluationAnswer):
@@ -177,10 +181,30 @@ class PairwiseEvaluationAnswer(EvaluationAnswer):
             "'B' if the answer from agent B is better, or 'C' for a tie."
         ),
     )
+    probabilities: SkipJsonSchema[dict[str, float] | None] = None
+    confidence: SkipJsonSchema[float | None] = None
 
-    def swap_perspective(self) -> Self:
+    def averaged_with(self, other: Self) -> Self:
+        """The judgment over both answer orders: the mean distribution and its most likely winner."""
+        mine, theirs = self.probabilities or {}, other.probabilities or {}
+        probabilities = {label: (mine.get(label, 0.0) + theirs.get(label, 0.0)) / 2 for label in mine | theirs}
+        winner = max(probabilities, key=lambda label: probabilities[label])
+        if probabilities.get("A") == probabilities.get("B") == probabilities[winner]:
+            winner = "C"
+        confidences = [c for c in (self.confidence, other.confidence) if c is not None]
         return self.model_copy(
             update={
+                "winner": winner,
+                "probabilities": probabilities,
+                "confidence": sum(confidences) / len(confidences) if confidences else None,
+            }
+        )
+
+    def swap_perspective(self) -> Self:
+        swapped = {swap_pairwise_winner(label): p for label, p in (self.probabilities or {}).items()}  # type: ignore[arg-type]
+        return self.model_copy(
+            update={
+                "probabilities": swapped or None,
                 "answer_a_strengths": [swap_pairwise_labels(item) for item in self.answer_b_strengths],
                 "answer_a_weaknesses": [swap_pairwise_labels(item) for item in self.answer_b_weaknesses],
                 "answer_b_strengths": [swap_pairwise_labels(item) for item in self.answer_a_strengths],
@@ -195,72 +219,20 @@ class PairwiseEvaluationAnswer(EvaluationAnswer):
 
 
 class RDNAMEvaluationAnswer(RetrievalEvaluationAnswer):
-    """LLM-generated evaluation for RDNAM retrieval tasks."""
+    """The stored RDNAM judgment: the mean over the annotators, with the aspects when they were asked for.
+
+    The evaluator builds the schema the LLM answers from its config, so none of these fields are
+    LLM-facing.
+    """
 
     # Narrowing the discriminator in a subclass is intended: an RDNAM payload must not
     # identify itself as the base relevance format.
     answer_format: SkipJsonSchema[Literal["rdnam"]] = "rdnam"  # type: ignore[assignment]
 
     reasoning: SkipJsonSchema[str] = ""
-    score: float = Field(
-        ...,
-        description="An number between 0 and 2 representing the score of the document.",
-    )
-    intent_match: float | None = Field(
-        ...,
-        description="An number between 0 and 2 representing the match of the document to the query intent.",
-    )
-    trustworthiness: float | None = Field(
-        ..., description="An number between 0 and 2 representing the trustworthiness of the document."
-    )
-
-
-class RDNAMNoAspectsAnswer(RetrievalEvaluationAnswer):
-    """Output format for evaluating the relevance of a document to a question."""
-
-    # Narrowing the discriminator in a subclass is intended: an RDNAM payload must not
-    # identify itself as the base relevance format.
-    answer_format: SkipJsonSchema[Literal["rdnam_no_aspects"]] = "rdnam_no_aspects"  # type: ignore[assignment]
-
-    reasoning: SkipJsonSchema[str] = ""
-    score: float = Field(
-        ...,
-        description="An number between 0 and 2 representing the overall score of the document.",
-    )
-
-
-class RDNAMMultipleAnnotatorsAnswer(RetrievalEvaluationAnswer):
-    """Output format for evaluating the relevance of a document to a question by simulating 5 annotators."""
-
-    # Narrowing the discriminator in a subclass is intended: an RDNAM payload must not
-    # identify itself as the base relevance format.
-    answer_format: SkipJsonSchema[Literal["rdnam_multiple_annotators"]] = "rdnam_multiple_annotators"  # type: ignore[assignment]
-
-    score: SkipJsonSchema[float | int] = 0.0
-    reasoning: SkipJsonSchema[str] = ""
-    annotator_1: RDNAMEvaluationAnswer
-    annotator_2: RDNAMEvaluationAnswer
-    annotator_3: RDNAMEvaluationAnswer
-    annotator_4: RDNAMEvaluationAnswer
-    annotator_5: RDNAMEvaluationAnswer
-
-
-class RDNAMMultipleAnnotatorsNoAspectsAnswer(RetrievalEvaluationAnswer):
-    """Output format for evaluating the relevance of a document to a question by simulating 5 annotators."""
-
-    # Narrowing the discriminator in a subclass is intended: an RDNAM payload must not
-    # identify itself as the base relevance format.
-    answer_format: SkipJsonSchema[Literal["rdnam_multiple_annotators_no_aspects"]] = (
-        "rdnam_multiple_annotators_no_aspects"  # type: ignore[assignment]
-    )
-
-    score: SkipJsonSchema[float | int] = 0.0
-    reasoning: SkipJsonSchema[str] = ""
-    annotator_1: RDNAMNoAspectsAnswer
-    annotator_2: RDNAMNoAspectsAnswer
-    annotator_3: RDNAMNoAspectsAnswer
-    annotator_4: RDNAMNoAspectsAnswer
-    annotator_5: RDNAMNoAspectsAnswer
+    score: float
+    intent_match: float | None = None
+    trustworthiness: float | None = None
 
 
 class Criterion(BaseModel):
@@ -524,6 +496,10 @@ class CriterionEvaluationPointwise(BaseModel):
     criterion: Criterion = Field(..., description="The criterion used for evaluating the answer quality")
     reasoning: str = Field(..., description="The LLM reasoning for the score of the criterion")
     fulfillment: bool | float = Field(..., description="Whether/how much the criterion is fulfilled by the answer")
+    probability: float | None = Field(
+        default=None,
+        description="The probability of a yes behind `fulfillment`, from judges that answer with one, such as Jev.",
+    )
 
 
 class RubricPointwiseAnswerFormat(EvaluationAnswer):

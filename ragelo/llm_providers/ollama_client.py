@@ -1,19 +1,16 @@
 from __future__ import annotations
 
 import json
-import logging
 from typing import Any, TypeVar
 
 from openai import AsyncOpenAI
 from pydantic import BaseModel, ValidationError
-from tenacity import before_sleep_log, retry, stop_after_attempt, wait_random_exponential
 
 from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, LLMProviderFactory
 from ragelo.types import LLMInputPrompt, LLMResponseType
 from ragelo.types.configurations import OllamaConfiguration
+from ragelo.types.formats import LLMUsage
 from ragelo.types.types import LLMProviderTypes
-
-logger = logging.getLogger(__name__)
 
 T_Schema = TypeVar("T_Schema", bound=BaseModel)
 
@@ -32,12 +29,6 @@ class OllamaProvider(BaseLLMProvider):
         super().__init__(config)
         self.__ollama_client = client or self.__get_ollama_client(config)
 
-    @retry(
-        wait=wait_random_exponential(min=1, max=120),
-        reraise=True,
-        stop=stop_after_attempt(1),
-        before_sleep=before_sleep_log(logger=logger, log_level=logging.INFO),
-    )
     async def call_async(self, input: LLMInputPrompt, response_schema: type[BaseModel]) -> LLMResponseType:
         """Calls the Ollama Local API asynchronously.
 
@@ -54,11 +45,11 @@ class OllamaProvider(BaseLLMProvider):
                 (if response_schema is a Pydantic BaseModel)).
         """
         messages = []
+        optional_kwargs = {"temperature": self.config.temperature, "seed": self.config.seed}
         call_kwargs: dict[str, Any] = {
             "model": self.config.model,
-            "temperature": self.config.temperature,
             "max_tokens": self.config.max_tokens,
-            "seed": self.config.seed,
+            **{k: v for k, v in optional_kwargs.items() if v is not None},
         }
 
         if input.system_prompt and input.messages:
@@ -80,23 +71,20 @@ class OllamaProvider(BaseLLMProvider):
 
         call_kwargs["messages"] = messages
         if self.config.json_mode:
-            # Build a JSON schema from a Pydantic model class when available
-            if isinstance(response_schema, type) and issubclass(response_schema, BaseModel):
-                schema_dict = response_schema.model_json_schema()
-            else:
-                schema_dict = response_schema  # type: ignore
-            schema = json.dumps(schema_dict, indent=4)
-            messages[-1]["content"] += (
+            schema = json.dumps(response_schema.model_json_schema(), indent=4)
+            suffix = (
                 f"\n\nYour output should be a JSON string that STRICTLY adheres to the following schema:\n{schema}"
             )
+            last = messages[-1]
+            messages = [*messages[:-1], {**last, "content": last["content"] + suffix}]
+            call_kwargs["messages"] = messages
             call_kwargs["response_format"] = {"type": "json_object"}
             answers = await self.__ollama_client.chat.completions.create(**call_kwargs)  # type: ignore
             if not answers.choices or not answers.choices[0].message or not answers.choices[0].message.content:
                 raise ValueError("Ollama did not return any completions.")
-            parsed_answer = json.loads(answers.choices[0].message.content)
             raw_answer = answers.choices[0].message.content
             try:
-                parsed_answer = response_schema.model_validate_json(parsed_answer)
+                parsed_answer = response_schema.model_validate_json(raw_answer)
             except ValidationError as e:
                 raise ValueError(
                     f"Failed to parse raw JSON answer {raw_answer} into the response schema {response_schema}: {e}"
@@ -112,10 +100,10 @@ class OllamaProvider(BaseLLMProvider):
             parsed_answer = answers.choices[0].message.parsed
             raw_answer = answers.choices[0].message.content
 
-        return LLMResponseType(
-            raw_answer=raw_answer,
-            parsed_answer=parsed_answer,
-        )
+        usage = None
+        if answers.usage:
+            usage = LLMUsage(input_tokens=answers.usage.prompt_tokens, output_tokens=answers.usage.completion_tokens)
+        return LLMResponseType(raw_answer=raw_answer, parsed_answer=parsed_answer, usage=usage)
 
     @staticmethod
     def __get_ollama_client(ollama_config: OllamaConfiguration) -> AsyncOpenAI:

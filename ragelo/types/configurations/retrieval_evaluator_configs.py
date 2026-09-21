@@ -3,7 +3,7 @@ from __future__ import annotations
 from jinja2 import Template
 from pydantic import BaseModel, Field, field_validator
 
-from ragelo.types.configurations.base_configs import BaseEvaluatorConfig
+from ragelo.types.configurations.base_configs import BaseConfig, BaseEvaluatorConfig
 from ragelo.types.configurations.generator_configs import RubricConfigMixin
 from ragelo.types.types import RetrievalEvaluatorTypes
 from ragelo.utils import get_placeholders_and_tags, string_to_template
@@ -30,6 +30,18 @@ class BaseRetrievalEvaluatorConfig(BaseEvaluatorConfig):
         description="The user prompt to use for the evaluator. Should contain at least a {{ query.query }} and a {{ document.text }} placeholder for the query and the document text.",
     )
 
+    relevance_grades: list[str] | None = Field(
+        default=None,
+        description="What each relevance score means, from the lowest score (0) to the highest. Replaces the "
+        "evaluator's own 0 to 2 grades, so four grades make the evaluator score from 0 to 3.",
+    )
+
+    @field_validator("relevance_grades", mode="after")
+    def validate_relevance_grades(cls, grades: list[str] | None) -> list[str] | None:
+        if grades is not None and len(grades) < 2:
+            raise ValueError("relevance_grades needs at least two grades")
+        return grades
+
     @field_validator("user_prompt", mode="after")
     def validate_user_prompt(cls, prompt: Template | None) -> Template | None:
         if prompt is None:
@@ -44,8 +56,28 @@ class BaseRetrievalEvaluatorConfig(BaseEvaluatorConfig):
         return prompt
 
 
+class JevDocumentConfigMixin(BaseConfig):
+    max_document_chars: int = Field(
+        default=30_000,
+        gt=0,
+        description="Documents longer than this are cut to their first characters before Jev sees them. Jev "
+        "rejects prose beyond about 83,000 characters and number-dense text beyond about 38,000.",
+    )
+
+
 class ReasonerEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.REASONER
+
+
+class JevRetrievalEvaluatorConfig(JevDocumentConfigMixin, ReasonerEvaluatorConfig):
+    evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.JEV
+    boolean_question: bool = Field(
+        default=True,
+        description="Ask Jev one yes/no question, whether the document would be used in a report on the topic "
+        "of the user question, and scale the probability of a yes to the top grade. Set system_prompt to ask a "
+        "different yes/no question. When False, Jev scores the document over the relevance grades and the most "
+        "likely grade is kept.",
+    )
 
 
 class DomainExpertEvaluatorConfig(BaseRetrievalEvaluatorConfig):
@@ -133,5 +165,13 @@ class RDNAMEvaluatorConfig(BaseRetrievalEvaluatorConfig):
     )
     use_multiple_annotators: bool = Field(
         default=False,
-        description="Should the prompt ask the LLM to mimic multiple annotators?",
+        description="Judge every document five times, independently, and average the scores.",
     )
+
+
+class JevRDNAMEvaluatorConfig(JevDocumentConfigMixin, RDNAMEvaluatorConfig):
+    evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.JEV_RDNAM
+
+
+class JevRubricCoverageEvaluatorConfig(JevDocumentConfigMixin, RubricCoverageEvaluatorConfig):
+    evaluator_name: str | RetrievalEvaluatorTypes = RetrievalEvaluatorTypes.JEV_RUBRIC_COVERAGE

@@ -12,13 +12,13 @@ from typing import TYPE_CHECKING, Any
 from pydantic import Field, create_model
 from pydantic.json_schema import SkipJsonSchema
 
-from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider
+from ragelo.llm_providers.base_llm_provider import BaseLLMProvider, get_llm_provider, split_llm_provider_kwargs
 from ragelo.types.answer_formats import Criterion, RubricSchema
 from ragelo.types.configurations import RubricGeneratorConfig
 from ragelo.types.evaluables import ChatMessage
 from ragelo.types.formats import LLMInputPrompt
 from ragelo.types.query import Query
-from ragelo.utils import call_async_fn, get_pbar, string_to_template, with_guidelines
+from ragelo.utils import call_async_fn, get_pbar, string_to_template, warn_ignored_arguments, with_guidelines
 
 if TYPE_CHECKING:
     from ragelo.types.experiment import Experiment
@@ -40,7 +40,7 @@ class RubricGenerator:
 
     documents_system_prompt = string_to_template(
         """
-        You are a domain expert in {{ expert_in }}.{% if company %} You work for {{ company }}.{% endif %}
+        {% if expert_in %}You are a domain expert in {{ expert_in }}.{% endif %}{% if company %} You work for {{ company }}.{% endif %}
         Your task is to, given a user question and a set of relevant retrieved documents, create a rubric: the criteria that a complete answer to the question must satisfy.
         Think deeply and carefully about which questions a complete and high-quality answer to the user question should answer.
         Each criterion should be a short yes/no question that can be used to evaluate whether an answer satisfies it.
@@ -70,7 +70,7 @@ class RubricGenerator:
 
     reference_answer_system_prompt = string_to_template(
         """
-        You are a domain expert in {{ expert_in }}.{% if company %} You work for {{ company }}.{% endif %}
+        {% if expert_in %}You are a domain expert in {{ expert_in }}.{% endif %}{% if company %} You work for {{ company }}.{% endif %}
         Your task is to, given a user question and a known-correct answer to it, decompose that answer into a rubric: the criteria that a complete answer to the question must satisfy.
         Each criterion should be a short yes/no question about one piece of information a complete answer must contain.
         You should write at most {{ n_criteria }} criteria, and fewer if the correct answer does not support that many.
@@ -211,8 +211,9 @@ def get_rubric_generator(
     **kwargs,
 ) -> RubricGenerator:
     if isinstance(llm_provider, str):
-        llm_provider = get_llm_provider(llm_provider, **kwargs)
+        provider_kwargs, kwargs = split_llm_provider_kwargs(llm_provider, kwargs)
+        llm_provider = get_llm_provider(llm_provider, **provider_kwargs)
     if config is None:
-        valid_keys = [field for field in RubricGeneratorConfig.model_fields]
-        config = RubricGeneratorConfig(**{k: v for k, v in kwargs.items() if k in valid_keys})
+        warn_ignored_arguments("The rubric generator", RubricGeneratorConfig, kwargs, stacklevel=3)
+        config = RubricGeneratorConfig(**kwargs)
     return RubricGenerator(config, llm_provider)

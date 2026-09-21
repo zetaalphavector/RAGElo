@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+import typer
 from typer.testing import CliRunner
 
 from ragelo.cli.cli import app
@@ -300,3 +302,46 @@ def test_run_expert_pairwise_cli(mock_llm_provider_factory):
     assert not Path(f"ragelo_cache/{experiment_name}.json").exists()
 
     _cleanup_files(output_file, results_file)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        ["run-all"],
+        ["retrieval-evaluator", "reasoner"],
+        ["retrieval-evaluator", "domain-expert"],
+        ["retrieval-evaluator", "rdnam"],
+        ["answer-evaluator", "pairwise"],
+        ["answer-evaluator", "expert-pairwise"],
+    ],
+)
+def test_every_command_takes_a_model(command):
+    """Read from the command's options: the rendered help is styled, and CI colours split the option name."""
+    cli = typer.main.get_command(app)
+    for name in command:
+        cli = cli.commands[name]  # type: ignore[attr-defined]
+    assert "--model" in [option for param in cli.params for option in param.opts]
+
+
+def test_benchmark_cli_judges_a_dataset_and_reports_the_agreement(mock_llm_provider_factory, tmp_path):
+    arguments = [
+        "benchmark",
+        "llmjudge",
+        "--data-dir",
+        "tests/data/llmjudge",
+        "--split",
+        "test",
+        "--output-dir",
+        str(tmp_path),
+        "--models",
+        "gpt-x",
+        "--evaluators",
+        "reasoner",
+    ]
+
+    result = runner.invoke(app, arguments, env=ENV)
+
+    assert result.exit_code == 0
+    assert "Agreement with the human labels on the 2 of 2 pairs every row judged" in result.stdout
+    assert (tmp_path / "test_all_reasoner_gpt-x_results.jsonl").exists()
+    assert runner.invoke(app, arguments[:-4], env=ENV).exit_code != 0, "models and evaluators are required"

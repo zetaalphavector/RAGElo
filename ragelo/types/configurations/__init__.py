@@ -3,6 +3,10 @@ from ragelo.types.configurations.answer_evaluator_configs import (
     BaseAnswerEvaluatorConfig,
     CustomPairwiseEvaluatorConfig,
     CustomPromptAnswerEvaluatorConfig,
+    JevAnswerEvaluatorConfig,
+    JevPairwiseEvaluatorConfig,
+    JevRubricPairwiseEvaluatorConfig,
+    JevRubricPointwiseEvaluatorConfig,
     PairwiseDomainExpertEvaluatorConfig,
     PairwiseEvaluatorConfig,
     RubricEvaluatorConfigBase,
@@ -10,19 +14,27 @@ from ragelo.types.configurations.answer_evaluator_configs import (
     RubricPointwiseEvaluatorConfig,
 )
 from ragelo.types.configurations.base_configs import BaseConfig, BaseEvaluatorConfig
+from ragelo.types.configurations.benchmark_configs import BenchmarkDatasetConfig, TrecRag24AnswersDatasetConfig
 from ragelo.types.configurations.cli_configs import CLIConfig
 from ragelo.types.configurations.generator_configs import RubricConfigMixin, RubricGeneratorConfig, RubricSource
 from ragelo.types.configurations.llm_provider_configs import (
     InstructorConfiguration,
+    JevConfiguration,
     LLMProviderConfig,
     OllamaConfiguration,
     OpenAIConfiguration,
+    TypeSafeConfiguration,
+    VercelConfiguration,
+    VercelJevConfiguration,
 )
 from ragelo.types.configurations.retrieval_evaluator_configs import (
     BaseRetrievalEvaluatorConfig,
     CustomPromptEvaluatorConfig,
     DomainExpertEvaluatorConfig,
     FewShotEvaluatorConfig,
+    JevRDNAMEvaluatorConfig,
+    JevRetrievalEvaluatorConfig,
+    JevRubricCoverageEvaluatorConfig,
     RDNAMEvaluatorConfig,
     ReasonerEvaluatorConfig,
     RubricCoverageEvaluatorConfig,
@@ -34,6 +46,7 @@ __all__ = [
     "BaseConfig",
     "BaseEvaluatorConfig",
     "BaseRetrievalEvaluatorConfig",
+    "BenchmarkDatasetConfig",
     "CLIConfig",
     "CustomPairwiseEvaluatorConfig",
     "CustomPromptAnswerEvaluatorConfig",
@@ -42,6 +55,14 @@ __all__ = [
     "EloAgentRankerConfig",
     "FewShotEvaluatorConfig",
     "InstructorConfiguration",
+    "JevAnswerEvaluatorConfig",
+    "JevConfiguration",
+    "JevPairwiseEvaluatorConfig",
+    "JevRDNAMEvaluatorConfig",
+    "JevRetrievalEvaluatorConfig",
+    "JevRubricCoverageEvaluatorConfig",
+    "JevRubricPairwiseEvaluatorConfig",
+    "JevRubricPointwiseEvaluatorConfig",
     "LLMProviderConfig",
     "OllamaConfiguration",
     "OpenAIConfiguration",
@@ -56,4 +77,8 @@ __all__ = [
     "RubricPairwiseEvaluatorConfig",
     "RubricPointwiseEvaluatorConfig",
     "RubricSource",
+    "TrecRag24AnswersDatasetConfig",
+    "TypeSafeConfiguration",
+    "VercelConfiguration",
+    "VercelJevConfiguration",
 ]

@@ -12,14 +12,20 @@ from ragelo.utils import string_to_template
 @RetrievalEvaluatorFactory.register(RetrievalEvaluatorTypes.DOMAIN_EXPERT)
 class DomainExpertEvaluator(BaseRetrievalEvaluator[DomainExpertEvaluatorConfig]):
     config: DomainExpertEvaluatorConfig
+    relevance_grades = (
+        "the document is not relevant to the query",
+        "the document is somewhat relevant to the query",
+        "the document is highly relevant to the query",
+    )
 
     system_prompt = string_to_template("""
         You are a domain expert in {{ expert_in }}.{% if company %} You work for {{ company }}.{% endif %} You are tasked with evaluating the performance of a retrieval system for question answering in this domain. The question answering system will be used by internal users{% if company %} of {{ company }}{% endif %}{% if domain_short %} but it also serves some of your external users like {{ domain_short }}{% endif %}. 
         These users are interested in a retrieval system that provides relevant passages based on their questions.
 
         ## Evaluation Guidelines
-        Please think in steps about the relevance of the retrieved document given the original query. Consider the query, the document title (if available), and the document passage. Reason whether the document is not relevant to the query, somewhat relevant to the query, or highly relevant to the query.
+        Please think in steps about the relevance of the retrieved document given the original query. Consider the query, the document title (if available), and the document passage.{% if not custom_grades %} Reason whether the document is not relevant to the query, somewhat relevant to the query, or highly relevant to the query.{% endif %}
         Use the following guidelines to reason about the relevance of the retrieved document:
+        {%- if not custom_grades %}
         - Not Relevant:
             The document contains information that is unrelated, outdated, or completely irrelevant to the query.
             The document may contain some keywords or phrases from the query, but the context and overall meaning do not align with the query's intent.
@@ -32,16 +38,17 @@ class DomainExpertEvaluator(BaseRetrievalEvaluator[DomainExpertEvaluatorConfig])
             The document directly addresses the main points of the query and provides comprehensive and accurate information.
             The document may cite relevant information directly applicable to the query.
             The document may be recent and from the same field as the query, enhancing its relevance.
+        {%- endif %}
         General Guidelines:
             - Context Matters: Annotators should evaluate the relevance of documents within the specific context provided by the query. Understanding the 
             - nuances and domain-specific terminology is essential.
             - Content Overlap: Consider the extent of content overlap between the document and the query. Assess whether the document covers the core aspects of the query or only peripheral topics.
             - Neutrality: Base judgments solely on the content's relevance and avoid any personal opinions or biases.
             - Uncertainty: If uncertain about a relevance judgement, annotators default to a lower relevance.
-        Given the analysis above, assign a relevance score of 0, 1, or 2 to the retrieved document for this query, where:
-        - 0: the document is not relevant to the query
-        - 1: the document is somewhat relevant to the query
-        - 2: the document is highly relevant to the query""")
+        Given the analysis above, assign a relevance score of {{ range(max_score) | join(", ") }}, or {{ max_score }} to the retrieved document for this query, where:
+        {%- for grade in relevance_grades %}
+        - {{ loop.index0 }}: {{ grade }}
+        {%- endfor %}""")
 
     user_prompt = string_to_template("""
         User query:
@@ -51,9 +58,7 @@ class DomainExpertEvaluator(BaseRetrievalEvaluator[DomainExpertEvaluatorConfig])
         {{ document.text }}""")
 
     def _build_message(self, query: Query, document: Document) -> LLMInputPrompt:
-        context = {
-            "query": query,
-            "document": document,
+        context = self._prompt_context(query, document) | {
             "expert_in": self.config.expert_in,
             "company": self.config.company,
             "domain_short": self.config.domain_short,

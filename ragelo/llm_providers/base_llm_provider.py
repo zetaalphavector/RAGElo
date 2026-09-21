@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import os
 from abc import ABC, abstractmethod
-from typing import ClassVar, TypeVar, get_type_hints
+from typing import Any, ClassVar, TypeVar, get_type_hints
 
 from pydantic import BaseModel
 
 from ragelo.types.configurations import LLMProviderConfig
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType
 from ragelo.types.types import LLMProviderTypes
-from ragelo.utils import call_async_fn
+from ragelo.utils import call_async_fn, warn_ignored_arguments
 
 T_Schema = TypeVar("T_Schema", bound=BaseModel)
 
@@ -84,7 +84,6 @@ class LLMProviderFactory:
         if config is None:
             class_ = cls.registry[name]
             type_config = class_.get_config_class()
-            valid_keys = [field for field in type_config.model_fields]
             if "api_key" not in kwargs and "api_key" in type_config.model_fields:
                 api_key = os.environ.get(class_.api_key_env_var)
                 if not api_key:
@@ -96,9 +95,16 @@ class LLMProviderFactory:
                     else:
                         api_key = api_key_field.default
                 kwargs["api_key"] = api_key
-            valid_args = {k: v for k, v in kwargs.items() if k in valid_keys}
-            config = type_config(**valid_args)
+            warn_ignored_arguments(f"The {name} LLM provider", type_config, kwargs)
+            config = type_config(**kwargs)
         return cls.registry[name].from_config(config)
+
+
+def split_llm_provider_kwargs(name: str, kwargs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Splits kwargs shared with another component into the named provider's arguments and the rest."""
+    fields = LLMProviderFactory.registry[LLMProviderTypes(name)].get_config_class().model_fields
+    provider_kwargs = {k: v for k, v in kwargs.items() if k in fields}
+    return provider_kwargs, {k: v for k, v in kwargs.items() if k not in fields}
 
 
 def get_llm_provider(
