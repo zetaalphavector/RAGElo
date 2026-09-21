@@ -1,81 +1,60 @@
-"""Parse arguments for the cli app"""
+"""Typer commands that take one config object, with one CLI parameter per field of that config."""
 
 from __future__ import annotations
 
 import collections.abc
+import functools
 import inspect
 from collections.abc import Callable
-from typing import Any, get_args, get_origin, get_type_hints
+from types import NoneType, UnionType
+from typing import Any, Union, get_args, get_origin, get_type_hints
 
-from typer.models import ArgumentInfo, OptionInfo, ParameterInfo, ParamMeta
+from jinja2 import Template
+from pydantic.fields import FieldInfo
+from typer.models import ArgumentInfo, OptionInfo
 
 from ragelo.types import BaseConfig
 
-arguments = {
-    "queries_csv_file",
-    "documents_csv_file",
-    "answers_csv_file",
-    "domain_long",
-}
 
-ignore_args = {"llm_response_schema", "system_prompt", "user_prompt", "result_type"}
+def cli_type(field: FieldInfo) -> Any | None:
+    """The type Typer parses the field as. None for a field the command line cannot express."""
+    parsed = field.annotation
+    if get_origin(parsed) in (Union, UnionType):
+        parsed = next(choice for choice in get_args(parsed) if choice is not NoneType)
+    if parsed in (NoneType, Template) or get_origin(parsed) in (dict, type, collections.abc.Callable):
+        return None
+    return parsed
 
 
-def get_params_from_function(func: Callable[..., Any]) -> dict[str, ParamMeta]:
-    signature = inspect.signature(func, eval_str=True)
-    type_hints = get_type_hints(func)
-
-    params = {}
-
-    for param in signature.parameters.values():
-        annotation = param.annotation
-        if param.name == "kwargs" or param.name == "args":
+def config_parameters(config_class: type[BaseConfig]) -> list[inspect.Parameter]:
+    parameters = []
+    for name, field in config_class.model_fields.items():
+        parsed = cli_type(field)
+        if parsed is None:
             continue
-        if param.name in type_hints:
-            annotation = type_hints[param.name]
-        if inspect.isclass(annotation) and issubclass(annotation, BaseConfig):
-            fields = annotation.model_fields
-            for k, v in fields.items():
-                if k in ignore_args:
-                    continue
-                description = v.description
-                _type = v.annotation
-                _outer_type = v.annotation
-                t_args = get_args(_type)
-                if get_origin(_outer_type) is list:
-                    _type = _outer_type
-                if get_origin(_outer_type) is type(None) or _type is type(None):
-                    continue
-                if get_origin(_outer_type) is dict:
-                    continue
-
-                if not isinstance(v, ParameterInfo):
-                    if len(t_args) > 1:
-                        # To resolve the True argument type, first remove any NoneType from the list of types"
-                        _t_args = [t for t in t_args if t is not type(None)]
-                        if len(_t_args) == 1:
-                            _type = _t_args[0]
-                        if (
-                            get_origin(_outer_type) == collections.abc.Callable
-                            or get_origin(_type) == collections.abc.Callable
-                        ):
-                            # ignore the callable type and move on.
-                            continue
-                        elif len(_t_args) > 1:
-                            _type = _t_args[0]
-                    if k in arguments:
-                        argument = ArgumentInfo(default=v.default, help=description)
-                        params[k] = ParamMeta(name=k, default=argument, annotation=_type)
-                    else:
-                        option = OptionInfo(
-                            default=v.default,
-                            default_factory=v.default_factory,  # type: ignore
-                            help=description,
-                        )
-                        params[k] = ParamMeta(name=k, default=option, annotation=_type)
-                else:
-                    params[k] = ParamMeta(name=k, default=v, annotation=_type)
-
+        if any(isinstance(marker, ArgumentInfo) for marker in field.metadata):
+            default: Any = ArgumentInfo(default=field.default, help=field.description)
         else:
-            params[param.name] = ParamMeta(name=param.name, default=param.default, annotation=annotation)
-    return params
+            default = OptionInfo(
+                default=field.default,
+                default_factory=field.default_factory,  # type: ignore[arg-type]
+                help=field.description,
+            )
+        parameters.append(inspect.Parameter(name, inspect.Parameter.KEYWORD_ONLY, default=default, annotation=parsed))
+    return parameters
+
+
+def config_command(func: Callable[[Any], Any]) -> Callable[..., Any]:
+    """Typer reads a command's parameters from its signature, so the command it registers takes the fields
+    of the config, and `func` takes the config built from them."""
+    [config_name] = inspect.signature(func).parameters
+    config_class = get_type_hints(func)[config_name]
+    parameters = config_parameters(config_class)
+
+    @functools.wraps(func)
+    def command(**kwargs: Any) -> Any:
+        return func(config_class(**kwargs))
+
+    command.__signature__ = inspect.Signature(parameters)  # type: ignore[attr-defined]
+    command.__annotations__ = {parameter.name: parameter.annotation for parameter in parameters}
+    return command

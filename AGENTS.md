@@ -103,7 +103,7 @@ Jinja2 templates for all LLM prompts. Available context variables: `{{ query.que
 
 ### CLI
 
-Typer-based CLI (`ragelo/cli/`). Entry point: `ragelo = "ragelo.cli:app"`. Subcommands: `run-all`, `retrieval-evaluator <type>`, `answer-evaluator <type>`. CLI parameters are dynamically generated from Pydantic config `Field(description=...)`.
+Typer-based CLI (`ragelo/cli/`). Entry point: `ragelo = "ragelo.cli:app"`. Subcommands: `run-all`, `retrieval-evaluator <type>`, `answer-evaluator <type>`, `benchmark <dataset>` (documented in `ragelo/benchmarks/README.md`). A command takes one config object and is decorated with `@config_command` (`ragelo/cli/args.py`), which gives Typer one parameter per field of that config, with the default and the help from its `Field(description=...)`.
 
 ## Code Style (Mandatory)
 

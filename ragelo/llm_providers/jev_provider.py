@@ -32,7 +32,7 @@ class JevProvider(BaseLLMProvider):
     the jev evaluators can use it. The subclasses differ in how they reach it, and all return a `JevResponse`.
 
     Prompts that share a `batch_key` and arrive within `config.batch_wait` seconds are asked in one request, up
-    to `config.batch_size` of them, which costs fewer input tokens (benchmarks/README.md). A batch only forms
+    to `config.batch_size` of them, which costs fewer input tokens. A batch only forms
     from calls that are in flight together, so it needs `n_processes` of that size.
     """
 

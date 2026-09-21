@@ -1,7 +1,7 @@
 import typer
 
 from ragelo import Experiment, get_retrieval_evaluator
-from ragelo.cli.args import get_params_from_function
+from ragelo.cli.args import config_command
 from ragelo.cli.utils import get_cli_llm_provider, get_path
 from ragelo.logger import configure_logging
 from ragelo.types.configurations.cli_configs import (
@@ -11,14 +11,12 @@ from ragelo.types.configurations.cli_configs import (
 )
 from ragelo.types.types import RetrievalEvaluatorTypes
 
-typer.main.get_params_from_function = get_params_from_function  # type: ignore
-
-
 app = typer.Typer()
 
 
 @app.command()
-def domain_expert(config: CLIDomainExpertEvaluatorConfig = CLIDomainExpertEvaluatorConfig(), **kwargs):
+@config_command
+def domain_expert(config: CLIDomainExpertEvaluatorConfig):
     """Evaluator with a domain expert persona.
 
     This Retrieval Evaluator evaluates the relevance of documents submitted by
@@ -29,11 +27,8 @@ def domain_expert(config: CLIDomainExpertEvaluatorConfig = CLIDomainExpertEvalua
     ragelo retrieval_evaluator domain_expert queries.csv documents.csv "Chemical Engineering" --company "ChemCorp Inc."
 
     """
-    kwargs.pop("llm_response_schema", None)
-
-    config = CLIDomainExpertEvaluatorConfig(**kwargs)
     configure_logging(level="INFO", rich=config.rich_print)
-    llm_provider = get_cli_llm_provider(config.llm_provider_name, kwargs)
+    llm_provider = get_cli_llm_provider(config.llm_provider_name, config.model_dump())
 
     queries_csv_file = get_path(config.data_dir, config.queries_csv_file)
     documents_file = get_path(config.data_dir, config.documents_csv_file)
@@ -48,8 +43,6 @@ def domain_expert(config: CLIDomainExpertEvaluatorConfig = CLIDomainExpertEvalua
         clear_evaluations=config.force,
         rich_print=config.rich_print,
     )
-
-    kwargs = config.model_dump()
 
     evaluator = get_retrieval_evaluator(
         RetrievalEvaluatorTypes.DOMAIN_EXPERT, config=config, llm_provider=llm_provider
@@ -59,16 +52,11 @@ def domain_expert(config: CLIDomainExpertEvaluatorConfig = CLIDomainExpertEvalua
 
 
 @app.command()
-def reasoner(
-    config: CLIReasonerEvaluatorConfig = CLIReasonerEvaluatorConfig(),
-    **kwargs,
-):
+@config_command
+def reasoner(config: CLIReasonerEvaluatorConfig):
     """
     A document Evaluator that only outputs the reasoning for why a document is relevant.
     """
-    kwargs.pop("llm_response_schema", None)
-
-    config = CLIReasonerEvaluatorConfig(**kwargs)
     configure_logging(level="INFO", rich=config.rich_print)
 
     queries_csv_file = get_path(config.data_dir, config.queries_csv_file)
@@ -85,24 +73,19 @@ def reasoner(
         rich_print=config.rich_print,
     )
 
-    kwargs = config.model_dump()
-
-    llm_provider = get_cli_llm_provider(config.llm_provider_name, kwargs)
-
+    llm_provider = get_cli_llm_provider(config.llm_provider_name, config.model_dump())
     evaluator = get_retrieval_evaluator(RetrievalEvaluatorTypes.REASONER, config=config, llm_provider=llm_provider)
     evaluator.evaluate_experiment(experiment)
     experiment.save(output_file)
 
 
 @app.command()
-def rdnam(config: CLIRDNAMEvaluatorConfig = CLIRDNAMEvaluatorConfig(), **kwargs):
+@config_command
+def rdnam(config: CLIRDNAMEvaluatorConfig):
     """
     Evaluator based on the paper by Thomas, Spielman, Craswell and Mitra:
     Large language models can accurately predict searcher preferences.
     """
-    kwargs.pop("llm_response_schema", None)
-
-    config = CLIRDNAMEvaluatorConfig(**kwargs)
     configure_logging(level="INFO", rich=config.rich_print)
     queries_csv_file = get_path(config.data_dir, config.queries_csv_file)
     documents_file = get_path(config.data_dir, config.documents_csv_file)
@@ -118,11 +101,7 @@ def rdnam(config: CLIRDNAMEvaluatorConfig = CLIRDNAMEvaluatorConfig(), **kwargs)
         rich_print=config.rich_print,
     )
 
-    kwargs = config.model_dump()
-    kwargs.pop("llm_response_schema", None)
-
-    llm_provider = get_cli_llm_provider(config.llm_provider_name, kwargs)
-
+    llm_provider = get_cli_llm_provider(config.llm_provider_name, config.model_dump())
     evaluator = get_retrieval_evaluator(RetrievalEvaluatorTypes.RDNAM, config=config, llm_provider=llm_provider)
     evaluator.evaluate_experiment(experiment)
     experiment.save(output_file)

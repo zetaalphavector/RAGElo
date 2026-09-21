@@ -3,13 +3,15 @@ from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
-import typer
 
-from benchmarks.agreement import spearman_interval
-from benchmarks.llmjudge import LLMJudgeData, load, sample, to_experiment
-from benchmarks.run_llmjudge import EVALUATORS, Judgments, Price, common_pairs, judge, rank, usage_cells
-from benchmarks.throughput import Run, Throughput, record
 from ragelo import get_retrieval_evaluator
+from ragelo.benchmarks.agreement import spearman_interval
+from ragelo.benchmarks.datasets import get_dataset
+from ragelo.benchmarks.datasets.llmjudge import load
+from ragelo.benchmarks.datasets.retrieval import Judgments, RetrievalData, common_pairs, rank, sample
+from ragelo.benchmarks.pricing import Price, usage_cells
+from ragelo.benchmarks.throughput import Run, Throughput, record
+from ragelo.benchmarks.variants import RETRIEVAL_VARIANTS
 from ragelo.types.formats import LLMUsage
 
 DATA_DIR = Path("tests/data/llmjudge")
@@ -32,9 +34,9 @@ class TestLLMJudgeLoader:
         assert data.n_pairs == 2
 
     def test_experiment_holds_the_judged_pairs_without_the_human_labels(self, tmp_path):
-        data = load(DATA_DIR, "dev")
+        dataset = get_dataset("llmjudge", data_dir=DATA_DIR, split="dev")
 
-        experiment = to_experiment(data, "llmjudge_dev", save_path=str(tmp_path / "llmjudge_dev.json"))
+        experiment = dataset.to_experiment("llmjudge_dev", save_path=str(tmp_path / "llmjudge_dev.json"))
 
         pairs = {(query.qid, doc.did) for query in experiment for doc in query.retrieved_docs_iter()}
         assert pairs == {("q1", "p1"), ("q1", "p3")}
@@ -44,7 +46,7 @@ class TestLLMJudgeLoader:
 
     def test_sample_keeps_the_label_distribution(self):
         labels = {f"p{i}": 0 if i < 30 else 3 for i in range(40)}
-        data = LLMJudgeData(queries={"q1": "query"}, passages={did: did for did in labels}, qrels={"q1": labels})
+        data = RetrievalData(queries={"q1": "query"}, passages={did: did for did in labels}, qrels={"q1": labels})
 
         subset = sample(data, n_pairs=20)
 
@@ -56,41 +58,41 @@ class TestLLMJudgeLoader:
 class TestLLMJudgeRunner:
     # The jev variants only accept the vercel-jev provider, which tests/unit/test_jev.py covers.
     @pytest.mark.parametrize(
-        "variant", [v for v, kwargs in EVALUATORS.items() if not kwargs["evaluator_name"].startswith("jev")]
+        "variant", [v for v, kwargs in RETRIEVAL_VARIANTS.items() if not kwargs["evaluator_name"].startswith("jev")]
     )
     def test_every_variant_in_the_grid_judges_through_an_experiment(self, variant, llm_provider_mock, tmp_path):
-        data = load(DATA_DIR, "test")
-        evaluator = get_retrieval_evaluator(llm_provider=llm_provider_mock, **EVALUATORS[variant])
+        dataset = get_dataset("llmjudge", data_dir=DATA_DIR, split="test")
+        evaluator = dataset.get_evaluator(variant, llm_provider_mock)
 
-        judgments = judge(data, evaluator, f"test_{variant}_mock", tmp_path)
+        judgments = dataset.judge(evaluator, f"test_{variant}_mock", tmp_path)
 
-        assert judgments.scores["q2"].keys() == data.qrels["q2"].keys()
+        assert judgments.scores["q2"].keys() == dataset.data.qrels["q2"].keys()
 
     def test_judge_labels_every_pair_and_a_rerun_makes_no_llm_calls(self, llm_provider_mock_retrieval, tmp_path):
-        data = load(DATA_DIR, "test")
+        dataset = get_dataset("llmjudge", data_dir=DATA_DIR, split="test")
         evaluator = get_retrieval_evaluator("reasoner", llm_provider=llm_provider_mock_retrieval)
 
-        scores = judge(data, evaluator, "test_reasoner_mock", tmp_path).scores
+        scores = dataset.judge(evaluator, "test_reasoner_mock", tmp_path).scores
 
         assert scores == {"q2": {"p2": 2, "p3": 2}}
         assert llm_provider_mock_retrieval.async_call_mocker.call_count == 2
 
-        assert judge(data, evaluator, "test_reasoner_mock", tmp_path).scores == scores
+        assert dataset.judge(evaluator, "test_reasoner_mock", tmp_path).scores == scores
         assert llm_provider_mock_retrieval.async_call_mocker.call_count == 2
 
     def test_a_failed_evaluation_is_counted_and_left_out_of_the_scores(self, llm_provider_mock_retrieval, tmp_path):
-        data = load(DATA_DIR, "test")
+        dataset = get_dataset("llmjudge", data_dir=DATA_DIR, split="test")
         answer = llm_provider_mock_retrieval.async_call_mocker.side_effect
 
         def fail_on_p3(prompt, schema):
-            if data.passages["p3"] in prompt.user_message:
+            if dataset.data.passages["p3"] in prompt.user_message:
                 raise TimeoutError()
             return answer(prompt, schema)
 
         llm_provider_mock_retrieval.async_call_mocker = AsyncMock(side_effect=fail_on_p3)
         evaluator = get_retrieval_evaluator("reasoner", llm_provider=llm_provider_mock_retrieval)
 
-        judgments = judge(data, evaluator, "one_failure", tmp_path)
+        judgments = dataset.judge(evaluator, "one_failure", tmp_path)
 
         assert (judgments.scores, judgments.n_failed) == ({"q2": {"p2": 2}}, 1)
 
@@ -116,7 +118,7 @@ class TestThroughput:
 
 
 def judgments(scores: dict[str, dict[str, float]]) -> Judgments:
-    return Judgments(scores=scores, usages=[], n_failed=0, throughput=Throughput())
+    return Judgments(scores=scores, max_score=2, usages=[], n_failed=0, throughput=Throughput())
 
 
 class TestCommonPairs:
@@ -156,7 +158,7 @@ class TestCost:
         )
 
     def test_a_price_needs_a_model_and_three_rates(self):
-        with pytest.raises(typer.BadParameter):
+        with pytest.raises(ValueError):
             Price.parse("gpt-x=2,8")
 
     def test_the_table_reports_mean_tokens_and_the_cost_of_a_thousand_pairs(self):

@@ -63,9 +63,6 @@ class VercelJevProvider(JevProvider):
         return LLMResponseType(raw_answer=response.text, parsed_answer=parsed, usage=usage)
 
     async def __post(self, body: dict[str, object]) -> httpx.Response:
-        """Under load the gateway answers 503 or stops answering. Those, the other statuses worth a second try
-        and transport errors are retried with the TypeSafe SDK's backoff. The last attempt's response is
-        returned and its transport error raised."""
         headers = {
             "Authorization": f"Bearer {self.config.api_key.get_secret_value()}",
             "ai-model-id": self.config.model,

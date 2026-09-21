@@ -2,9 +2,9 @@ import json
 from pathlib import Path
 from unittest.mock import AsyncMock
 
-from benchmarks.run_trec_rag24_answers import human_scores, keep_systems, pick_systems, play
-from benchmarks.trec_rag24_answers import NUGGETS_FILE, load
 from ragelo import get_answer_evaluator
+from ragelo.benchmarks.datasets import get_dataset
+from ragelo.benchmarks.datasets.trec_rag24_answers import NUGGETS_FILE, human_scores, load, pick_systems
 from ragelo.types.answer_formats import PairwiseEvaluationAnswer
 from ragelo.types.formats import LLMResponseType
 
@@ -55,15 +55,16 @@ class TestSystemRanking:
         self, llm_provider_mock, tmp_path
     ):
         write_answers(tmp_path)
-        everything = load(tmp_path)
-        systems = ["system_11", "system_07", "system_03", "system_00"]
-        data = keep_systems(everything, systems)
+        dataset = get_dataset("trec_rag24_answers", data_dir=tmp_path, n_systems=4)
+        human = human_scores(dataset.data)
+        systems = sorted(human, reverse=True)
         llm_provider_mock.async_call_mocker = AsyncMock(side_effect=prefers_the_higher_numbered_system)
         evaluator = get_answer_evaluator("pairwise", llm_provider=llm_provider_mock)
 
-        played = play(data, evaluator, "elo", tmp_path)
+        played = dataset.judge(evaluator, "elo", tmp_path)
 
         assert (played.n_games, played.n_failed, played.ties) == (12, 0, 0)
         assert (played.agreeing, played.decided) == (12, 12)
+        assert (systems[0], systems[-1]) == ("system_11", "system_00")
         assert sorted(systems, key=lambda run: -played.elo[run]) == systems
-        assert sorted(systems, key=lambda run: -human_scores(data)[run]) == systems
+        assert sorted(systems, key=lambda run: -human[run]) == systems

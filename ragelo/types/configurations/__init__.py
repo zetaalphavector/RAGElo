@@ -14,6 +14,7 @@ from ragelo.types.configurations.answer_evaluator_configs import (
     RubricPointwiseEvaluatorConfig,
 )
 from ragelo.types.configurations.base_configs import BaseConfig, BaseEvaluatorConfig
+from ragelo.types.configurations.benchmark_configs import BenchmarkDatasetConfig, TrecRag24AnswersDatasetConfig
 from ragelo.types.configurations.cli_configs import CLIConfig
 from ragelo.types.configurations.generator_configs import RubricConfigMixin, RubricGeneratorConfig, RubricSource
 from ragelo.types.configurations.llm_provider_configs import (
@@ -45,6 +46,7 @@ __all__ = [
     "BaseConfig",
     "BaseEvaluatorConfig",
     "BaseRetrievalEvaluatorConfig",
+    "BenchmarkDatasetConfig",
     "CLIConfig",
     "CustomPairwiseEvaluatorConfig",
     "CustomPromptAnswerEvaluatorConfig",
@@ -75,6 +77,7 @@ __all__ = [
     "RubricPairwiseEvaluatorConfig",
     "RubricPointwiseEvaluatorConfig",
     "RubricSource",
+    "TrecRag24AnswersDatasetConfig",
     "TypeSafeConfiguration",
     "VercelConfiguration",
     "VercelJevConfiguration",

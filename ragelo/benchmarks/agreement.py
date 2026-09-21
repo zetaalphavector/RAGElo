@@ -8,7 +8,12 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
-from scipy.stats import spearmanr
+try:
+    from scipy.stats import kendalltau, spearmanr
+
+    _SCIPY_AVAILABLE = True
+except ImportError:
+    _SCIPY_AVAILABLE = False
 
 Qrels = Mapping[str, Mapping[str, float]]
 
@@ -53,8 +58,8 @@ def agreement(reference: Qrels, judged: Qrels, max_label: int = 2, relevant_from
         ),
         kappa_graded=cohen_kappa(graded_reference, graded_judged),
         alpha_ordinal=krippendorff_alpha_ordinal(graded_reference, graded_judged),
-        spearman=_spearman(raw_reference, raw_judged),
-        spearman_raw=_spearman(raw_reference, [score for _, score in scores]),
+        spearman=spearman(raw_reference, raw_judged),
+        spearman_raw=spearman(raw_reference, [score for _, score in scores]),
     )
 
 
@@ -81,7 +86,7 @@ def spearman_interval(
     estimates = []
     for _ in range(n_resamples):
         pairs = [pair for qid in rng.choices(qids, k=len(qids)) for pair in labels[qid]]
-        estimate = _spearman([a for a, _ in pairs], [b for _, b in pairs])
+        estimate = spearman([a for a, _ in pairs], [b for _, b in pairs])
         if not math.isnan(estimate):
             estimates.append(estimate)
     if not estimates:
@@ -91,11 +96,15 @@ def spearman_interval(
     return estimates[int(tail * len(estimates))], estimates[min(int((1 - tail) * len(estimates)), len(estimates) - 1)]
 
 
-def _spearman(a: Sequence[float], b: Sequence[float]) -> float:
+def spearman(a: Sequence[float], b: Sequence[float]) -> float:
     """nan for a constant side, which scipy also returns, but with a warning per call."""
     if len(set(a)) < 2 or len(set(b)) < 2:
         return math.nan
     return float(spearmanr(a, b).statistic)
+
+
+def kendall_tau(a: Sequence[float], b: Sequence[float]) -> float:
+    return float(kendalltau(a, b).statistic)
 
 
 def cohen_kappa(a: Sequence[int], b: Sequence[int]) -> float:

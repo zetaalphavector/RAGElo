@@ -33,7 +33,6 @@ class JevRetrievalEvaluator(JevEvaluatorMixin, ReasonerEvaluator):
     """Asks Jev one yes/no question about the document, or with `boolean_question=False` a score
     question over the relevance grades. The yes-probability is scaled to the top grade, so on a 0-2
     scale a document rounds to grade 2 from a probability of 0.75 and to grade 1 from 0.25.
-    Both defaults are measured in benchmarks/README.md.
     """
 
     config: JevRetrievalEvaluatorConfig

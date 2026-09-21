@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from benchmarks.trec_rag24 import QRELS_FILE, TOPICS_FILE, download, lines_at, load, tar_members
+from ragelo.benchmarks.datasets.trec_rag24 import QRELS_FILE, TOPICS_FILE, download, lines_at, load, tar_members
 
 
 def corpus_file(number: str, segments: list[str]) -> tuple[bytes, dict[str, int]]:

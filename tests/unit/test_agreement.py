@@ -2,7 +2,7 @@ import math
 
 import pytest
 
-from benchmarks.agreement import agreement
+from ragelo.benchmarks.agreement import agreement
 
 
 class TestAgreement:

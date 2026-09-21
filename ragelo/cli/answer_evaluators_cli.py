@@ -1,30 +1,27 @@
 import typer
 
 from ragelo import Experiment, get_answer_evaluator, get_retrieval_evaluator
-from ragelo.cli.args import get_params_from_function
+from ragelo.cli.args import config_command
 from ragelo.cli.utils import get_cli_llm_provider, get_path
 from ragelo.logger import configure_logging
 from ragelo.types import AnswerEvaluatorTypes
 from ragelo.types.configurations.cli_configs import CLIPairwiseDomainExpertEvaluatorConfig, CLIPairwiseEvaluatorConfig
 from ragelo.types.types import RetrievalEvaluatorTypes
 
-typer.main.get_params_from_function = get_params_from_function  # type: ignore
 app = typer.Typer()
 
 
 @app.command()
-def pairwise(config: CLIPairwiseEvaluatorConfig = CLIPairwiseEvaluatorConfig(), **kwargs):
+@config_command
+def pairwise(config: CLIPairwiseEvaluatorConfig):
     """An evaluator that evaluates RAG-based answers by comparing the answers of two agents to the same queries.
 
     example:
     >> ragelo answer-evaluator pairwise queries.csv answers.csv
 
     """
-    kwargs.pop("llm_response_schema", None)
-
-    config = CLIPairwiseEvaluatorConfig(**kwargs)
     configure_logging(level="INFO", rich=config.rich_print)
-    llm_provider = get_cli_llm_provider(config.llm_provider_name, kwargs)
+    llm_provider = get_cli_llm_provider(config.llm_provider_name, config.model_dump())
 
     queries_csv_file = get_path(config.data_dir, config.queries_csv_file)
     documents_file = get_path(config.data_dir, config.documents_csv_file)
@@ -41,8 +38,6 @@ def pairwise(config: CLIPairwiseEvaluatorConfig = CLIPairwiseEvaluatorConfig(), 
         clear_evaluations=config.force,
         rich_print=config.rich_print,
     )
-
-    kwargs = config.model_dump()
 
     if config.add_reasoning:
         reasoner_evaluator = get_retrieval_evaluator(
@@ -64,19 +59,14 @@ def pairwise(config: CLIPairwiseEvaluatorConfig = CLIPairwiseEvaluatorConfig(), 
 
 
 @app.command()
-def expert_pairwise(
-    config: CLIPairwiseDomainExpertEvaluatorConfig = CLIPairwiseDomainExpertEvaluatorConfig(),
-    **kwargs,
-):
+@config_command
+def expert_pairwise(config: CLIPairwiseDomainExpertEvaluatorConfig):
     """
     An evaluator that evaluates RAG-based answers by comparing answers of two agents and impersonating a domain expert.
     """
-    kwargs.pop("llm_response_schema", None)
-
-    config = CLIPairwiseDomainExpertEvaluatorConfig(**kwargs)
     configure_logging(level="INFO", rich=config.rich_print)
 
-    llm_provider = get_cli_llm_provider(config.llm_provider_name, kwargs)
+    llm_provider = get_cli_llm_provider(config.llm_provider_name, config.model_dump())
 
     queries_csv_file = get_path(config.data_dir, config.queries_csv_file)
     documents_file = get_path(config.data_dir, config.documents_csv_file)

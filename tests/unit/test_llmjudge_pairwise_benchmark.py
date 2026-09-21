@@ -1,9 +1,9 @@
 from pathlib import Path
 from unittest.mock import AsyncMock
 
-from benchmarks.llmjudge import load
-from benchmarks.run_llmjudge_pairwise import PreferencePair, judge, sample_pairs
 from ragelo import get_answer_evaluator
+from ragelo.benchmarks.datasets import get_dataset
+from ragelo.benchmarks.datasets.llmjudge_pairwise import PreferencePair
 from ragelo.types.answer_formats import PairwiseEvaluationAnswer
 from ragelo.types.formats import LLMResponseType
 
@@ -26,17 +26,18 @@ def prefers(passage: str):
 
 class TestPairwisePreferences:
     def test_pairs_put_the_higher_graded_passage_of_a_query_first(self):
-        assert sample_pairs(load(DATA_DIR, "test"), n_pairs=10) == [PreferencePair("q2", better="p2", worse="p3")]
+        dataset = get_dataset("llmjudge_pairwise", data_dir=DATA_DIR, split="test", n_samples=10)
+
+        assert dataset.pairs == [PreferencePair("q2", better="p2", worse="p3")]
 
     def test_accuracy_is_the_share_of_games_won_by_the_higher_graded_passage(self, llm_provider_mock, tmp_path):
-        data = load(DATA_DIR, "test")
-        pairs = sample_pairs(data, n_pairs=10)
+        dataset = get_dataset("llmjudge_pairwise", data_dir=DATA_DIR, split="test", n_samples=10)
         evaluator = get_answer_evaluator("pairwise", llm_provider=llm_provider_mock)
 
-        llm_provider_mock.async_call_mocker = prefers(data.passages["p2"])
-        right = judge(data, pairs, evaluator, "right", tmp_path)
-        llm_provider_mock.async_call_mocker = prefers(data.passages["p3"])
-        wrong = judge(data, pairs, evaluator, "wrong", tmp_path)
+        llm_provider_mock.async_call_mocker = prefers(dataset.data.passages["p2"])
+        right = dataset.judge(evaluator, "right", tmp_path)
+        llm_provider_mock.async_call_mocker = prefers(dataset.data.passages["p3"])
+        wrong = dataset.judge(evaluator, "wrong", tmp_path)
 
         assert (right.n_games, right.accuracy, right.ties) == (1, 1.0, 0)
         assert (wrong.n_games, wrong.accuracy, wrong.ties) == (1, 0.0, 0)
@@ -44,11 +45,11 @@ class TestPairwisePreferences:
         assert (right.points_by_grades, wrong.points_by_grades) == ({(2, 1): [1.0]}, {(2, 1): [0.0]})
 
     def test_a_tie_earns_half_a_point_in_every_breakdown(self, llm_provider_mock, tmp_path):
-        data = load(DATA_DIR, "test")
+        dataset = get_dataset("llmjudge_pairwise", data_dir=DATA_DIR, split="test", n_samples=10)
         evaluator = get_answer_evaluator("pairwise", llm_provider=llm_provider_mock)
         llm_provider_mock.async_call_mocker = prefers("a passage nobody wrote")
 
-        tied = judge(data, sample_pairs(data, n_pairs=10), evaluator, "tied", tmp_path)
+        tied = dataset.judge(evaluator, "tied", tmp_path)
 
         assert (tied.accuracy, tied.accuracy_over_queries, tied.ties) == (0.5, 0.5, 1)
         assert (tied.points_by_grades, tied.points_by_query) == ({(2, 1): [0.5]}, {"q2": [0.5]})
@@ -56,11 +57,10 @@ class TestPairwisePreferences:
     def test_a_game_with_a_failed_answer_order_counts_as_failed_and_leaves_no_accuracy(
         self, llm_provider_mock, tmp_path
     ):
-        data = load(DATA_DIR, "test")
-        pairs = sample_pairs(data, n_pairs=10)
+        dataset = get_dataset("llmjudge_pairwise", data_dir=DATA_DIR, split="test", n_samples=10)
         evaluator = get_answer_evaluator("pairwise", llm_provider=llm_provider_mock)
         llm_provider_mock.async_call_mocker = AsyncMock(side_effect=TimeoutError())
 
-        found = judge(data, pairs, evaluator, "failed", tmp_path)
+        found = dataset.judge(evaluator, "failed", tmp_path)
 
         assert (found.n_games, found.n_failed, found.accuracy) == (0, 1, None)

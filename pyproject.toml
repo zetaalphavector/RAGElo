@@ -67,7 +67,7 @@ Homepage = "https://github.com/zetaalphavector/RAGElo"
 Repository = "https://github.com/zetaalphavector/RAGElo"
 
 [tool.setuptools.packages.find]
-exclude = ["data*", "benchmarks*"]
+exclude = ["data*"]
 
 
 [tool.mypy]
@@ -92,7 +92,6 @@ fix = true
 
 [tool.ruff.lint.per-file-ignores]
 "ragelo/cli/*" = ["B008"]
-"benchmarks/run_*" = ["B008"]
 
 [tool.ruff.lint.isort]
 combine-as-imports = true

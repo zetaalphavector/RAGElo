@@ -17,7 +17,7 @@ from ragelo.types.answer_formats import EvaluationAnswer, RetrievalEvaluationAns
 from ragelo.types.configurations import BaseRetrievalEvaluatorConfig
 from ragelo.types.evaluables import Document, Evaluable
 from ragelo.types.evaluator_utils import answer_format_for
-from ragelo.types.types import RetrievalEvaluatorTypes, _result_type_registry
+from ragelo.types.types import RetrievalEvaluatorTypes, result_type_registry
 from ragelo.utils import call_async_fn, describe_exception, warn_ignored_arguments
 
 logger = logging.getLogger(__name__)
@@ -209,7 +209,7 @@ class RetrievalEvaluatorFactory:
             if evaluator_name in cls.registry:
                 logger.debug(f"Overwriting {evaluator_name} in registry")
             cls.registry[evaluator_name] = wrapped_class
-            _result_type_registry[f"retrieval:{evaluator_name}"] = wrapped_class.result_type
+            result_type_registry[f"retrieval:{evaluator_name}"] = wrapped_class.result_type
             return wrapped_class
 
         return inner_wrapper

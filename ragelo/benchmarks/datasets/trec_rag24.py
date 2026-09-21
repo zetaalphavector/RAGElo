@@ -16,7 +16,9 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import BinaryIO
 
-from benchmarks.llmjudge import LLMJudgeData, Split
+from ragelo.benchmarks.datasets.base import DatasetFactory
+from ragelo.benchmarks.datasets.retrieval import RetrievalData, RetrievalDataset
+from ragelo.types.types import BenchmarkDatasetTypes
 
 logger = logging.getLogger(__name__)
 
@@ -132,8 +134,7 @@ def download(data_dir: Path, open_range: OpenRange = open_corpus_range, n_thread
             job.result()
 
 
-def load(data_dir: Path, split: Split = "test") -> LLMJudgeData:
-    """The track has one set of judged topics, so `split` only keeps the signature of the other benchmarks."""
+def load(data_dir: Path) -> RetrievalData:
     qrels: dict[str, dict[str, int]] = {}
     for line in (data_dir / QRELS_FILE).read_text().splitlines():
         qid, _, did, label = line.split()
@@ -150,4 +151,15 @@ def load(data_dir: Path, split: Split = "test") -> LLMJudgeData:
         for did, segment in json.loads(path.read_text()).items():
             passages[did] = segment["segment"]
     qrels = {qid: {did: label for did, label in labels.items() if did in passages} for qid, labels in qrels.items()}
-    return LLMJudgeData(queries=queries, passages=passages, qrels=qrels)
+    return RetrievalData(queries=queries, passages=passages, qrels=qrels)
+
+
+@DatasetFactory.register(BenchmarkDatasetTypes.TREC_RAG24)
+class TrecRag24Dataset(RetrievalDataset):
+    data_name = "trec_rag24"
+
+    def download(self) -> None:
+        download(self.data_dir)
+
+    def load(self) -> RetrievalData:
+        return load(self.data_dir)

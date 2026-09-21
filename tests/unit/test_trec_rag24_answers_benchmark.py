@@ -4,7 +4,9 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from benchmarks.trec_rag24_answers import (
+from ragelo import get_answer_evaluator
+from ragelo.benchmarks.datasets import get_dataset
+from ragelo.benchmarks.datasets.trec_rag24_answers import (
     NUGGETS_FILE,
     Nugget,
     human_fulfillments,
@@ -12,9 +14,7 @@ from benchmarks.trec_rag24_answers import (
     nugget_score,
     rubrics,
     sample_topics,
-    to_experiment,
 )
-from ragelo import get_answer_evaluator
 from ragelo.types.formats import LLMResponseType
 
 NUGGETS = [("Paris is the capital", "vital"), ("It has two million people", "vital"), ("It is on the Seine", "okay")]
@@ -82,7 +82,8 @@ class TestNuggetsAsRubrics:
     ):
         """Judging on a 0-2 scale with the track's weights makes `average_score` the track's weighted score."""
         write_rows(tmp_path, {"run_a": ["support", "partial_support", "not_support"]})
-        data = load(tmp_path)
+        dataset = get_dataset("trec_rag24_answers", data_dir=tmp_path, n_systems=2)
+        data = dataset.data
         grades = {"nugget_01": 2, "nugget_02": 1, "nugget_03": 0}
         llm_provider_mock.async_call_mocker = AsyncMock(
             side_effect=lambda prompt, schema: LLMResponseType(
@@ -97,7 +98,7 @@ class TestNuggetsAsRubrics:
             graduated_scoring=True,
             max_score=2,
         )
-        experiment = to_experiment(data, "answers", save_path=str(tmp_path / "answers.json"))
+        experiment = dataset.to_experiment("answers", save_path=str(tmp_path / "answers.json"))
 
         evaluator.evaluate_experiment(experiment)
 

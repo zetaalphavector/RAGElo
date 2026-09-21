@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Annotated
+
+import typer
 from jinja2 import Template
 from pydantic import AliasChoices, Field
 
@@ -8,11 +12,14 @@ from ragelo.types.configurations.answer_evaluator_configs import (
     PairwiseEvaluatorConfig,
 )
 from ragelo.types.configurations.base_configs import BaseConfig
+from ragelo.types.configurations.benchmark_configs import BenchmarkDatasetConfig, TrecRag24AnswersDatasetConfig
 from ragelo.types.configurations.retrieval_evaluator_configs import (
     DomainExpertEvaluatorConfig,
     RDNAMEvaluatorConfig,
     ReasonerEvaluatorConfig,
 )
+
+Positional = Annotated[str, typer.Argument()]
 
 
 class BaseCLIConfig(BaseConfig):
@@ -24,7 +31,7 @@ class BaseCLIConfig(BaseConfig):
         default="data",
         description="The directory where the data is stored.",
     )
-    queries_csv_file: str = Field(
+    queries_csv_file: Positional = Field(
         default="queries.csv",
         description="The path to the queries CSV file. The file should contain at least the following columns: "
         "qid, query. Any additional columns will be considered as metadata.",
@@ -50,14 +57,14 @@ class BaseCLIConfig(BaseConfig):
 
 
 class CLIEvaluatorConfig(BaseCLIConfig):
-    documents_csv_file: str = Field(
+    documents_csv_file: Positional = Field(
         default="documents.csv",
         description=(
             "The path to the documents CSV file. The file should contain at least the following columns: "
             "qid, did, document. Any additional columns will be considered as metadata."
         ),
     )
-    answers_csv_file: str = Field(
+    answers_csv_file: Positional = Field(
         default="answers.csv",
         description="The path to the answers CSV file. The file should contain at least the following columns: "
         "qid, agent, answer. Any additional columns will be considered as metadata. Ignored on Retrieval Evaluators.",
@@ -95,12 +102,12 @@ class CLIPairwiseEvaluatorConfig(CLIEvaluatorConfig, PairwiseEvaluatorConfig):
 
 
 class CLIConfig(BaseCLIConfig):
-    documents_csv_file: str = Field(
+    documents_csv_file: Positional = Field(
         default="documents.csv",
         description="The path to the documents CSV file. The file should contain at least the following columns: "
         "qid, did, document. Any additional columns will be considered as metadata.",
     )
-    answers_csv_file: str = Field(
+    answers_csv_file: Positional = Field(
         default="answers.csv",
         description="The path to the answers CSV file. The file should contain at least the following columns: "
         "qid, did, answer. Any additional columns will be considered as metadata.",
@@ -109,3 +116,26 @@ class CLIConfig(BaseCLIConfig):
     k: int = Field(default=100, description="Number of pairwise games to generate")
     initial_score: int = Field(default=1000, description="The initial Elo score for each agent")
     elo_k: int = Field(default=32, description="The K factor for the Elo ranking algorithm")
+
+
+class CLIBenchmarkConfig(BenchmarkDatasetConfig):
+    models: list[str] | None = Field(default=None, description="The models to judge with.")
+    evaluators: list[str] | None = Field(
+        default=None,
+        description="The evaluators to judge with. A retrieval dataset takes the names in "
+        "ragelo/benchmarks/variants.py, the others take the name of a pairwise answer evaluator.",
+    )
+    prices: list[str] | None = Field(
+        default=None,
+        description="MODEL=INPUT,OUTPUT,CACHED in USD per million tokens. Without it only the tokens are reported.",
+    )
+    output_dir: Path | None = Field(
+        default=None,
+        description="The directory where the judgments are cached. Defaults to benchmarks/results/<dataset>.",
+    )
+    tag: str = Field(default="", description="Suffix of the experiment names, to judge again beside an old cache.")
+    n_processes: int = Field(default=16, description="The number of parallel LLM calls to use for the evaluation.")
+
+
+class CLITrecRag24AnswersBenchmarkConfig(CLIBenchmarkConfig, TrecRag24AnswersDatasetConfig):
+    pass
