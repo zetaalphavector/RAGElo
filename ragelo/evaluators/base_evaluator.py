@@ -101,7 +101,12 @@ class BaseEvaluator(ABC, Generic[T_Config, T_Result]):
             if evaluation.exception:
                 failed += 1
                 continue
-            query.add_evaluation(eval_tuple[1], evaluation, exist_ok=True)
+            query.add_evaluation(
+                eval_tuple[1],
+                evaluation,
+                exist_ok=True,
+                force=self.config.force or self._has_stale_result(*eval_tuple),
+            )
         pbar.close()
         if self.config.show_results:
             render_failed_evaluations(evaluations, failed, self.config.rich_print)
@@ -187,7 +192,7 @@ class BaseEvaluator(ABC, Generic[T_Config, T_Result]):
                 eval_tuple,
                 evaluation,
                 exist_ok=True,
-                force=self.config.force,
+                force=self.config.force or self._has_stale_result(*eval_tuple),
                 should_print=self.config.show_results,
             )
         pbar.close()
@@ -208,6 +213,11 @@ class BaseEvaluator(ABC, Generic[T_Config, T_Result]):
         if not isinstance(answer, RubricJudgment) or answer.rubric_fingerprint is None:
             return True
         return answer.rubric_fingerprint == query.rubric_fingerprint
+
+    def _has_stale_result(self, query: Query, evaluable: Evaluable) -> bool:
+        """Whether the evaluable holds this evaluator's judgment against a rubric the query no longer has."""
+        cached = evaluable.evaluations.get(str(self.config.evaluator_name))
+        return cached is not None and not self._is_cached_result_valid(query, cached)
 
     def _process_answer(self, llm_response: LLMResponseType[BaseModel], query: Query) -> LLMResponseType[BaseModel]:
         """Processes the raw answer returned by the LLM. Should be implemented by the subclass if needed."""

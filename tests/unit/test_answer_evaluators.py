@@ -32,6 +32,7 @@ from ragelo.types.answer_formats import (
 )
 from ragelo.types.configurations import RubricPairwiseEvaluatorConfig, RubricPointwiseEvaluatorConfig
 from ragelo.types.evaluables import AgentAnswer, ChatMessage, PairwiseGame
+from ragelo.types.experiment import Experiment
 from ragelo.types.formats import LLMInputPrompt, LLMResponseType, LLMUsage
 from ragelo.types.query import Query
 from ragelo.types.results import AnswerEvaluatorResult, PairwiseGameEvaluatorResult
@@ -1095,6 +1096,38 @@ class TestRubricArtifact:
 
         query.rubric = [*query.rubric, Criterion(criterion_name="clarity", short_question="Clear?")]
         assert answer in [e for _, e in evaluator._get_tuples_to_evaluate(experiment)]
+
+    def test_editing_a_rubric_re_judges_its_answers_and_the_new_judgement_survives_a_reload(
+        self, llm_provider_mock, base_experiment_config, tmp_path
+    ):
+        config = {**base_experiment_config, "save_on_disk": True, "save_path": str(tmp_path / "experiment.json")}
+        experiment = Experiment(**config)
+        for query in experiment:
+            query.rubric = self._make_criteria()
+        llm_provider_mock.async_call_mocker = AsyncMock(
+            side_effect=lambda llm_input, schema: LLMResponseType(
+                raw_answer="eval",
+                parsed_answer=schema.model_validate(
+                    {name: {"reasoning": "yes", "fulfillment": True} for name in schema.model_fields}
+                ),
+            )
+        )
+        evaluator = RubricPointwiseEvaluator.from_config(
+            config=RubricPointwiseEvaluatorConfig(expert_in="AI"), llm_provider=llm_provider_mock
+        )
+        evaluator.evaluate_experiment(experiment)
+        judged = llm_provider_mock.async_call_mocker.call_count
+
+        query = experiment["0"]
+        query.replace_rubric([*query.rubric, Criterion(criterion_name="clarity", short_question="Clear?")])
+        evaluator.evaluate_experiment(experiment)
+
+        assert llm_provider_mock.async_call_mocker.call_count == judged + len(query.answers)
+        for reloaded in (experiment, Experiment(**config)):
+            for answer in reloaded["0"].answers.values():
+                judgement = answer.evaluations["rubric_pointwise"].answer
+                assert judgement.rubric_fingerprint == reloaded["0"].rubric_fingerprint
+                assert [c.criterion.criterion_name for c in judgement.criteria][-1] == "clarity"
 
 
 class TestRubricPointwiseEvaluator:

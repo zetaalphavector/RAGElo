@@ -3,11 +3,17 @@ from unittest.mock import AsyncMock
 import pytest
 
 from ragelo.generators import RubricGenerator, get_rubric_generator
-from ragelo.types.answer_formats import Criterion, RubricSchema
+from ragelo.types.answer_formats import (
+    Criterion,
+    CriterionEvaluationPointwise,
+    RubricPointwiseAnswerFormat,
+    RubricSchema,
+)
 from ragelo.types.configurations import RubricGeneratorConfig
-from ragelo.types.evaluables import ChatMessage
+from ragelo.types.evaluables import AgentAnswer, ChatMessage, Document
 from ragelo.types.formats import LLMResponseType
 from ragelo.types.query import Query
+from ragelo.types.results import AnswerEvaluatorResult
 
 
 def _criteria() -> list[Criterion]:
@@ -127,6 +133,76 @@ class TestRubricGenerator:
         generator = get_rubric_generator(llm_provider_mock, expert_in="geography", n_criteria=9)
         assert generator.config.expert_in == "geography"
         assert generator.config.n_criteria == 9
+
+
+def _graded(query: Query, agent: str, fingerprint: str | None) -> AgentAnswer:
+    answer = AgentAnswer(qid=query.qid, agent=agent, text=f"{agent} says Brasilia")
+    answer.evaluations["rubric_pointwise"] = AnswerEvaluatorResult(
+        qid=query.qid,
+        agent=agent,
+        evaluator_name="rubric_pointwise",
+        answer=RubricPointwiseAnswerFormat(
+            rubric_fingerprint=fingerprint,
+            criteria=[
+                CriterionEvaluationPointwise(
+                    criterion=query.rubric[0], reasoning=f"{agent} reasoning", fulfillment=False
+                ),
+                CriterionEvaluationPointwise(
+                    criterion=Criterion(criterion_name="evidence_recall", short_question="Recalled?"),
+                    reasoning="1 of 3 snippets",
+                    fulfillment=0.3,
+                ),
+            ],
+        ),
+    )
+    query.answers[agent] = answer
+    return answer
+
+
+class TestRubricRefinement:
+    def test_refine_shows_the_answers_graded_against_the_current_rubric(self, llm_provider_mock):
+        _responds_with_criteria(llm_provider_mock)
+        query = Query(
+            qid="0",
+            query="What is the capital of Brazil?",
+            reference_answer="Brasilia, since 1960.",
+            rubric=[Criterion(criterion_name="capital", short_question="Does it name the capital?", evidence=["d1"])],
+            retrieved_docs={"d1": Document(qid="0", did="d1", text="Brasilia became the capital in 1960.")},
+        )
+        _graded(query, "agent1", query.rubric_fingerprint)
+        _graded(query, "agent2", "an older rubric")
+
+        rubric = RubricGenerator(RubricGeneratorConfig(n_criteria=3), llm_provider_mock).refine(query)
+
+        assert [c.criterion_name for c in rubric] == ["capital", "since_when"]
+        assert [c.criterion_name for c in query.rubric] == ["capital"]
+        prompt = llm_provider_mock.async_call_mocker.call_args_list[0][0][0]
+        assert "at most 3 criteria" in prompt.system_prompt
+        assert "Brasilia, since 1960." in prompt.user_message
+        assert "capital: Does it name the capital? Evidence: d1" in prompt.user_message
+        assert "[[d1]] Brasilia became the capital in 1960." in prompt.user_message
+        assert "evidence_recall" not in prompt.user_message
+        assert "[[agent1]] agent1 says Brasilia" in prompt.user_message
+        assert "- capital: False. agent1 reasoning" in prompt.user_message
+        assert "[[agent2]] agent2 says Brasilia" in prompt.user_message
+        assert "agent2 reasoning" not in prompt.user_message
+
+    def test_refine_experiment_keeps_the_replaced_rubric(self, llm_provider_mock, experiment):
+        _responds_with_criteria(llm_provider_mock)
+        kept = [Criterion(criterion_name="kept", short_question="Untouched?")]
+        experiment["0"].rubric = kept
+        experiment["1"].rubric = []
+
+        RubricGenerator(RubricGeneratorConfig(), llm_provider_mock).refine_experiment(experiment, should_save=False)
+
+        assert [c.criterion_name for c in experiment["0"].rubric] == ["capital", "since_when"]
+        assert experiment["0"].rubric_history == [kept]
+        assert experiment["1"].rubric == [] and experiment["1"].rubric_history == []
+        assert llm_provider_mock.async_call_mocker.call_count == 1
+
+    def test_refine_needs_a_rubric(self, llm_provider_mock):
+        with pytest.raises(ValueError, match="no rubric to refine"):
+            RubricGenerator(RubricGeneratorConfig(), llm_provider_mock).refine(Query(qid="0", query="q"))
 
 
 class TestRubricFingerprint:

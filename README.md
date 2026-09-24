@@ -147,6 +147,19 @@ for criterion in experiment["q0"].rubric:
 
 `source="documents"` derives the criteria from the query's retrieved documents, so the rubric is bounded by what retrieval found. `source="reference_answer"` decomposes `query.reference_answer` instead, which keeps the criteria out of reach of the systems being scored. You can also write `query.rubric` by hand, or pass `rubrics={qid: [Criterion(...)]}` to an evaluator's config.
 
+#### Refining the rubric
+
+Once answers have been graded, the generator can revise a rubric from them. It sees the current criteria with their evidence, the retrieved documents when `source="documents"`, and each answer with its pointwise grades against the current rubric. It rewrites, drops or adds criteria so the rubric tells the better answers from the worse ones. When the rubric needs no revision, it comes back unchanged.
+
+```python
+generator.refine_experiment(experiment)  # every query with a rubric and answers
+
+query = experiment["q0"]
+query.replace_rubric(await generator.refine_async(query, answers=[...]))  # one query, chosen answers
+```
+
+`replace_rubric` keeps the replaced criteria in `query.rubric_history`, oldest first. The new rubric has a new fingerprint, so the next `evaluate_experiment` grades that query's answers again.
+
 #### Criteria weights
 
 When the LLM generates criteria it may optionally assign a **weight** (a positive float) to each criterion. Weights are normalized at scoring time so their absolute scale does not matter. If no weight is generated, all criteria are weighted equally.

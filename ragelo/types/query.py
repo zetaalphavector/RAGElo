@@ -29,6 +29,8 @@ class Query(BaseModel):
             retrieval-evaluation literature as a nugget bank. Shared by every evaluator that grades
             against it: `rubric_coverage` over retrieved documents, `rubric_pointwise` and
             `rubric_pairwise` over agent answers.
+        rubric_history list[list[Criterion]]: The rubrics this query had before its current one, oldest
+            first, kept by `replace_rubric`.
         reference_answer Optional[str]: A known-correct answer to the query, for judges and rubric
             generators that grade against a gold answer.
         retrieved_docs dict[str, Document]: A dictionary of retrieved documents, where the key is the document ID.
@@ -41,6 +43,7 @@ class Query(BaseModel):
     query: str
     metadata: dict[str, Any] | None = None
     rubric: list[Criterion] = []
+    rubric_history: list[list[Criterion]] = []
     reference_answer: str | None = None
     retrieved_docs: dict[str, Document] = {}
     answers: dict[str, AgentAnswer] = {}
@@ -53,6 +56,11 @@ class Query(BaseModel):
             return None
         criteria = sorted(json.dumps(c.model_dump(), sort_keys=True) for c in self.rubric)
         return hashlib.sha256("\n".join(criteria).encode()).hexdigest()[:16]
+
+    def replace_rubric(self, rubric: list[Criterion]) -> None:
+        """Makes `rubric` the current one and moves the replaced rubric to `rubric_history`."""
+        self.rubric_history.append(self.rubric)
+        self.rubric = rubric
 
     @property
     def retrieval_systems(self) -> set[str]:

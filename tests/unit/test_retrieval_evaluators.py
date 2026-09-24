@@ -620,6 +620,26 @@ class TestRubricCoverageEvaluator:
         evaluator.evaluate(query, document)
         assert llm_provider_mock.async_call_mocker.call_count == 2, "an edited rubric must re-judge"
 
+    def test_an_edited_rubric_replaces_the_stored_judgements(self, llm_provider_mock, experiment):
+        for query in experiment:
+            query.rubric = self._rubric()
+        llm_provider_mock.async_call_mocker.side_effect = lambda input, schema: LLMResponseType(
+            raw_answer="{}",
+            parsed_answer=schema(reasoning="Addresses both.", **dict.fromkeys(_schema_flags(schema), True)),
+        )
+        evaluator = RubricCoverageEvaluator.from_config(
+            config=RubricCoverageEvaluatorConfig(expert_in="geography"),
+            llm_provider=llm_provider_mock,
+        )
+        evaluator.evaluate_experiment(experiment)
+
+        query = experiment["0"]
+        query.replace_rubric([*self._rubric(), Criterion(criterion_name="dates_it", short_question="Gives a date?")])
+        evaluator.evaluate_experiment(experiment)
+
+        for document in query.retrieved_docs.values():
+            assert document.evaluations["rubric_coverage"].answer.rubric_fingerprint == query.rubric_fingerprint
+
     def test_a_judgement_made_before_fingerprints_existed_is_reused(self, llm_provider_mock, experiment):
         query = experiment["0"]
         query.rubric = self._rubric()

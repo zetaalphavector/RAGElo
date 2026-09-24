@@ -1212,6 +1212,7 @@ class Experiment:
                 (query, evaluable),
                 result,
                 should_save=False,
+                force=True,
                 exist_ok=True,
                 should_print=False,
             )

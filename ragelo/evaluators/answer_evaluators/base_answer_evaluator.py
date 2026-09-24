@@ -149,7 +149,7 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
         evaluator_name = str(self.config.evaluator_name)
         if evaluator_name in answer.evaluations and not self.config.force:
             cached = answer.evaluations[evaluator_name]
-            if isinstance(cached, AnswerEvaluatorResult):
+            if isinstance(cached, AnswerEvaluatorResult) and self._is_cached_result_valid(query, cached):
                 return cached
 
         prompt = self._with_guidelines(self._build_message(query, answer))
@@ -212,7 +212,7 @@ class BaseAnswerEvaluator(BaseEvaluator[T_AnswerConfig, T_Result]):
         evaluator_name = str(self.config.evaluator_name)
         if evaluator_name in game.evaluations and not self.config.force:
             cached = game.evaluations[evaluator_name]
-            if isinstance(cached, PairwiseGameEvaluatorResult):
+            if isinstance(cached, PairwiseGameEvaluatorResult) and self._is_cached_result_valid(query, cached):
                 return cached
 
         # Evaluate in both directions.
